@@ -126,3 +126,8 @@ dmypy.json
 
 # Pyre type checker
 .pyre/
+
+# tiny_lidar_net
+tiny_lidar_net/logs/
+tiny_lidar_net/checkpoints/
+tiny_lidar_net/outputs/
