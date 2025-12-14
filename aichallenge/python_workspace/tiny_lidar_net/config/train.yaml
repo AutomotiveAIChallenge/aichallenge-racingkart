@@ -1,7 +1,7 @@
 data:
   # データセットのディレクトリパス
-  train_dir: "./dataset/train"
-  val_dir: "./dataset/val"
+  train_dir: "/aichallenge/python_workspace/tiny_lidar_net/dataset/train"
+  val_dir: "/aichallenge/python_workspace/tiny_lidar_net/dataset/val"
 
 model:
   # "TinyLidarNet" または "TinyLidarNetSmall"
@@ -23,8 +23,8 @@ train:
   pretrained_path: null
 
   # 保存先設定
-  save_dir: "./checkpoints"
-  log_dir: "./logs"
+  save_dir: "/aichallenge/python_workspace/tiny_lidar_net/checkpoints"
+  log_dir: "/aichallenge/python_workspace/tiny_lidar_net/logs"
 
   # 損失関数の重み設定
   loss:
