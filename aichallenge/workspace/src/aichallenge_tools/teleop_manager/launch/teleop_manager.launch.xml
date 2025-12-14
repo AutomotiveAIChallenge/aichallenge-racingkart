@@ -1,0 +1,34 @@
+<launch>
+
+  <arg name="teleop_param"  default="$(find-pkg-share teleop_manager)/config/teleop.param.yaml"/>
+  <arg name="self_control_topic" default="/ackermann_cmd"/>
+  <arg name="vehicle_control_topic" default="/awsim/control_cmd"/>
+  <arg name="trigger_topic" default="/rosbag2_recorder/trigger"/>
+
+  
+  <!-- joynode -->
+  <node pkg="joy" 
+        exec="joy_node"
+        name="joy_node"
+        output="screen">
+    <param name="deadzone" value="0.05"/>
+  </node>
+
+  <!-- joy manager node-->
+  <node pkg="teleop_manager"
+        exec="teleop_manager_node"
+        name="teleop_manager_node"
+        output="screen">
+        
+    <param from="$(var teleop_param)"/>
+    <!-- joy -->
+    <remap from="/joy" to="/joy"/>
+    <!-- 自律走行　コマンド -->
+    <remap from="/ackermann_cmd" to="$(var self_control_topic)"/>
+    <!-- AWSIMへの入力 -->
+    <remap from="/awsim/control_cmd" to="$(var vehicle_control_topic)"/> 
+    <!-- rosbag制御トリガ -->
+    <remap from="/rosbag2_recorder/trigger" to="$(var trigger_topic)"/>
+  </node>
+
+</launch>
