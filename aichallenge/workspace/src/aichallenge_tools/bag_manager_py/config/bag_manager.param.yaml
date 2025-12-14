@@ -1,0 +1,15 @@
+/**:
+  ros__parameters:
+    output_dir: "/aichallenge/record"
+    storage_id: mcap
+    all_topics: false
+    topics:
+      - /awsim/control_cmd
+      # - /sensing/camera/image_raw
+      # - /sensing/camera/camera_info
+      # - /sensing/imu/imu_raw
+      # - /sensing/gnss/nav_sat_fix
+      # - /vehicle/status/steering_status
+      # - /vehicle/status/velocity_status
+      # - /localization/pose_with_covariance
+      - /sensing/lidar/scan
