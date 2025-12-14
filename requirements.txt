@@ -17,6 +17,7 @@ kaleido
 rosbags
 h5py
 hdf5plugin
+jaxtyping
 opencv-python<=4.9
 pyyaml
 tqdm
