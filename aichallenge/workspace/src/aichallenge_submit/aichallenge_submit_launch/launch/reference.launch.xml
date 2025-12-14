@@ -100,7 +100,7 @@
       <arg name="proc_stddev_vx_c" value="10.0"/>
       <arg name="proc_stddev_wz_c" value="5.0"/>
       <arg name="pose_additional_delay" value="$(var pose_additional_delay_var)"/>
-      <arg name="extend_state_step" value="10"/>
+      <arg name="extend_state_step" value="100"/>
     </include>
 
     <!-- twist2accel -->
