@@ -2,6 +2,7 @@
 
 target="${1}"
 device="${2}"
+device_drivers="/dev/dri /dev/input"
 case "${target}" in
 "eval")
     volume="output:/output"
@@ -42,4 +43,4 @@ LOG_FILE="$LOG_DIR/docker_run.log"
 echo "A rocker run log is stored at : file://$LOG_FILE"
 
 # shellcheck disable=SC2086
-rocker ${opts} --x11 --devices /dev/dri --user --net host --privileged --name "aichallenge-2025-$(date "+%Y-%m-%d-%H-%M-%S")" --volume ${volume} -- "aichallenge-2025-${target}" 2>&1 | tee "$LOG_FILE"
+rocker ${opts} --x11 --devices ${device_drivers} --user --net host --privileged --name "aichallenge-2025-$(date "+%Y-%m-%d-%H-%M-%S")" --volume ${volume} -- "aichallenge-2025-${target}" 2>&1 | tee "$LOG_FILE"

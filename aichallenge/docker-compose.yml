@@ -23,6 +23,7 @@ x-autoware-base: &autoware-base
   devices:
     - /dev/dri
     - /dev/video0
+    - /dev/input
   working_dir: /aichallenge
 
 x-racing_kart_interface-base: &racing_kart_interface-base
