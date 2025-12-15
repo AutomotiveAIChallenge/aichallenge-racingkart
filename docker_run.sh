@@ -2,13 +2,13 @@
 
 target="${1}"
 device="${2}"
-device_drivers="/dev/dri /dev/input"
+device_drivers="/dev/dri"
 case "${target}" in
 "eval")
     volume="output:/output"
     ;;
 "dev")
-    volume="output:/output aichallenge:/aichallenge remote:/remote vehicle:/vehicle"
+    volume="output:/output aichallenge:/aichallenge remote:/remote vehicle:/vehicle /dev/input:/dev/input"
     ;;
 "rm")
     # clean up old <none> images
