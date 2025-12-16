@@ -1,0 +1,75 @@
+# Vehicle d2 bridge configuration
+# Domain 2: Autoware Vehicle d2 <-> Domain 0: AWSIM
+
+name: d2_bridge
+from_domain: 2
+to_domain: 0
+
+topics:
+  # Control commands: Autoware -> AWSIM
+  awsim/control_cmd:
+    type: autoware_auto_control_msgs/msg/AckermannControlCommand
+    remap: /d2/awsim/control_cmd
+  
+  awsim/control_mode_request_topic:
+    type: std_msgs/msg/Bool
+    remap: /d2/awsim/control_mode_request_topic
+  
+  control/command/gear_cmd:
+    type: autoware_auto_vehicle_msgs/msg/GearCommand
+    remap: /d2/control/command/gear_cmd
+
+  # Time synchronization: AWSIM -> Autoware
+  clock:
+    type: rosgraph_msgs/msg/Clock
+    qos:
+      reliability: best_effort
+    reversed: True
+
+  # Vehicle status: AWSIM -> Autoware
+  d2/vehicle/status/gear_status:
+    type: autoware_auto_vehicle_msgs/msg/GearReport
+    remap: /vehicle/status/gear_status
+    reversed: True
+
+  d2/vehicle/status/steering_status:
+    type: autoware_auto_vehicle_msgs/msg/SteeringReport
+    remap: /vehicle/status/steering_status
+    reversed: True
+  
+  d2/vehicle/status/velocity_status:
+    type: autoware_auto_vehicle_msgs/msg/VelocityReport
+    remap: /vehicle/status/velocity_status
+    reversed: True
+
+  # Sensor data: AWSIM -> Autoware
+  d2/sensing/gnss/nav_sat_fix:
+    type: sensor_msgs/msg/NavSatFix
+    remap: /sensing/gnss/nav_sat_fix
+    reversed: True
+    
+  d2/sensing/imu/imu_raw:
+    type: sensor_msgs/msg/Imu
+    remap: /sensing/imu/imu_raw
+    reversed: True
+
+  d2/sensing/lidar/scan:
+    type: sensor_msgs/msg/LaserScan
+    qos:
+      reliability: best_effort
+    remap: /sensing/lidar/scan
+    reversed: True
+
+  d2/sensing/camera/image_raw:
+    type: sensor_msgs/msg/Image
+    qos:
+      reliability: best_effort
+    remap: /sensing/camera/image_raw
+    reversed: True  
+    
+  d2/sensing/camera/camera_info:
+    type: sensor_msgs/msg/CameraInfo
+    qos:
+      reliability: best_effort
+    remap: /sensing/camera/camera_info
+    reversed: True

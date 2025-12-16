@@ -5,7 +5,10 @@
     <arg name="run_rviz"/>
     <arg name="sensor_model" default="racing_kart_sensor_kit"/>
     <arg name="launch_vehicle_interface" default="true"/>
+    <arg name="domain_id" default="0"/>
+    <arg name="multiple_vehicle" default="true"/>
 
+    <let name="domain_id" value="$(var domain_id)"/>
     <let name="rviz_config" value="$(find-pkg-share aichallenge_system_launch)/config/autoware_vehicle.rviz"/>
     <let name="rviz_config" value="$(find-pkg-share aichallenge_system_launch)/config/autoware.rviz" if="$(var simulation)"/>
     <arg name="rviz_config" default="$(var rviz_config_file)" description="rviz config"/>
@@ -16,6 +19,7 @@
     <log message=" - sensor_model: $(var sensor_model)"/>
     <log message=" - launch_vehicle_interface: $(var launch_vehicle_interface)"/>
     <log message=" - rviz config: $(var rviz_config)"/>
+    <log message=" - domain_id: $(var domain_id)"/>
 
     <!-- Main module of AI challenge 2025. -->
     <include file="$(find-pkg-share aichallenge_submit_launch)/launch/aichallenge_submit.launch.xml" >
@@ -44,5 +48,12 @@
     <!-- Adapters for real vehicle. -->
     <group unless="$(var simulation)">
         <include file="$(find-pkg-share aichallenge_system_launch)/launch/mode/real.launch.xml"/>
+    </group>
+
+    <!-- Multiple vehicle. -->
+    <group if="$(var multiple_vehicle)">
+        <node pkg="domain_bridge" exec="domain_bridge" name="vehicle_domain_bridge" output="screen"
+            args="--from $(var domain_id) --to 0 $(find-pkg-share aichallenge_system_launch)/config/domain/d$(var domain_id)_bridge_config.yaml">
+        </node>
     </group>
 </launch>

@@ -1,0 +1,72 @@
+# Vehicle d4 bridge configuration - Based on updated TODO.md
+# Domain 0: AWSIM -> Domain 2: Autoware Vehicle d4
+name: d4_bridge
+from_domain: 4
+to_domain: 0
+
+topics:
+  # Common topics (no remap) - shared across all vehicles
+  awsim/control_cmd: # OK
+    type: autoware_auto_control_msgs/msg/AckermannControlCommand
+    remap: /d4/awsim/control_cmd
+  
+  awsim/control_mode_request_topic: # OK
+    type: std_msgs/msg/Bool
+    remap: /d4/awsim/control_mode_request_topic
+  
+  control/command/gear_cmd:
+    type: autoware_auto_vehicle_msgs/msg/GearCommand
+    remap: /d4/control/command/gear_cmd
+
+  # AWSIM to autoware
+  clock: # OK
+    type: rosgraph_msgs/msg/Clock
+    qos:
+      reliability: best_effort
+    reversed: True
+
+  d4/vehicle/status/gear_status:
+    type: autoware_auto_vehicle_msgs/msg/GearReport
+    remap: /vehicle/status/gear_status
+    reversed: True
+
+  d4/vehicle/status/steering_status:
+    type: autoware_auto_vehicle_msgs/msg/SteeringReport
+    remap: /vehicle/status/steering_status
+    reversed: True
+  
+  d4/vehicle/status/velocity_status:
+    type: autoware_auto_vehicle_msgs/msg/VelocityReport
+    remap: /vehicle/status/velocity_status
+    reversed: True
+
+  d4/sensing/gnss/nav_sat_fix:
+    type: sensor_msgs/msg/NavSatFix
+    remap: /sensing/gnss/nav_sat_fix
+    reversed: True  
+    
+  d4/sensing/imu/imu_raw:
+    type: sensor_msgs/msg/Imu
+    remap: /sensing/imu/imu_raw
+    reversed: True
+
+  d4/sensing/lidar/scan:
+    type: sensor_msgs/msg/LaserScan
+    qos:
+      reliability: best_effort
+    remap: /sensing/lidar/scan
+    reversed: True
+
+  d4/sensing/camera/image_raw:
+    type: sensor_msgs/msg/Image
+    qos:
+      reliability: best_effort
+    remap: /sensing/camera/image_raw
+    reversed: True  
+    
+  d4/sensing/camera/camera_info:
+    type: sensor_msgs/msg/CameraInfo
+    qos:
+      reliability: best_effort
+    remap: /sensing/camera/camera_info
+    reversed: True
