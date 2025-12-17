@@ -28,4 +28,4 @@ sudo ip link set multicast on lo
 sudo sysctl -w net.core.rmem_max=2147483647 >/dev/null
 export ROS_DOMAIN_ID=0
 export ROS_LOCAL_HOST_ONLY=1
-$AWSIM_DIRECTORY/AWSIM.x86_64 "${opts[@]}"
+$AWSIM_DIRECTORY/AWSIM.x86_64 "${opts[@]}" --timeout 80000000

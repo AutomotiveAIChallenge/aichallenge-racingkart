@@ -7,7 +7,7 @@ model:
   # "TinyLidarNet" または "TinyLidarNetSmall"
   name: "TinyLidarNet"
   # LiDARのスキャン点数
-  input_dim: 1080
+  input_dim: 750
   # 出力次元（[accel, steer]）
   output_dim: 2
 
