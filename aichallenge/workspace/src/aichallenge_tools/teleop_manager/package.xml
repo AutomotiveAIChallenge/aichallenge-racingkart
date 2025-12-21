@@ -1,0 +1,20 @@
+<?xml version="1.0"?>
+<package format="3">
+  <name>teleop_manager</name>
+  <version>0.0.1</version>
+  <description>Joy and Ackermann control switch node</description>
+
+  <maintainer email="tanaka.arata.y5@s.gifu-u.ac.jp">Arata Tanaka</maintainer>
+  <license>Apache-2.0</license>
+
+  <buildtool_depend>ament_cmake_auto</buildtool_depend>
+
+  <depend>rclcpp</depend>
+  <depend>std_msgs</depend>
+  <depend>sensor_msgs</depend>
+  <depend>autoware_auto_control_msgs</depend>
+
+  <export>
+    <build_type>ament_cmake</build_type>
+  </export>
+</package>

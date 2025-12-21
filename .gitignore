@@ -3,7 +3,9 @@
 *.log
 *.webm
 *.db3
+*.mcap
 rosbag2*/
 *.pyc
 *pem
 vehicle/.env
+metadata.yaml

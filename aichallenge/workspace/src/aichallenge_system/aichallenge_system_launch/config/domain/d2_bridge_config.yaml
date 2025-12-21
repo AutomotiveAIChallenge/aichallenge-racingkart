@@ -53,17 +53,23 @@ topics:
     remap: /sensing/imu/imu_raw
     reversed: True
 
-  d2/sensing/lidar/pointcloud:
-    type: sensor_msgs/msg/PointCloud2
-    remap: /sensing/lidar/pointcloud
+  d2/sensing/lidar/scan:
+    type: sensor_msgs/msg/LaserScan
+    qos:
+      reliability: best_effort
+    remap: /sensing/lidar/scan
     reversed: True
 
   d2/sensing/camera/image_raw:
     type: sensor_msgs/msg/Image
+    qos:
+      reliability: best_effort
     remap: /sensing/camera/image_raw
     reversed: True  
     
   d2/sensing/camera/camera_info:
     type: sensor_msgs/msg/CameraInfo
+    qos:
+      reliability: best_effort
     remap: /sensing/camera/camera_info
     reversed: True

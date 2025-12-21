@@ -22,13 +22,7 @@ case "${mode}" in
     ;;
 esac
 
-# idが0でない場合
-if [ "$id" -ne 0 ]; then
-    # Use loopback only and set domain for isolated runs
-    export ROS_LOCALHOST_ONLY=0
-    export ROS_DOMAIN_ID=$id
-fi
-
+export ROS_DOMAIN_ID=$id
 # shellcheck disable=SC1091
 source /opt/ros/humble/setup.bash
 # shellcheck disable=SC1091

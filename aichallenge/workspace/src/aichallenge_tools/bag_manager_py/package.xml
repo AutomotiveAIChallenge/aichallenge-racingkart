@@ -1,0 +1,18 @@
+<?xml version="1.0"?>
+<package format="3">
+  <name>bag_manager_py</name>
+  <version>0.1.0</version>
+  <description>A package for recording and managing ROS2 bags</description>
+  <maintainer email="tanaka.arata.y5@s.gifu-u.ac.jp">Arata Tanaka</maintainer>
+  <license>Apache-2.0</license>
+
+  <buildtool_depend>ament_cmake</buildtool_depend>
+  <buildtool_depend>ament_cmake_python</buildtool_depend>
+
+  <depend>rclpy</depend>
+  <depend>std_msgs</depend>
+  
+  <export>
+    <build_type>ament_cmake</build_type>
+  </export>
+</package>

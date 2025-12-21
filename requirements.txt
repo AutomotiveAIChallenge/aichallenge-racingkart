@@ -1,12 +1,32 @@
+--extra-index-url https://download.pytorch.org/whl/cu121
+
+# Dockerfile内のCUDA 12.2と互換性のあるCUDA 12.1向けPyTorchをインストール
+torch==2.3.1
+torchvision==0.18.1
+torchaudio==2.3.1
+
+
 cvxpy
-numpy==1.26.4
+numpy==1.26.4   # 'numpy<2' の条件を満たしています
 matplotlib
 scipy
 ecos
 pandas
 plotly
 kaleido
-osqp
-scikit-image
-PyYAML
+rosbags
+h5py
+hdf5plugin
+jaxtyping
+opencv-python<=4.9
+pyyaml
+tqdm
+hydra-core
+omegaconf
+scikit-learn
+ultralytics
+pyproj
+pycocotools
+grad-cam
+tensorboard
 tomli==2.3.0

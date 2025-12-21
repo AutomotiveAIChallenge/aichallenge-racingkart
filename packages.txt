@@ -8,3 +8,4 @@ terminator
 arp-scan
 ros-humble-rosbag2-storage-mcap
 ros-humble-domain-bridge
+zstd
