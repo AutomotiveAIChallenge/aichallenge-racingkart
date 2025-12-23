@@ -26,4 +26,6 @@ source /autoware/install/setup.bash
 source /aichallenge/workspace/install/setup.bash
 sudo ip link set multicast on lo
 sudo sysctl -w net.core.rmem_max=2147483647 >/dev/null
-$AWSIM_DIRECTORY/AWSIM.x86_64 "${opts[@]}" --timeout 86400.0
+export ROS_DOMAIN_ID=0
+export ROS_LOCAL_HOST_ONLY=1
+$AWSIM_DIRECTORY/AWSIM.x86_64 "${opts[@]}"

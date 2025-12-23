@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<launch>
+  <!-- V2X -->
+  <group>
+    <push-ros-namespace namespace="v2x"/>
+    <group>
+      <push-ros-namespace namespace="gnss"/>
+      <include file="$(find-pkg-share racing_kart_gnss_poser)/launch/gnss_poser.launch.xml">
+        <arg name="input_topic_fix" value="nav_sat_fix"/>
+        <arg name="output_topic_gnss_pose" value="pose"/>
+        <arg name="output_topic_gnss_fixed" value="gnss_fixed"/>
+        <arg name="output_topic_gnss_pose_cov" value="pose_with_covariance"/>
+      </include>
+    </group>
+  </group>
+</launch>

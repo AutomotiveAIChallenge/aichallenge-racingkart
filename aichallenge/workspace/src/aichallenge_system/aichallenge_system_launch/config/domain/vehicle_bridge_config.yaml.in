@@ -1,0 +1,83 @@
+# Domain bridge configuration template for AWSIM multi-vehicle.
+#
+# This file is expanded at build time by CMake (`configure_file`).
+# Placeholders:
+#   @FROM_DOMAIN@ -> from_domain (e.g. 1..4)
+#   @TO_DOMAIN@   -> to_domain (usually 0)
+#   @VEHICLE_NS@  -> vehicle namespace (e.g. d1..d4)
+
+name: @VEHICLE_NS@_bridge
+from_domain: @FROM_DOMAIN@
+to_domain: @TO_DOMAIN@
+
+topics:
+  # Control commands: Autoware -> AWSIM
+  awsim/control_cmd:
+    type: autoware_auto_control_msgs/msg/AckermannControlCommand
+    remap: /@VEHICLE_NS@/awsim/control_cmd
+
+  awsim/control_mode_request_topic:
+    type: std_msgs/msg/Bool
+    remap: /@VEHICLE_NS@/awsim/control_mode_request_topic
+
+  control/command/gear_cmd:
+    type: autoware_auto_vehicle_msgs/msg/GearCommand
+    remap: /@VEHICLE_NS@/control/command/gear_cmd
+
+  # Time synchronization: AWSIM -> Autoware
+  clock:
+    type: rosgraph_msgs/msg/Clock
+    qos:
+      reliability: best_effort
+    reversed: True
+
+  # Vehicle status: AWSIM -> Autoware
+  @VEHICLE_NS@/vehicle/status/gear_status:
+    type: autoware_auto_vehicle_msgs/msg/GearReport
+    remap: /vehicle/status/gear_status
+    reversed: True
+
+  @VEHICLE_NS@/vehicle/status/steering_status:
+    type: autoware_auto_vehicle_msgs/msg/SteeringReport
+    remap: /vehicle/status/steering_status
+    reversed: True
+
+  @VEHICLE_NS@/vehicle/status/velocity_status:
+    type: autoware_auto_vehicle_msgs/msg/VelocityReport
+    remap: /vehicle/status/velocity_status
+    reversed: True
+
+  # Sensor data: AWSIM -> Autoware
+  @VEHICLE_NS@/sensing/gnss/nav_sat_fix:
+    type: sensor_msgs/msg/NavSatFix
+    remap: /sensing/gnss/nav_sat_fix
+    reversed: True
+
+  @VEHICLE_NS@/sensing/imu/imu_raw:
+    type: sensor_msgs/msg/Imu
+    remap: /sensing/imu/imu_raw
+    reversed: True
+
+  @VEHICLE_NS@/sensing/lidar/scan:
+    type: sensor_msgs/msg/LaserScan
+    qos:
+      reliability: best_effort
+    remap: /sensing/lidar/scan
+    reversed: True
+
+  @VEHICLE_NS@/sensing/camera/image_raw:
+    type: sensor_msgs/msg/Image
+    qos:
+      reliability: best_effort
+    remap: /sensing/camera/image_raw
+    reversed: True
+
+  @VEHICLE_NS@/sensing/camera/camera_info:
+    type: sensor_msgs/msg/CameraInfo
+    qos:
+      reliability: best_effort
+    remap: /sensing/camera/camera_info
+    reversed: True
+
+  # V2X topics: GNSS from other vehicles (AWSIM -> Autoware)
+@V2X_OTHER_GNSS_TOPICS@
