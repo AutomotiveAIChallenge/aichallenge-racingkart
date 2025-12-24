@@ -3,13 +3,13 @@
     log_interval_sec: 5.0        # 推論統計ログを出す間隔（秒）
     
     model:
-      input_dim: 1080            # LiDARスキャンの入力次元
+      input_dim: 750            # LiDARスキャンの入力次元
       output_dim: 2              # 出力（steering, throttleなど）
       architecture: "normal"      # "normal" または "small"
       ckpt_path: "/path/to/tinylidarnet_weights.npy"
 
     max_range: 30.0              # LiDARの最大レンジ（メートル）
     control_mode: "fixed"          # "ai" または "fixed"
-    acceleration: 1.0            # 固定加速度コマンド mode:fixed の場合に使用
+    acceleration: 0.3            # 固定加速度コマンド mode:fixed の場合に使用
 
     debug: false
