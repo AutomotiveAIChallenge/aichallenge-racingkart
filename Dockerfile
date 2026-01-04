@@ -8,6 +8,16 @@ RUN apt-get update \
     && xargs -a /tmp/packages.txt apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
+# Qt (rviz2) dark theme defaults via qt5ct
+RUN mkdir -p /etc/xdg/qt5ct \
+    && { \
+      echo '[Appearance]'; \
+      echo 'custom_palette=true'; \
+      echo 'style=Fusion'; \
+      echo 'color_scheme_path=/usr/share/qt5ct/colors/darker.conf'; \
+    } > /etc/xdg/qt5ct/qt5ct.conf
+ENV QT_QPA_PLATFORMTHEME=qt5ct
+
 COPY requirements.txt .
 RUN python3 -m pip install --no-cache-dir -r requirements.txt
 
