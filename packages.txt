@@ -8,5 +8,7 @@ terminator
 arp-scan
 ros-humble-rosbag2-storage-mcap
 ros-humble-domain-bridge
+ros-humble-nav2-map-server
+ros-humble-nav2-lifecycle-manager
 zstd
 python3-tomli

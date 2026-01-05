@@ -1,0 +1,10 @@
+repositories:
+    workspace/src/aichallenge_submit/lanelet2_to_ogm:
+      type: git
+      url: https://github.com/Roborovsky-Racers/lanelet2_to_ogm.git
+    workspace/src/aichallenge_submit/multi_purpose_mpc_ros:
+      type: git
+      url: https://github.com/AutomotiveAIChallenge/multi_purpose_mpc_ros.git
+    workspace/src/aichallenge_submit/aichallenge-trajectory-editor:
+      type: git
+      url: https://github.com/iASL-Gifu/aichallenge-trajectory-editor.git
