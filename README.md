@@ -10,5 +10,5 @@ This repository provides a development environment use in the Automotive AI Chal
 
 Toward the competition, we will update the following pages to provide information such as rules and how to set up your dev environment. Please follow them. We are looking forward your participation!
 
-- [日本語ページ](https://automotiveaichallenge.github.io/aichallenge-documentation-2025/)
-- [English Page](https://automotiveaichallenge.github.io/aichallenge-documentation-2025/en/)
+- [日本語ページ](https://automotiveaichallenge.github.io/aichallenge-documentation-racingkart/)
+- [English Page](https://automotiveaichallenge.github.io/aichallenge-documentation-racingkart/en/)
