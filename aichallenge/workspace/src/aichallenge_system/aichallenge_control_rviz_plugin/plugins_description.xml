@@ -1,0 +1,8 @@
+<library path="aichallenge_control_rviz_plugin">
+  <class
+    name="aichallenge_control_rviz_plugin/ControlModePanel"
+    type="aichallenge_control_rviz_plugin::ControlModePanel"
+    base_class_type="rviz_common::Panel">
+    <description>Publishes /awsim/control_mode_request_topic to start auto mode.</description>
+  </class>
+</library>
