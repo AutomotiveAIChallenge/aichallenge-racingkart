@@ -12,7 +12,10 @@
 
   <depend>pluginlib</depend>
   <depend>rclcpp</depend>
+  <depend>rcpputils</depend>
   <depend>rviz_common</depend>
+  <depend>geometry_msgs</depend>
+  <depend>rosidl_typesupport_introspection_cpp</depend>
   <depend>std_msgs</depend>
 
   <test_depend>ament_lint_auto</test_depend>

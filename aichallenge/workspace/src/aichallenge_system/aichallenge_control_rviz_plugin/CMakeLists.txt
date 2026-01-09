@@ -36,7 +36,10 @@ pluginlib_export_plugin_description_file(rviz_common plugins_description.xml)
 
 ament_target_dependencies(${PROJECT_NAME} PUBLIC
   rclcpp
+  rcpputils
   rviz_common
+  geometry_msgs
+  rosidl_typesupport_introspection_cpp
   std_msgs
 )
 
