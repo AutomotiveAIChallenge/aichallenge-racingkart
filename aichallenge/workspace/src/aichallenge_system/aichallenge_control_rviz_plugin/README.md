@@ -51,4 +51,3 @@ Provides buttons for:
 - If GNSS or trajectory has not been received, or trajectory has fewer than 2 valid points/segments:
   - Do not publish `/initialpose`.
   - Show a status message in the panel and log a warning.
-
