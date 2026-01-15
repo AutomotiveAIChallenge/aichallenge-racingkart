@@ -4,6 +4,8 @@ project(aichallenge_control_rviz_plugin)
 find_package(ament_cmake_auto REQUIRED)
 ament_auto_find_build_dependencies()
 
+find_package(Qt5 REQUIRED COMPONENTS Widgets)
+
 set(headers_to_moc
   include/aichallenge_control_rviz_plugin/control_mode_panel.hpp
 )
@@ -24,8 +26,9 @@ target_include_directories(
   ${PROJECT_NAME} PUBLIC
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
   $<INSTALL_INTERFACE:include>
-  ${Qt5Widgets_INCLUDE_DIRS}
 )
+
+target_link_libraries(${PROJECT_NAME} PUBLIC Qt5::Widgets)
 
 target_compile_definitions(${PROJECT_NAME} PRIVATE "${PROJECT_NAME}_BUILDING_LIBRARY")
 

@@ -15,8 +15,11 @@
   <depend>rcpputils</depend>
   <depend>rviz_common</depend>
   <depend>geometry_msgs</depend>
+  <depend>autoware_auto_planning_msgs</depend>
   <depend>rosidl_typesupport_introspection_cpp</depend>
   <depend>std_msgs</depend>
+  <depend>qtbase5-dev</depend>
+  <depend>qtbase5-dev-tools</depend>
 
   <test_depend>ament_lint_auto</test_depend>
   <test_depend>ament_lint_common</test_depend>
