@@ -63,11 +63,11 @@ RUN tar zxf /ws/aichallenge_submit.tar.gz -C /aichallenge/workspace/src
 RUN rm -rf /ws
 
 RUN bash -c ' \
-	  source /autoware/install/setup.bash; \
-	  cd /aichallenge/workspace; \
-	  rosdep update; \
-	  rosdep install -y -r -i --from-paths src --ignore-src --rosdistro $ROS_DISTRO; \
-	  python3 -c \"from colcon_core.command import main; import sys; sys.exit(main())\" build --symlink-install --allow-overriding gyro_odometer --cmake-args -DCMAKE_BUILD_TYPE=Release'
+    source /autoware/install/setup.bash; \
+    cd /aichallenge/workspace; \
+    rosdep update; \
+    rosdep install -y -r -i --from-paths src --ignore-src --rosdistro $ROS_DISTRO; \
+    python3 -c "from colcon_core.command import main; import sys; sys.exit(main())" build --symlink-install --allow-overriding gyro_odometer --cmake-args -DCMAKE_BUILD_TYPE=Release'
 
 ENTRYPOINT []
 CMD ["bash", "/aichallenge/run_evaluation.bash"]
