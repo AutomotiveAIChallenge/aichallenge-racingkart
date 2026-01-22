@@ -9,6 +9,7 @@ INPUT_RESULT="d$ROS_DOMAIN_ID-result-details.json"
 
 HOST_UID=""
 HOST_GID=""
+INPUT_RESULT="d$ROS_DOMAIN_ID_DEFAULT-result-details.json"
 OUTPUT_ROOT="/output"
 RESULT_WAIT_SECONDS=10
 
@@ -96,6 +97,7 @@ parse_args() {
             ;;
         --domain-id)
             ROS_DOMAIN_ID="${2-}"
+            INPUT_RESULT="d${ROS_DOMAIN_ID}-result-details.json"
             shift 2
             ;;
         --output-root)

@@ -70,7 +70,7 @@ request_control() {
 
 # Function to set initial pose
 request_initial_pose_set() {
-    call_service "Requesting initial pose set" 60 \
+    call_service "Requesting initial pose set" 10 \
         "/set_initial_pose" "std_srvs/srv/Trigger" "{}"
 }
 
