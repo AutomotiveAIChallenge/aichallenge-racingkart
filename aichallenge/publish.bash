@@ -13,66 +13,71 @@ usage() {
 }
 
 # Function to capture screen
-capture_screen() {
-    echo "Capturing screen..."
-    timeout 10s ros2 service call /debug/service/capture_screen std_srvs/srv/Trigger >/dev/null
-    if [ $? -eq 124 ]; then
-        echo "Warning: Screen capture service call timed out after 10 seconds"
-    else
-        echo "Screen capture requested successfully"
+run_with_timeout() {
+    local label="$1"
+    local timeout_s="$2"
+    shift 2
+
+    echo "${label}..."
+    timeout "${timeout_s}s" "$@" >/dev/null 2>&1
+    local rc=$?
+
+    if [ $rc -eq 124 ]; then
+        echo "Warning: ${label} timed out after ${timeout_s} seconds"
+        return 124
     fi
+    if [ $rc -ne 0 ]; then
+        echo "Error: ${label} failed (rc=$rc)"
+        return $rc
+    fi
+
+    echo "${label} successfully"
+    return 0
+}
+
+call_service() {
+    local label="$1"
+    local timeout_s="$2"
+    local service="$3"
+    local type="$4"
+    local request="${5:-}"
+
+    if [ -z "$request" ]; then
+        request="{}"
+    fi
+
+    run_with_timeout "${label}" "${timeout_s}" ros2 service call "${service}" "${type}" "${request}"
+}
+
+wait_for_topic_once() {
+    local label="$1"
+    local timeout_s="$2"
+    local topic="$3"
+    local type="$4"
+
+    run_with_timeout "${label}" "${timeout_s}" ros2 topic echo "${topic}" "${type}" --once
+}
+
+request_capture() {
+    call_service "Capturing screen" 10 \
+        "/debug/service/capture_screen" "std_srvs/srv/Trigger" "{}"
 }
 
 # Function to request control mode
 request_control() {
-    echo "Requesting control mode change..."
-    timeout 10s ros2 service call /control/control_mode_request autoware_auto_vehicle_msgs/srv/ControlModeCommand '{mode: 1}' >/dev/null
-    local rc=$?
-    if [ $rc -eq 124 ]; then
-        echo "Warning: Control mode request timed out after 10 seconds"
-        return 124
-    fi
-    if [ $rc -ne 0 ]; then
-        echo "Error: Control mode request failed (rc=$rc)"
-        return $rc
-    fi
-
-    echo "Control mode change requested successfully"
-    return 0
+    call_service "Requesting control mode change" 10 \
+        "/control/control_mode_request" "autoware_auto_vehicle_msgs/srv/ControlModeCommand" "{mode: 1}"
 }
 
 # Function to set initial pose
 request_initial_pose_set() {
-    echo "Requesting initial pose set..."
-    timeout 60s ros2 service call /set_initial_pose std_srvs/srv/Trigger >/dev/null
-    local rc=$?
-    if [ $rc -eq 124 ]; then
-        echo "Warning: Initial pose set timed out after 60 seconds"
-        return 124
-    fi
-    if [ $rc -ne 0 ]; then
-        echo "Error: Initial pose set request failed (rc=$rc)"
-        return $rc
-    fi
-
-    echo "Initial pose set successfully"
-    return 0
+    call_service "Requesting initial pose set" 60 \
+        "/set_initial_pose" "std_srvs/srv/Trigger" "{}"
 }
 
 check_simulator_ready() {
-    timeout_seconds=60
-    elapsed=0
-    while ! timeout 60s ros2 topic echo /clock 2>/dev/null | grep -q "sec:"; do
-        sleep 2
-        elapsed=$((elapsed + 2))
-        echo "Waiting for /clock topic to be available... (${elapsed}s elapsed)"
-        if [ $elapsed -ge $timeout_seconds ]; then
-            echo "Warning: /clock topic not available after ${timeout_seconds}s timeout. Continuing anyway..."
-            break
-        fi
-    done
-    sleep 1
-    echo "System is ready, executing publish commands..."
+    wait_for_topic_once "Waiting for /clock topic to be available" 60 \
+        "/clock" "rosgraph_msgs/msg/Clock"
 }
 
 # Check if an argument was provided
@@ -84,9 +89,11 @@ fi
 case "$1" in
 check-awsim)
     check_simulator_ready
+    exit $?
     ;;
 request-capture)
-    capture_screen
+    request_capture
+    exit $?
     ;;
 request-control)
     request_control

@@ -238,14 +238,6 @@ start_simulator() {
     log "AWSIM PID: $PID_AWSIM"
 }
 
-check_simulator_ready() {
-    log "Check simulator readiness"
-    export ROS_DOMAIN_ID=$ROS_DOMAIN_ID_SIM
-    bash /aichallenge/publish.bash check-awsim
-    log "AWSIM is ready."
-    export ROS_DOMAIN_ID=$ROS_DOMAIN_ID_DEFAULT
-}
-
 start_autoware() {
     log "Start Autoware"
     nohup /aichallenge/run_autoware.bash awsim "$ROS_DOMAIN_ID" >autoware.log 2>&1 &
@@ -363,7 +355,10 @@ main() {
     tune_network_best_effort
 
     start_simulator
-    check_simulator_ready
+    
+    log "Check simulator readiness"
+    run_or_exit "AWSIM /clock wait" env ROS_DOMAIN_ID="$ROS_DOMAIN_ID_SIM" bash /aichallenge/publish.bash check-awsim
+    log "AWSIM is ready."
 
     start_autoware
     sleep 3

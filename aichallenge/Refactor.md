@@ -27,12 +27,12 @@
 - `--uid N` / `--gid N`（互換: 末尾に `<uid> <gid>`）: 生成物の `chown` 用
 - `--domain-id N`: Autoware 側の `ROS_DOMAIN_ID` として使用
 - `--output-root PATH`: 出力先（デフォルト `/output`）
-- `--result-wait-seconds N`: `result-details.json` の待ち秒数（デフォルト 60）
+- `--result-wait-seconds N`: `result-details.json` の待ち秒数（デフォルト 10）
 - 未知引数: 無視（互換のため保持して警告ログ）
 
 ### 「落ちても最低限は残す」ための工夫
 
-- `trap cleanup EXIT SIGINT SIGTERM` により、通常終了/中断（Ctrl+C 等）でも後処理を走らせる
+- `trap cleanup EXIT` と `trap on_sigint SIGINT` / `trap on_sigterm SIGTERM` により、通常終了/中断（Ctrl+C 等）でも後処理を走らせる
 - `sudo` は `sudo -n` を best-effort で呼び、パスワード待ちでハングしないようにする
 - `wmctrl` が無い/見つからない場合はウィンドウ制御をスキップし、評価自体は続行する
 - `result-details.json` を最大待ちしてから `result-converter.py` を呼ぶ（遅延生成の吸収）
@@ -40,11 +40,11 @@
 ## 現状の注意点 / 残課題
 
 ### 1) Domain ID の扱いが分かりづらい
-- `check_simulator_ready()` で `ROS_DOMAIN_ID` を一時的に `ROS_DOMAIN_ID_SIM` に切り替えています。
-- 切り替え後の復帰先が `ROS_DOMAIN_ID_DEFAULT` 固定のため、`--domain-id` 指定時は意図とズレる可能性があります（「元の値に戻す」のが読みやすい）。
+- AWSIM の `/clock` 待ちは、`env ROS_DOMAIN_ID=<sim>` を付けて「そのコマンドだけ」Domain を切り替えて実行しています。
+- そのため `--domain-id` で指定した Autoware 側の Domain を上書きしません。
 
 ### 2) `publish.bash` 呼び出し結果の扱い
-- `run_evaluation.bash` は `/aichallenge/publish.bash request-control` 等を呼びますが、現状の `publish.bash` は基本的に `exit 0` で終わるため、失敗を exit code で受け取りにくいです。
+- `publish.bash` は `timeout`/`ros2` の終了コードを返すため、`run_evaluation.bash` 側で `$?`（または `run_or_exit`）により失敗を判定できます。
 - `request_control` の「成功判定」を `run_evaluation.bash` 側で取りたい場合は、以下のどれかに寄せるのが読みやすいです。
   - `publish.bash` を「関数ライブラリ + CLIラッパ」に分け、関数が適切な終了コードを返す
   - `ros2 service call` の出力（`success:` 等）をパースして終了コード化する
@@ -53,7 +53,3 @@
 ### 3) ネットワーク設定の重複
 - `run_evaluation.bash` 側は `sudo -n` の best-effort ですが、`run_simulator.bash` 側にも `sudo ip link ...` 等があり、環境によってはそこがブロッカーになり得ます。
 - 「どこが責務を持つか」を整理すると追いやすくなります（例: 片側に寄せる）。
-
-## 参考: さらなる整理案（未反映）
-
-- `run_evaluation.bash` の中を「lib化して source」する場合は、`main "$@"` を直実行時だけ呼ぶ構造（`BASH_SOURCE` チェック）にして、再利用時に副作用が出ないようにする。
