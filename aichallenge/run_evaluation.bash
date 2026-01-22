@@ -345,13 +345,13 @@ kill_sid_safe() {
         return 0
     fi
 
-    local pids
-    pids=$(pgrep -s "$sid" 2>/dev/null || true)
-    if [ -z "$pids" ]; then
+    local -a pids=()
+    mapfile -t pids < <(pgrep -s "$sid" 2>/dev/null || true)
+    if [ "${#pids[@]}" -eq 0 ]; then
         return 0
     fi
 
-    kill "-$signal" $pids 2>/dev/null || true
+    kill "-$signal" "${pids[@]}" 2>/dev/null || true
 }
 
 is_session_running() {

@@ -9,7 +9,6 @@ usage() {
     echo "  request-control     Request control mode change"
     echo "  request-initialpose Set initial pose"
     echo "  help                Display this help message"
-    exit 1
 }
 
 # Function to capture screen
@@ -82,34 +81,39 @@ check_simulator_ready() {
 
 # Check if an argument was provided
 if [ $# -eq 0 ]; then
-    usage
+    usage >&2
+    exit 1
 fi
+
+rc=0
 
 # Process based on provided argument
 case "$1" in
 check-awsim)
     check_simulator_ready
-    exit $?
+    rc=$?
     ;;
 request-capture)
     request_capture
-    exit $?
+    rc=$?
     ;;
 request-control)
     request_control
-    exit $?
+    rc=$?
     ;;
 request-initialpose)
     request_initial_pose_set
-    exit $?
+    rc=$?
     ;;
 help)
     usage
+    rc=0
     ;;
 *)
-    echo "Error: Invalid option '$1'"
-    usage
+    echo "Error: Invalid option '$1'" >&2
+    usage >&2
+    rc=2
     ;;
 esac
 
-exit 0
+exit "$rc"
