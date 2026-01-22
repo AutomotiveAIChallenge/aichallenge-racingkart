@@ -40,7 +40,7 @@ call_service() {
     local timeout_s="$2"
     local service="$3"
     local type="$4"
-    local request="${5:-}"
+    local request="${5-}"
 
     if [ -z "$request" ]; then
         request="{}"

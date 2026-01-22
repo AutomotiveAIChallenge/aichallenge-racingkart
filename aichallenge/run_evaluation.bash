@@ -355,7 +355,7 @@ main() {
     tune_network_best_effort
 
     start_simulator
-    
+
     log "Check simulator readiness"
     run_or_exit "AWSIM /clock wait" env ROS_DOMAIN_ID="$ROS_DOMAIN_ID_SIM" bash /aichallenge/publish.bash check-awsim
     log "AWSIM is ready."
