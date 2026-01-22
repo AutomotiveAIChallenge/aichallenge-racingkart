@@ -12,6 +12,7 @@
 #include <utility>
 
 #include <QHBoxLayout>
+#include <QMetaObject>
 
 #include <rcpputils/shared_library.hpp>
 
@@ -186,6 +187,7 @@ ControlModePanel::ControlModePanel(QWidget * parent)
   trajectory_topic_name_("/planning/scenario_planning/trajectory"),
   trajectory_topic_type_name_("autoware_auto_planning_msgs/msg/Trajectory"),
   initial_pose_topic_name_("/initialpose"),
+  initial_pose_service_name_("/set_initial_pose"),
   topic_label_(new QLabel(this)),
   status_label_(new QLabel(this)),
   send_button_(new QPushButton(tr("Auto Mode Start"), this)),
@@ -227,6 +229,7 @@ void ControlModePanel::onInitialize()
 
   ensurePublisher();
   ensureInitialPosePublisher();
+  ensureInitialPoseService();
   ensureSubscriptions();
 }
 
@@ -245,6 +248,29 @@ void ControlModePanel::ensureInitialPosePublisher()
     initial_pose_publisher_ =
       ros_node_->create_publisher<geometry_msgs::msg::PoseWithCovarianceStamped>(
         initial_pose_topic_name_, qos);
+  }
+}
+
+void ControlModePanel::ensureInitialPoseService()
+{
+  if (!initial_pose_service_ && ros_node_) {
+    initial_pose_service_ = ros_node_->create_service<std_srvs::srv::Trigger>(
+      initial_pose_service_name_,
+      [this](
+        const std::shared_ptr<std_srvs::srv::Trigger::Request> /*request*/,
+        std::shared_ptr<std_srvs::srv::Trigger::Response> response)
+      {
+        QString status;
+        const bool success = tryPublishInitialPose(status);
+
+        response->success = success;
+        response->message = status.toStdString();
+
+        if (status_label_) {
+          QMetaObject::invokeMethod(
+            status_label_, "setText", Qt::QueuedConnection, Q_ARG(QString, status));
+        }
+      });
   }
 }
 
@@ -465,16 +491,25 @@ void ControlModePanel::sendControlModeStop()
 
 void ControlModePanel::sendInitialPoseSet()
 {
+  QString status;
+  (void)tryPublishInitialPose(status);
+  status_label_->setText(status);
+}
+
+bool ControlModePanel::tryPublishInitialPose(QString & status_text)
+{
+  status_text.clear();
+
   ensureSubscriptions();
   ensureInitialPosePublisher();
 
   if (!ros_node_) {
-    status_label_->setText(tr("Initial Pose: ROS node is not available"));
-    return;
+    status_text = tr("Initial Pose: ROS node is not available");
+    return false;
   }
   if (!initial_pose_publisher_) {
-    status_label_->setText(tr("Initial Pose: publisher is not available"));
-    return;
+    status_text = tr("Initial Pose: publisher is not available");
+    return false;
   }
 
   geometry_msgs::msg::PoseWithCovarianceStamped::SharedPtr gnss_pose;
@@ -488,22 +523,22 @@ void ControlModePanel::sendInitialPoseSet()
   }
 
   if (!gnss_pose) {
-    status_label_->setText(tr("Initial Pose: waiting for GNSS pose"));
+    status_text = tr("Initial Pose: waiting for GNSS pose");
     RCLCPP_WARN(ros_node_->get_logger(), "Initial pose set requested, but GNSS pose is not received yet.");
-    return;
+    return false;
   }
   if (trajectory_points.empty()) {
-    status_label_->setText(tr("Initial Pose: waiting for trajectory"));
+    status_text = tr("Initial Pose: waiting for trajectory");
     RCLCPP_WARN(ros_node_->get_logger(), "Initial pose set requested, but trajectory is not received yet.");
-    return;
+    return false;
   }
 
   if (trajectory_points.size() < 2) {
-    status_label_->setText(tr("Initial Pose: trajectory has too few points"));
+    status_text = tr("Initial Pose: trajectory has too few points");
     RCLCPP_WARN(
       ros_node_->get_logger(), "Initial pose set requested, but trajectory has too few points: %zu",
       trajectory_points.size());
-    return;
+    return false;
   }
 
   if (
@@ -518,9 +553,9 @@ void ControlModePanel::sendInitialPoseSet()
 
   const auto & gnss_point = gnss_pose->pose.pose.position;
   if (!isFinitePoint2d(gnss_point)) {
-    status_label_->setText(tr("Initial Pose: GNSS pose is invalid"));
+    status_text = tr("Initial Pose: GNSS pose is invalid");
     RCLCPP_WARN(ros_node_->get_logger(), "Initial pose set requested, but GNSS pose is invalid (NaN/Inf).");
-    return;
+    return false;
   }
 
   size_t closest_index = 0;
@@ -540,20 +575,20 @@ void ControlModePanel::sendInitialPoseSet()
   }
 
   if (!found) {
-    status_label_->setText(tr("Initial Pose: trajectory points are invalid"));
+    status_text = tr("Initial Pose: trajectory points are invalid");
     RCLCPP_WARN(
       ros_node_->get_logger(),
       "Initial pose set requested, but all trajectory points are invalid (NaN/Inf).");
-    return;
+    return false;
   }
 
   double yaw = 0.0;
   if (!tryComputeYawFromAdjacentPoints(trajectory_points, closest_index, yaw)) {
-    status_label_->setText(tr("Initial Pose: cannot compute yaw from trajectory"));
+    status_text = tr("Initial Pose: cannot compute yaw from trajectory");
     RCLCPP_WARN(
       ros_node_->get_logger(),
       "Initial pose set requested, but cannot compute yaw from adjacent trajectory points.");
-    return;
+    return false;
   }
 
   auto initial_pose = *gnss_pose;
@@ -564,10 +599,11 @@ void ControlModePanel::sendInitialPoseSet()
   initial_pose_publisher_->publish(initial_pose);
 
   const double yaw_deg = yaw * 180.0 / kPi;
-  status_label_->setText(tr("Initial Pose: published (yaw %1 deg)").arg(yaw_deg, 0, 'f', 1));
+  status_text = tr("Initial Pose: published (yaw %1 deg)").arg(yaw_deg, 0, 'f', 1);
   RCLCPP_INFO(
     ros_node_->get_logger(), "Published /initialpose from GNSS pose with trajectory yaw (%.3f deg).",
     yaw_deg);
+  return true;
 }
 
 void ControlModePanel::publishControlMode(bool enable)

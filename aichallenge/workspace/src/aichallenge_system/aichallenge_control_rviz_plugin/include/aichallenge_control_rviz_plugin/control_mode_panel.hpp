@@ -14,6 +14,7 @@
 #include <rclcpp/rclcpp.hpp>
 #include <rviz_common/panel.hpp>
 #include <std_msgs/msg/bool.hpp>
+#include <std_srvs/srv/trigger.hpp>
 
 struct rosidl_message_type_support_t;
 
@@ -55,17 +56,20 @@ private:
   void publishControlMode(bool enable);
   void ensurePublisher();
   void ensureInitialPosePublisher();
+  void ensureInitialPoseService();
   void ensureSubscriptions();
   bool ensureTrajectoryTypeSupport();
   bool parseTrajectoryMessage(
     const rclcpp::SerializedMessage & serialized, std::vector<geometry_msgs::msg::Point> & points,
     std::string & frame_id);
+  bool tryPublishInitialPose(QString & status_text);
 
   rclcpp::Node::SharedPtr ros_node_;
   rclcpp::Publisher<std_msgs::msg::Bool>::SharedPtr publisher_;
 
   rclcpp::Publisher<geometry_msgs::msg::PoseWithCovarianceStamped>::SharedPtr
     initial_pose_publisher_;
+  rclcpp::Service<std_srvs::srv::Trigger>::SharedPtr initial_pose_service_;
   rclcpp::Subscription<geometry_msgs::msg::PoseWithCovarianceStamped>::SharedPtr gnss_pose_sub_;
   std::shared_ptr<rclcpp::GenericSubscription> trajectory_sub_;
 
@@ -80,6 +84,7 @@ private:
   std::string trajectory_topic_name_;
   std::string trajectory_topic_type_name_;
   std::string initial_pose_topic_name_;
+  std::string initial_pose_service_name_;
   QLabel * topic_label_;
   QLabel * status_label_;
   QPushButton * send_button_;

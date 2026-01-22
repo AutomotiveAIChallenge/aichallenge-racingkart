@@ -44,6 +44,7 @@ ament_target_dependencies(${PROJECT_NAME} PUBLIC
   geometry_msgs
   rosidl_typesupport_introspection_cpp
   std_msgs
+  std_srvs
 )
 
 ament_export_include_directories(include)
