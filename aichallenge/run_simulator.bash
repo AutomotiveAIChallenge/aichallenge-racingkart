@@ -13,7 +13,10 @@ fi
 
 case "${mode}" in
 "endless")
-    opts+=(" --endless")
+    opts+=("--endless")
+    ;;
+"eval")
+    opts+=("--vehicles" "1" --laps "6" --timeout  "600")
     ;;
 *) ;;
 esac

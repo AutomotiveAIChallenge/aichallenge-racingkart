@@ -61,18 +61,18 @@ autoware-sim:
 ifeq ($(ROSBAG),true)
     ifeq ($(CAPTURE),true)
         # ROSBAG=true かつ CAPTURE=true の場合
-        RUN_MODE_VAL := "rosbag capture"
+        RUN_MODE_VAL := "--rosbag --capture"
         LOG_MSG := "--- Starting Evaluation (With ROSBAG & CAPTURE) ---"
     else
         # ROSBAG=true だが CAPTURE!=true の場合
-        RUN_MODE_VAL := "rosbag"
+        RUN_MODE_VAL := "--rosbag"
         LOG_MSG := "--- Starting Evaluation (With ROSBAG) ---"
     endif
 else
     # 2. ROSBAG!=true のレシピ
     ifeq ($(CAPTURE),true)
         # ROSBAG!=true かつ CAPTURE=true の場合
-        RUN_MODE_VAL := "capture"
+        RUN_MODE_VAL := "--capture"
         LOG_MSG := "--- Starting Evaluation (no ROSBAG, With CAPTURE) ---"
     else
         # ROSBAG!=true かつ CAPTURE!=true の場合
