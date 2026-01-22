@@ -12,3 +12,4 @@ Toward the competition, we will update the following pages to provide informatio
 
 - [日本語ページ](https://automotiveaichallenge.github.io/aichallenge-documentation-racingkart/)
 - [English Page](https://automotiveaichallenge.github.io/aichallenge-documentation-racingkart/en/)
+- [スクリプト設計メモ（評価/ビルド/起動）](aichallenge/Readme.md)

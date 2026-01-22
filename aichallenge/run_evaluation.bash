@@ -60,6 +60,17 @@ best_effort() {
     "$@" >/dev/null 2>&1 || warn "Command failed (continuing): $*"
 }
 
+stop_ros2_daemon_best_effort() {
+    if ! command -v ros2 >/dev/null 2>&1; then
+        return 0
+    fi
+    if command -v timeout >/dev/null 2>&1; then
+        best_effort timeout 5s ros2 daemon stop
+    else
+        best_effort ros2 daemon stop
+    fi
+}
+
 is_number() {
     [[ ${1-} =~ $RE_NUMBER ]]
 }
@@ -172,7 +183,7 @@ move_window() {
     has_gpu=$(command -v nvidia-smi >/dev/null && echo 1 || echo 0)
 
     # Add timeout to prevent infinite hanging
-    local timeout=60 # 60 seconds timeout
+    local timeout=10 # 10 seconds timeout
     local elapsed=0
 
     while [ $elapsed -lt $timeout ]; do
@@ -233,14 +244,22 @@ tune_network_best_effort() {
 
 start_simulator() {
     log "Start AWSIM"
-    nohup /aichallenge/run_simulator.bash eval >/dev/null 2>&1 &
+    if command -v setsid >/dev/null 2>&1; then
+        nohup setsid /aichallenge/run_simulator.bash eval >/dev/null 2>&1 &
+    else
+        nohup /aichallenge/run_simulator.bash eval >/dev/null 2>&1 &
+    fi
     PID_AWSIM=$!
     log "AWSIM PID: $PID_AWSIM"
 }
 
 start_autoware() {
     log "Start Autoware"
-    nohup /aichallenge/run_autoware.bash awsim "$ROS_DOMAIN_ID" >autoware.log 2>&1 &
+    if command -v setsid >/dev/null 2>&1; then
+        nohup setsid /aichallenge/run_autoware.bash awsim "$ROS_DOMAIN_ID" >autoware.log 2>&1 &
+    else
+        nohup /aichallenge/run_autoware.bash awsim "$ROS_DOMAIN_ID" >autoware.log 2>&1 &
+    fi
     PID_AUTOWARE=$!
     log "Autoware PID: $PID_AUTOWARE"
 }
@@ -290,6 +309,276 @@ stop_rosbag_if_needed() {
     fi
 }
 
+get_pgid_of_pid() {
+    local pid="$1"
+    ps -o pgid= -p "$pid" 2>/dev/null | tr -d ' '
+}
+
+get_self_pgid() {
+    ps -o pgid= -p $$ 2>/dev/null | tr -d ' '
+}
+
+get_sid_of_pid() {
+    local pid="$1"
+    ps -o sid= -p "$pid" 2>/dev/null | tr -d ' '
+}
+
+get_self_sid() {
+    ps -o sid= -p $$ 2>/dev/null | tr -d ' '
+}
+
+is_sid_safe_to_signal() {
+    local sid="$1"
+    if [ -z "$sid" ]; then
+        return 1
+    fi
+    local self_sid
+    self_sid=$(get_self_sid)
+    [ -z "$self_sid" ] || [ "$sid" != "$self_sid" ]
+}
+
+kill_sid_safe() {
+    local sid="$1"
+    local signal="${2:-TERM}"
+
+    if [ -z "$sid" ]; then
+        return 0
+    fi
+
+    local pids
+    pids=$(pgrep -s "$sid" 2>/dev/null || true)
+    if [ -z "$pids" ]; then
+        return 0
+    fi
+
+    kill "-$signal" $pids 2>/dev/null || true
+}
+
+is_session_running() {
+    local sid="$1"
+    pgrep -s "$sid" >/dev/null 2>&1
+}
+
+stop_process_name_best_effort() {
+    local name="$1"
+    local label="${2:-$1}"
+
+    if ! command -v pgrep >/dev/null 2>&1; then
+        return 0
+    fi
+
+    local pids
+    pids=$(pgrep -x "$name" 2>/dev/null || true)
+    if [ -z "$pids" ]; then
+        return 0
+    fi
+
+    warn "Leftover ${label} detected. Stopping..."
+
+    local pid pgid
+    for pid in $pids; do
+        pgid=$(get_pgid_of_pid "$pid")
+        log "Stop leftover ${label} (PID: ${pid}, PGID: ${pgid:-NA})"
+        if is_pgid_safe_to_signal "$pgid"; then
+            kill_pgid_safe "$pgid" INT
+        else
+            kill -INT "$pid" 2>/dev/null || true
+        fi
+    done
+
+    local i
+    for ((i = 0; i < 50; i++)); do
+        if ! pgrep -x "$name" >/dev/null 2>&1; then
+            return 0
+        fi
+        sleep 0.1
+    done
+
+    warn "Leftover ${label} did not exit. Sending SIGKILL..."
+    pids=$(pgrep -x "$name" 2>/dev/null || true)
+    for pid in $pids; do
+        pgid=$(get_pgid_of_pid "$pid")
+        if is_pgid_safe_to_signal "$pgid"; then
+            kill_pgid_safe "$pgid" KILL
+        else
+            kill -KILL "$pid" 2>/dev/null || true
+        fi
+    done
+}
+
+stop_pids_matching_cmdline_best_effort() {
+    local pattern="$1"
+    local label="$2"
+
+    if ! command -v pgrep >/dev/null 2>&1; then
+        return 0
+    fi
+
+    local pids
+    pids=$(pgrep -f "$pattern" 2>/dev/null || true)
+    if [ -z "$pids" ]; then
+        return 0
+    fi
+
+    warn "Leftover ${label} detected. Stopping..."
+
+    local pid pgid
+    for pid in $pids; do
+        pgid=$(get_pgid_of_pid "$pid")
+        log "Stop leftover ${label} (PID: ${pid}, PGID: ${pgid:-NA})"
+        if is_pgid_safe_to_signal "$pgid"; then
+            kill_pgid_safe "$pgid" INT
+        else
+            kill -INT "$pid" 2>/dev/null || true
+        fi
+    done
+}
+
+kill_pgid_safe() {
+    local pgid="$1"
+    local signal="${2:-TERM}"
+
+    if [ -z "$pgid" ]; then
+        return 0
+    fi
+
+    local self_pgid
+    self_pgid=$(get_self_pgid)
+    if [ -n "$self_pgid" ] && [ "$pgid" = "$self_pgid" ]; then
+        return 0
+    fi
+
+    kill "-$signal" -- "-$pgid" 2>/dev/null || true
+}
+
+is_pgid_safe_to_signal() {
+    local pgid="$1"
+    if [ -z "$pgid" ]; then
+        return 1
+    fi
+    local self_pgid
+    self_pgid=$(get_self_pgid)
+    [ -z "$self_pgid" ] || [ "$pgid" != "$self_pgid" ]
+}
+
+is_process_group_running() {
+    local pgid="$1"
+    pgrep -g "$pgid" >/dev/null 2>&1
+}
+
+stop_nohup_process_if_needed() {
+    local label="$1"
+    local pid="$2"
+
+    if [ -z "$pid" ]; then
+        return 0
+    fi
+
+    local pid_running=0
+    if kill -0 "$pid" 2>/dev/null; then
+        pid_running=1
+    fi
+
+    local sid
+    sid=$(get_sid_of_pid "$pid")
+    if [ -z "$sid" ] && is_session_running "$pid"; then
+        # When started with `setsid`, session id == original PID (even if the leader is already gone)
+        sid="$pid"
+    fi
+
+    local pgid
+    pgid=$(get_pgid_of_pid "$pid")
+
+    local has_targets=0
+    if [ "$pid_running" -eq 1 ]; then
+        has_targets=1
+    elif [ -n "$sid" ] && is_session_running "$sid"; then
+        has_targets=1
+    elif [ -n "$pgid" ] && is_process_group_running "$pgid"; then
+        has_targets=1
+    fi
+    if [ "$has_targets" -ne 1 ]; then
+        return 0
+    fi
+
+    log "Stop ${label} (PID: ${pid}, SID: ${sid:-NA}, PGID: ${pgid:-NA})"
+
+    if is_sid_safe_to_signal "$sid"; then
+        kill_sid_safe "$sid" INT
+    elif is_pgid_safe_to_signal "$pgid"; then
+        kill_pgid_safe "$pgid" INT
+    else
+        if [ "$pid_running" -eq 1 ]; then
+            kill -INT "$pid" 2>/dev/null || true
+        fi
+    fi
+
+    local i
+    for ((i = 0; i < 50; i++)); do
+        if is_sid_safe_to_signal "$sid"; then
+            if ! is_session_running "$sid"; then
+                break
+            fi
+        elif is_pgid_safe_to_signal "$pgid"; then
+            if ! is_process_group_running "$pgid"; then
+                break
+            fi
+        else
+            if [ "$pid_running" -eq 1 ] && ! kill -0 "$pid" 2>/dev/null; then
+                break
+            fi
+        fi
+        sleep 0.1
+    done
+
+    local still_running=0
+    if is_sid_safe_to_signal "$sid"; then
+        if is_session_running "$sid"; then
+            still_running=1
+        fi
+    elif is_pgid_safe_to_signal "$pgid"; then
+        if is_process_group_running "$pgid"; then
+            still_running=1
+        fi
+    else
+        if [ "$pid_running" -eq 1 ] && kill -0 "$pid" 2>/dev/null; then
+            still_running=1
+        fi
+    fi
+
+    if [ "$still_running" -eq 1 ]; then
+        warn "${label} did not exit. Sending SIGKILL..."
+        if is_sid_safe_to_signal "$sid"; then
+            kill_sid_safe "$sid" KILL
+        elif is_pgid_safe_to_signal "$pgid"; then
+            kill_pgid_safe "$pgid" KILL
+        else
+            if [ "$pid_running" -eq 1 ]; then
+                kill -KILL "$pid" 2>/dev/null || true
+            fi
+        fi
+
+        for ((i = 0; i < 50; i++)); do
+            if is_sid_safe_to_signal "$sid"; then
+                if ! is_session_running "$sid"; then
+                    break
+                fi
+            elif is_pgid_safe_to_signal "$pgid"; then
+                if ! is_process_group_running "$pgid"; then
+                    break
+                fi
+            else
+                if ! kill -0 "$pid" 2>/dev/null; then
+                    break
+                fi
+            fi
+            sleep 0.1
+        done
+    fi
+
+    wait "$pid" 2>/dev/null || true
+}
+
 convert_result_best_effort() {
     log "Convert result (wait up to ${RESULT_WAIT_SECONDS}s for $INPUT_RESULT)"
     for ((i = 0; i < RESULT_WAIT_SECONDS; i++)); do
@@ -322,6 +611,11 @@ fix_ownership_if_needed() {
 cleanup() {
     stop_screen_capture_if_needed
     stop_rosbag_if_needed
+    stop_nohup_process_if_needed "Autoware" "$PID_AUTOWARE"
+    stop_nohup_process_if_needed "AWSIM" "$PID_AWSIM"
+    stop_pids_matching_cmdline_best_effort "/opt/ros/humble/bin/ros2" "ros2 (launch/cli)"
+    stop_ros2_daemon_best_effort
+    stop_pids_matching_cmdline_best_effort "ros2cli.daemon" "ros2 daemon"
     fix_ownership_if_needed
 }
 
