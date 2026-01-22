@@ -5,6 +5,7 @@ IS_CAPTURE_MODE=0
 ROS_DOMAIN_ID_SIM=0
 ROS_DOMAIN_ID_DEFAULT=1
 ROS_DOMAIN_ID=$ROS_DOMAIN_ID_DEFAULT
+INPUT_RESULT="d$ROS_DOMAIN_ID-result-details.json"
 
 HOST_UID=""
 HOST_GID=""
@@ -298,12 +299,12 @@ stop_rosbag_if_needed() {
 }
 
 convert_result_best_effort() {
-    log "Convert result (wait up to ${RESULT_WAIT_SECONDS}s for result-details.json)"
+    log "Convert result (wait up to ${RESULT_WAIT_SECONDS}s for $INPUT_RESULT)"
     for ((i = 0; i < RESULT_WAIT_SECONDS; i++)); do
-        [ -s result-details.json ] && break
+        [ -s $INPUT_RESULT ] && break
         sleep 1
     done
-    python3 /aichallenge/workspace/src/aichallenge_system/script/result-converter.py 60 11 || true
+    python3 /aichallenge/workspace/src/aichallenge_system/script/result-converter.py --input $INPUT_RESULT || true
 }
 
 fix_ownership_if_needed() {
@@ -332,6 +333,20 @@ cleanup() {
     fix_ownership_if_needed
 }
 
+on_sigint() {
+    warn "Interrupted (SIGINT). Cleaning up..."
+    trap - EXIT SIGINT SIGTERM
+    cleanup
+    exit 130
+}
+
+on_sigterm() {
+    warn "Terminated (SIGTERM). Cleaning up..."
+    trap - EXIT SIGINT SIGTERM
+    cleanup
+    exit 143
+}
+
 main() {
     parse_args "$@"
     if [ "$REQUEST_HELP" -eq 1 ]; then
@@ -339,7 +354,9 @@ main() {
         return 0
     fi
 
-    trap cleanup EXIT SIGINT SIGTERM # Called at script exit or Ctrl-C
+    trap cleanup EXIT
+    trap on_sigint SIGINT
+    trap on_sigterm SIGTERM
 
     setup_output_dir
     setup_ros_env
