@@ -16,7 +16,7 @@ case "${mode}" in
     opts+=("--endless")
     ;;
 "eval")
-    opts+=("--vehicles" "1" --laps "6" --timeout  "600")
+    opts+=("--vehicles" "1" --laps "6" --timeout "600")
     ;;
 *) ;;
 esac

@@ -60,7 +60,7 @@ best_effort() {
 }
 
 is_number() {
-    [[ "${1:-}" =~ $RE_NUMBER ]]
+    [[ ${1-} =~ $RE_NUMBER ]]
 }
 
 parse_args() {
@@ -75,23 +75,23 @@ parse_args() {
             shift
             ;;
         --uid)
-            HOST_UID="${2:-}"
+            HOST_UID="${2-}"
             shift 2
             ;;
         --gid)
-            HOST_GID="${2:-}"
+            HOST_GID="${2-}"
             shift 2
             ;;
         --domain-id)
-            ROS_DOMAIN_ID="${2:-}"
+            ROS_DOMAIN_ID="${2-}"
             shift 2
             ;;
         --output-root)
-            OUTPUT_ROOT="${2:-}"
+            OUTPUT_ROOT="${2-}"
             shift 2
             ;;
         --result-wait-seconds)
-            RESULT_WAIT_SECONDS="${2:-}"
+            RESULT_WAIT_SECONDS="${2-}"
             shift 2
             ;;
         -h | --help)
