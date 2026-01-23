@@ -149,6 +149,7 @@ parse_args() {
     if [ -n "$ROS_DOMAIN_ID" ] && ! is_number "$ROS_DOMAIN_ID"; then
         warn "Invalid --domain-id: '$ROS_DOMAIN_ID' (fallback to ${ROS_DOMAIN_ID_DEFAULT})"
         ROS_DOMAIN_ID=$ROS_DOMAIN_ID_DEFAULT
+        INPUT_RESULT="d${ROS_DOMAIN_ID}-result-details.json"
     fi
     if [ -n "$RESULT_WAIT_SECONDS" ] && ! is_number "$RESULT_WAIT_SECONDS"; then
         warn "Invalid --result-wait-seconds: '$RESULT_WAIT_SECONDS' (fallback to 60)"
