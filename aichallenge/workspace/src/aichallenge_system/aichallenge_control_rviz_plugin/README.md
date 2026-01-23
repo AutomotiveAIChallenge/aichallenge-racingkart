@@ -67,7 +67,7 @@ Provides buttons for:
 
 - `Auto Mode Start` / `Auto Mode Stop`: publish `std_msgs/Bool` to request autonomous control mode.
 - `Initial Pose Set`: publish `/initialpose` using GNSS position and trajectory heading.
-  - Same behavior is also available via service: `/aichallenge/control_mode_panel/set_initial_pose` (`std_srvs/srv/Trigger`).
+  - Same behavior is also available via service: `/set_initial_pose` (`std_srvs/srv/Trigger`).
 
 ## Initial Pose Set specification
 
