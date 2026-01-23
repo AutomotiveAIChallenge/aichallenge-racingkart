@@ -584,10 +584,10 @@ stop_nohup_process_if_needed() {
 convert_result_best_effort() {
     log "Convert result (wait up to ${RESULT_WAIT_SECONDS}s for $INPUT_RESULT)"
     for ((i = 0; i < RESULT_WAIT_SECONDS; i++)); do
-        [ -s $INPUT_RESULT ] && break
+        [ -s "$INPUT_RESULT" ] && break
         sleep 1
     done
-    python3 /aichallenge/workspace/src/aichallenge_system/script/result-converter.py --input $INPUT_RESULT || true
+    python3 /aichallenge/workspace/src/aichallenge_system/script/result-converter.py --input "$INPUT_RESULT" || true
 }
 
 fix_ownership_if_needed() {

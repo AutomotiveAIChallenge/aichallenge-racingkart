@@ -41,6 +41,7 @@ call_service() {
     local type="$4"
     local request="${5-}"
 
+
     if [ -z "$request" ]; then
         request="{}"
     fi
