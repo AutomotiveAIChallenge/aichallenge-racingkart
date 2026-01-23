@@ -14,7 +14,7 @@ AI Challenge システム向けの RViz2 パネルプラグインです。
 
 ### 初期姿勢セット（サービス）
 
-- サービス名: `/aichallenge/control_mode_panel/set_initial_pose`
+- サービス名: `/set_initial_pose`
 - 型: `std_srvs/srv/Trigger`
 - 呼び出し例:
   - `ros2 service call /aichallenge/control_mode_panel/set_initial_pose std_srvs/srv/Trigger {}`
