@@ -12,8 +12,15 @@ x-autoware-base: &autoware-base
     - TZ=Asia/Tokyo
     - RUN_MODE=
     - CMD=
+    - AWSIM_TITLE_REGEX=${AWSIM_TITLE_REGEX:-}
+    - AWSIM_CLASS_REGEX=${AWSIM_CLASS_REGEX:-}
+    - RVIZ_TITLE_REGEX=${RVIZ_TITLE_REGEX:-}
+    - RVIZ_CLASS_REGEX=${RVIZ_CLASS_REGEX:-}
+    - MOVE_WINDOW_DEBUG=${MOVE_WINDOW_DEBUG:-0}
+    - MOVE_WINDOW_PREFER_LARGEST=${MOVE_WINDOW_PREFER_LARGEST:-1}
+    - MOVE_WINDOW_QUIET=${MOVE_WINDOW_QUIET:-1}
   volumes:
-    - ./output:/output
+    - ./output:${OUTPUT_ROOT:-/output}
     - ./aichallenge:/aichallenge
     - ./remote:/remote
     - ./vehicle:/vehicle
@@ -77,13 +84,15 @@ services:
     <<: *autoware-base 
     container_name: "aic-2025-autoware"
     stop_grace_period: 0.1s
-    command: ["bash", "-c", "cd /aichallenge && exec bash run_autoware.bash ${RUN_MODE:-}"]
+    working_dir: ${OUTPUT_RUN_DIR:-/aichallenge}
+    command: ["bash", "-lc", "if [ \"${EVAL_RUN:-0}\" = \"1\" ]; then exec /aichallenge/run_autoware.bash ${RUN_MODE:-awsim} ${DOMAIN_ID:-1} >autoware.log 2>&1; else exec /aichallenge/run_autoware.bash ${RUN_MODE:-awsim} ${DOMAIN_ID:-1}; fi"]
 
   autoware-gpu:
     <<: [*autoware-base, *gpu]
     container_name: "aic-2025-autoware-gpu"
     stop_grace_period: 0.1s
-    command: ["bash", "-c", "cd /aichallenge && exec bash run_autoware.bash ${RUN_MODE:-}"]
+    working_dir: ${OUTPUT_RUN_DIR:-/aichallenge}
+    command: ["bash", "-lc", "if [ \"${EVAL_RUN:-0}\" = \"1\" ]; then exec /aichallenge/run_autoware.bash ${RUN_MODE:-awsim} ${DOMAIN_ID:-1} >autoware.log 2>&1; else exec /aichallenge/run_autoware.bash ${RUN_MODE:-awsim} ${DOMAIN_ID:-1}; fi"]
 
   # Autoware service
   aic-build:
@@ -102,13 +111,15 @@ services:
     <<: *autoware-base 
     container_name: "aic-2025-simulator"
     stop_grace_period: 0.1s
-    command: ["bash", "-c", "cd /aichallenge && exec bash run_simulator.bash"]
+    working_dir: ${OUTPUT_RUN_DIR:-/aichallenge}
+    command: ["bash", "-lc", "exec /aichallenge/run_simulator.bash ${SIM_MODE:-}"]
 
   simulator-gpu:
     <<: [*autoware-base, *gpu]
     container_name: "aic-2025-simulator-gpu"
     stop_grace_period: 0.1s
-    command: ["bash", "-c", "cd /aichallenge && exec bash run_simulator.bash"]
+    working_dir: ${OUTPUT_RUN_DIR:-/aichallenge}
+    command: ["bash", "-lc", "exec /aichallenge/run_simulator.bash ${SIM_MODE:-}"]
 
   sim-eval:
     <<: *autoware-base 
@@ -126,21 +137,20 @@ services:
     <<: *autoware-base 
     container_name: "aic-2025-cmd"
     stop_grace_period: 0.1s
-    command: ["bash", "-c", "source /opt/ros/humble/setup.bash && source /autoware/install/setup.bash && cd /aichallenge && exec ${CMD:-}"]
+    command: ["bash", "-lc", "source /aichallenge/workspace/install/setup.bash && cd ${CMD_WORKDIR:-/aichallenge} && exec ${CMD:-}"]
 
   aw-cmd-gpu:
     <<: [*autoware-base, *gpu]
     container_name: "aic-2025-cmd-gpu"
     stop_grace_period: 0.1s
-    command: ["bash", "-c", "source /opt/ros/humble/setup.bash && source /autoware/install/setup.bash && cd /aichallenge && exec ${CMD:-}"]
+    command: ["bash", "-lc", "source /aichallenge/workspace/install/setup.bash && cd ${CMD_WORKDIR:-/aichallenge} && exec ${CMD:-}"]
 
-  # rosbag record 
-  #rosbag:
-  #  <<: *autoware-base 
-  #  init: true
-  #  container_name: "aic-2025-rosbag"
-  #  stop_grace_period: 5.0s
-  #  command: ["bash", "-c", "source /opt/ros/humble/setup.bash && source /autoware/install/setup.bash && cd /vehicle && exec bash record_rosbag.bash"]
+  rosbag:
+    <<: *autoware-base
+    container_name: "aic-2025-rosbag"
+    stop_grace_period: 5.0s
+    working_dir: ${OUTPUT_RUN_DIR:-/aichallenge}
+    command: ["bash", "-lc", "exec env ROS_DOMAIN_ID=${DOMAIN_ID:-1} /aichallenge/record_rosbag.bash"]
 
   rviz2:
     <<: *autoware-base 
