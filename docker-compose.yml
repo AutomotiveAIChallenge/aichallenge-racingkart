@@ -13,10 +13,10 @@ x-autoware-base: &autoware-base
     - RUN_MODE=
     - CMD=
   volumes:
-    - ../output:/output
-    - ../aichallenge:/aichallenge
-    - ../remote:/remote
-    - ./:/vehicle
+    - ./output:/output
+    - ./aichallenge:/aichallenge
+    - ./remote:/remote
+    - ./vehicle:/vehicle
     - /tmp/.X11-unix:/tmp/.X11-unix:rw
     - /dev/dri:/dev/dri
     - ${XAUTHORITY}:${XAUTHORITY}:rw
@@ -25,6 +25,13 @@ x-autoware-base: &autoware-base
     - /dev/video0
     - /dev/input
   working_dir: /aichallenge
+
+x-gpu: &gpu
+  deploy:
+    resources:
+      reservations:
+        devices:
+          - capabilities: [gpu]
 
 x-racing_kart_interface-base: &racing_kart_interface-base
   image: "ghcr.io/tier4/racing_kart_interface:latest-experiment"
@@ -36,8 +43,8 @@ x-racing_kart_interface-base: &racing_kart_interface-base
     - USER=${USER}
     - TZ=Asia/Tokyo
     - ROS_DISTRO=humble
-    - NTRIP_USERNAME=${NTRIP_USERNAME}
-    - NTRIP_PASSWORD=${NTRIP_PASSWORD}
+    - NTRIP_USERNAME=${NTRIP_USERNAME:-}
+    - NTRIP_PASSWORD=${NTRIP_PASSWORD:-}
   volumes:
     - /dev/vcu:/dev/vcu
     - /dev/gnss:/dev/gnss
@@ -56,7 +63,7 @@ services:
     container_name: "zenoh"
     stop_grace_period: 0.1s
     working_dir: /vehicle
-    command: ["bash", "-c", "case ${VEHICLE_ID} in A2) PORT=7448;; A3) PORT=7449;; A6) PORT=7450;; A7) PORT=7451;; *) echo 'Invalid VEHICLE_ID'; exit 1;; esac && zenoh-bridge-ros2dds client -e tls/zenoh.dev.aichallenge-board.jsae.or.jp:$$PORT -c /vehicle/zenoh.json5"]
+    command: ["bash", "-c", "case ${VEHICLE_ID:-} in A2) PORT=7448;; A3) PORT=7449;; A6) PORT=7450;; A7) PORT=7451;; *) echo 'Invalid VEHICLE_ID'; exit 1;; esac && zenoh-bridge-ros2dds client -e tls/zenoh.dev.aichallenge-board.jsae.or.jp:$$PORT -c /vehicle/zenoh.json5"]
 
   # Driver service
   driver:
@@ -70,15 +77,26 @@ services:
     <<: *autoware-base 
     container_name: "aic-2025-autoware"
     stop_grace_period: 0.1s
-    command: ["bash", "-c", "cd /aichallenge && exec bash run_autoware.bash ${RUN_MODE}"]
+    command: ["bash", "-c", "cd /aichallenge && exec bash run_autoware.bash ${RUN_MODE:-}"]
 
+  autoware-gpu:
+    <<: [*autoware-base, *gpu]
+    container_name: "aic-2025-autoware-gpu"
+    stop_grace_period: 0.1s
+    command: ["bash", "-c", "cd /aichallenge && exec bash run_autoware.bash ${RUN_MODE:-}"]
 
   # Autoware service
   aic-build:
     <<: *autoware-base 
     container_name: "aic-2025-build"
     stop_grace_period: 0.1s
-    command: ["bash", "-c", "cd /aichallenge && exec bash build_autoware.bash ${HOST_UID} ${HOST_GID}"]
+    command: ["bash", "-c", "cd /aichallenge && exec bash build_autoware.bash ${HOST_UID:-} ${HOST_GID:-}"]
+
+  aic-build-gpu:
+    <<: [*autoware-base, *gpu]
+    container_name: "aic-2025-build-gpu"
+    stop_grace_period: 0.1s
+    command: ["bash", "-c", "cd /aichallenge && exec bash build_autoware.bash ${HOST_UID:-} ${HOST_GID:-}"]
 
   simulator:
     <<: *autoware-base 
@@ -86,17 +104,35 @@ services:
     stop_grace_period: 0.1s
     command: ["bash", "-c", "cd /aichallenge && exec bash run_simulator.bash"]
 
+  simulator-gpu:
+    <<: [*autoware-base, *gpu]
+    container_name: "aic-2025-simulator-gpu"
+    stop_grace_period: 0.1s
+    command: ["bash", "-c", "cd /aichallenge && exec bash run_simulator.bash"]
+
   sim-eval:
     <<: *autoware-base 
     container_name: "aic-2025-eval"
     stop_grace_period: 0.1s
-    command: ["bash", "-c", "cd /aichallenge && exec bash run_evaluation.bash ${RUN_MODE} ${HOST_UID} ${HOST_GID}"]
+    command: ["bash", "-c", "cd /aichallenge && exec bash run_evaluation.bash ${RUN_MODE:-} --uid ${HOST_UID:-} --gid ${HOST_GID:-}"]
+
+  sim-eval-gpu:
+    <<: [*autoware-base, *gpu]
+    container_name: "aic-2025-eval-gpu"
+    stop_grace_period: 0.1s
+    command: ["bash", "-c", "cd /aichallenge && exec bash run_evaluation.bash ${RUN_MODE:-} --uid ${HOST_UID:-} --gid ${HOST_GID:-}"]
 
   aw-cmd:
     <<: *autoware-base 
     container_name: "aic-2025-cmd"
     stop_grace_period: 0.1s
-    command: ["bash", "-c", "source /opt/ros/humble/setup.bash && source /autoware/install/setup.bash && cd /aichallenge && exec ${CMD}"]
+    command: ["bash", "-c", "source /opt/ros/humble/setup.bash && source /autoware/install/setup.bash && cd /aichallenge && exec ${CMD:-}"]
+
+  aw-cmd-gpu:
+    <<: [*autoware-base, *gpu]
+    container_name: "aic-2025-cmd-gpu"
+    stop_grace_period: 0.1s
+    command: ["bash", "-c", "source /opt/ros/humble/setup.bash && source /autoware/install/setup.bash && cd /aichallenge && exec ${CMD:-}"]
 
   # rosbag record 
   #rosbag:
@@ -109,5 +145,11 @@ services:
   rviz2:
     <<: *autoware-base 
     container_name: "aic-2025-rviz2"
+    stop_grace_period: 0.1s
+    command: ["bash", "-c", "cd /aichallenge && exec bash run_rviz.bash remote"]
+
+  rviz2-gpu:
+    <<: [*autoware-base, *gpu]
+    container_name: "aic-2025-rviz2-gpu"
     stop_grace_period: 0.1s
     command: ["bash", "-c", "cd /aichallenge && exec bash run_rviz.bash remote"]

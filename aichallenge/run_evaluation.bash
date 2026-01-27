@@ -232,10 +232,6 @@ setup_output_dir() {
 
 setup_ros_env() {
     # shellcheck disable=SC1091
-    source /opt/ros/humble/setup.bash
-    # shellcheck disable=SC1091
-    source /autoware/install/setup.bash
-    # shellcheck disable=SC1091
     source /aichallenge/workspace/install/setup.bash
     export ROS_DOMAIN_ID=$ROS_DOMAIN_ID
 }

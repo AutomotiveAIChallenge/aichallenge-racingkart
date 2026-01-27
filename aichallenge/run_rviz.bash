@@ -25,8 +25,6 @@ case "${mode}" in
     ;;
 esac
 
-source /opt/ros/humble/setup.bash
-source /autoware/install/setup.bash
 source /aichallenge/workspace/install/setup.bash
 sudo ip link set multicast on lo
 sudo sysctl -w net.core.rmem_max=2147483647 >/dev/null

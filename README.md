@@ -13,3 +13,10 @@ Toward the competition, we will update the following pages to provide informatio
 - [日本語ページ](https://automotiveaichallenge.github.io/aichallenge-documentation-racingkart/)
 - [English Page](https://automotiveaichallenge.github.io/aichallenge-documentation-racingkart/en/)
 - [スクリプト設計メモ（評価/ビルド/起動）](aichallenge/Readme.md)
+
+## Docker Compose（推奨）
+
+- `cp .env.example .env`（必要に応じて編集）
+- ビルド: `./docker_build.sh dev`
+- 起動: `make run-sim-eval` / `make sim` / `make autoware-vehicle`
+- GPU: 自動検出（強制: `make sim DEVICE=gpu`、CPU強制: `make sim DEVICE=cpu`）
