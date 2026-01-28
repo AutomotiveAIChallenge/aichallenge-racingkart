@@ -148,20 +148,51 @@ install_submit_tar() {
     # Packages that generate interfaces must declare membership in rosidl_interface_packages.
     # (Some submissions forget this and colcon fails early.)
     local ptb_xml="${dest}/parameter_topic_bridge/package.xml"
-    if [ -f "${ptb_xml}" ] && ! rg -q "<member_of_group>rosidl_interface_packages</member_of_group>" "${ptb_xml}"; then
-        log "Patching rosidl group membership: ${ptb_xml}"
+    if [ -f "${ptb_xml}" ]; then
+        log "Patching rosidl group membership (best effort): ${ptb_xml}"
         python3 - "${ptb_xml}" <<'PY' || true
 import sys
+
 path = sys.argv[1]
-s = open(path, "r", encoding="utf-8").read()
 needle = "<member_of_group>rosidl_interface_packages</member_of_group>"
-if needle in s:
-    sys.exit(0)
-if "<export>" in s:
-    s = s.replace("<export>", "<export>\n    " + needle, 1)
-else:
-    s = s.replace("</package>", "  <export>\n    " + needle + "\n  </export>\n</package>", 1)
-open(path, "w", encoding="utf-8").write(s)
+top_level = "  " + needle
+
+lines = open(path, "r", encoding="utf-8").read().splitlines(True)
+
+# Remove occurrences inside <export>...</export> to avoid placing it in the wrong scope.
+out = []
+in_export = False
+for l in lines:
+    stripped = l.strip()
+    if stripped == "<export>":
+        in_export = True
+        out.append(l)
+        continue
+    if stripped == "</export>":
+        in_export = False
+        out.append(l)
+        continue
+    if in_export and stripped == needle:
+        continue
+    out.append(l)
+lines = out
+
+has_top_level = any(l.strip() == needle and l.startswith("  ") and not l.startswith("    ") for l in lines)
+
+if not has_top_level:
+    inserted = False
+    out = []
+    for l in lines:
+        if (not inserted) and l.strip() == "<export>":
+            out.append(top_level + "\n")
+            inserted = True
+        if (not inserted) and l.strip() == "</package>":
+            out.append(top_level + "\n")
+            inserted = True
+        out.append(l)
+    lines = out
+
+open(path, "w", encoding="utf-8").write("".join(lines))
 PY
     fi
 
