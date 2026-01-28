@@ -4,6 +4,8 @@ set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 COMPOSE_BASE_FILE="${REPO_ROOT}/docker-compose.yml"
+HOST_LOG_DIR=""
+HOST_LOG_FILE=""
 
 log() { echo "[run_autoware_multi] $*"; }
 warn() { echo "[run_autoware_multi][WARN] $*" >&2; }
@@ -82,20 +84,23 @@ init_host_log() {
     local run_id="$1"
 
     mkdir -p "${REPO_ROOT}/output/_host"
-    local event_id log_dir log_file
+
+    local event_id
     event_id="$(ts_compact)-run_autoware_multi-$$"
-    log_dir="${REPO_ROOT}/output/_host/${event_id}"
-    mkdir -p "${log_dir}"
+
+    HOST_LOG_DIR="${REPO_ROOT}/output/_host/${event_id}"
+    mkdir -p "${HOST_LOG_DIR}"
+
     ln -nfs "${event_id}" "${REPO_ROOT}/output/_host/latest-autoware-multi"
-    log_file="${log_dir}/run_autoware_multi.log"
-    touch "${log_file}" || true
-    exec > >(tee -a "${log_file}") 2>&1
 
-    log "Log dir: ${log_dir}"
-    log "Log file: ${log_file}"
+    HOST_LOG_FILE="${HOST_LOG_DIR}/run_autoware_multi.log"
+    touch "${HOST_LOG_FILE}" || true
+
+    exec > >(tee -a "${HOST_LOG_FILE}") 2>&1
+
+    log "Log dir: ${HOST_LOG_DIR}"
+    log "Log file: ${HOST_LOG_FILE}"
     log "Run id: ${run_id}"
-
-    echo "${log_dir}"
 }
 
 require_submit_in_build_context() {
@@ -260,8 +265,7 @@ main() {
     local gpu_enabled
     gpu_enabled="$(gpu_enabled_from_device "${device}")"
 
-    local log_dir
-    log_dir="$(init_host_log "${run_id}")"
+    init_host_log "${run_id}"
 
     log "Vehicles: ${vehicles}"
     log "Device: ${device} (gpu_enabled=${gpu_enabled})"
@@ -280,7 +284,7 @@ main() {
         images+=("$(build_eval_image "${submit_rel}" "${run_id}" "${domain_id}")")
     done
 
-    local override_file="${log_dir}/compose.autoware_multi.yml"
+    local override_file="${HOST_LOG_DIR}/compose.autoware_multi.yml"
     write_compose_override "${override_file}" "${run_id}" "${vehicles}" "${gpu_enabled}" "${images[@]}"
 
     log "Starting simulator (once)"
