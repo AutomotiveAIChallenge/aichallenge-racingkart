@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-set -euo pipefail
+set -eo pipefail
 
 # Usage:
 #   build_autoware.bash [clean] [HOST_UID HOST_GID]
@@ -45,4 +45,3 @@ else
 fi
 
 exit 0
-

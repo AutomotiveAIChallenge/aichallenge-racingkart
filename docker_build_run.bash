@@ -163,7 +163,7 @@ build_autoware_and_wait() {
 
     local cid=""
     for _ in $(seq 1 30); do
-        cid="$(cd "${REPO_ROOT}" && docker compose -f docker-compose.yml ps -q "${svc}" 2>/dev/null || true)"
+        cid="$(cd "${REPO_ROOT}" && docker compose -f docker-compose.yml ps -aq "${svc}" 2>/dev/null || true)"
         [ -n "${cid}" ] && break
         sleep 1
     done
