@@ -50,6 +50,11 @@ DOMAIN_ID ?= 1
 DOMAIN_IDS ?= $(DOMAIN_ID)
 OUTPUT_ROOT ?= /output
 RESULT_WAIT_SECONDS ?= 10
+# Output layout overrides (optional)
+# - RUN_ID: run directory name under output/ (default: timestamp)
+# - RUN_GROUP: optional subdirectory under RUN_ID (e.g., submit name)
+RUN_ID ?=
+RUN_GROUP ?=
 
 # Window matching overrides for move_window.bash (optional)
 # Tips:
@@ -89,7 +94,7 @@ run-full-kart-system:
 
 # autowareのbuildのみ
 build-autoware:
-	$(DC) up -d $(AIC_BUILD_SERVICE)
+	$(DC) up -d --force-recreate $(AIC_BUILD_SERVICE)
 
 # Download submission data by asking for credentials interactively
 # Usage:
@@ -114,7 +119,11 @@ download:
 # make run-sim-eval ROSBAG=true CAPTURE=true
 run-sim-eval:
 	@bash -lc 'set -euo pipefail; \
-		ts="$$(date +%Y%m%d-%H%M%S)"; \
+		ts="$(RUN_ID)"; \
+		if [ -z "$$ts" ]; then ts="$$(date +%Y%m%d-%H%M%S)"; fi; \
+		run_group="$(RUN_GROUP)"; \
+		run_rel="$$ts"; \
+		if [ -n "$$run_group" ]; then run_rel="$$ts/$$run_group"; fi; \
 		mkdir -p output; \
 		mkdir -p output/_host; \
 		if [ -e output/latest ] && [ ! -L output/latest ]; then \
@@ -122,7 +131,7 @@ run-sim-eval:
 			echo "[make] Moving legacy output/latest to $$legacy"; \
 			mv output/latest "$$legacy"; \
 		fi; \
-			mkdir -p "output/$$ts"; \
+			mkdir -p "output/$$run_rel"; \
 			ln -nfs "$$ts" output/latest; \
 			output_root="$(OUTPUT_ROOT)"; \
 			domain_ids="$(DOMAIN_IDS)"; \
@@ -180,9 +189,9 @@ run-sim-eval:
 			trap "echo \"[make] Terminated\" >&2; exit 143" TERM; \
 			echo "--- Starting Evaluation ---"; \
 			for domain_id in $$domain_ids; do \
-				mkdir -p "output/$$ts/d$$domain_id"; \
-				output_run_dir="$$output_root/$$ts/d$$domain_id"; \
-				echo "OUTPUT: output/$$ts/d$$domain_id (container: $$output_run_dir)"; \
+				mkdir -p "output/$$run_rel/d$$domain_id"; \
+				output_run_dir="$$output_root/$$run_rel/d$$domain_id"; \
+				echo "OUTPUT: output/$$run_rel/d$$domain_id (container: $$output_run_dir)"; \
 				echo "DOMAIN_ID=$$domain_id ROSBAG=$$rosbag_enabled CAPTURE=$$capture_enabled"; \
 				capture_started=0; \
 				rosbag_started=0; \
