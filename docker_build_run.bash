@@ -82,7 +82,7 @@ sanitize_group() {
     name="${name%.tgz}"
     name="${name%.tar}"
     name="${name%.gz}"
-    name="$(echo "${name}" | tr -cs 'A-Za-z0-9._-' '_' | sed 's/^_\\+//; s/_\\+$//')"
+    name="$(echo "${name}" | tr -cs 'A-Za-z0-9._-' '_' | sed -E 's/^_+//; s/_+$//')"
     if [ -z "${name}" ]; then
         name="submit"
     fi
@@ -143,6 +143,27 @@ install_submit_tar() {
     mkdir -p "${src_root}"
     rm -rf "${dest}"
     mv "${extracted}" "${dest}"
+
+    # Best-effort fix for a common ROSIDL packaging rule:
+    # Packages that generate interfaces must declare membership in rosidl_interface_packages.
+    # (Some submissions forget this and colcon fails early.)
+    local ptb_xml="${dest}/parameter_topic_bridge/package.xml"
+    if [ -f "${ptb_xml}" ] && ! rg -q "<member_of_group>rosidl_interface_packages</member_of_group>" "${ptb_xml}"; then
+        log "Patching rosidl group membership: ${ptb_xml}"
+        python3 - "${ptb_xml}" <<'PY' || true
+import sys
+path = sys.argv[1]
+s = open(path, "r", encoding="utf-8").read()
+needle = "<member_of_group>rosidl_interface_packages</member_of_group>"
+if needle in s:
+    sys.exit(0)
+if "<export>" in s:
+    s = s.replace("<export>", "<export>\n    " + needle, 1)
+else:
+    s = s.replace("</package>", "  <export>\n    " + needle + "\n  </export>\n</package>", 1)
+open(path, "w", encoding="utf-8").write(s)
+PY
+    fi
 
     rm -rf "${tmp}" || true
     log "Installed: ${dest}"
