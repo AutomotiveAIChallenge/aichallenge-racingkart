@@ -172,7 +172,14 @@ PY
     local ws="${REPO_ROOT}/aichallenge/workspace"
     if [ -d "${ws}/build" ] || [ -d "${ws}/install" ] || [ -d "${ws}/log" ]; then
         log "Cleaning overlay build artifacts: ${ws}/{build,install,log}"
-        rm -rf "${ws}/build" "${ws}/install" "${ws}/log"
+        if ! rm -rf "${ws}/build" "${ws}/install" "${ws}/log" >/dev/null 2>&1; then
+            warn "Failed to remove overlay artifacts (likely root-owned). Retrying via docker..."
+            docker run --rm \
+                -v "${REPO_ROOT}/aichallenge:/aichallenge" \
+                -w /aichallenge \
+                "aichallenge-2025-dev" \
+                bash -lc 'rm -rf workspace/build workspace/install workspace/log' >/dev/null 2>&1 || true
+        fi
     fi
 }
 
