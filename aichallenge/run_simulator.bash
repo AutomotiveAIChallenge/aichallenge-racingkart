@@ -9,7 +9,7 @@ if [[ -e /dev/nvidia0 ]]; then
 else
     echo "[INFO] No NVIDIA GPU detected → running on headless mode"
     # opts=("-headless")
-    opts=( "--camera" "false" "--lidar" "false")
+    opts=("--camera" "false" "--lidar" "false")
 fi
 
 case "${mode}" in
