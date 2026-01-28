@@ -9,7 +9,7 @@ set -eo pipefail
 #   - If "clean" is provided, workspace/{build,install,log} are removed before building.
 #   - If running as root and HOST_UID/HOST_GID are provided, ownership is fixed after build.
 
-action="${1:-}"
+action="${1-}"
 if [ "${action}" = "clean" ]; then
     echo "[build_autoware] Cleaning build directories..."
     rm -rf ./workspace/build ./workspace/install ./workspace/log

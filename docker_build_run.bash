@@ -92,7 +92,7 @@ compose_cmd() {
 }
 
 sanitize_group() {
-    local name="${1:-}"
+    local name="${1-}"
     name="${name##*/}"
     name="${name%.tar.gz}"
     name="${name%.tgz}"
@@ -128,8 +128,8 @@ gpu_enabled_from_device() {
 }
 
 create_submit_volume() {
-    local submit_tar="${1:-}"
-    local volume_name="${2:-}"
+    local submit_tar="${1-}"
+    local volume_name="${2-}"
     [ -n "${submit_tar}" ] || die "create_submit_volume: submit file not specified"
     [ -f "${submit_tar}" ] || die "submit file not found: ${submit_tar}"
     [ -n "${volume_name}" ] || die "create_submit_volume: volume name not specified"
@@ -165,8 +165,8 @@ create_submit_volume() {
 }
 
 write_compose_override_for_submit() {
-    local volume_name="${1:-}"
-    local out_file="${2:-}"
+    local volume_name="${1-}"
+    local out_file="${2-}"
     [ -n "${volume_name}" ] || die "write_compose_override_for_submit: volume name not specified"
     [ -n "${out_file}" ] || die "write_compose_override_for_submit: output file not specified"
 
@@ -218,7 +218,11 @@ build_autoware_and_wait() {
 
     local cid=""
     for _ in $(seq 1 30); do
-        cid="$(cd "${REPO_ROOT}" && docker compose "${COMPOSE_ARGS[@]}" ps -aq "${svc}" 2>/dev/null || true)"
+        if cid="$(cd "${REPO_ROOT}" && docker compose "${COMPOSE_ARGS[@]}" ps -aq "${svc}" 2>/dev/null)"; then
+            :
+        else
+            cid=""
+        fi
         [ -n "${cid}" ] && break
         sleep 1
     done
@@ -235,14 +239,14 @@ build_autoware_and_wait() {
 }
 
 cmd_build() {
-    local target="${1:-}"
+    local target="${1-}"
     shift || true
 
     local submit_tar=""
     while [ $# -gt 0 ]; do
         case "$1" in
         --submit | --submit-tar)
-            submit_tar="${2:-}"
+            submit_tar="${2-}"
             shift 2
             ;;
         --)
@@ -287,11 +291,11 @@ cmd_eval() {
     while [ $# -gt 0 ]; do
         case "$1" in
         --device)
-            device="${2:-}"
+            device="${2-}"
             shift 2
             ;;
         --domain-ids)
-            domain_ids="${2:-}"
+            domain_ids="${2-}"
             shift 2
             ;;
         --rosbag)
@@ -303,19 +307,19 @@ cmd_eval() {
             shift
             ;;
         --output-root)
-            output_root="${2:-}"
+            output_root="${2-}"
             shift 2
             ;;
         --result-wait-seconds)
-            result_wait_seconds="${2:-}"
+            result_wait_seconds="${2-}"
             shift 2
             ;;
         --run-id)
-            run_id="${2:-}"
+            run_id="${2-}"
             shift 2
             ;;
         --run-group)
-            run_group="${2:-}"
+            run_group="${2-}"
             shift 2
             ;;
         -h | --help)
@@ -371,11 +375,11 @@ cmd_all() {
     while [ $# -gt 0 ]; do
         case "$1" in
         --submit | --submit-tar)
-            submit_tars+=("${2:-}")
+            submit_tars+=("${2-}")
             shift 2
             ;;
         --device)
-            device="${2:-}"
+            device="${2-}"
             shift 2
             ;;
         --rosbag)
@@ -387,15 +391,15 @@ cmd_all() {
             shift
             ;;
         --output-root)
-            output_root="${2:-}"
+            output_root="${2-}"
             shift 2
             ;;
         --result-wait-seconds)
-            result_wait_seconds="${2:-}"
+            result_wait_seconds="${2-}"
             shift 2
             ;;
         --run-id)
-            run_id="${2:-}"
+            run_id="${2-}"
             shift 2
             ;;
         *)
@@ -487,7 +491,7 @@ main() {
     trap on_sigint INT
     trap on_sigterm TERM
 
-    local subcmd="${1:-}"
+    local subcmd="${1-}"
     shift || true
 
     case "${subcmd}" in

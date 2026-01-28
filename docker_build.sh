@@ -2,10 +2,10 @@
 
 set -euo pipefail
 
-target="${1:-}"
+target="${1-}"
 shift || true
 
-SUBMIT_TAR="${SUBMIT_TAR:-}"
+SUBMIT_TAR="${SUBMIT_TAR-}"
 
 if [ -z "${target}" ]; then
     echo "Usage: ./docker_build.sh <dev|eval> [--submit <path/to/aichallenge_submit.tar.gz>]" >&2
@@ -15,7 +15,7 @@ fi
 while [ $# -gt 0 ]; do
     case "$1" in
     --submit | --submit-tar)
-        SUBMIT_TAR="${2:-}"
+        SUBMIT_TAR="${2-}"
         shift 2
         ;;
     --)

@@ -9,7 +9,10 @@ HOST_LOG_FILE=""
 
 log() { echo "[run_autoware_multi] $*"; }
 warn() { echo "[run_autoware_multi][WARN] $*" >&2; }
-die() { echo "[run_autoware_multi][ERROR] $*" >&2; exit 1; }
+die() {
+    echo "[run_autoware_multi][ERROR] $*" >&2
+    exit 1
+}
 
 ts_compact() { date +%Y%m%d-%H%M%S; }
 
@@ -33,8 +36,8 @@ EOF
 }
 
 is_number() {
-    local s="${1:-}"
-    [[ -n "${s}" && "${s}" =~ ^[0-9]+$ ]]
+    local s="${1-}"
+    [[ -n ${s} && ${s} =~ ^[0-9]+$ ]]
 }
 
 gpu_enabled_from_device() {
@@ -50,7 +53,7 @@ gpu_enabled_from_device() {
 }
 
 sanitize_tag_fragment() {
-    local s="${1:-}"
+    local s="${1-}"
     s="${s##*/}"
     s="${s%.tar.gz}"
     s="${s%.tgz}"
@@ -141,7 +144,7 @@ simulator_container_id() {
 }
 
 simulator_is_running() {
-    local cid="${1:-}"
+    local cid="${1-}"
     [ -n "${cid}" ] || return 1
     local running
     running="$(docker inspect -f '{{.State.Running}}' "${cid}" 2>/dev/null || echo false)"
@@ -179,7 +182,7 @@ require_submit_in_build_context() {
     "${REPO_ROOT}"/*) ;;
     *) die "submit must be under repo root (docker build context): ${submit}" ;;
     esac
-    submit_rel="${submit_abs#${REPO_ROOT}/}"
+    submit_rel="${submit_abs#"${REPO_ROOT}"/}"
     echo "${submit_rel}"
 }
 
@@ -263,7 +266,7 @@ cmd_down() {
     while [ $# -gt 0 ]; do
         case "$1" in
         --log-dir)
-            log_dir="${2:-}"
+            log_dir="${2-}"
             shift 2
             ;;
         -h | --help)
@@ -309,11 +312,11 @@ cmd_collect() {
     while [ $# -gt 0 ]; do
         case "$1" in
         --run-id)
-            run_id="${2:-}"
+            run_id="${2-}"
             shift 2
             ;;
         --vehicles)
-            vehicles="${2:-}"
+            vehicles="${2-}"
             shift 2
             ;;
         -h | --help)
@@ -342,12 +345,12 @@ cmd_collect() {
 }
 
 main() {
-    if [ "${1:-}" = "down" ]; then
+    if [ "${1-}" = "down" ]; then
         shift
         cmd_down "$@"
         return 0
     fi
-    if [ "${1:-}" = "collect" ]; then
+    if [ "${1-}" = "collect" ]; then
         shift
         cmd_collect "$@"
         return 0
@@ -361,19 +364,19 @@ main() {
     while [ $# -gt 0 ]; do
         case "$1" in
         --submit | --submit-tar)
-            submits+=("${2:-}")
+            submits+=("${2-}")
             shift 2
             ;;
         --vehicles)
-            vehicles="${2:-}"
+            vehicles="${2-}"
             shift 2
             ;;
         --device)
-            device="${2:-}"
+            device="${2-}"
             shift 2
             ;;
         --run-id)
-            run_id="${2:-}"
+            run_id="${2-}"
             shift 2
             ;;
         -h | --help)
