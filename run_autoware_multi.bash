@@ -129,6 +129,25 @@ collect_results() {
     done
 }
 
+simulator_container_id() {
+    # Returns the container ID of simulator or simulator-gpu for the current compose project (if any).
+    # Prefer simulator-gpu when both exist.
+    local cid=""
+    cid="$(docker compose -f "${COMPOSE_BASE_FILE}" ps -q simulator-gpu 2>/dev/null || true)"
+    if [ -z "${cid}" ]; then
+        cid="$(docker compose -f "${COMPOSE_BASE_FILE}" ps -q simulator 2>/dev/null || true)"
+    fi
+    echo "${cid}"
+}
+
+simulator_is_running() {
+    local cid="${1:-}"
+    [ -n "${cid}" ] || return 1
+    local running
+    running="$(docker inspect -f '{{.State.Running}}' "${cid}" 2>/dev/null || echo false)"
+    [ "${running}" = "true" ]
+}
+
 init_host_log() {
     local run_id="$1"
 
@@ -260,14 +279,22 @@ cmd_down() {
     local override_file="${log_dir}/compose.autoware_multi.yml"
     [ -f "${override_file}" ] || die "compose override not found: ${override_file} (hint: --log-dir output/_host/<event_id>)"
 
-    local run_id
-    run_id="$(resolve_run_id_default)"
-    if [ -n "${run_id}" ]; then
-        local vehicles
-        vehicles="$(detect_vehicles "${run_id}")"
-        if [ "${vehicles}" -gt 0 ]; then
-            log "Collecting AWSIM result jsons into per-domain folders (run_id=${run_id}, vehicles=${vehicles})"
-            collect_results "${run_id}" "${vehicles}" || true
+    # AWSIM result jsons are generated after AWSIM exits.
+    # Only collect automatically when the simulator container is already not running.
+    local cid
+    cid="$(simulator_container_id)"
+    if [ -n "${cid}" ] && simulator_is_running "${cid}"; then
+        warn "Simulator is still running (cid=${cid}). Skipping result collection. Run later: ./run_autoware_multi.bash collect"
+    else
+        local run_id
+        run_id="$(resolve_run_id_default)"
+        if [ -n "${run_id}" ]; then
+            local vehicles
+            vehicles="$(detect_vehicles "${run_id}")"
+            if [ "${vehicles}" -gt 0 ]; then
+                log "Collecting AWSIM result jsons into per-domain folders (run_id=${run_id}, vehicles=${vehicles})"
+                collect_results "${run_id}" "${vehicles}" || true
+            fi
         fi
     fi
 
