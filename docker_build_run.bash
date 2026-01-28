@@ -351,7 +351,6 @@ cmd_all() {
     fi
 
     log "All device: ${device}"
-    log "All domain ids: ${domain_ids}"
     log "All rosbag: ${rosbag}"
     log "All capture: ${capture}"
     log "All output root: ${output_root}"
@@ -366,7 +365,6 @@ cmd_all() {
         if [ "${capture}" = "true" ]; then eval_flags+=(--capture); fi
         cmd_eval \
             --device "${device}" \
-            --domain-ids "${domain_ids}" \
             --output-root "${output_root}" \
             --result-wait-seconds "${result_wait_seconds}" \
             --run-id "${run_id}" \
