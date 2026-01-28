@@ -17,6 +17,7 @@ usage() {
     cat <<'EOF'
 Usage:
   ./run_autoware_multi.bash down [--log-dir <output/_host/...>]
+  ./run_autoware_multi.bash collect [--run-id ID] [--vehicles N]
   ./run_autoware_multi.bash --submit <aichallenge_submit.tar.gz> [--submit <...> ...]
                             [--vehicles N] [--device auto|gpu|cpu] [--run-id ID]
 
@@ -77,6 +78,54 @@ ensure_output_dirs() {
     local i
     for i in $(seq 1 "${vehicles}"); do
         mkdir -p "${REPO_ROOT}/output/${run_id}/d${i}"
+    done
+}
+
+resolve_run_id_default() {
+    local latest="${REPO_ROOT}/output/latest"
+    if [ -L "${latest}" ]; then
+        readlink "${latest}" || true
+    fi
+}
+
+detect_vehicles() {
+    local run_id="$1"
+    local run_root="${REPO_ROOT}/output/${run_id}"
+    local count=0
+    local i
+    for i in 1 2 3 4; do
+        if [ -d "${run_root}/d${i}" ]; then
+            count=$((count + 1))
+        fi
+    done
+    if [ "${count}" -eq 0 ]; then
+        echo 0
+        return 0
+    fi
+    echo "${count}"
+}
+
+collect_results() {
+    local run_id="$1"
+    local vehicles="$2"
+
+    local run_root="${REPO_ROOT}/output/${run_id}"
+    [ -d "${run_root}" ] || die "run root not found: ${run_root}"
+
+    local i
+    for i in $(seq 1 "${vehicles}"); do
+        local dest="${run_root}/d${i}"
+        mkdir -p "${dest}"
+
+        # AWSIM tends to output dN-result*.json in its working directory.
+        # Move them into per-domain folders for easier browsing.
+        (
+            shopt -s nullglob
+            local f
+            for f in "${run_root}/d${i}-result"*.json "${REPO_ROOT}/aichallenge/d${i}-result"*.json; do
+                mv -f "${f}" "${dest}/" || true
+            done
+        )
     done
 }
 
@@ -211,14 +260,69 @@ cmd_down() {
     local override_file="${log_dir}/compose.autoware_multi.yml"
     [ -f "${override_file}" ] || die "compose override not found: ${override_file} (hint: --log-dir output/_host/<event_id>)"
 
+    local run_id
+    run_id="$(resolve_run_id_default)"
+    if [ -n "${run_id}" ]; then
+        local vehicles
+        vehicles="$(detect_vehicles "${run_id}")"
+        if [ "${vehicles}" -gt 0 ]; then
+            log "Collecting AWSIM result jsons into per-domain folders (run_id=${run_id}, vehicles=${vehicles})"
+            collect_results "${run_id}" "${vehicles}" || true
+        fi
+    fi
+
     log "docker compose down --remove-orphans (override: ${override_file})"
     docker compose -f "${COMPOSE_BASE_FILE}" -f "${override_file}" down --remove-orphans
+}
+
+cmd_collect() {
+    local run_id=""
+    local vehicles=""
+
+    while [ $# -gt 0 ]; do
+        case "$1" in
+        --run-id)
+            run_id="${2:-}"
+            shift 2
+            ;;
+        --vehicles)
+            vehicles="${2:-}"
+            shift 2
+            ;;
+        -h | --help)
+            usage
+            exit 0
+            ;;
+        *)
+            die "Unknown option for collect: '$1'"
+            ;;
+        esac
+    done
+
+    if [ -z "${run_id}" ]; then
+        run_id="$(resolve_run_id_default)"
+    fi
+    [ -n "${run_id}" ] || die "run id not specified and output/latest not found"
+
+    if [ -z "${vehicles}" ]; then
+        vehicles="$(detect_vehicles "${run_id}")"
+    fi
+    is_number "${vehicles}" || die "--vehicles must be a number (1..4)"
+    if [ "${vehicles}" -lt 1 ] || [ "${vehicles}" -gt 4 ]; then die "--vehicles must be in 1..4"; fi
+
+    log "Collecting AWSIM result jsons (run_id=${run_id}, vehicles=${vehicles})"
+    collect_results "${run_id}" "${vehicles}"
 }
 
 main() {
     if [ "${1:-}" = "down" ]; then
         shift
         cmd_down "$@"
+        return 0
+    fi
+    if [ "${1:-}" = "collect" ]; then
+        shift
+        cmd_collect "$@"
         return 0
     fi
 
@@ -291,9 +395,9 @@ main() {
 
     log "Starting simulator (once)"
     if [ "${gpu_enabled}" = "1" ]; then
-        compose_up "${gpu_enabled}" -f "${COMPOSE_BASE_FILE}" up -d --force-recreate simulator-gpu
+        EVAL_RUN=1 OUTPUT_RUN_DIR="/output/${run_id}" compose_up "${gpu_enabled}" -f "${COMPOSE_BASE_FILE}" up -d --force-recreate simulator-gpu
     else
-        compose_up "${gpu_enabled}" -f "${COMPOSE_BASE_FILE}" up -d --force-recreate simulator
+        EVAL_RUN=1 OUTPUT_RUN_DIR="/output/${run_id}" compose_up "${gpu_enabled}" -f "${COMPOSE_BASE_FILE}" up -d --force-recreate simulator
     fi
 
     local -a autoware_svcs=()
