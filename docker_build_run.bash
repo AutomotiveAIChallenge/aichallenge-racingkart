@@ -167,6 +167,13 @@ PY
 
     rm -rf "${tmp}" || true
     log "Installed: ${dest}"
+
+    # When swapping submissions, clean the overlay build to avoid stale CMake/package.xml cache.
+    local ws="${REPO_ROOT}/aichallenge/workspace"
+    if [ -d "${ws}/build" ] || [ -d "${ws}/install" ] || [ -d "${ws}/log" ]; then
+        log "Cleaning overlay build artifacts: ${ws}/{build,install,log}"
+        rm -rf "${ws}/build" "${ws}/install" "${ws}/log"
+    fi
 }
 
 build_autoware_and_wait() {
