@@ -379,11 +379,35 @@ cmd_all() {
         return 0
     fi
 
+    local domain_ids_provided=0
+    if [ "${domain_ids}" != "1,2,3,4" ]; then
+        domain_ids_provided=1
+    fi
+
+    local -a mapped_domain_ids=()
+    if [ "${domain_ids_provided}" -eq 0 ]; then
+        # Default mapping for multi-submit:
+        #   1st submit -> domain 1, 2nd submit -> domain 2, ...
+        for i in "${!submit_tars[@]}"; do
+            mapped_domain_ids+=("$((i + 1))")
+        done
+    else
+        # If user specifies --domain-ids with multiple submits, treat it as a 1:1 mapping list.
+        # Example: --submit A --submit B --domain-ids 1,2
+        read -r -a mapped_domain_ids <<<"$(echo "${domain_ids}" | tr ',' ' ')"
+        if [ "${#mapped_domain_ids[@]}" -ne "${#submit_tars[@]}" ]; then
+            die "--domain-ids count (${#mapped_domain_ids[@]}) must match --submit count (${#submit_tars[@]}) when using multiple submits"
+        fi
+    fi
+
     local -a eval_flags=()
     if [ "${rosbag}" = "true" ]; then eval_flags+=(--rosbag); fi
     if [ "${capture}" = "true" ]; then eval_flags+=(--capture); fi
 
-    for submit_tar in "${submit_tars[@]}"; do
+    for i in "${!submit_tars[@]}"; do
+        local submit_tar="${submit_tars[$i]}"
+        local domain_id="${mapped_domain_ids[$i]}"
+
         [ -n "${submit_tar}" ] || die "--submit requires a file path"
         [ -f "${submit_tar}" ] || die "submit file not found: ${submit_tar}"
 
@@ -393,13 +417,14 @@ cmd_all() {
         log "========================================================"
         log "Submit: ${submit_tar}"
         log "Group: ${group}"
+        log "Domain id: ${domain_id}"
         log "========================================================"
 
         install_submit_tar "${submit_tar}"
         build_autoware_and_wait "${device}"
         cmd_eval \
             --device "${device}" \
-            --domain-ids "${domain_ids}" \
+            --domain-ids "${domain_id}" \
             --output-root "${output_root}" \
             --result-wait-seconds "${result_wait_seconds}" \
             --run-id "${run_id}" \
