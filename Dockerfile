@@ -49,6 +49,7 @@ ENV RCUTILS_COLORIZED_OUTPUT=1
 FROM common AS eval
 
 ENV RCUTILS_COLORIZED_OUTPUT=0
+ARG SUBMIT_TAR=submit/aichallenge_submit.tar.gz
 
 RUN mkdir /ws
 RUN git clone --depth 1 https://github.com/AutomotiveAIChallenge/aichallenge-racingkart /ws/repository
@@ -58,7 +59,7 @@ RUN rm -rf /aichallenge/workspace/src/aichallenge_submit
 RUN chmod 757 /aichallenge
 
 COPY aichallenge/simulator/ /aichallenge/simulator/
-COPY submit/aichallenge_submit.tar.gz /ws
+COPY ${SUBMIT_TAR} /ws/aichallenge_submit.tar.gz
 RUN tar zxf /ws/aichallenge_submit.tar.gz -C /aichallenge/workspace/src
 RUN rm -rf /ws
 

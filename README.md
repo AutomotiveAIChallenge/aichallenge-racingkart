@@ -18,9 +18,13 @@ Toward the competition, we will update the following pages to provide informatio
 
 - `cp .env.example .env`（必要に応じて編集）
 - ビルド: `./docker_build.sh dev`
+- 評価用イメージのビルド（提出物を差し替えたい場合）: `./docker_build.sh eval --submit submit/aichallenge_submit.tar.gz`
+- ビルド + 評価（推奨）: `./docker_build_run.bash all --submit submit/aichallenge_submit.tar.gz --device gpu --domain-ids 1,2,3,4`
 - Autoware(overlay) ビルド: `make build-autoware`
 - 評価（`aichallenge/run_evaluation.bash` 相当）: `make run-sim-eval`
   - オプション例: `make run-sim-eval DEVICE=gpu DOMAIN_ID=1 ROSBAG=true CAPTURE=false RESULT_WAIT_SECONDS=10`
+  - 複数domainを連続実行: `make run-sim-eval DOMAIN_IDS=1,2,3,4`
+  - 省略形: `make run-sim-eval-1-4`
   - 出力: `output/<timestamp>/d<domain_id>/`（`output/latest` は可能ならシンボリックリンク）
 - 個別起動: `make sim` / `make autoware-sim` / `make autoware-vehicle`
 - GPU: 自動検出（強制: `DEVICE=gpu`、CPU強制: `DEVICE=cpu`）

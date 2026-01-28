@@ -103,13 +103,13 @@ services:
     <<: *autoware-base 
     container_name: "aic-2025-build"
     stop_grace_period: 0.1s
-    command: ["bash", "-c", "cd /aichallenge && exec bash utils/build_autoware.bash ${HOST_UID:-} ${HOST_GID:-}"]
+    command: ["bash", "-c", "cd /aichallenge && exec bash build_autoware.bash ${HOST_UID:-} ${HOST_GID:-}"]
 
   aic-build-gpu:
     <<: [*autoware-base, *gpu]
     container_name: "aic-2025-build-gpu"
     stop_grace_period: 0.1s
-    command: ["bash", "-c", "cd /aichallenge && exec bash utils/build_autoware.bash ${HOST_UID:-} ${HOST_GID:-}"]
+    command: ["bash", "-c", "cd /aichallenge && exec bash build_autoware.bash ${HOST_UID:-} ${HOST_GID:-}"]
 
   simulator:
     <<: *autoware-base 

@@ -11,3 +11,7 @@ rosbag2*/
 vehicle/.env
 metadata.yaml
 outputs/
+
+# local notes (do not commit)
+/memo.md
+/Plan.md
