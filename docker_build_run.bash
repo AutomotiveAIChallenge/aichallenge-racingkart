@@ -7,6 +7,8 @@ REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 LOG_EVENT_ID=""
 LOG_DIR=""
 LOG_FILE=""
+COMPOSE_FILES=("${REPO_ROOT}/docker-compose.yml")
+COMPOSE_ARGS=(-f "${REPO_ROOT}/docker-compose.yml")
 
 log() {
     echo "[docker_build_run] $*"
@@ -40,9 +42,16 @@ init_host_log() {
     log "Log file: ${LOG_FILE}"
 }
 
+rebuild_compose_args() {
+    COMPOSE_ARGS=()
+    for f in "${COMPOSE_FILES[@]}"; do
+        COMPOSE_ARGS+=(-f "${f}")
+    done
+}
+
 cleanup_compose_best_effort() {
     set +e
-    (cd "${REPO_ROOT}" && docker compose -f docker-compose.yml down --remove-orphans >/dev/null 2>&1) || true
+    (cd "${REPO_ROOT}" && docker compose "${COMPOSE_ARGS[@]}" down --remove-orphans >/dev/null 2>&1) || true
     set -e
 }
 
@@ -73,6 +82,13 @@ Notes:
   - Logs are written to: output/_host/<event_id>/docker_build_run.log
   - Evaluation artifacts are written under: output/<run_id>/<run_group>/d<domain_id>/ (run_group is optional)
 EOF
+}
+
+compose_cmd() {
+    printf 'docker compose'
+    for f in "${COMPOSE_FILES[@]}"; do
+        printf ' -f %s' "${f}"
+    done
 }
 
 sanitize_group() {
@@ -111,107 +127,70 @@ gpu_enabled_from_device() {
     esac
 }
 
-install_submit_tar() {
+create_submit_volume() {
     local submit_tar="${1:-}"
-    [ -n "${submit_tar}" ] || die "install_submit_tar: submit file not specified"
+    local volume_name="${2:-}"
+    [ -n "${submit_tar}" ] || die "create_submit_volume: submit file not specified"
     [ -f "${submit_tar}" ] || die "submit file not found: ${submit_tar}"
+    [ -n "${volume_name}" ] || die "create_submit_volume: volume name not specified"
 
-    local src_root="${REPO_ROOT}/aichallenge/workspace/src"
-    local dest="${src_root}/aichallenge_submit"
-    local tmp
-    tmp="$(mktemp -d)"
+    log "Creating submit volume: ${volume_name}"
+    docker volume create "${volume_name}" >/dev/null
 
-    log "Installing submit tar into workspace: ${submit_tar}"
+    log "Extracting submit tar into volume (no host workspace extraction): ${submit_tar}"
+    local submit_abs
+    submit_abs="$(realpath "${submit_tar}")"
+    docker run --rm \
+        -v "${volume_name}:/submit" \
+        -v "${submit_abs}:/tmp/submit.tar.gz:ro" \
+        -w /tmp \
+        "aichallenge-2025-dev" \
+        bash -lc "set -euo pipefail; \
+          rm -rf /submit/*; \
+          tar -xzf /tmp/submit.tar.gz -C /tmp; \
+          if [ -d /tmp/aichallenge_submit ]; then src=/tmp/aichallenge_submit; else src=\$(find /tmp -maxdepth 3 -type d -name aichallenge_submit -print -quit); fi; \
+          [ -n \"\$src\" ] && [ -d \"\$src\" ]; \
+          cp -a \"\$src\"/. /submit/; \
+          ptb=/submit/parameter_topic_bridge/package.xml; \
+          if [ -f \"\$ptb\" ]; then \
+            python3 - \"\$ptb\" <<'PY' || true\nimport sys\npath=sys.argv[1]\nneedle='<member_of_group>rosidl_interface_packages</member_of_group>'\nlines=open(path,'r',encoding='utf-8').read().splitlines(True)\nout=[]\nin_export=False\nfor l in lines:\n  s=l.strip()\n  if s=='<export>': in_export=True; out.append(l); continue\n  if s=='</export>': in_export=False; out.append(l); continue\n  if in_export and s==needle: continue\n  out.append(l)\nlines=out\nhas_top=any(l.strip()==needle and l.startswith('  ') and not l.startswith('    ') for l in lines)\nif not has_top:\n  out=[]\n  inserted=False\n  for l in lines:\n    if (not inserted) and l.strip()=='<export>': out.append('  '+needle+'\\n'); inserted=True\n    if (not inserted) and l.strip()=='</package>': out.append('  '+needle+'\\n'); inserted=True\n    out.append(l)\n  lines=out\nopen(path,'w',encoding='utf-8').write(''.join(lines))\nPY\n          fi"
+}
 
-    if [[ "${submit_tar}" = *.tar.gz || "${submit_tar}" = *.tgz || "${submit_tar}" = *.gz ]]; then
-        tar -xzf "${submit_tar}" -C "${tmp}"
-    else
-        tar -xf "${submit_tar}" -C "${tmp}"
-    fi
+write_compose_override_for_submit() {
+    local volume_name="${1:-}"
+    local out_file="${2:-}"
+    [ -n "${volume_name}" ] || die "write_compose_override_for_submit: volume name not specified"
+    [ -n "${out_file}" ] || die "write_compose_override_for_submit: output file not specified"
 
-    local extracted=""
-    if [ -d "${tmp}/aichallenge_submit" ]; then
-        extracted="${tmp}/aichallenge_submit"
-    else
-        extracted="$(find "${tmp}" -maxdepth 3 -type d -name aichallenge_submit -print -quit || true)"
-    fi
-    if [ -z "${extracted}" ] || [ ! -d "${extracted}" ]; then
-        rm -rf "${tmp}" || true
-        die "submit tar does not contain aichallenge_submit/ directory: ${submit_tar}"
-    fi
+    cat >"${out_file}" <<EOF
+volumes:
+  submit_src:
+    external: true
+    name: ${volume_name}
 
-    mkdir -p "${src_root}"
-    rm -rf "${dest}"
-    mv "${extracted}" "${dest}"
-
-    # Best-effort fix for a common ROSIDL packaging rule:
-    # Packages that generate interfaces must declare membership in rosidl_interface_packages.
-    # (Some submissions forget this and colcon fails early.)
-    local ptb_xml="${dest}/parameter_topic_bridge/package.xml"
-    if [ -f "${ptb_xml}" ]; then
-        log "Patching rosidl group membership (best effort): ${ptb_xml}"
-        python3 - "${ptb_xml}" <<'PY' || true
-import sys
-
-path = sys.argv[1]
-needle = "<member_of_group>rosidl_interface_packages</member_of_group>"
-top_level = "  " + needle
-
-lines = open(path, "r", encoding="utf-8").read().splitlines(True)
-
-# Remove occurrences inside <export>...</export> to avoid placing it in the wrong scope.
-out = []
-in_export = False
-for l in lines:
-    stripped = l.strip()
-    if stripped == "<export>":
-        in_export = True
-        out.append(l)
-        continue
-    if stripped == "</export>":
-        in_export = False
-        out.append(l)
-        continue
-    if in_export and stripped == needle:
-        continue
-    out.append(l)
-lines = out
-
-has_top_level = any(l.strip() == needle and l.startswith("  ") and not l.startswith("    ") for l in lines)
-
-if not has_top_level:
-    inserted = False
-    out = []
-    for l in lines:
-        if (not inserted) and l.strip() == "<export>":
-            out.append(top_level + "\n")
-            inserted = True
-        if (not inserted) and l.strip() == "</package>":
-            out.append(top_level + "\n")
-            inserted = True
-        out.append(l)
-    lines = out
-
-open(path, "w", encoding="utf-8").write("".join(lines))
-PY
-    fi
-
-    rm -rf "${tmp}" || true
-    log "Installed: ${dest}"
-
-    # When swapping submissions, clean the overlay build to avoid stale CMake/package.xml cache.
-    local ws="${REPO_ROOT}/aichallenge/workspace"
-    if [ -d "${ws}/build" ] || [ -d "${ws}/install" ] || [ -d "${ws}/log" ]; then
-        log "Cleaning overlay build artifacts: ${ws}/{build,install,log}"
-        if ! rm -rf "${ws}/build" "${ws}/install" "${ws}/log" >/dev/null 2>&1; then
-            warn "Failed to remove overlay artifacts (likely root-owned). Retrying via docker..."
-            docker run --rm \
-                -v "${REPO_ROOT}/aichallenge:/aichallenge" \
-                -w /aichallenge \
-                "aichallenge-2025-dev" \
-                bash -lc 'rm -rf workspace/build workspace/install workspace/log' >/dev/null 2>&1 || true
-        fi
-    fi
+services:
+  autoware:
+    volumes:
+      - submit_src:/aichallenge/workspace/src/aichallenge_submit
+  autoware-gpu:
+    volumes:
+      - submit_src:/aichallenge/workspace/src/aichallenge_submit
+  aic-build:
+    volumes:
+      - submit_src:/aichallenge/workspace/src/aichallenge_submit
+  aic-build-gpu:
+    volumes:
+      - submit_src:/aichallenge/workspace/src/aichallenge_submit
+  aw-cmd:
+    volumes:
+      - submit_src:/aichallenge/workspace/src/aichallenge_submit
+  aw-cmd-gpu:
+    volumes:
+      - submit_src:/aichallenge/workspace/src/aichallenge_submit
+  rosbag:
+    volumes:
+      - submit_src:/aichallenge/workspace/src/aichallenge_submit
+EOF
 }
 
 build_autoware_and_wait() {
@@ -225,11 +204,13 @@ build_autoware_and_wait() {
     fi
 
     log "Building autoware overlay (service: ${svc}, device: ${device})"
-    (cd "${REPO_ROOT}" && make build-autoware DEVICE="${device}")
+    local dc
+    dc="$(compose_cmd)"
+    (cd "${REPO_ROOT}" && make build-autoware DEVICE="${device}" DC="${dc}")
 
     local cid=""
     for _ in $(seq 1 30); do
-        cid="$(cd "${REPO_ROOT}" && docker compose -f docker-compose.yml ps -aq "${svc}" 2>/dev/null || true)"
+        cid="$(cd "${REPO_ROOT}" && docker compose "${COMPOSE_ARGS[@]}" ps -aq "${svc}" 2>/dev/null || true)"
         [ -n "${cid}" ] && break
         sleep 1
     done
@@ -356,6 +337,8 @@ cmd_eval() {
         log "Eval run group: ${run_group}"
     fi
 
+    local dc
+    dc="$(compose_cmd)"
     (cd "${REPO_ROOT}" && make run-sim-eval \
         DEVICE="${device}" \
         DOMAIN_IDS="${domain_ids}" \
@@ -364,7 +347,8 @@ cmd_eval() {
         OUTPUT_ROOT="${output_root}" \
         RESULT_WAIT_SECONDS="${result_wait_seconds}" \
         RUN_ID="${run_id}" \
-        RUN_GROUP="${run_group}")
+        RUN_GROUP="${run_group}" \
+        DC="${dc}")
 }
 
 cmd_all() {
@@ -462,7 +446,16 @@ cmd_all() {
         log "Domain id: ${domain_id}"
         log "========================================================"
 
-        install_submit_tar "${submit_tar}"
+        local volume_name override_file
+        volume_name="aic-submit-${run_id}-d${domain_id}"
+        volume_name="$(echo "${volume_name}" | tr -cs 'A-Za-z0-9_.-' '_' | sed -E 's/^_+//; s/_+$//')"
+        override_file="${LOG_DIR}/compose.submit.d${domain_id}.yml"
+
+        create_submit_volume "${submit_tar}" "${volume_name}"
+        write_compose_override_for_submit "${volume_name}" "${override_file}"
+        COMPOSE_FILES=("${REPO_ROOT}/docker-compose.yml" "${override_file}")
+        rebuild_compose_args
+
         build_autoware_and_wait "${device}"
         cmd_eval \
             --device "${device}" \
@@ -477,7 +470,7 @@ cmd_all() {
 
 cmd_down() {
     log "docker compose down --remove-orphans"
-    (cd "${REPO_ROOT}" && docker compose -f docker-compose.yml down --remove-orphans)
+    (cd "${REPO_ROOT}" && docker compose "${COMPOSE_ARGS[@]}" down --remove-orphans)
 }
 
 main() {
