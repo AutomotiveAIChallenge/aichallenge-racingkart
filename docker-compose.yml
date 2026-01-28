@@ -90,6 +90,7 @@ services:
   autoware-gpu:
     <<: [*autoware-base, *gpu]
     container_name: "aic-2025-autoware-gpu"
+    gpus: all
     stop_grace_period: 0.1s
     working_dir: ${OUTPUT_RUN_DIR:-/aichallenge}
     command: ["bash", "-lc", "if [ \"${EVAL_RUN:-0}\" = \"1\" ]; then exec /aichallenge/run_autoware.bash ${RUN_MODE:-awsim} ${DOMAIN_ID:-1} >autoware.log 2>&1; else exec /aichallenge/run_autoware.bash ${RUN_MODE:-awsim} ${DOMAIN_ID:-1}; fi"]
@@ -99,27 +100,29 @@ services:
     <<: *autoware-base 
     container_name: "aic-2025-build"
     stop_grace_period: 0.1s
-    command: ["bash", "-c", "cd /aichallenge && exec bash build_autoware.bash ${HOST_UID:-} ${HOST_GID:-}"]
+    command: ["bash", "-c", "cd /aichallenge && exec bash utils/build_autoware.bash ${HOST_UID:-} ${HOST_GID:-}"]
 
   aic-build-gpu:
     <<: [*autoware-base, *gpu]
     container_name: "aic-2025-build-gpu"
+    gpus: all
     stop_grace_period: 0.1s
-    command: ["bash", "-c", "cd /aichallenge && exec bash build_autoware.bash ${HOST_UID:-} ${HOST_GID:-}"]
+    command: ["bash", "-c", "cd /aichallenge && exec bash utils/build_autoware.bash ${HOST_UID:-} ${HOST_GID:-}"]
 
   simulator:
     <<: *autoware-base 
     container_name: "aic-2025-simulator"
     stop_grace_period: 0.1s
     working_dir: ${OUTPUT_RUN_DIR:-/aichallenge}
-    command: ["bash", "-lc", "exec /aichallenge/run_simulator.bash ${SIM_MODE:-}"]
+    command: ["bash", "-lc", "if [ \"${EVAL_RUN:-0}\" = \"1\" ]; then exec /aichallenge/run_simulator.bash ${SIM_MODE:-} >awsim.log 2>&1; else exec /aichallenge/run_simulator.bash ${SIM_MODE:-}; fi"]
 
   simulator-gpu:
     <<: [*autoware-base, *gpu]
     container_name: "aic-2025-simulator-gpu"
+    gpus: all
     stop_grace_period: 0.1s
     working_dir: ${OUTPUT_RUN_DIR:-/aichallenge}
-    command: ["bash", "-lc", "exec /aichallenge/run_simulator.bash ${SIM_MODE:-}"]
+    command: ["bash", "-lc", "if [ \"${EVAL_RUN:-0}\" = \"1\" ]; then exec /aichallenge/run_simulator.bash ${SIM_MODE:-} >awsim.log 2>&1; else exec /aichallenge/run_simulator.bash ${SIM_MODE:-}; fi"]
 
   sim-eval:
     <<: *autoware-base 
@@ -130,6 +133,7 @@ services:
   sim-eval-gpu:
     <<: [*autoware-base, *gpu]
     container_name: "aic-2025-eval-gpu"
+    gpus: all
     stop_grace_period: 0.1s
     command: ["bash", "-c", "cd /aichallenge && exec bash run_evaluation.bash ${RUN_MODE:-} --uid ${HOST_UID:-} --gid ${HOST_GID:-}"]
 
@@ -142,24 +146,27 @@ services:
   aw-cmd-gpu:
     <<: [*autoware-base, *gpu]
     container_name: "aic-2025-cmd-gpu"
+    gpus: all
     stop_grace_period: 0.1s
     command: ["bash", "-lc", "source /aichallenge/workspace/install/setup.bash && cd ${CMD_WORKDIR:-/aichallenge} && exec ${CMD:-}"]
 
   rosbag:
     <<: *autoware-base
     container_name: "aic-2025-rosbag"
-    stop_grace_period: 5.0s
+    stop_signal: SIGINT
+    stop_grace_period: 30s
     working_dir: ${OUTPUT_RUN_DIR:-/aichallenge}
-    command: ["bash", "-lc", "exec env ROS_DOMAIN_ID=${DOMAIN_ID:-1} /aichallenge/record_rosbag.bash"]
+    command: ["bash", "-lc", "exec env ROS_DOMAIN_ID=${DOMAIN_ID:-1} /aichallenge/utils/record_rosbag.bash"]
 
   rviz2:
     <<: *autoware-base 
     container_name: "aic-2025-rviz2"
     stop_grace_period: 0.1s
-    command: ["bash", "-c", "cd /aichallenge && exec bash run_rviz.bash remote"]
+    command: ["bash", "-c", "cd /aichallenge && exec bash utils/run_rviz.bash remote"]
 
   rviz2-gpu:
     <<: [*autoware-base, *gpu]
     container_name: "aic-2025-rviz2-gpu"
+    gpus: all
     stop_grace_period: 0.1s
-    command: ["bash", "-c", "cd /aichallenge && exec bash run_rviz.bash remote"]
+    command: ["bash", "-c", "cd /aichallenge && exec bash utils/run_rviz.bash remote"]

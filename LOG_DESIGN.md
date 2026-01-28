@@ -26,10 +26,12 @@
 ### 1.2 既存の出力仕様（現状）
 
 - `aichallenge/run_evaluation.bash`
-  - `/output/<timestamp>/` を作成し、そこで実行を継続（`autoware.log`、`capture/`、`result-details.json` 等が同階層に出る）
+  - `/output/<timestamp>/d<domain_id>/` を作成し、そこで実行を継続（`autoware.log`、`capture/`、`result-details.json` 等が同階層に出る）
   - **`/output/latest` を「最新実行ディレクトリへの symlink」にする意図**がある（`ln -nfs "$ts" latest`）
-- `docker_build.sh` / `docker_run.sh` / `aichallenge/topic_check.sh`
-  - `output/latest/`（ディレクトリ）にログを出している
+- `docker_build.sh` / `docker_run.sh`
+  - ホスト側ログを `output/_host/<event_id>/` に出力し、`output/_host/latest` で最新を参照する
+- `aichallenge/utils/topic_check.sh`
+  - デフォルトでは `output/latest/`（= 最新Runを指す symlink）にログを出す
 
 ### 1.3 問題点（根本原因）
 
@@ -63,13 +65,16 @@
 ```
 /output/
   <run_id>/                 # 評価1回の成果物（現行の timestamp ディレクトリを踏襲）
-    autoware.log
-    run_evaluation.log      # ★追加: オーケストレータの stdout/stderr を保存
-    result-details.json
-    capture/...
-    rosbag2_autoware/...
-    ros/                    # ★追加: ROS の ~/.ros 相当（log を含む）
-    meta.json               # ★追加: 実行条件/環境/終了コード
+    d<domain_id>/           # ★追加: domain id ごとに成果物を分離
+      autoware.log
+      awsim.log
+      rosbag.log
+      run_evaluation.log    # ★追加: オーケストレータの stdout/stderr を保存
+      result-details.json
+      capture/...
+      rosbag2_autoware/...
+      ros/                  # ★追加: ROS の ~/.ros 相当（log を含む）
+      meta.json             # ★追加: 実行条件/環境/終了コード
   latest -> <run_id>        # ★復活: 最新 Run への symlink（これを不変の入口にする）
   _host/                    # ★追加: host 側ログ（build/run/compose）
     <host_event_id>/

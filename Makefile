@@ -115,21 +115,28 @@ run-sim-eval:
 	@bash -lc 'set -euo pipefail; \
 		ts="$$(date +%Y%m%d-%H%M%S)"; \
 		mkdir -p output; \
-		mkdir -p "output/$$ts"; \
-		ln -nfs "$$ts" output/latest; \
-		output_root="$(OUTPUT_ROOT)"; \
-		output_run_dir="$$output_root/$$ts"; \
-		domain_id="$(DOMAIN_ID)"; \
-		result_wait_seconds="$(RESULT_WAIT_SECONDS)"; \
-		rosbag_enabled="$(ROSBAG)"; \
-		capture_enabled="$(CAPTURE)"; \
+		mkdir -p output/_host; \
+		if [ -e output/latest ] && [ ! -L output/latest ]; then \
+			legacy="output/_host/legacy-output-latest-$$ts-$$RANDOM"; \
+			echo "[make] Moving legacy output/latest to $$legacy"; \
+			mv output/latest "$$legacy"; \
+		fi; \
+			mkdir -p "output/$$ts"; \
+			ln -nfs "$$ts" output/latest; \
+			output_root="$(OUTPUT_ROOT)"; \
+			domain_id="$(DOMAIN_ID)"; \
+			mkdir -p "output/$$ts/d$$domain_id"; \
+			output_run_dir="$$output_root/$$ts/d$$domain_id"; \
+			result_wait_seconds="$(RESULT_WAIT_SECONDS)"; \
+			rosbag_enabled="$(ROSBAG)"; \
+			capture_enabled="$(CAPTURE)"; \
 		sim_svc="$(SIMULATOR_SERVICE)"; \
 		autoware_svc="$(AUTOWARE_SERVICE)"; \
 		cmd_svc="$(AW_CMD_SERVICE)"; \
 		rosbag_svc="$(ROSBAG_SERVICE)"; \
 		echo "--- Starting Evaluation ---"; \
-		echo "OUTPUT: output/$$ts (container: $$output_run_dir)"; \
-		echo "DOMAIN_ID=$$domain_id ROSBAG=$$rosbag_enabled CAPTURE=$$capture_enabled"; \
+			echo "OUTPUT: output/$$ts/d$$domain_id (container: $$output_run_dir)"; \
+			echo "DOMAIN_ID=$$domain_id ROSBAG=$$rosbag_enabled CAPTURE=$$capture_enabled"; \
 		dc() { OUTPUT_ROOT="$$output_root" OUTPUT_RUN_DIR="$$output_run_dir" DOMAIN_ID="$$domain_id" EVAL_RUN=1 CMD_WORKDIR="$$output_run_dir" $(DC) "$$@"; }; \
 		best_effort() { "$$@" >/dev/null 2>&1 || true; }; \
 		capture_started=0; \
@@ -140,7 +147,7 @@ run-sim-eval:
 		cleanup() { \
 			set +e; \
 			if [ "$$capture_started" -eq 1 ]; then \
-				CMD="env ROS_DOMAIN_ID=$$domain_id /aichallenge/publish.bash request-capture" dc run --rm --no-deps "$$cmd_svc" >/dev/null 2>&1 || true; \
+					CMD="env ROS_DOMAIN_ID=$$domain_id /aichallenge/utils/publish.bash request-capture" dc run --rm --no-deps "$$cmd_svc" >/dev/null 2>&1 || true; \
 			fi; \
 			if [ "$$rosbag_started" -eq 1 ]; then \
 				rosbag_cid="$$(dc ps -q "$$rosbag_svc" 2>/dev/null || true)"; \
@@ -162,20 +169,20 @@ run-sim-eval:
 				docker wait "$$sim_cid" >/dev/null 2>&1 || true; \
 			fi; \
 			dc stop "$$sim_svc" >/dev/null 2>&1 || true; \
-			CMD="bash /aichallenge/fix_ownership.bash $(HOST_UID) $(HOST_GID) $$output_root $$ts" dc run --rm --no-deps "$$cmd_svc" >/dev/null 2>&1 || true; \
+				CMD="bash /aichallenge/utils/fix_ownership.bash $(HOST_UID) $(HOST_GID) $$output_root $$ts" dc run --rm --no-deps "$$cmd_svc" >/dev/null 2>&1 || true; \
 		}; \
 		trap cleanup EXIT; \
 		trap "echo \"[make] Interrupted\" >&2; exit 130" INT; \
 		trap "echo \"[make] Terminated\" >&2; exit 143" TERM; \
 		SIM_MODE=eval dc up -d --force-recreate "$$sim_svc"; \
-		CMD="env ROS_DOMAIN_ID=0 /aichallenge/publish.bash check-awsim" dc run --rm --no-deps "$$cmd_svc"; \
+			CMD="env ROS_DOMAIN_ID=0 /aichallenge/utils/publish.bash check-awsim" dc run --rm --no-deps "$$cmd_svc"; \
 		RUN_MODE=awsim dc up -d --force-recreate "$$autoware_svc"; \
 		sleep 3; \
-		CMD="bash /aichallenge/move_window.bash" dc run --rm --no-deps "$$cmd_svc" || true; \
-		CMD="env ROS_DOMAIN_ID=$$domain_id /aichallenge/publish.bash request-initialpose" dc run --rm --no-deps "$$cmd_svc"; \
-		CMD="env ROS_DOMAIN_ID=$$domain_id /aichallenge/publish.bash request-control" dc run --rm --no-deps "$$cmd_svc"; \
+			CMD="bash /aichallenge/utils/move_window.bash" dc run --rm --no-deps "$$cmd_svc" || true; \
+			CMD="env ROS_DOMAIN_ID=$$domain_id /aichallenge/utils/publish.bash request-initialpose" dc run --rm --no-deps "$$cmd_svc"; \
+			CMD="env ROS_DOMAIN_ID=$$domain_id /aichallenge/utils/publish.bash request-control" dc run --rm --no-deps "$$cmd_svc"; \
 		if [ "$$capture_enabled" = "true" ]; then \
-			CMD="env ROS_DOMAIN_ID=$$domain_id /aichallenge/publish.bash request-capture" dc run --rm --no-deps "$$cmd_svc" >/dev/null 2>&1 || true; \
+				CMD="env ROS_DOMAIN_ID=$$domain_id /aichallenge/utils/publish.bash request-capture" dc run --rm --no-deps "$$cmd_svc" >/dev/null 2>&1 || true; \
 			capture_started=1; \
 		fi; \
 		if [ "$$rosbag_enabled" = "true" ]; then \
@@ -186,7 +193,7 @@ run-sim-eval:
 		if [ -n "$$sim_cid" ]; then \
 			docker wait "$$sim_cid" >/dev/null 2>&1 || true; \
 		fi; \
-		CMD="bash /aichallenge/convert_result.bash $$domain_id $$result_wait_seconds" dc run --rm --no-deps "$$cmd_svc" >/dev/null 2>&1 || true; \
+			CMD="bash /aichallenge/utils/convert_result.bash $$domain_id $$result_wait_seconds" dc run --rm --no-deps "$$cmd_svc" >/dev/null 2>&1 || true; \
 		echo \"[make] Evaluation finished\"'
 
 # rviz

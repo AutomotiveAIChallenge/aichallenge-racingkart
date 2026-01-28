@@ -5,12 +5,37 @@
 #   - コンテナ内で実行
 #   - `source aichallenge/workspace/install/setup.bash` 済み
 # 使い方:
-#   bash topic_check.sh [--timeout 15] [--output output/latest/topic_check.txt] [--list]
+#   bash utils/topic_check.sh [--timeout 15] [--output output/latest/topic_check.txt] [--list]
 
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+
+find_repo_root() {
+    local dir="$1"
+    local i parent
+
+    for ((i = 0; i < 10; i++)); do
+        if [ -d "${dir}/output" ]; then
+            echo "$dir"
+            return 0
+        fi
+        parent="$(cd "${dir}/.." && pwd)"
+        if [ "$parent" = "$dir" ]; then
+            break
+        fi
+        dir="$parent"
+    done
+
+    # Fallback: keep previous behavior-ish, but avoid pointing under /aichallenge.
+    if [ -d "/output" ]; then
+        echo "/"
+        return 0
+    fi
+    { cd "$1/../.." 2>/dev/null && pwd; } || true
+}
+
+REPO_ROOT="$(find_repo_root "$SCRIPT_DIR")"
 
 TIMEOUT=3
 HZ_SECS=5
@@ -44,7 +69,7 @@ Options:
 
 例:
   source aichallenge/workspace/install/setup.bash
-  bash topic_check.sh --timeout 20
+  bash utils/topic_check.sh --timeout 20
 EOF
 }
 

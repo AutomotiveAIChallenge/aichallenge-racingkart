@@ -170,9 +170,9 @@ fi
 
 log "AWSIM and RViz windows found"
 
-wmctrl -i -a "$rviz_id" && wmctrl -i -r "$rviz_id" -e 0,0,0,1920,1043 || true
+{ wmctrl -i -a "$rviz_id" && wmctrl -i -r "$rviz_id" -e 0,0,0,1920,1043; } || true
 sleep 1
 if [ -n "$awsim_id" ]; then
-    wmctrl -i -a "$awsim_id" && wmctrl -i -r "$awsim_id" -e 0,0,0,900,1043 || true
+    { wmctrl -i -a "$awsim_id" && wmctrl -i -r "$awsim_id" -e 0,0,0,900,1043; } || true
 fi
 sleep 2

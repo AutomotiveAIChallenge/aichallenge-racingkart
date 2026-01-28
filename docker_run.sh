@@ -3,6 +3,20 @@
 target="${1}"
 device="${2}"
 device_drivers="/dev/dri"
+
+migrate_legacy_output_latest() {
+    # `output/latest` was historically used as a directory for host logs.
+    # We now reserve `output/latest` as a symlink to the latest evaluation run.
+    if [ -e "output/latest" ] && [ ! -L "output/latest" ]; then
+        mkdir -p output/_host
+        local ts legacy
+        ts="$(date +%Y%m%d-%H%M%S)"
+        legacy="output/_host/legacy-output-latest-${ts}-$$"
+        echo "[INFO] Moving legacy 'output/latest' to '${legacy}'"
+        mv output/latest "${legacy}"
+    fi
+}
+
 case "${target}" in
 "eval")
     volume="output:/output"
@@ -37,9 +51,14 @@ fi
 
 mkdir -p output
 
-LOG_DIR="output/latest"
-mkdir -p $LOG_DIR
-LOG_FILE="$LOG_DIR/docker_run.log"
+migrate_legacy_output_latest
+
+mkdir -p output/_host
+EVENT_ID="$(date +%Y%m%d-%H%M%S)-docker_run-${target}-$$"
+LOG_DIR="output/_host/${EVENT_ID}"
+mkdir -p "$LOG_DIR"
+ln -nfs "${EVENT_ID}" output/_host/latest
+LOG_FILE="${LOG_DIR}/docker_run.log"
 echo "A rocker run log is stored at : $LOG_FILE"
 
 # shellcheck disable=SC2086

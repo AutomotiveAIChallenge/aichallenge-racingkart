@@ -20,6 +20,10 @@ PID_AWSIM=""
 PID_AUTOWARE=""
 PID_ROSBAG=""
 OUTPUT_DIRECTORY=""
+RUN_ID=""
+RUN_LOG_FILE=""
+RUN_ROOT=""
+DOMAIN_OUTPUT_DIR=""
 CAPTURE_STARTED=0
 CAPTURE_STOPPED=0
 OWNERSHIP_DONE=0
@@ -219,21 +223,56 @@ move_window() {
 }
 
 setup_output_dir() {
-    local ts
+    local ts legacy
     ts=$(date +%Y%m%d-%H%M%S)
+
+    RUN_ID="$ts"
+
     mkdir -p "$OUTPUT_ROOT" || exit 1
-    cd "$OUTPUT_ROOT" || exit 1
-    mkdir "$ts" || exit 1
-    ln -nfs "$ts" latest
-    cd "$ts" || exit 1
+    if [ -e "$OUTPUT_ROOT/$RUN_ID" ]; then
+        RUN_ID="${RUN_ID}-$$"
+    fi
+    RUN_ROOT="$OUTPUT_ROOT/$RUN_ID"
+    mkdir -p "$RUN_ROOT" || exit 1
+
+    DOMAIN_OUTPUT_DIR="${RUN_ROOT}/d${ROS_DOMAIN_ID}"
+    mkdir -p "$DOMAIN_OUTPUT_DIR" || exit 1
+    cd "$DOMAIN_OUTPUT_DIR" || exit 1
     OUTPUT_DIRECTORY="$(pwd)"
+
+    RUN_LOG_FILE="${OUTPUT_DIRECTORY}/run_evaluation.log"
+    touch "$RUN_LOG_FILE" || true
+    exec > >(tee -a "$RUN_LOG_FILE") 2>&1
+
+    cd "$OUTPUT_ROOT" || exit 1
+    if [ -e latest ] && [ ! -L latest ]; then
+        mkdir -p "$OUTPUT_ROOT/_host" || true
+        legacy="$OUTPUT_ROOT/_host/legacy-output-latest-${RUN_ID}"
+        warn "Found '${OUTPUT_ROOT}/latest' as a directory/file. Moving to '${legacy}' to restore symlink behavior."
+        mv latest "$legacy" || warn "Failed to move legacy latest directory (continuing)."
+    fi
+    ln -nfs "$RUN_ID" latest || warn "Failed to update latest symlink (continuing)."
+
+    cd "$OUTPUT_DIRECTORY" || exit 1
     log "Output directory: $OUTPUT_DIRECTORY"
+    log "Run root directory: $RUN_ROOT"
+    log "Domain output directory: $DOMAIN_OUTPUT_DIR"
+    log "Run log file: $RUN_LOG_FILE"
 }
 
 setup_ros_env() {
     # shellcheck disable=SC1091
     source /aichallenge/workspace/install/setup.bash
     export ROS_DOMAIN_ID=$ROS_DOMAIN_ID
+}
+
+setup_ros_logs() {
+    # Keep ROS logs under the run directory (instead of ~/.ros/log).
+    export ROS_HOME="${OUTPUT_DIRECTORY}/ros"
+    export ROS_LOG_DIR="${ROS_HOME}/log"
+    mkdir -p "${ROS_LOG_DIR}" || true
+    log "ROS_HOME: ${ROS_HOME}"
+    log "ROS_LOG_DIR: ${ROS_LOG_DIR}"
 }
 
 tune_network_best_effort() {
@@ -244,9 +283,9 @@ tune_network_best_effort() {
 start_simulator() {
     log "Start AWSIM"
     if command -v setsid >/dev/null 2>&1; then
-        nohup setsid /aichallenge/run_simulator.bash eval >/dev/null 2>&1 &
+        nohup setsid /aichallenge/run_simulator.bash eval >"${OUTPUT_DIRECTORY}/awsim.log" 2>&1 &
     else
-        nohup /aichallenge/run_simulator.bash eval >/dev/null 2>&1 &
+        nohup /aichallenge/run_simulator.bash eval >"${OUTPUT_DIRECTORY}/awsim.log" 2>&1 &
     fi
     PID_AWSIM=$!
     log "AWSIM PID: $PID_AWSIM"
@@ -255,9 +294,9 @@ start_simulator() {
 start_autoware() {
     log "Start Autoware"
     if command -v setsid >/dev/null 2>&1; then
-        nohup setsid /aichallenge/run_autoware.bash awsim "$ROS_DOMAIN_ID" >autoware.log 2>&1 &
+        nohup setsid /aichallenge/run_autoware.bash awsim "$ROS_DOMAIN_ID" >"${OUTPUT_DIRECTORY}/autoware.log" 2>&1 &
     else
-        nohup /aichallenge/run_autoware.bash awsim "$ROS_DOMAIN_ID" >autoware.log 2>&1 &
+        nohup /aichallenge/run_autoware.bash awsim "$ROS_DOMAIN_ID" >"${OUTPUT_DIRECTORY}/autoware.log" 2>&1 &
     fi
     PID_AUTOWARE=$!
     log "Autoware PID: $PID_AUTOWARE"
@@ -265,7 +304,7 @@ start_autoware() {
 
 start_screen_capture_if_needed() {
     if [ "$IS_CAPTURE_MODE" -eq 1 ]; then
-        bash /aichallenge/publish.bash request-capture
+        bash /aichallenge/utils/publish.bash request-capture
         CAPTURE_STARTED=1
         log "Screen capture started."
     else
@@ -276,7 +315,7 @@ start_screen_capture_if_needed() {
 stop_screen_capture_if_needed() {
     if [ "$CAPTURE_STARTED" -eq 1 ] && [ "$CAPTURE_STOPPED" -eq 0 ]; then
         log "Stop screen capture"
-        bash /aichallenge/publish.bash request-capture || true
+        bash /aichallenge/utils/publish.bash request-capture || true
         CAPTURE_STOPPED=1
     fi
 }
@@ -284,7 +323,7 @@ stop_screen_capture_if_needed() {
 start_rosbag_if_needed() {
     if [ "$IS_ROSBAG_MODE" -eq 1 ]; then
         log "Start rosbag"
-        nohup /aichallenge/record_rosbag.bash >/dev/null 2>&1 &
+        nohup /aichallenge/utils/record_rosbag.bash >"${OUTPUT_DIRECTORY}/rosbag.log" 2>&1 &
         PID_ROSBAG=$!
         log "ROS Bag PID: $PID_ROSBAG"
         sleep 2
@@ -594,8 +633,12 @@ fix_ownership_if_needed() {
     if [ -n "$HOST_UID" ] && [ -n "$HOST_GID" ]; then
         if [ "$(id -u)" -eq 0 ]; then
             log "Running as root. Changing ownership of artifacts to ${HOST_UID}:${HOST_GID}..."
-            log "Target directory: $(pwd)"
-            chown -R "${HOST_UID}:${HOST_GID}" "$(pwd)" || true
+            log "Target directory: ${RUN_ROOT:-$(pwd)}"
+            if [ -n "${RUN_ROOT:-}" ]; then
+                chown -R "${HOST_UID}:${HOST_GID}" "${RUN_ROOT}" || true
+            else
+                chown -R "${HOST_UID}:${HOST_GID}" "$(pwd)" || true
+            fi
             chown -h "${HOST_UID}:${HOST_GID}" "${OUTPUT_ROOT}/latest" || true
             log "Ownership change complete."
         else
@@ -644,20 +687,21 @@ main() {
     trap on_sigterm SIGTERM
 
     setup_output_dir
+    setup_ros_logs
     setup_ros_env
     tune_network_best_effort
 
     start_simulator
 
     log "Check simulator readiness"
-    run_or_exit "AWSIM /clock wait" env ROS_DOMAIN_ID="$ROS_DOMAIN_ID_SIM" bash /aichallenge/publish.bash check-awsim
+    run_or_exit "AWSIM /clock wait" env ROS_DOMAIN_ID="$ROS_DOMAIN_ID_SIM" bash /aichallenge/utils/publish.bash check-awsim
     log "AWSIM is ready."
 
     start_autoware
     sleep 3
     move_window
-    run_or_exit "Initial pose set" /aichallenge/publish.bash request-initialpose
-    run_or_exit "Control request" /aichallenge/publish.bash request-control
+    run_or_exit "Initial pose set" /aichallenge/utils/publish.bash request-initialpose
+    run_or_exit "Control request" /aichallenge/utils/publish.bash request-control
     start_screen_capture_if_needed
     start_rosbag_if_needed
 
