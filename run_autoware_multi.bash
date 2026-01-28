@@ -122,8 +122,10 @@ build_eval_image() {
 
     local tag
     tag="aichallenge-2025-eval-$(sanitize_tag_fragment "${submit_rel}")-${run_id}-d${domain_id}"
-    log "Build image for d${domain_id}: ${tag} (SUBMIT_TAR=${submit_rel})"
-    docker build --progress=plain --target eval --build-arg "SUBMIT_TAR=${submit_rel}" -t "${tag}" "${REPO_ROOT}"
+    # IMPORTANT: This function is used via command substitution, so it must only emit the tag on stdout.
+    # Send build logs to stderr to avoid corrupting the captured tag.
+    log "Build image for d${domain_id}: ${tag} (SUBMIT_TAR=${submit_rel})" >&2
+    docker build --progress=plain --target eval --build-arg "SUBMIT_TAR=${submit_rel}" -t "${tag}" "${REPO_ROOT}" 1>&2
     echo "${tag}"
 }
 
