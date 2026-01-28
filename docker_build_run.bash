@@ -65,7 +65,7 @@ Usage:
   ./docker_build_run.bash eval  [--device auto|gpu|cpu] [--domain-ids 1,2,3,4] [--rosbag] [--capture]
                                [--output-root /output] [--result-wait-seconds N] [--run-id ID] [--run-group NAME]
   ./docker_build_run.bash all   [--submit <path/to/aichallenge_submit.tar.gz>]...
-                               [--device auto|gpu|cpu] [--domain-ids 1,2,3,4] [--rosbag] [--capture]
+                               [--device auto|gpu|cpu] [--rosbag] [--capture]
                                [--output-root /output] [--result-wait-seconds N] [--run-id ID]
   ./docker_build_run.bash down
 
@@ -304,7 +304,6 @@ cmd_eval() {
 cmd_all() {
     local -a submit_tars=()
     local device="auto"
-    local domain_ids="1,2,3,4"
     local rosbag="false"
     local capture="false"
     local output_root="/output"
@@ -319,10 +318,6 @@ cmd_all() {
             ;;
         --device)
             device="${2:-}"
-            shift 2
-            ;;
-        --domain-ids)
-            domain_ids="${2:-}"
             shift 2
             ;;
         --rosbag)
@@ -379,25 +374,8 @@ cmd_all() {
         return 0
     fi
 
-    local domain_ids_provided=0
-    if [ "${domain_ids}" != "1,2,3,4" ]; then
-        domain_ids_provided=1
-    fi
-
-    local -a mapped_domain_ids=()
-    if [ "${domain_ids_provided}" -eq 0 ]; then
-        # Default mapping for multi-submit:
-        #   1st submit -> domain 1, 2nd submit -> domain 2, ...
-        for i in "${!submit_tars[@]}"; do
-            mapped_domain_ids+=("$((i + 1))")
-        done
-    else
-        # If user specifies --domain-ids with multiple submits, treat it as a 1:1 mapping list.
-        # Example: --submit A --submit B --domain-ids 1,2
-        read -r -a mapped_domain_ids <<<"$(echo "${domain_ids}" | tr ',' ' ')"
-        if [ "${#mapped_domain_ids[@]}" -ne "${#submit_tars[@]}" ]; then
-            die "--domain-ids count (${#mapped_domain_ids[@]}) must match --submit count (${#submit_tars[@]}) when using multiple submits"
-        fi
+    if [ "${#submit_tars[@]}" -gt 4 ]; then
+        die "too many --submit args (${#submit_tars[@]}). max is 4 (mapped to domain id 1..4)"
     fi
 
     local -a eval_flags=()
@@ -406,7 +384,7 @@ cmd_all() {
 
     for i in "${!submit_tars[@]}"; do
         local submit_tar="${submit_tars[$i]}"
-        local domain_id="${mapped_domain_ids[$i]}"
+        local domain_id="$((i + 1))"
 
         [ -n "${submit_tar}" ] || die "--submit requires a file path"
         [ -f "${submit_tar}" ] || die "submit file not found: ${submit_tar}"
