@@ -11,7 +11,7 @@ SHELL := /bin/bash
 DEVICE ?= auto
 HAVE_NVIDIA := $(shell command -v nvidia-smi >/dev/null 2>&1 && [ -e /dev/nvidia0 ] && echo 1 || echo 0)
 
-DC := docker compose -f docker-compose.yml
+DC ?= docker compose -f docker-compose.yml
 
 GPU_ENABLED := 0
 ifeq ($(DEVICE),gpu)
