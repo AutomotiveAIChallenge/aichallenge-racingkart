@@ -130,14 +130,17 @@ run-sim-eval:
 			result_wait_seconds="$(RESULT_WAIT_SECONDS)"; \
 			rosbag_enabled="$(ROSBAG)"; \
 			capture_enabled="$(CAPTURE)"; \
-		sim_svc="$(SIMULATOR_SERVICE)"; \
-		autoware_svc="$(AUTOWARE_SERVICE)"; \
-		cmd_svc="$(AW_CMD_SERVICE)"; \
-		rosbag_svc="$(ROSBAG_SERVICE)"; \
-		echo "--- Starting Evaluation ---"; \
+			sim_svc="$(SIMULATOR_SERVICE)"; \
+			autoware_svc="$(AUTOWARE_SERVICE)"; \
+			cmd_svc="$(AW_CMD_SERVICE)"; \
+			rosbag_svc="$(ROSBAG_SERVICE)"; \
+			nvidia_visible_devices=""; \
+			nvidia_driver_caps=""; \
+			case "$$sim_svc" in *-gpu) nvidia_visible_devices="all"; nvidia_driver_caps="all";; esac; \
+			echo "--- Starting Evaluation ---"; \
 			echo "OUTPUT: output/$$ts/d$$domain_id (container: $$output_run_dir)"; \
 			echo "DOMAIN_ID=$$domain_id ROSBAG=$$rosbag_enabled CAPTURE=$$capture_enabled"; \
-		dc() { OUTPUT_ROOT="$$output_root" OUTPUT_RUN_DIR="$$output_run_dir" DOMAIN_ID="$$domain_id" EVAL_RUN=1 CMD_WORKDIR="$$output_run_dir" $(DC) "$$@"; }; \
+			dc() { NVIDIA_VISIBLE_DEVICES="$$nvidia_visible_devices" NVIDIA_DRIVER_CAPABILITIES="$$nvidia_driver_caps" OUTPUT_ROOT="$$output_root" OUTPUT_RUN_DIR="$$output_run_dir" DOMAIN_ID="$$domain_id" EVAL_RUN=1 CMD_WORKDIR="$$output_run_dir" $(DC) "$$@"; }; \
 		best_effort() { "$$@" >/dev/null 2>&1 || true; }; \
 		capture_started=0; \
 		rosbag_started=0; \

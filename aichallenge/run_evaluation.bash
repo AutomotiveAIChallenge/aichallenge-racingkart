@@ -634,7 +634,7 @@ fix_ownership_if_needed() {
         if [ "$(id -u)" -eq 0 ]; then
             log "Running as root. Changing ownership of artifacts to ${HOST_UID}:${HOST_GID}..."
             log "Target directory: ${RUN_ROOT:-$(pwd)}"
-            if [ -n "${RUN_ROOT:-}" ]; then
+            if [ -n "${RUN_ROOT-}" ]; then
                 chown -R "${HOST_UID}:${HOST_GID}" "${RUN_ROOT}" || true
             else
                 chown -R "${HOST_UID}:${HOST_GID}" "$(pwd)" || true
