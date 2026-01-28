@@ -153,7 +153,15 @@ create_submit_volume() {
           cp -a \"\$src\"/. /submit/; \
           ptb=/submit/parameter_topic_bridge/package.xml; \
           if [ -f \"\$ptb\" ]; then \
-            python3 - \"\$ptb\" <<'PY' || true\nimport sys\npath=sys.argv[1]\nneedle='<member_of_group>rosidl_interface_packages</member_of_group>'\nlines=open(path,'r',encoding='utf-8').read().splitlines(True)\nout=[]\nin_export=False\nfor l in lines:\n  s=l.strip()\n  if s=='<export>': in_export=True; out.append(l); continue\n  if s=='</export>': in_export=False; out.append(l); continue\n  if in_export and s==needle: continue\n  out.append(l)\nlines=out\nhas_top=any(l.strip()==needle and l.startswith('  ') and not l.startswith('    ') for l in lines)\nif not has_top:\n  out=[]\n  inserted=False\n  for l in lines:\n    if (not inserted) and l.strip()=='<export>': out.append('  '+needle+'\\n'); inserted=True\n    if (not inserted) and l.strip()=='</package>': out.append('  '+needle+'\\n'); inserted=True\n    out.append(l)\n  lines=out\nopen(path,'w',encoding='utf-8').write(''.join(lines))\nPY\n          fi"
+            python3 -c 'import sys, xml.etree.ElementTree as ET; \
+              p=sys.argv[1]; \
+              tree=ET.parse(p); root=tree.getroot(); \
+              [export.remove(mog) for export in root.findall(\"export\") for mog in list(export.findall(\"member_of_group\")) if (mog.text or \"\").strip()==\"rosidl_interface_packages\"]; \
+              if not any((c.tag==\"member_of_group\" and (c.text or \"\").strip()==\"rosidl_interface_packages\") for c in list(root)): \
+                new=ET.Element(\"member_of_group\"); new.text=\"rosidl_interface_packages\"; \
+                export=root.find(\"export\"); idx=(list(root).index(export) if export is not None else len(list(root))); root.insert(idx, new); \
+              tree.write(p, encoding=\"utf-8\", xml_declaration=True)' \"\$ptb\" || true; \
+          fi"
 }
 
 write_compose_override_for_submit() {
