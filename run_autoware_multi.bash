@@ -14,6 +14,7 @@ ts_compact() { date +%Y%m%d-%H%M%S; }
 usage() {
     cat <<'EOF'
 Usage:
+  ./run_autoware_multi.bash down [--log-dir <output/_host/...>]
   ./run_autoware_multi.bash --submit <aichallenge_submit.tar.gz> [--submit <...> ...]
                             [--vehicles N] [--device auto|gpu|cpu] [--run-id ID]
 
@@ -23,6 +24,8 @@ Behavior:
   - Starts Autoware containers autoware-d1..autoware-dN concurrently.
   - Domain id is assigned by submit order: 1..4 (max 4).
   - Writes logs under output/<run_id>/d<domain_id>/autoware.log and output/latest -> <run_id>.
+  - Writes compose override to output/_host/<event_id>/compose.autoware_multi.yml and
+    output/_host/latest-autoware-multi -> <event_id>.
 EOF
 }
 
@@ -179,7 +182,39 @@ compose_up() {
     fi
 }
 
+cmd_down() {
+    local log_dir="${REPO_ROOT}/output/_host/latest-autoware-multi"
+
+    while [ $# -gt 0 ]; do
+        case "$1" in
+        --log-dir)
+            log_dir="${2:-}"
+            shift 2
+            ;;
+        -h | --help)
+            usage
+            exit 0
+            ;;
+        *)
+            die "Unknown option for down: '$1'"
+            ;;
+        esac
+    done
+
+    local override_file="${log_dir}/compose.autoware_multi.yml"
+    [ -f "${override_file}" ] || die "compose override not found: ${override_file} (hint: --log-dir output/_host/<event_id>)"
+
+    log "docker compose down --remove-orphans (override: ${override_file})"
+    docker compose -f "${COMPOSE_BASE_FILE}" -f "${override_file}" down --remove-orphans
+}
+
 main() {
+    if [ "${1:-}" = "down" ]; then
+        shift
+        cmd_down "$@"
+        return 0
+    fi
+
     local device="auto"
     local run_id=""
     local vehicles=""
@@ -264,7 +299,8 @@ main() {
     compose_up "${gpu_enabled}" -f "${COMPOSE_BASE_FILE}" -f "${override_file}" up -d --force-recreate "${autoware_svcs[@]}"
 
     log "Started. Output: output/${run_id}/d*/autoware.log"
-    log "Stop: docker compose -f docker-compose.yml -f ${override_file} down --remove-orphans"
+    log "Stop: ./run_autoware_multi.bash down"
+    log "  or: docker compose -f docker-compose.yml -f ${override_file} down --remove-orphans"
 }
 
 main "$@"
