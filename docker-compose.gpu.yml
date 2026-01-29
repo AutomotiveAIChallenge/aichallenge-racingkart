@@ -1,6 +1,15 @@
+x-gpu: &gpu
+  deploy:
+    resources:
+      reservations:
+        devices:
+          - driver: nvidia
+            count: all
+            capabilities: ["gpu"]
+
 services:
   autoware:
-    gpus: all
+    <<: *gpu
 
   simulator:
-    gpus: all
+    <<: *gpu

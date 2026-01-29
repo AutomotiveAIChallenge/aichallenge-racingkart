@@ -219,7 +219,15 @@ write_compose_override() {
     network_mode: host
 EOF
             if [ "${gpu_enabled}" = "1" ]; then
-                echo "    gpus: all"
+                cat <<'EOF'
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: ["gpu"]
+EOF
             fi
             cat <<EOF
     environment:
@@ -487,10 +495,15 @@ main() {
     write_compose_override "${override_file}" "${run_id}" "${vehicles}" "${gpu_enabled}" "${images[@]}"
 
     log "Starting simulator (once)"
+    local sim_mode="eval"
+    if [ "${vehicles}" -ge 2 ]; then
+        sim_mode="${vehicles}p"
+    fi
+    log "Simulator mode: ${sim_mode}"
     if [ "${gpu_enabled}" = "1" ]; then
-        EVAL_RUN=1 OUTPUT_RUN_DIR="/output/${run_id}" compose_up "${gpu_enabled}" -f "${COMPOSE_BASE_FILE}" -f "${COMPOSE_GPU_FILE}" up -d --force-recreate simulator
+        EVAL_RUN=1 OUTPUT_RUN_DIR="/output/${run_id}" SIM_MODE="${sim_mode}" compose_up "${gpu_enabled}" -f "${COMPOSE_BASE_FILE}" -f "${COMPOSE_GPU_FILE}" up -d --force-recreate simulator
     else
-        EVAL_RUN=1 OUTPUT_RUN_DIR="/output/${run_id}" compose_up "${gpu_enabled}" -f "${COMPOSE_BASE_FILE}" up -d --force-recreate simulator
+        EVAL_RUN=1 OUTPUT_RUN_DIR="/output/${run_id}" SIM_MODE="${sim_mode}" compose_up "${gpu_enabled}" -f "${COMPOSE_BASE_FILE}" up -d --force-recreate simulator
     fi
 
     local -a autoware_svcs=()
@@ -509,9 +522,9 @@ main() {
 
     log "Request initial pose + control for each domain"
     for domain_id in $(seq 1 "${vehicles}"); do
-        run_autoware_command_best_effort "${gpu_enabled}" "env ROS_DOMAIN_ID=${domain_id} /aichallenge/utils/publish.bash request-initialpose" ||
+        run_autoware_command_best_effort "${gpu_enabled}" "env ROS_DOMAIN_ID=${domain_id} AIC_SERVICE_CALL_TIMEOUT_S=${AIC_SERVICE_CALL_TIMEOUT_S_INITIALPOSE:-60} /aichallenge/utils/publish.bash request-initialpose" ||
             warn "Initial pose request failed (domain_id=${domain_id})"
-        run_autoware_command_best_effort "${gpu_enabled}" "env ROS_DOMAIN_ID=${domain_id} /aichallenge/utils/publish.bash request-control" ||
+        run_autoware_command_best_effort "${gpu_enabled}" "env ROS_DOMAIN_ID=${domain_id} AIC_SERVICE_CALL_TIMEOUT_S=${AIC_SERVICE_CALL_TIMEOUT_S_CONTROL:-30} /aichallenge/utils/publish.bash request-control" ||
             warn "Control request failed (domain_id=${domain_id})"
     done
 
