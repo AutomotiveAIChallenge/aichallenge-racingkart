@@ -16,22 +16,29 @@ Toward the competition, we will update the following pages to provide informatio
 
 ## Docker Compose（推奨）
 
-- `cp .env.example .env`（必要に応じて編集）
-- ビルド: `./docker_build.sh dev`
-- 評価用イメージのビルド（提出物を差し替えたい場合）: `./docker_build.sh eval --submit submit/aichallenge_submit.tar.gz`
-- ビルド + 評価（提出物 tar.gz を eval イメージとしてビルドして実行）: `./run_parallel_submissions.bash --submit submit/aichallenge_submit.tar.gz --device gpu`
-  - 複数 `--submit` 時は順に domain id を 1..4 に固定割当します
-- Autoware(overlay) ビルド: `make autoware-build`
-- 評価（`aichallenge/run_evaluation.bash` 相当）: `make eval`
-  - オプション例: `make eval DEVICE=gpu DOMAIN_ID=1 ROSBAG=true CAPTURE=false RESULT_WAIT_SECONDS=10`
-  - 複数domainを連続実行: `make eval DOMAIN_IDS=1,2,3,4`
-  - 出力: `output/<timestamp>/d<domain_id>/`（`output/latest` は可能ならシンボリックリンク）
-- 開発用（AWSIM+Autoware起動のみ）: `make dev`
-- 個別起動: `make simulator` / `make autoware-simulator` / `make autoware-vehicle`
-- GPU: Autoware/Simulator は自動検出（強制: `DEVICE=gpu`、CPU強制: `DEVICE=cpu`）。`autoware-build` / `rviz2` は常に CPU サービスを使用
-- ウィンドウ移動の調整: `MOVE_WINDOW_DEBUG=1 MOVE_WINDOW_QUIET=0 make eval`（必要なら `AWSIM_*_REGEX` / `RVIZ_*_REGEX` を指定）
+### 全体像（開発: Makefile / 個別起動）
+
+```text
+Host (you)
+  ├─ make autoware-build / make eval / make dev / make simulator ...
+  └─ docker compose
+        ├─ simulator        (AWSIM)
+        ├─ autoware         (Autoware)
+        ├─ autoware-command (ros2 service/topic の単発操作)
+        └─ output/ にログ・結果を出力（output/latest は最新runへのsymlink）
+```
 
 ## 複数提出物の並列起動（run_parallel_submissions）
 
-- 複数提出物を **別々の eval イメージとしてビルド**し、`autoware-d1..dN` を **並列起動**: `./run_parallel_submissions.bash --submit ... --submit ...`
-- 詳細（入出力/生成される compose override/ディレクトリ構成）: `design_docs/run_parallel_submissions.md`
+```text
+Host: ./run_parallel_submissions.bash --submit <tar.gz> [--submit <tar.gz> ...]
+
+  1) submitごとに eval イメージをビルド（Dockerfile target=eval）
+  2) simulator を1回だけ起動
+  3) autoware-d1..dN を並列起動（domain id は submit 順に 1..N）
+
+主な出力:
+  output/<run_id>/awsim.log
+  output/<run_id>/dN/autoware.log
+  output/_host/<event_id>/run_parallel_submissions.log
+```

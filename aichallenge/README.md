@@ -52,46 +52,19 @@
 - `aichallenge/utils/record_rosbag.bash`: rosbag 記録。`SIGINT/SIGTERM/EXIT` で `ros2 bag record` を止める
 - `aichallenge/utils/pkill_all.bash`: デバッグ/緊急停止用。関連プロセスを強制終了して環境を戻す
 - `aichallenge/utils/topic_check.sh`: 走行前のトピック存在/HZチェック。ログは `output/latest/` に残す運用を想定
-- `docker-compose.yml`: 役割別コンテナ（build/eval/autoware/simulator/zenoh等）を定義し、作業者の操作手順を簡略化
-- `Makefile`: `docker compose` の操作を短いターゲットに集約（ログ表示や引数組み立ての隠蔽）
-- `.env.example`: `docker-compose.yml` 用の環境変数テンプレ
-- `aichallenge/autoware.log`: Autoware起動ログの一時出力（デバッグ用途）
-- `aichallenge/result-details.json`: 結果JSONのサンプル/一時出力（採点用途）
-- `aichallenge/d*-result-details.json`: Domainごとの結果JSONサンプル（採点用途）
 
-## `run_evaluation.bash` の評価フロー（現状）
+## 評価フロー（現状）
 
-`aichallenge/run_evaluation.bash` は以下の流れで評価をオーケストレーションします。
+以下の流れで評価をオーケストレーションします。
 
 1. 出力ディレクトリ作成（`/output/<timestamp>/d<domain_id>`、`/output/latest` シンボリックリンク）
 2. ROS/Autoware/overlay 環境の `source` と `ROS_DOMAIN_ID` の設定
 3. ネットワーク設定（`sudo -n ...` を best-effort 実行）
-4. AWSIM 起動（`run_simulator.bash eval` を `nohup` 起動）
+4. AWSIM 起動（`run_simulator.bash eval` を起動）
 5. AWSIM 準備待ち（`utils/publish.bash check-awsim`。`/clock` を1回受け取るまで待つ）
-6. Autoware 起動（`run_autoware.bash awsim <domain>` を `nohup` 起動）
+6. Autoware 起動（`run_autoware.bash awsim <domain>` を起動）
 7. （可能なら）ウィンドウ移動（`wmctrl` がある場合のみ、タイムアウト付き）
 8. 初期姿勢/制御要求（`utils/publish.bash request-initialpose` → `request-control`）
 9. 任意で画面キャプチャ・rosbag 開始（フラグ指定時）
 10. AWSIM 終了待ち → 結果変換（`result-details.json` を最大待ち）→ 終了
-11. 終了時 `trap` により後処理（キャプチャ停止/rosbag停止/権限調整）
-
-### 引数/オプション（抜粋）
-
-- `rosbag` / `--rosbag`: rosbag 記録を有効化
-- `capture` / `--capture`: 画面キャプチャを有効化
-- `--uid N` / `--gid N`（互換: 末尾に `<uid> <gid>`）: 生成物の `chown` 用
-- `--domain-id N`: Autoware 側の `ROS_DOMAIN_ID` として使用
-- `--output-root PATH`: 出力先（デフォルト `/output`）
-- `--result-wait-seconds N`: `result-details.json` の待ち秒数（デフォルト 10）
-
-## 重要な実装上の注意点
-
-### `/clock` 待ちの実装
-
-`ros2 topic echo /clock --once` は「型推論ができない状態」だと `rc=1` で即失敗しやすいため、
-`utils/publish.bash check-awsim` ではメッセージ型（`rosgraph_msgs/msg/Clock`）を明示して待機します。
-
-### Domain ID の扱い
-
-AWSIM の `/clock` 待ちは、`env ROS_DOMAIN_ID=<sim>` を付けて「そのコマンドだけ」Domain を切り替えて実行します。
-そのため `--domain-id` で指定した Autoware 側の Domain を上書きしません。
+11. 終了時後処理（キャプチャ停止/rosbag停止/権限調整）

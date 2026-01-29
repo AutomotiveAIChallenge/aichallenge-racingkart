@@ -71,7 +71,7 @@ services:
   autoware-build:
     <<: *autoware-base 
     stop_grace_period: 0.1s
-    command: ["bash", "-c", "cd /aichallenge && exec bash build_autoware.bash ${HOST_UID:-} ${HOST_GID:-}"]
+    command: ["bash", "-c", "cd /aichallenge/build_autoware.bash ${HOST_UID:-} ${HOST_GID:-}"]
 
   simulator:
     <<: *autoware-base 
