@@ -3,8 +3,8 @@ set -euo pipefail
 
 SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 REPO_ROOT=$(cd "${SCRIPT_DIR}/.." && pwd)
-AIC_DIR="${REPO_ROOT}/aichallenge"
-COMPOSE_FILE="${AIC_DIR}/docker-compose.yml"
+MAKE_DIR="${REPO_ROOT}"
+COMPOSE_FILE="${REPO_ROOT}/docker-compose.yml"
 
 usage() {
     cat <<'USAGE'
@@ -15,13 +15,13 @@ Usage:
 USAGE
 }
 
-if [ ! -d "${AIC_DIR}" ]; then
-    echo "Error: vehicle directory not found at '${AIC_DIR}'." >&2
+if [ ! -d "${MAKE_DIR}" ]; then
+    echo "Error: repository root directory not found at '${MAKE_DIR}'." >&2
     exit 1
 fi
 
-if [ ! -f "${AIC_DIR}/Makefile" ]; then
-    echo "Error: Makefile not found in '${AIC_DIR}'." >&2
+if [ ! -f "${MAKE_DIR}/Makefile" ]; then
+    echo "Error: Makefile not found in '${MAKE_DIR}'." >&2
     exit 1
 fi
 
@@ -61,9 +61,9 @@ fi
 
 case "${mode}" in
 start)
-    echo "Running 'make rviz2' inside '${AIC_DIR}'."
-    cd "${AIC_DIR}"
-    make rviz2 "$@"
+    echo "Running 'make rviz2' inside '${MAKE_DIR}'."
+    cd "${MAKE_DIR}"
+    make rviz2
     ;;
 down)
     echo "Stopping and removing 'rviz2' service using compose file '${COMPOSE_FILE}'."
@@ -72,9 +72,9 @@ down)
 restart)
     echo "Restarting 'rviz2' service."
     docker compose -f "${COMPOSE_FILE}" rm -f -s rviz2
-    echo "Running 'make rviz2' inside '${AIC_DIR}' after restart."
-    cd "${AIC_DIR}"
-    make rviz2 "$@"
+    echo "Running 'make rviz2' inside '${MAKE_DIR}' after restart."
+    cd "${MAKE_DIR}"
+    make rviz2
     ;;
 *)
     echo "Error: unsupported mode '${mode}'." >&2

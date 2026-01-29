@@ -13,11 +13,14 @@ else
 fi
 
 case "${mode}" in
-"endless")
-    opts+=("--endless")
+"dev")
+    opts+=("--vehicles" "1" "--laps" "600" "--timeout" "60000000")
     ;;
 "eval")
     opts+=("--vehicles" "1" "--laps" "6" "--timeout" "600")
+    ;;
+"multi-player")
+    opts+=("--vehicles" "4" "--laps" "6" "--timeout" "1200")
     ;;
 *) ;;
 esac

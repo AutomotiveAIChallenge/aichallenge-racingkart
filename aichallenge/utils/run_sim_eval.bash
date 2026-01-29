@@ -54,7 +54,7 @@ capture_enabled="${CAPTURE:-false}"
 sim_svc="${SIMULATOR_SERVICE:-simulator}"
 autoware_svc="${AUTOWARE_SERVICE:-autoware}"
 cmd_svc="${AW_CMD_SERVICE:-autoware-command}"
-rosbag_svc="${ROSBAG_SERVICE:-rosbag}"
+rosbag_svc="${ROSBAG_SERVICE:-autoware-rosbag}"
 
 host_uid="${HOST_UID:-$(id -u)}"
 host_gid="${HOST_GID:-$(id -g)}"

@@ -8,7 +8,7 @@
 - **文字種**: `a-z` / `0-9` / `-` のみ（小文字）。`_` は使わない
 - **語順**: 先頭は必ず *service*（`build-*` / `run-*` のような動詞始まりは避ける）
 - **意味の粒度**: 1ターゲット = 1責務（複数サービスを束ねる場合は `system-*` / `workflow-*` に寄せる）
-- **オプションは変数で渡す**: `make eval-run DOMAIN_IDS=1,2,3,4` のように、原則は環境変数で分岐する
+- **オプションは変数で渡す**: `make eval DOMAIN_IDS=1,2,3,4` のように、原則は環境変数で分岐する
 
 ## 2. docker compose との対応
 
@@ -20,23 +20,23 @@
 - `autoware-build`（overlay build）
 - `simulator`
 - `autoware-command`（単発コマンド実行用）
-- `rosbag`
+- `autoware-rosbag`
 - `driver`
 - `zenoh`
 - `rviz2`
 
 例（compose に合わせたターゲット名）:
 
-- `autoware-up` / `autoware-up-vehicle`（`RUN_MODE=...` を内部で切替）
+- `autoware-simulator` / `autoware-vehicle`（`RUN_MODE=...` を内部で切替）
 - `autoware-build`（compose service: `autoware-build`）
-- `simulator-up` / `simulator-reset`
-- `rviz2-up`
+- `simulator` / `simulator-reset`
+- `rviz2`
 
 GPU の扱い:
 
 - `docker-compose.yml` は CPU 前提のベース、`docker-compose.gpu.yml` で GPU 設定を上書きする
 - Makefile 側で `DEVICE=auto|gpu|cpu` に応じて compose file を選択する（`-f docker-compose.yml -f docker-compose.gpu.yml`）
-- 例: `make simulator-up DEVICE=gpu` → `docker compose -f docker-compose.yml -f docker-compose.gpu.yml up -d simulator`
+- 例: `make simulator DEVICE=gpu` → `docker compose -f docker-compose.yml -f docker-compose.gpu.yml up -d simulator`
 
 ## 3. service の命名
 
@@ -49,8 +49,9 @@ service は「操作対象のまとまり」を表します（docker compose の
 - `simulator` : AWSIM 起動・操作
 - `autoware-command` : 単発コマンド実行用
 - `eval` : 評価オーケストレーション（複数サービスを束ねる）
+- `dev` : 開発用（AWSIM + Autoware 起動のみ）
 - `rviz2` : 可視化（RViz2）
-- `rosbag` : 記録
+- `autoware-rosbag` : 記録
 - `driver` : racing_kart_interface
 - `zenoh` : Zenoh bridge
 - `compose` : docker compose の直操作（`compose-ps` / `compose-down` など）
@@ -60,7 +61,7 @@ service は「操作対象のまとまり」を表します（docker compose の
 
 以下の語彙を優先し、同義語を増やさない（例: `start` と `up` を混在させない）。
 
-- `up` : 起動（基本は `docker compose up -d`）
+- `up` : 起動（基本は `docker compose up -d`。このリポジトリでは **ターゲット名に `-up` を付けず**、service 名そのものを「起動」として扱う）
 - `stop` : 停止（コンテナは残す）
 - `down` : 停止 + リソース削除（`docker compose down`）
 - `restart` : 再起動
@@ -75,8 +76,8 @@ service は「操作対象のまとまり」を表します（docker compose の
 `-<variant>` は「変数で表すのが難しい、固定の差分」だけに使います。
 
 例:
-- `autoware-up-vehicle` / `autoware-up-sim`（mode 固定のショートカット）
-- `eval-run-1-4`（ただし可能なら `DOMAIN_IDS=1,2,3,4` を推奨）
+- `autoware-vehicle` / `autoware-simulator`（mode 固定のショートカット）
+- 評価の複数domain実行は `DOMAIN_IDS=1,2,3,4` など **変数で表現**する（固定の `*-1-4` は作らない）
 
 避けたい例:
 - `eval-run-fast`（意味が曖昧。具体的に `RESULT_WAIT_SECONDS=...` で表現する）
@@ -84,19 +85,19 @@ service は「操作対象のまとまり」を表します（docker compose の
 ## 6. 例（Good / Bad）
 
 Good:
-- `autoware-up` / `autoware-up-vehicle`
+- `autoware-simulator` / `autoware-vehicle`
 - `autoware-build`
-- `simulator-up` / `simulator-reset`
+- `simulator` / `simulator-reset`
 - `eval-run`（`DOMAIN_ID` / `DOMAIN_IDS` などは変数で）
+- `eval`（`DOMAIN_ID` / `DOMAIN_IDS` などは変数で）
 - `compose-ps` / `compose-down`
 
 Bad（語順が逆/曖昧）:
 - `build-autoware`（→ `autoware-build`）
-- `simulator-eval`（→ `eval-run` など）
+- `simulator-eval`（旧名。現状は `eval` を使用）
 - `start` / `init` / `reset`（→ `simulator-start` / `simulator-init` / `simulator-reset` のように service を明示）
 
-## 7. 変更時の互換性（推奨）
+## 7. 変更時の互換性
 
-既存ターゲット名を変更する場合:
-- 旧ターゲットは **alias として残す**（1〜2リリース程度）
-- 旧ターゲット実行時に **DEPRECATED メッセージ**を出し、新ターゲットに委譲する
+このリポジトリでは、互換 alias を残さずにターゲット名を整理する場合があります。
+ドキュメント（`README.md` / `design_docs/`）と `docker-compose.yml` の整合を優先してください。

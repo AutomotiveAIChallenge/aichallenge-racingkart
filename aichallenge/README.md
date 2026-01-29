@@ -16,7 +16,7 @@
 ## リポジトリ構成（トップレベル）
 
 - `aichallenge/`: シミュレータ/Autoware/評価の起動・操作スクリプト（本ドキュメントの対象）
-- `vehicle/`: 実車環境向け（セットアップ確認、Zenoh、rosbag等）。詳細は `vehicle/Readme.md`
+- `vehicle/`: 実車環境向け（セットアップ確認、Zenoh、rosbag等）。詳細は `vehicle/README.md`
 - `remote/`: 実車/遠隔接続の補助（SSH/Zenoh/RViz/joy）
 - `output/`: 実行結果・ログの出力先（タイムスタンプ + `latest`）。ソースではない
 - `submit/`: 提出物（tar.gz）置き場

@@ -273,15 +273,38 @@ sanitize_yaml_tabs_in_place_best_effort() {
     if LC_ALL=C grep -q $'\t' "${file}"; then
         warn "compose override contains tab characters (invalid YAML). Sanitizing in place: ${file}"
         local tmp="${file}.tmp.$$"
-        tr -d '\t' <"${file}" >"${tmp}" || {
-            rm -f "${tmp}"
-            return 1
-        }
+        if command -v expand >/dev/null 2>&1; then
+            expand -t 2 "${file}" >"${tmp}" || {
+                rm -f "${tmp}"
+                return 1
+            }
+        else
+            sed $'s/\t/  /g' "${file}" >"${tmp}" || {
+                rm -f "${tmp}"
+                return 1
+            }
+        fi
         mv -f "${tmp}" "${file}" || {
             rm -f "${tmp}"
             return 1
         }
     fi
+}
+
+cleanup_compose_project_best_effort() {
+    local project
+    project="$(basename "${REPO_ROOT}")"
+
+    local cids=""
+    cids="$(docker ps -aq --filter "label=com.docker.compose.project=${project}" 2>/dev/null || true)"
+    if [ -z "${cids}" ]; then
+        warn "No containers found for compose project '${project}' (override parse failed)"
+        return 0
+    fi
+
+    warn "Removing containers by label (project='${project}') due to compose override parse failure"
+    # shellcheck disable=SC2086
+    docker rm -f ${cids} >/dev/null 2>&1 || true
 }
 
 cmd_down() {
@@ -330,6 +353,11 @@ cmd_down() {
     fi
 
     log "docker compose down --remove-orphans (override: ${override_file})"
+    if ! docker compose -f "${COMPOSE_BASE_FILE}" -f "${override_file}" config -q >/dev/null 2>&1; then
+        warn "docker compose failed to parse override file: ${override_file}"
+        cleanup_compose_project_best_effort || true
+        return 0
+    fi
     docker compose -f "${COMPOSE_BASE_FILE}" -f "${override_file}" down --remove-orphans
 }
 

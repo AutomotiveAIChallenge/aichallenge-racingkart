@@ -70,13 +70,11 @@ services:
   # Autoware service
   autoware-build:
     <<: *autoware-base 
-    container_name: "aic-2025-build"
     stop_grace_period: 0.1s
     command: ["bash", "-c", "cd /aichallenge && exec bash build_autoware.bash ${HOST_UID:-} ${HOST_GID:-}"]
 
   simulator:
     <<: *autoware-base 
-    container_name: "aic-2025-simulator"
     stop_grace_period: 0.1s
     working_dir: ${OUTPUT_RUN_DIR:-/aichallenge}
     command: ["bash", "-lc", "if [ \"${EVAL_RUN:-0}\" = \"1\" ]; then exec /aichallenge/run_simulator.bash ${SIM_MODE:-} >awsim.log 2>&1; else exec /aichallenge/run_simulator.bash ${SIM_MODE:-}; fi"]
@@ -86,7 +84,7 @@ services:
     stop_grace_period: 0.1s
     command: ["bash", "-lc", "source /aichallenge/workspace/install/setup.bash && cd ${CMD_WORKDIR:-/aichallenge} && exec ${CMD:-}"]
 
-  rosbag:
+  autoware-rosbag:
     <<: *autoware-base
     stop_signal: SIGINT
     stop_grace_period: 30s

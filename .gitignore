@@ -10,6 +10,7 @@ rosbag2*/
 *.zstd
 vehicle/.env
 metadata.yaml
+output/
 outputs/
 
 # local notes (do not commit)

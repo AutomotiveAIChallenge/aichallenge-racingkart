@@ -1,15 +1,18 @@
 # make file inspired by https://roborovsky-racers.github.io/RoborovskyNote/
 SHELL := /bin/bash
 
-.PHONY: autoware-build autoware-vehicle autoware-simulator autoware-init autoware-start autoware-driver-zenoh \
-	simulator simulator-reset driver zenoh download simulator-eval simulator-eval-1-4 rviz2 down ps
+.PHONY: autoware-build autoware-vehicle autoware-simulator autoware-request-initialpose autoware-request-control autoware-driver-zenoh \
+	simulator simulator-reset dev eval autoware-rosbag driver zenoh download rviz2 down ps
 
 # GPU selection:
 # - DEVICE=auto (default): enable GPU override if NVIDIA is detected
 # - DEVICE=gpu: force GPU override
 # - DEVICE=cpu: never use GPU override
 DEVICE ?= auto
-HAVE_NVIDIA := $(shell command -v nvidia-smi >/dev/null 2>&1 && [ -e /dev/nvidia0 ] && echo 1 || echo 0)
+# Auto-detect NVIDIA GPU availability on the host.
+# We only check the device node to avoid depending on NVML (`nvidia-smi`) and Docker daemon access.
+# If Docker-side GPU is not configured, use `DEVICE=cpu` (or force GPU by `DEVICE=gpu`).
+HAVE_NVIDIA := $(shell [ -e /dev/nvidia0 ] && echo 1 || echo 0)
 
 GPU_ENABLED := 0
 ifeq ($(DEVICE),gpu)
@@ -41,7 +44,7 @@ endif
 AUTOWARE_SERVICE := autoware
 SIMULATOR_SERVICE := simulator
 AW_CMD_SERVICE := autoware-command
-ROSBAG_SERVICE := rosbag
+ROSBAG_SERVICE := autoware-rosbag
 
 AIC_BUILD_SERVICE := autoware-build
 RVIZ2_SERVICE := rviz2
@@ -53,7 +56,7 @@ export HOST_UID HOST_GID
 
 # Evaluation options (compatible with run_evaluation.bash)
 # Usage:
-#   make simulator-eval [ROSBAG=true] [CAPTURE=true] [DOMAIN_ID=1] [OUTPUT_ROOT=/output] [RESULT_WAIT_SECONDS=10]
+#   make eval [ROSBAG=true] [CAPTURE=true] [DOMAIN_ID=1] [OUTPUT_ROOT=/output] [RESULT_WAIT_SECONDS=10]
 ROSBAG ?= false
 CAPTURE ?= false
 DOMAIN_ID ?= 1
@@ -91,33 +94,33 @@ autoware-vehicle:
 # run autoware for simulator
 autoware-simulator:
 	@echo "Start Autoware for AWSIM"
-	RUN_MODE=awsim $(DC) up -d $(AUTOWARE_SERVICE)
+	RUN_MODE=awsim DOMAIN_ID=$(DOMAIN_ID) $(DC) up -d $(AUTOWARE_SERVICE)
 
 # autoware command service
-autoware-init:
+autoware-request-initialpose:
 	CMD="env ROS_DOMAIN_ID=$(DOMAIN_ID) /aichallenge/utils/publish.bash request-initialpose" \
 	$(DC) up -d $(AW_CMD_SERVICE)
 
-autoware-start:
+autoware-request-control:
 	@echo "Start control"
 	CMD="env ROS_DOMAIN_ID=$(DOMAIN_ID) /aichallenge/utils/publish.bash request-control" \
 	$(DC) up -d $(AW_CMD_SERVICE)
 
-# run simulator
+# run simulator (docker compose up -d simulator)
 simulator:
 	@echo "Start AWSIM"
-	$(DC) up -d $(SIMULATOR_SERVICE)
+	SIM_MODE=$(SIM_MODE) $(DC) up -d $(SIMULATOR_SERVICE)
 
 simulator-reset:
 	@echo "Reset simulation"
 	CMD="bash /aichallenge/utils/simulator_reset.bash $(DOMAIN_ID)" \
 	$(DC) up -d $(AW_CMD_SERVICE)
 
-# racing kart
+# racing kart (docker compose up -d driver)
 driver:
 	$(DC) up -d driver
 
-# zenoh
+# zenoh (docker compose up -d zenoh)
 zenoh:
 	$(DC) up -d zenoh
 
@@ -141,8 +144,13 @@ download:
 		fi; \
 	fi
 
-# make simulator-eval ROSBAG=true CAPTURE=true
-simulator-eval:
+dev:
+	@echo "Start dev simulation (AWSIM + Autoware, DOMAIN_ID=$(DOMAIN_ID))"
+	@$(MAKE) simulator SIM_MODE=dev
+	@$(MAKE) autoware-simulator DOMAIN_ID=$(DOMAIN_ID)
+
+# make eval ROSBAG=true CAPTURE=true
+eval:
 	@RUN_ID="$(RUN_ID)" RUN_GROUP="$(RUN_GROUP)" \
 		OUTPUT_ROOT="$(OUTPUT_ROOT)" DOMAIN_IDS="$(DOMAIN_IDS)" RESULT_WAIT_SECONDS="$(RESULT_WAIT_SECONDS)" \
 		ROSBAG="$(ROSBAG)" CAPTURE="$(CAPTURE)" \
@@ -151,13 +159,13 @@ simulator-eval:
 		DC="$(DC)" \
 		bash aichallenge/utils/run_sim_eval.bash
 
-simulator-eval-1-4:
-	@$(MAKE) simulator-eval DOMAIN_IDS=1,2,3,4
-
-# remote operation
+# remote operation (docker compose up -d rviz2)
 rviz2:
 	$(DC) stop $(RVIZ2_SERVICE)
 	$(DC) up -d $(RVIZ2_SERVICE)
+
+autoware-rosbag:
+	$(DC) up -d $(ROSBAG_SERVICE)
 
 
 # driver + autoware + zenoh

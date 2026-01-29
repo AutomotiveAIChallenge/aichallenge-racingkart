@@ -1,0 +1,23 @@
+.git
+.github
+
+# Local outputs/logs (not needed in build context)
+output
+output/**
+outputs
+outputs/**
+
+# Local ROS workspace artifacts (colcon)
+aichallenge/workspace/build
+aichallenge/workspace/install
+aichallenge/workspace/log
+
+# Python caches / virtualenvs
+**/__pycache__
+**/*.pyc
+.venv
+venv
+
+# Large local ML data (not required for image build)
+aichallenge/ml_workspace/rawdata
+aichallenge/ml_workspace/rawdata/**
