@@ -22,8 +22,10 @@
 - `submit/`: 提出物（tar.gz）置き場
 - `Dockerfile`: dev/eval 向けイメージ定義
 - `docker_build.sh` / `docker_run.sh` / `docker_exec.sh`: Docker/rocker のラッパ（ホスト側ログを `output/_host/latest/` に残す）
+- `run_parallel_submissions.bash`: 複数提出物を別 eval イメージとしてビルドし、`autoware-d1..dN` を並列起動する（設計メモ: `../design_docs/run_parallel_submissions.md`）
 - `create_submit_file.bash`: `aichallenge/workspace/src/aichallenge_submit` を tar 化して提出物を作成
-- `make_gui.py`: `remote/` 配下の操作をGUI化（最終的な実体はシェルスクリプトに寄せる）
+- `remote/gui_tools.py`: `remote/` 配下の操作をGUI化（最終的な実体はシェルスクリプトに寄せる）
+- `design_docs/`: 開発/運用メモ（例: `design_docs/run_parallel_submissions.md`）
 - `requirements.txt`: Python ツール類の依存
 - `packages.txt`: 環境構築で必要な apt パッケージ一覧（用途はリポジトリ運用側に寄せる）
 - `.pre-commit-config.yaml`: コード整形/静的解析の自動化（任意、開発体験の改善）

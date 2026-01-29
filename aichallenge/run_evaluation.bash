@@ -1,15 +1,17 @@
 #!/bin/bash
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck disable=SC1091
+source "${SCRIPT_DIR}/utils/eval_flow.bash"
+
 IS_ROSBAG_MODE=0
 IS_CAPTURE_MODE=0
 ROS_DOMAIN_ID_SIM=0
 ROS_DOMAIN_ID_DEFAULT=1
 ROS_DOMAIN_ID=$ROS_DOMAIN_ID_DEFAULT
-INPUT_RESULT="d$ROS_DOMAIN_ID-result-details.json"
 
 HOST_UID=""
 HOST_GID=""
-INPUT_RESULT="d$ROS_DOMAIN_ID_DEFAULT-result-details.json"
 OUTPUT_ROOT="/output"
 RESULT_WAIT_SECONDS=10
 
@@ -37,6 +39,21 @@ warn() {
     echo "[run_evaluation][WARN] $*" >&2
 }
 
+aic_eval_log() { log "$@"; }
+aic_eval_run_or_exit() { run_or_exit "$@"; }
+
+aic_eval_backend_start_simulator() { start_simulator; }
+aic_eval_backend_wait_sim_ready() { env ROS_DOMAIN_ID="$ROS_DOMAIN_ID_SIM" bash /aichallenge/utils/publish.bash check-awsim; }
+aic_eval_backend_start_autoware() { start_autoware; }
+aic_eval_backend_move_window_best_effort() { best_effort bash /aichallenge/utils/move_window.bash; }
+aic_eval_backend_request_initialpose() { /aichallenge/utils/publish.bash request-initialpose; }
+aic_eval_backend_request_control() { /aichallenge/utils/publish.bash request-control; }
+aic_eval_backend_start_capture_best_effort() { start_screen_capture_best_effort; }
+aic_eval_backend_start_rosbag_best_effort() { start_rosbag_best_effort; }
+aic_eval_backend_wait_sim_finish() { wait "$PID_AWSIM" || true; }
+aic_eval_backend_convert_result_best_effort() { bash /aichallenge/utils/convert_result.bash "$ROS_DOMAIN_ID" "$RESULT_WAIT_SECONDS" || true; }
+aic_eval_backend_cleanup_domain() { :; }
+
 run_or_exit() {
     local description="$1"
     shift
@@ -53,7 +70,8 @@ usage() {
     cat <<'EOF'
 Usage:
   run_evaluation.bash [rosbag|--rosbag] [capture|--capture] [HOST_UID HOST_GID]
-  run_evaluation.bash [--uid N] [--gid N] [--domain-id N] [--output-root PATH]
+  run_evaluation.bash [--uid N] [--gid N] [--domain-id N] [--output-root PATH] [--result-wait-seconds N]
+  run_evaluation.bash -h|--help
 
 Notes:
   - Backward compatible with the legacy positional form: "... <uid> <gid>".
@@ -101,7 +119,6 @@ parse_args() {
             ;;
         --domain-id)
             ROS_DOMAIN_ID="${2-}"
-            INPUT_RESULT="d${ROS_DOMAIN_ID}-result-details.json"
             shift 2
             ;;
         --output-root)
@@ -153,7 +170,6 @@ parse_args() {
     if [ -n "$ROS_DOMAIN_ID" ] && ! is_number "$ROS_DOMAIN_ID"; then
         warn "Invalid --domain-id: '$ROS_DOMAIN_ID' (fallback to ${ROS_DOMAIN_ID_DEFAULT})"
         ROS_DOMAIN_ID=$ROS_DOMAIN_ID_DEFAULT
-        INPUT_RESULT="d${ROS_DOMAIN_ID}-result-details.json"
     fi
     if [ -n "$RESULT_WAIT_SECONDS" ] && ! is_number "$RESULT_WAIT_SECONDS"; then
         warn "Invalid --result-wait-seconds: '$RESULT_WAIT_SECONDS' (fallback to 60)"
@@ -175,51 +191,6 @@ parse_args() {
     if [ "${#OTHER_ARGS[@]}" -gt 0 ]; then
         warn "Ignoring unknown args: ${OTHER_ARGS[*]}"
     fi
-}
-
-move_window() {
-    log "Move window"
-
-    if ! wmctrl -l >/dev/null 2>&1; then
-        log "wmctrl command not available. Skipping window management."
-        sleep 5
-        return 0
-    fi
-
-    local has_gpu has_awsim has_rviz
-    has_gpu=$(command -v nvidia-smi >/dev/null && echo 1 || echo 0)
-
-    # Add timeout to prevent infinite hanging
-    local timeout=10 # 10 seconds timeout
-    local elapsed=0
-
-    while [ $elapsed -lt $timeout ]; do
-        has_awsim=$(wmctrl -l | grep -q "AWSIM" && echo 1 || echo 0)
-        has_rviz=$(wmctrl -l | grep -q "RViz" && echo 1 || echo 0)
-
-        if [ "$has_rviz" -eq 1 ] && { [ "$has_awsim" -eq 1 ] || [ "$has_gpu" -eq 0 ]; }; then
-            break
-        fi
-        sleep 1
-        ((elapsed++))
-        log "Move window: $elapsed seconds elapsed"
-    done
-
-    if [ $elapsed -ge $timeout ]; then
-        warn "Timeout waiting for AWSIM/RViz windows after ${timeout} seconds"
-        warn "AWSIM window found: $has_awsim"
-        warn "RViz window found: $has_rviz"
-        warn "GPU available: $has_gpu"
-        warn "Continuing without window positioning..."
-        return 1
-    fi
-
-    log "AWSIM and RViz windows found"
-    # Move windows
-    wmctrl -a "RViz" && wmctrl -r "RViz" -e 0,0,0,1920,1043
-    sleep 1
-    wmctrl -a "AWSIM" && wmctrl -r "AWSIM" -e 0,0,0,900,1043
-    sleep 2
 }
 
 setup_output_dir() {
@@ -281,35 +252,34 @@ tune_network_best_effort() {
 }
 
 start_simulator() {
-    log "Start AWSIM"
-    if command -v setsid >/dev/null 2>&1; then
-        nohup setsid /aichallenge/run_simulator.bash eval >"${OUTPUT_DIRECTORY}/awsim.log" 2>&1 &
-    else
-        nohup /aichallenge/run_simulator.bash eval >"${OUTPUT_DIRECTORY}/awsim.log" 2>&1 &
-    fi
-    PID_AWSIM=$!
-    log "AWSIM PID: $PID_AWSIM"
+    start_nohup_process "AWSIM" PID_AWSIM "${OUTPUT_DIRECTORY}/awsim.log" /aichallenge/run_simulator.bash eval
 }
 
 start_autoware() {
-    log "Start Autoware"
-    if command -v setsid >/dev/null 2>&1; then
-        nohup setsid /aichallenge/run_autoware.bash awsim "$ROS_DOMAIN_ID" >"${OUTPUT_DIRECTORY}/autoware.log" 2>&1 &
-    else
-        nohup /aichallenge/run_autoware.bash awsim "$ROS_DOMAIN_ID" >"${OUTPUT_DIRECTORY}/autoware.log" 2>&1 &
-    fi
-    PID_AUTOWARE=$!
-    log "Autoware PID: $PID_AUTOWARE"
+    start_nohup_process "Autoware" PID_AUTOWARE "${OUTPUT_DIRECTORY}/autoware.log" /aichallenge/run_autoware.bash awsim "$ROS_DOMAIN_ID"
 }
 
-start_screen_capture_if_needed() {
-    if [ "$IS_CAPTURE_MODE" -eq 1 ]; then
-        bash /aichallenge/utils/publish.bash request-capture
-        CAPTURE_STARTED=1
-        log "Screen capture started."
+start_nohup_process() {
+    local label="$1"
+    local pid_var="$2"
+    local log_file="$3"
+    shift 3
+
+    log "Start ${label}"
+    if command -v setsid >/dev/null 2>&1; then
+        nohup setsid "$@" >"${log_file}" 2>&1 &
     else
-        log "Screen capture skipped."
+        nohup "$@" >"${log_file}" 2>&1 &
     fi
+    local pid=$!
+    printf -v "${pid_var}" '%s' "${pid}"
+    log "${label} PID: ${pid}"
+}
+
+start_screen_capture_best_effort() {
+    log "Start screen capture"
+    best_effort bash /aichallenge/utils/publish.bash request-capture
+    CAPTURE_STARTED=1
 }
 
 stop_screen_capture_if_needed() {
@@ -320,21 +290,16 @@ stop_screen_capture_if_needed() {
     fi
 }
 
-start_rosbag_if_needed() {
-    if [ "$IS_ROSBAG_MODE" -eq 1 ]; then
-        log "Start rosbag"
-        nohup /aichallenge/utils/record_rosbag.bash >"${OUTPUT_DIRECTORY}/rosbag.log" 2>&1 &
-        PID_ROSBAG=$!
-        log "ROS Bag PID: $PID_ROSBAG"
-        sleep 2
-        if ! kill -0 "$PID_ROSBAG" 2>/dev/null; then
-            warn "Rosbag process is not running"
-        else
-            log "Rosbag recording started successfully"
-        fi
+start_rosbag_best_effort() {
+    log "Start rosbag"
+    nohup /aichallenge/utils/record_rosbag.bash >"${OUTPUT_DIRECTORY}/rosbag.log" 2>&1 &
+    PID_ROSBAG=$!
+    log "ROS Bag PID: $PID_ROSBAG"
+    sleep 2
+    if ! kill -0 "$PID_ROSBAG" 2>/dev/null; then
+        warn "Rosbag process is not running"
     else
-        PID_ROSBAG=""
-        log "ROS Bag recording skipped."
+        log "Rosbag recording started successfully"
     fi
 }
 
@@ -395,53 +360,6 @@ kill_sid_safe() {
 is_session_running() {
     local sid="$1"
     pgrep -s "$sid" >/dev/null 2>&1
-}
-
-stop_process_name_best_effort() {
-    local name="$1"
-    local label="${2:-$1}"
-
-    if ! command -v pgrep >/dev/null 2>&1; then
-        return 0
-    fi
-
-    local pids
-    pids=$(pgrep -x "$name" 2>/dev/null || true)
-    if [ -z "$pids" ]; then
-        return 0
-    fi
-
-    warn "Leftover ${label} detected. Stopping..."
-
-    local pid pgid
-    for pid in $pids; do
-        pgid=$(get_pgid_of_pid "$pid")
-        log "Stop leftover ${label} (PID: ${pid}, PGID: ${pgid:-NA})"
-        if is_pgid_safe_to_signal "$pgid"; then
-            kill_pgid_safe "$pgid" INT
-        else
-            kill -INT "$pid" 2>/dev/null || true
-        fi
-    done
-
-    local i
-    for ((i = 0; i < 50; i++)); do
-        if ! pgrep -x "$name" >/dev/null 2>&1; then
-            return 0
-        fi
-        sleep 0.1
-    done
-
-    warn "Leftover ${label} did not exit. Sending SIGKILL..."
-    pids=$(pgrep -x "$name" 2>/dev/null || true)
-    for pid in $pids; do
-        pgid=$(get_pgid_of_pid "$pid")
-        if is_pgid_safe_to_signal "$pgid"; then
-            kill_pgid_safe "$pgid" KILL
-        else
-            kill -KILL "$pid" 2>/dev/null || true
-        fi
-    done
 }
 
 stop_pids_matching_cmdline_best_effort() {
@@ -617,15 +535,6 @@ stop_nohup_process_if_needed() {
     wait "$pid" 2>/dev/null || true
 }
 
-convert_result_best_effort() {
-    log "Convert result (wait up to ${RESULT_WAIT_SECONDS}s for $INPUT_RESULT)"
-    for ((i = 0; i < RESULT_WAIT_SECONDS; i++)); do
-        [ -s "$INPUT_RESULT" ] && break
-        sleep 1
-    done
-    python3 /aichallenge/workspace/src/aichallenge_system/script/result-converter.py --input "$INPUT_RESULT" || true
-}
-
 fix_ownership_if_needed() {
     if [ "$OWNERSHIP_DONE" -eq 1 ]; then
         return 0
@@ -691,22 +600,12 @@ main() {
     setup_ros_env
     tune_network_best_effort
 
-    start_simulator
+    local capture_enabled="false"
+    local rosbag_enabled="false"
+    if [ "$IS_CAPTURE_MODE" -eq 1 ]; then capture_enabled="true"; fi
+    if [ "$IS_ROSBAG_MODE" -eq 1 ]; then rosbag_enabled="true"; fi
 
-    log "Check simulator readiness"
-    run_or_exit "AWSIM /clock wait" env ROS_DOMAIN_ID="$ROS_DOMAIN_ID_SIM" bash /aichallenge/utils/publish.bash check-awsim
-    log "AWSIM is ready."
-
-    start_autoware
-    sleep 3
-    move_window
-    run_or_exit "Initial pose set" /aichallenge/utils/publish.bash request-initialpose
-    run_or_exit "Control request" /aichallenge/utils/publish.bash request-control
-    start_screen_capture_if_needed
-    start_rosbag_if_needed
-
-    wait "$PID_AWSIM" || true
-    convert_result_best_effort
+    aic_eval_flow_run_domain "$ROS_DOMAIN_ID" "$ROS_DOMAIN_ID_SIM" "$RESULT_WAIT_SECONDS" "$capture_enabled" "$rosbag_enabled"
     log "Evaluation Script finished. Cleaning up..."
 }
 

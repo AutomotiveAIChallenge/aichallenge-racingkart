@@ -19,15 +19,19 @@ Toward the competition, we will update the following pages to provide informatio
 - `cp .env.example .env`（必要に応じて編集）
 - ビルド: `./docker_build.sh dev`
 - 評価用イメージのビルド（提出物を差し替えたい場合）: `./docker_build.sh eval --submit submit/aichallenge_submit.tar.gz`
-- ビルド + 評価（推奨）: `./docker_build_run.bash all --submit submit/aichallenge_submit.tar.gz --device gpu`
-  - `all` は提出物をホストの `aichallenge/workspace/src/aichallenge_submit/` に展開せず、Docker volume に展開してマウントします
+- ビルド + 評価（提出物 tar.gz を eval イメージとしてビルドして実行）: `./run_parallel_submissions.bash --submit submit/aichallenge_submit.tar.gz --device gpu`
   - 複数 `--submit` 時は順に domain id を 1..4 に固定割当します
-- Autoware(overlay) ビルド: `make build-autoware`
-- 評価（`aichallenge/run_evaluation.bash` 相当）: `make run-sim-eval`
-  - オプション例: `make run-sim-eval DEVICE=gpu DOMAIN_ID=1 ROSBAG=true CAPTURE=false RESULT_WAIT_SECONDS=10`
-  - 複数domainを連続実行: `make run-sim-eval DOMAIN_IDS=1,2,3,4`
-  - 省略形: `make run-sim-eval-1-4`
+- Autoware(overlay) ビルド: `make autoware-build`
+- 評価（`aichallenge/run_evaluation.bash` 相当）: `make simulator-eval`
+  - オプション例: `make simulator-eval DEVICE=gpu DOMAIN_ID=1 ROSBAG=true CAPTURE=false RESULT_WAIT_SECONDS=10`
+  - 複数domainを連続実行: `make simulator-eval DOMAIN_IDS=1,2,3,4`
+  - 省略形: `make simulator-eval-1-4`
   - 出力: `output/<timestamp>/d<domain_id>/`（`output/latest` は可能ならシンボリックリンク）
-- 個別起動: `make sim` / `make autoware-sim` / `make autoware-vehicle`
-- GPU: 自動検出（強制: `DEVICE=gpu`、CPU強制: `DEVICE=cpu`）
-- ウィンドウ移動の調整: `MOVE_WINDOW_DEBUG=1 MOVE_WINDOW_QUIET=0 make run-sim-eval`（必要なら `AWSIM_*_REGEX` / `RVIZ_*_REGEX` を指定）
+- 個別起動: `make simulator` / `make autoware-simulator` / `make autoware-vehicle`
+- GPU: Autoware/Simulator は自動検出（強制: `DEVICE=gpu`、CPU強制: `DEVICE=cpu`）。`autoware-build` / `rviz2` は常に CPU サービスを使用
+- ウィンドウ移動の調整: `MOVE_WINDOW_DEBUG=1 MOVE_WINDOW_QUIET=0 make simulator-eval`（必要なら `AWSIM_*_REGEX` / `RVIZ_*_REGEX` を指定）
+
+## 複数提出物の並列起動（run_parallel_submissions）
+
+- 複数提出物を **別々の eval イメージとしてビルド**し、`autoware-d1..dN` を **並列起動**: `./run_parallel_submissions.bash --submit ... --submit ...`
+- 詳細（入出力/生成される compose override/ディレクトリ構成）: `design_docs/run_parallel_submissions.md`

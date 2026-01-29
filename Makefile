@@ -1,8 +1,8 @@
 # make file inspired by https://roborovsky-racers.github.io/RoborovskyNote/
 SHELL := /bin/bash
 
-.PHONY: autoware-vehicle autoware-sim driver zenoh run-full-kart-system build-autoware \
-	download run-sim-eval run-sim-eval-1-4 rviz2 sim init start reset down ps
+.PHONY: autoware-build autoware-vehicle autoware-simulator autoware-init autoware-start autoware-driver-zenoh \
+	simulator simulator-reset driver zenoh download simulator-eval simulator-eval-1-4 rviz2 down ps
 
 # GPU selection:
 # - DEVICE=auto (default): enable GPU override if NVIDIA is detected
@@ -10,8 +10,6 @@ SHELL := /bin/bash
 # - DEVICE=cpu: never use GPU override
 DEVICE ?= auto
 HAVE_NVIDIA := $(shell command -v nvidia-smi >/dev/null 2>&1 && [ -e /dev/nvidia0 ] && echo 1 || echo 0)
-
-DC ?= docker compose -f docker-compose.yml
 
 GPU_ENABLED := 0
 ifeq ($(DEVICE),gpu)
@@ -22,19 +20,31 @@ GPU_ENABLED := 1
 endif
 endif
 
-AUTOWARE_SERVICE := autoware
-AIC_BUILD_SERVICE := aic-build
-SIMULATOR_SERVICE := simulator
-AW_CMD_SERVICE := aw-cmd
-RVIZ2_SERVICE := rviz2
-ROSBAG_SERVICE := rosbag
+# Compose file selection (reduce compose-side variants; use overrides instead)
+COMPOSE_FILE ?= docker-compose.yml
+COMPOSE_GPU_FILE ?= docker-compose.gpu.yml
+
+ifeq ($(origin DC), undefined)
+ifeq ($(GPU_ENABLED),1)
+DC := docker compose -f $(COMPOSE_FILE) -f $(COMPOSE_GPU_FILE)
+else
+DC := docker compose -f $(COMPOSE_FILE)
+endif
+endif
 
 ifeq ($(GPU_ENABLED),1)
-AUTOWARE_SERVICE := autoware-gpu
-AIC_BUILD_SERVICE := aic-build-gpu
-SIMULATOR_SERVICE := simulator-gpu
-RVIZ2_SERVICE := rviz2-gpu
+NVIDIA_VISIBLE_DEVICES ?= all
+NVIDIA_DRIVER_CAPABILITIES ?= all
+export NVIDIA_VISIBLE_DEVICES NVIDIA_DRIVER_CAPABILITIES
 endif
+
+AUTOWARE_SERVICE := autoware
+SIMULATOR_SERVICE := simulator
+AW_CMD_SERVICE := autoware-command
+ROSBAG_SERVICE := rosbag
+
+AIC_BUILD_SERVICE := autoware-build
+RVIZ2_SERVICE := rviz2
 
 # Used by docker-compose.yml for build/eval artifact ownership.
 HOST_UID ?= $(shell id -u)
@@ -43,7 +53,7 @@ export HOST_UID HOST_GID
 
 # Evaluation options (compatible with run_evaluation.bash)
 # Usage:
-#   make run-sim-eval [ROSBAG=true] [CAPTURE=true] [DOMAIN_ID=1] [OUTPUT_ROOT=/output] [RESULT_WAIT_SECONDS=10]
+#   make simulator-eval [ROSBAG=true] [CAPTURE=true] [DOMAIN_ID=1] [OUTPUT_ROOT=/output] [RESULT_WAIT_SECONDS=10]
 ROSBAG ?= false
 CAPTURE ?= false
 DOMAIN_ID ?= 1
@@ -69,14 +79,39 @@ MOVE_WINDOW_PREFER_LARGEST ?= 1
 MOVE_WINDOW_QUIET ?= 1
 export AWSIM_TITLE_REGEX AWSIM_CLASS_REGEX RVIZ_TITLE_REGEX RVIZ_CLASS_REGEX MOVE_WINDOW_DEBUG MOVE_WINDOW_PREFER_LARGEST MOVE_WINDOW_QUIET
 
-# autowareのみ起動
+# autowareのbuildのみ
+autoware-build:
+	$(DC) up -d --force-recreate $(AIC_BUILD_SERVICE)
+
+# run autoware for vehicle
 autoware-vehicle:
+	@echo "Start Autoware for Vehicle"
 	RUN_MODE=vehicle $(DC) up -d $(AUTOWARE_SERVICE)
 
-# Autoware(AWSIM mode)
-autoware-sim:
-	@echo "Start Autoware(AWSIM mode)"
+# run autoware for simulator
+autoware-simulator:
+	@echo "Start Autoware for AWSIM"
 	RUN_MODE=awsim $(DC) up -d $(AUTOWARE_SERVICE)
+
+# autoware command service
+autoware-init:
+	CMD="env ROS_DOMAIN_ID=$(DOMAIN_ID) /aichallenge/utils/publish.bash request-initialpose" \
+	$(DC) up -d $(AW_CMD_SERVICE)
+
+autoware-start:
+	@echo "Start control"
+	CMD="env ROS_DOMAIN_ID=$(DOMAIN_ID) /aichallenge/utils/publish.bash request-control" \
+	$(DC) up -d $(AW_CMD_SERVICE)
+
+# run simulator
+simulator:
+	@echo "Start AWSIM"
+	$(DC) up -d $(SIMULATOR_SERVICE)
+
+simulator-reset:
+	@echo "Reset simulation"
+	CMD="bash /aichallenge/utils/simulator_reset.bash $(DOMAIN_ID)" \
+	$(DC) up -d $(AW_CMD_SERVICE)
 
 # racing kart
 driver:
@@ -85,16 +120,6 @@ driver:
 # zenoh
 zenoh:
 	$(DC) up -d zenoh
-
-# driver + autoware + zenoh
-run-full-kart-system:
-	RUN_MODE=vehicle $(DC) up -d driver $(AUTOWARE_SERVICE)
-	sleep 15
-	$(DC) up -d zenoh
-
-# autowareのbuildのみ
-build-autoware:
-	$(DC) up -d --force-recreate $(AIC_BUILD_SERVICE)
 
 # Download submission data by asking for credentials interactively
 # Usage:
@@ -116,136 +141,30 @@ download:
 		fi; \
 	fi
 
-# make run-sim-eval ROSBAG=true CAPTURE=true
-run-sim-eval:
-	@bash -lc 'set -euo pipefail; \
-		ts="$(RUN_ID)"; \
-		if [ -z "$$ts" ]; then ts="$$(date +%Y%m%d-%H%M%S)"; fi; \
-		run_group="$(RUN_GROUP)"; \
-		run_rel="$$ts"; \
-		if [ -n "$$run_group" ]; then run_rel="$$ts/$$run_group"; fi; \
-		mkdir -p output; \
-		mkdir -p output/_host; \
-		if [ -e output/latest ] && [ ! -L output/latest ]; then \
-			legacy="output/_host/legacy-output-latest-$$ts-$$RANDOM"; \
-			echo "[make] Moving legacy output/latest to $$legacy"; \
-			mv output/latest "$$legacy"; \
-		fi; \
-			mkdir -p "output/$$run_rel"; \
-			ln -nfs "$$ts" output/latest; \
-			output_root="$(OUTPUT_ROOT)"; \
-			domain_ids="$(DOMAIN_IDS)"; \
-			domain_ids="$${domain_ids//,/ }"; \
-			result_wait_seconds="$(RESULT_WAIT_SECONDS)"; \
-			rosbag_enabled="$(ROSBAG)"; \
-			capture_enabled="$(CAPTURE)"; \
-			sim_svc="$(SIMULATOR_SERVICE)"; \
-			autoware_svc="$(AUTOWARE_SERVICE)"; \
-			cmd_svc="$(AW_CMD_SERVICE)"; \
-			rosbag_svc="$(ROSBAG_SERVICE)"; \
-			nvidia_visible_devices=""; \
-			nvidia_driver_caps=""; \
-			case "$$sim_svc" in *-gpu) nvidia_visible_devices="all"; nvidia_driver_caps="all";; esac; \
-			dc() { NVIDIA_VISIBLE_DEVICES="$$nvidia_visible_devices" NVIDIA_DRIVER_CAPABILITIES="$$nvidia_driver_caps" OUTPUT_ROOT="$$output_root" OUTPUT_RUN_DIR="$$output_run_dir" DOMAIN_ID="$$domain_id" EVAL_RUN=1 CMD_WORKDIR="$$output_run_dir" $(DC) "$$@"; }; \
-			best_effort() { "$$@" >/dev/null 2>&1 || true; }; \
-			capture_started=0; \
-			rosbag_started=0; \
-			sim_cid=""; \
-			autoware_cid=""; \
-			rosbag_cid=""; \
-			cleanup_domain() { \
-				set +e; \
-				if [ "$$capture_started" -eq 1 ]; then \
-					CMD="env ROS_DOMAIN_ID=$$domain_id /aichallenge/utils/publish.bash request-capture" dc run --rm --no-deps "$$cmd_svc" >/dev/null 2>&1 || true; \
-				fi; \
-				if [ "$$rosbag_started" -eq 1 ]; then \
-					rosbag_cid="$$(dc ps -q "$$rosbag_svc" 2>/dev/null || true)"; \
-					if [ -n "$$rosbag_cid" ]; then \
-						docker kill --signal INT "$$rosbag_cid" >/dev/null 2>&1 || true; \
-						docker wait "$$rosbag_cid" >/dev/null 2>&1 || true; \
-					fi; \
-					dc stop "$$rosbag_svc" >/dev/null 2>&1 || true; \
-				fi; \
-				autoware_cid="$$(dc ps -q "$$autoware_svc" 2>/dev/null || true)"; \
-				if [ -n "$$autoware_cid" ]; then \
-					docker kill --signal INT "$$autoware_cid" >/dev/null 2>&1 || true; \
-					docker wait "$$autoware_cid" >/dev/null 2>&1 || true; \
-				fi; \
-				dc stop "$$autoware_svc" >/dev/null 2>&1 || true; \
-				sim_cid="$$(dc ps -q "$$sim_svc" 2>/dev/null || true)"; \
-				if [ -n "$$sim_cid" ]; then \
-					docker kill --signal INT "$$sim_cid" >/dev/null 2>&1 || true; \
-					docker wait "$$sim_cid" >/dev/null 2>&1 || true; \
-				fi; \
-				dc stop "$$sim_svc" >/dev/null 2>&1 || true; \
-			}; \
-			cleanup_all() { \
-				set +e; \
-				cleanup_domain; \
-				CMD="bash /aichallenge/utils/fix_ownership.bash $(HOST_UID) $(HOST_GID) $$output_root $$ts" dc run --rm --no-deps "$$cmd_svc" >/dev/null 2>&1 || true; \
-			}; \
-			trap cleanup_all EXIT; \
-			trap "echo \"[make] Interrupted\" >&2; exit 130" INT; \
-			trap "echo \"[make] Terminated\" >&2; exit 143" TERM; \
-			echo "--- Starting Evaluation ---"; \
-			for domain_id in $$domain_ids; do \
-				mkdir -p "output/$$run_rel/d$$domain_id"; \
-				output_run_dir="$$output_root/$$run_rel/d$$domain_id"; \
-				echo "OUTPUT: output/$$run_rel/d$$domain_id (container: $$output_run_dir)"; \
-				echo "DOMAIN_ID=$$domain_id ROSBAG=$$rosbag_enabled CAPTURE=$$capture_enabled"; \
-				capture_started=0; \
-				rosbag_started=0; \
-				SIM_MODE=eval dc up -d --force-recreate "$$sim_svc"; \
-				CMD="env ROS_DOMAIN_ID=0 /aichallenge/utils/publish.bash check-awsim" dc run --rm --no-deps "$$cmd_svc"; \
-				RUN_MODE=awsim dc up -d --force-recreate "$$autoware_svc"; \
-				sleep 3; \
-				CMD="bash /aichallenge/utils/move_window.bash" dc run --rm --no-deps "$$cmd_svc" || true; \
-				CMD="env ROS_DOMAIN_ID=$$domain_id /aichallenge/utils/publish.bash request-initialpose" dc run --rm --no-deps "$$cmd_svc"; \
-				CMD="env ROS_DOMAIN_ID=$$domain_id /aichallenge/utils/publish.bash request-control" dc run --rm --no-deps "$$cmd_svc"; \
-				if [ "$$capture_enabled" = "true" ]; then \
-					CMD="env ROS_DOMAIN_ID=$$domain_id /aichallenge/utils/publish.bash request-capture" dc run --rm --no-deps "$$cmd_svc" >/dev/null 2>&1 || true; \
-					capture_started=1; \
-				fi; \
-				if [ "$$rosbag_enabled" = "true" ]; then \
-					dc up -d --force-recreate "$$rosbag_svc" >/dev/null 2>&1 || true; \
-					rosbag_started=1; \
-				fi; \
-				sim_cid="$$(dc ps -q "$$sim_svc")"; \
-				if [ -n "$$sim_cid" ]; then \
-					docker wait "$$sim_cid" >/dev/null 2>&1 || true; \
-				fi; \
-				CMD="bash /aichallenge/utils/convert_result.bash $$domain_id $$result_wait_seconds" dc run --rm --no-deps "$$cmd_svc" >/dev/null 2>&1 || true; \
-				cleanup_domain; \
-				echo "[make] Domain $$domain_id finished"; \
-			done; \
-			echo "[make] Evaluation finished"'
+# make simulator-eval ROSBAG=true CAPTURE=true
+simulator-eval:
+	@RUN_ID="$(RUN_ID)" RUN_GROUP="$(RUN_GROUP)" \
+		OUTPUT_ROOT="$(OUTPUT_ROOT)" DOMAIN_IDS="$(DOMAIN_IDS)" RESULT_WAIT_SECONDS="$(RESULT_WAIT_SECONDS)" \
+		ROSBAG="$(ROSBAG)" CAPTURE="$(CAPTURE)" \
+		SIMULATOR_SERVICE="$(SIMULATOR_SERVICE)" AUTOWARE_SERVICE="$(AUTOWARE_SERVICE)" \
+		AW_CMD_SERVICE="$(AW_CMD_SERVICE)" ROSBAG_SERVICE="$(ROSBAG_SERVICE)" \
+		DC="$(DC)" \
+		bash aichallenge/utils/run_sim_eval.bash
 
-run-sim-eval-1-4:
-	@$(MAKE) run-sim-eval DOMAIN_IDS=1,2,3,4
+simulator-eval-1-4:
+	@$(MAKE) simulator-eval DOMAIN_IDS=1,2,3,4
 
-# rviz
+# remote operation
 rviz2:
 	$(DC) stop $(RVIZ2_SERVICE)
 	$(DC) up -d $(RVIZ2_SERVICE)
 
-# simulator
-sim:
-	@echo "Start AWSIM"
-	$(DC) up -d $(SIMULATOR_SERVICE)
 
-init:
-	CMD=python3 ./publish_initialpose.py \
-	$(DC) up -d $(AW_CMD_SERVICE)
-
-start:
-	@echo "Start control"
-	CMD="ros2 topic pub -t 10 /awsim/control_mode_request_topic std_msgs/msg/Bool '{data: true}'" \
-	$(DC) up -d $(AW_CMD_SERVICE)
-
-reset:
-	@echo "Reset simulation"
-	CMD="ros2 topic pub --once /aichallenge/awsim/reset std_msgs/msg/Empty {} | python3 ./publish_initialpose.py" \
-	$(DC) up -d $(AW_CMD_SERVICE)
+# driver + autoware + zenoh
+autoware-driver-zenoh:
+	RUN_MODE=vehicle $(DC) up -d driver $(AUTOWARE_SERVICE)
+	sleep 15
+	$(DC) up -d zenoh
 
 down:
 	$(DC) down --remove-orphans

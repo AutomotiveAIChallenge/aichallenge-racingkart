@@ -4,13 +4,14 @@ set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 COMPOSE_BASE_FILE="${REPO_ROOT}/docker-compose.yml"
+COMPOSE_GPU_FILE="${REPO_ROOT}/docker-compose.gpu.yml"
 HOST_LOG_DIR=""
 HOST_LOG_FILE=""
 
-log() { echo "[run_autoware_multi] $*"; }
-warn() { echo "[run_autoware_multi][WARN] $*" >&2; }
+log() { echo "[run_parallel_submissions] $*"; }
+warn() { echo "[run_parallel_submissions][WARN] $*" >&2; }
 die() {
-    echo "[run_autoware_multi][ERROR] $*" >&2
+    echo "[run_parallel_submissions][ERROR] $*" >&2
     exit 1
 }
 
@@ -19,10 +20,10 @@ ts_compact() { date +%Y%m%d-%H%M%S; }
 usage() {
     cat <<'EOF'
 Usage:
-  ./run_autoware_multi.bash down [--log-dir <output/_host/...>]
-  ./run_autoware_multi.bash collect [--run-id ID] [--vehicles N]
-  ./run_autoware_multi.bash --submit <aichallenge_submit.tar.gz> [--submit <...> ...]
-                            [--vehicles N] [--device auto|gpu|cpu] [--run-id ID]
+  ./run_parallel_submissions.bash down [--log-dir <output/_host/...>]
+  ./run_parallel_submissions.bash collect [--run-id ID] [--vehicles N]
+  ./run_parallel_submissions.bash --submit <aichallenge_submit.tar.gz> [--submit <...> ...]
+                                           [--vehicles N] [--device auto|gpu|cpu] [--run-id ID]
 
 Behavior:
   - Starts AWSIM once (docker compose service: simulator).
@@ -31,7 +32,7 @@ Behavior:
   - Domain id is assigned by submit order: 1..4 (max 4).
   - Writes logs under output/<run_id>/d<domain_id>/autoware.log and output/latest -> <run_id>.
   - Writes compose override to output/_host/<event_id>/compose.autoware_multi.yml and
-    output/_host/latest-autoware-multi -> <event_id>.
+    output/_host/latest-autoware-parallel-submissions -> <event_id> (also updates legacy: latest-autoware-multi).
 EOF
 }
 
@@ -133,13 +134,9 @@ collect_results() {
 }
 
 simulator_container_id() {
-    # Returns the container ID of simulator or simulator-gpu for the current compose project (if any).
-    # Prefer simulator-gpu when both exist.
+    # Returns the container ID of simulator for the current compose project (if any).
     local cid=""
-    cid="$(docker compose -f "${COMPOSE_BASE_FILE}" ps -q simulator-gpu 2>/dev/null || true)"
-    if [ -z "${cid}" ]; then
-        cid="$(docker compose -f "${COMPOSE_BASE_FILE}" ps -q simulator 2>/dev/null || true)"
-    fi
+    cid="$(docker compose -f "${COMPOSE_BASE_FILE}" ps -q simulator 2>/dev/null || true)"
     echo "${cid}"
 }
 
@@ -157,14 +154,15 @@ init_host_log() {
     mkdir -p "${REPO_ROOT}/output/_host"
 
     local event_id
-    event_id="$(ts_compact)-run_autoware_multi-$$"
+    event_id="$(ts_compact)-run_parallel_submissions-$$"
 
     HOST_LOG_DIR="${REPO_ROOT}/output/_host/${event_id}"
     mkdir -p "${HOST_LOG_DIR}"
 
+    ln -nfs "${event_id}" "${REPO_ROOT}/output/_host/latest-autoware-parallel-submissions"
     ln -nfs "${event_id}" "${REPO_ROOT}/output/_host/latest-autoware-multi"
 
-    HOST_LOG_FILE="${HOST_LOG_DIR}/run_autoware_multi.log"
+    HOST_LOG_FILE="${HOST_LOG_DIR}/run_parallel_submissions.log"
     touch "${HOST_LOG_FILE}" || true
 
     exec > >(tee -a "${HOST_LOG_FILE}") 2>&1
@@ -221,7 +219,7 @@ write_compose_override() {
     network_mode: host
 EOF
             if [ "${gpu_enabled}" = "1" ]; then
-                echo "    runtime: nvidia"
+                echo "    gpus: all"
             fi
             cat <<EOF
     environment:
@@ -234,6 +232,14 @@ EOF
       - RUN_MODE=awsim
       - DOMAIN_ID=${i}
       - RUN_ID=${run_id}
+EOF
+            if [ "${gpu_enabled}" = "1" ]; then
+                cat <<EOF
+      - NVIDIA_VISIBLE_DEVICES=all
+      - NVIDIA_DRIVER_CAPABILITIES=all
+EOF
+            fi
+            cat <<EOF
     volumes:
       - ./output:/output
       - /tmp/.X11-unix:/tmp/.X11-unix:rw
@@ -260,8 +266,29 @@ compose_up() {
     fi
 }
 
+sanitize_yaml_tabs_in_place_best_effort() {
+    local file="$1"
+    [ -f "${file}" ] || return 0
+
+    if LC_ALL=C grep -q $'\t' "${file}"; then
+        warn "compose override contains tab characters (invalid YAML). Sanitizing in place: ${file}"
+        local tmp="${file}.tmp.$$"
+        tr -d '\t' <"${file}" >"${tmp}" || {
+            rm -f "${tmp}"
+            return 1
+        }
+        mv -f "${tmp}" "${file}" || {
+            rm -f "${tmp}"
+            return 1
+        }
+    fi
+}
+
 cmd_down() {
-    local log_dir="${REPO_ROOT}/output/_host/latest-autoware-multi"
+    local log_dir="${REPO_ROOT}/output/_host/latest-autoware-parallel-submissions"
+    if [ ! -e "${log_dir}" ]; then
+        log_dir="${REPO_ROOT}/output/_host/latest-autoware-multi"
+    fi
 
     while [ $# -gt 0 ]; do
         case "$1" in
@@ -281,13 +308,14 @@ cmd_down() {
 
     local override_file="${log_dir}/compose.autoware_multi.yml"
     [ -f "${override_file}" ] || die "compose override not found: ${override_file} (hint: --log-dir output/_host/<event_id>)"
+    sanitize_yaml_tabs_in_place_best_effort "${override_file}" || warn "Failed to sanitize tabs in ${override_file} (continuing)"
 
     # AWSIM result jsons are generated after AWSIM exits.
     # Only collect automatically when the simulator container is already not running.
     local cid
     cid="$(simulator_container_id)"
     if [ -n "${cid}" ] && simulator_is_running "${cid}"; then
-        warn "Simulator is still running (cid=${cid}). Skipping result collection. Run later: ./run_autoware_multi.bash collect"
+        warn "Simulator is still running (cid=${cid}). Skipping result collection. Run later: ./run_parallel_submissions.bash collect"
     else
         local run_id
         run_id="$(resolve_run_id_default)"
@@ -342,6 +370,13 @@ cmd_collect() {
 
     log "Collecting AWSIM result jsons (run_id=${run_id}, vehicles=${vehicles})"
     collect_results "${run_id}" "${vehicles}"
+}
+
+run_autoware_command_best_effort() {
+    local gpu_enabled="$1"
+    local cmd="$2"
+
+    CMD="${cmd}" compose_up "${gpu_enabled}" -f "${COMPOSE_BASE_FILE}" run --rm --no-deps autoware-command || return 1
 }
 
 main() {
@@ -425,7 +460,7 @@ main() {
 
     log "Starting simulator (once)"
     if [ "${gpu_enabled}" = "1" ]; then
-        EVAL_RUN=1 OUTPUT_RUN_DIR="/output/${run_id}" compose_up "${gpu_enabled}" -f "${COMPOSE_BASE_FILE}" up -d --force-recreate simulator-gpu
+        EVAL_RUN=1 OUTPUT_RUN_DIR="/output/${run_id}" compose_up "${gpu_enabled}" -f "${COMPOSE_BASE_FILE}" -f "${COMPOSE_GPU_FILE}" up -d --force-recreate simulator
     else
         EVAL_RUN=1 OUTPUT_RUN_DIR="/output/${run_id}" compose_up "${gpu_enabled}" -f "${COMPOSE_BASE_FILE}" up -d --force-recreate simulator
     fi
@@ -438,9 +473,27 @@ main() {
     log "Starting ${autoware_svcs[*]} (concurrent)"
     compose_up "${gpu_enabled}" -f "${COMPOSE_BASE_FILE}" -f "${override_file}" up -d --force-recreate "${autoware_svcs[@]}"
 
+    log "Waiting for AWSIM readiness (/clock)"
+    run_autoware_command_best_effort "${gpu_enabled}" "env ROS_DOMAIN_ID=0 /aichallenge/utils/publish.bash check-awsim" || die "AWSIM readiness check failed"
+
+    log "Waiting for Autoware startup"
+    sleep "${AIC_EVAL_AUTOWARE_START_SLEEP_SECONDS:-3}" || true
+
+    log "Request initial pose + control for each domain"
+    for domain_id in $(seq 1 "${vehicles}"); do
+        run_autoware_command_best_effort "${gpu_enabled}" "env ROS_DOMAIN_ID=${domain_id} /aichallenge/utils/publish.bash request-initialpose" ||
+            warn "Initial pose request failed (domain_id=${domain_id})"
+        run_autoware_command_best_effort "${gpu_enabled}" "env ROS_DOMAIN_ID=${domain_id} /aichallenge/utils/publish.bash request-control" ||
+            warn "Control request failed (domain_id=${domain_id})"
+    done
+
     log "Started. Output: output/${run_id}/d*/autoware.log"
-    log "Stop: ./run_autoware_multi.bash down"
-    log "  or: docker compose -f docker-compose.yml -f ${override_file} down --remove-orphans"
+    log "Stop: ./run_parallel_submissions.bash down"
+    if [ "${gpu_enabled}" = "1" ]; then
+        log "  or: docker compose -f docker-compose.yml -f docker-compose.gpu.yml -f ${override_file} down --remove-orphans"
+    else
+        log "  or: docker compose -f docker-compose.yml -f ${override_file} down --remove-orphans"
+    fi
 }
 
 main "$@"

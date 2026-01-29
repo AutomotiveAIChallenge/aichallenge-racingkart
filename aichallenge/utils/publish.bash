@@ -5,6 +5,7 @@ usage() {
     echo "Usage: $0 [OPTION]"
     echo "Options:"
     echo "  check-awsim         Check if simulator is ready"
+    echo "  reset-awsim         Reset AWSIM (topic publish)"
     echo "  request-capture     Capture screen via service call"
     echo "  request-control     Request control mode change"
     echo "  request-initialpose Set initial pose"
@@ -79,6 +80,11 @@ check_simulator_ready() {
         "/clock" "rosgraph_msgs/msg/Clock"
 }
 
+reset_awsim() {
+    run_with_timeout "Resetting AWSIM" 5 \
+        ros2 topic pub --once "/aichallenge/awsim/reset" "std_msgs/msg/Empty" "{}"
+}
+
 # Check if an argument was provided
 if [ $# -eq 0 ]; then
     usage >&2
@@ -91,6 +97,10 @@ rc=0
 case "$1" in
 check-awsim)
     check_simulator_ready
+    rc=$?
+    ;;
+reset-awsim)
+    reset_awsim
     rc=$?
     ;;
 request-capture)

@@ -1,0 +1,6 @@
+services:
+  autoware:
+    gpus: all
+
+  simulator:
+    gpus: all

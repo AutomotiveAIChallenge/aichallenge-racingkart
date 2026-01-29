@@ -57,7 +57,7 @@ make run-full-system
 
 ```bash
 # Autowareのビルド
-make build-autoware
+make autoware-build
 
 # Driverのビルド
 make build-driver
@@ -141,7 +141,7 @@ tail -f full_log.log
    # 古いコンテナを削除してからビルド
    docker compose down
    docker system prune -f
-   make build-autoware
+   make autoware-build
    make build-driver
    ```
 
@@ -150,7 +150,7 @@ tail -f full_log.log
 ```bash
 # 1. 初回セットアップ
 make download
-make build-autoware
+make autoware-build
 make build-driver
 make run-full-system
 
@@ -165,11 +165,11 @@ make zenoh          # ターミナル3: Zenoh単体起動
 # 4. 新しいsubmissionデータでテスト
 make stop-rosbag    # 既存システム停止
 make download       # 新データダウンロード
-make build-autoware # リビルド
+make autoware-build # リビルド
 make run-full-system # 実行
 
 # 5. 可視化付きデバッグ
-make build-autoware
+make autoware-build
 make build-driver
 make run-full-system  # メインシステム（別ターミナル）
 make rviz2           # 可視化
