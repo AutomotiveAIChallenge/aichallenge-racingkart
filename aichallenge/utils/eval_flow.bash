@@ -55,11 +55,11 @@ aic_eval_flow_run_domain() {
         return 2
     }
 
-    AIC_EVAL_DOMAIN_ID="${domain_id}"
-    AIC_EVAL_SIM_DOMAIN_ID="${sim_domain_id}"
-    AIC_EVAL_RESULT_WAIT_SECONDS="${result_wait_seconds}"
-    AIC_EVAL_CAPTURE_ENABLED="${capture_enabled}"
-    AIC_EVAL_ROSBAG_ENABLED="${rosbag_enabled}"
+    export AIC_EVAL_DOMAIN_ID="${domain_id}"
+    export AIC_EVAL_SIM_DOMAIN_ID="${sim_domain_id}"
+    export AIC_EVAL_RESULT_WAIT_SECONDS="${result_wait_seconds}"
+    export AIC_EVAL_CAPTURE_ENABLED="${capture_enabled}"
+    export AIC_EVAL_ROSBAG_ENABLED="${rosbag_enabled}"
 
     aic_eval_flow__require_fn aic_eval_log
     aic_eval_flow__require_fn aic_eval_run_or_exit

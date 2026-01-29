@@ -76,35 +76,45 @@ dc() {
         DOMAIN_ID="${domain_id}" \
         EVAL_RUN=1 \
         CMD_WORKDIR="${output_run_dir}" \
+        SIM_MODE="${SIM_MODE-}" \
+        RUN_MODE="${RUN_MODE-}" \
+        CMD="${CMD-}" \
         "${dc_cmd[@]}" "$@"
 }
 
 aic_eval_backend_start_simulator() {
-    SIM_MODE=eval dc up -d --force-recreate "${sim_svc}"
+    local SIM_MODE="eval"
+    dc up -d --force-recreate "${sim_svc}"
 }
 
 aic_eval_backend_wait_sim_ready() {
-    CMD="env ROS_DOMAIN_ID=${AIC_EVAL_SIM_DOMAIN_ID:-0} /aichallenge/utils/publish.bash check-awsim" dc run --rm --no-deps "${cmd_svc}"
+    local CMD="env ROS_DOMAIN_ID=${AIC_EVAL_SIM_DOMAIN_ID:-0} /aichallenge/utils/publish.bash check-awsim"
+    dc run --rm --no-deps "${cmd_svc}"
 }
 
 aic_eval_backend_start_autoware() {
-    RUN_MODE=awsim dc up -d --force-recreate "${autoware_svc}"
+    local RUN_MODE="awsim"
+    dc up -d --force-recreate "${autoware_svc}"
 }
 
 aic_eval_backend_move_window_best_effort() {
-    CMD="bash /aichallenge/utils/move_window.bash" dc run --rm --no-deps "${cmd_svc}"
+    local CMD="bash /aichallenge/utils/move_window.bash"
+    dc run --rm --no-deps "${cmd_svc}"
 }
 
 aic_eval_backend_request_initialpose() {
-    CMD="env ROS_DOMAIN_ID=${AIC_EVAL_DOMAIN_ID} /aichallenge/utils/publish.bash request-initialpose" dc run --rm --no-deps "${cmd_svc}"
+    local CMD="env ROS_DOMAIN_ID=${AIC_EVAL_DOMAIN_ID} /aichallenge/utils/publish.bash request-initialpose"
+    dc run --rm --no-deps "${cmd_svc}"
 }
 
 aic_eval_backend_request_control() {
-    CMD="env ROS_DOMAIN_ID=${AIC_EVAL_DOMAIN_ID} /aichallenge/utils/publish.bash request-control" dc run --rm --no-deps "${cmd_svc}"
+    local CMD="env ROS_DOMAIN_ID=${AIC_EVAL_DOMAIN_ID} /aichallenge/utils/publish.bash request-control"
+    dc run --rm --no-deps "${cmd_svc}"
 }
 
 aic_eval_backend_start_capture_best_effort() {
-    CMD="env ROS_DOMAIN_ID=${AIC_EVAL_DOMAIN_ID} /aichallenge/utils/publish.bash request-capture" dc run --rm --no-deps "${cmd_svc}" >/dev/null 2>&1 || true
+    local CMD="env ROS_DOMAIN_ID=${AIC_EVAL_DOMAIN_ID} /aichallenge/utils/publish.bash request-capture"
+    dc run --rm --no-deps "${cmd_svc}" >/dev/null 2>&1 || true
     capture_started=1
 }
 
@@ -121,8 +131,8 @@ aic_eval_backend_wait_sim_finish() {
 }
 
 aic_eval_backend_convert_result_best_effort() {
-    CMD="bash /aichallenge/utils/convert_result.bash ${AIC_EVAL_DOMAIN_ID} ${AIC_EVAL_RESULT_WAIT_SECONDS}" dc run --rm --no-deps "${cmd_svc}" \
-        >/dev/null 2>&1 || true
+    local CMD="bash /aichallenge/utils/convert_result.bash ${AIC_EVAL_DOMAIN_ID} ${AIC_EVAL_RESULT_WAIT_SECONDS}"
+    dc run --rm --no-deps "${cmd_svc}" >/dev/null 2>&1 || true
 }
 
 aic_eval_backend_cleanup_domain() {
@@ -135,8 +145,8 @@ cleanup_domain() {
     set +e
 
     if [ "${capture_started}" -eq 1 ]; then
-        CMD="env ROS_DOMAIN_ID=${domain_id} /aichallenge/utils/publish.bash request-capture" dc run --rm --no-deps "${cmd_svc}" \
-            >/dev/null 2>&1 || true
+        local CMD="env ROS_DOMAIN_ID=${domain_id} /aichallenge/utils/publish.bash request-capture"
+        dc run --rm --no-deps "${cmd_svc}" >/dev/null 2>&1 || true
     fi
 
     if [ "${rosbag_started}" -eq 1 ]; then
@@ -172,8 +182,8 @@ cleanup_all() {
     case $- in *e*) had_errexit=1 ;; esac
     set +e
     cleanup_domain
-    CMD="bash /aichallenge/utils/fix_ownership.bash ${host_uid} ${host_gid} ${output_root} ${run_id}" dc run --rm --no-deps "${cmd_svc}" \
-        >/dev/null 2>&1 || true
+    local CMD="bash /aichallenge/utils/fix_ownership.bash ${host_uid} ${host_gid} ${output_root} ${run_id}"
+    dc run --rm --no-deps "${cmd_svc}" >/dev/null 2>&1 || true
 
     if [ "${had_errexit}" -eq 1 ]; then
         set -e
