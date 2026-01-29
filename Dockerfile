@@ -51,17 +51,15 @@ FROM common AS eval
 ENV RCUTILS_COLORIZED_OUTPUT=0
 ARG SUBMIT_TAR=submit/aichallenge_submit.tar.gz
 
-RUN mkdir /ws
-RUN git clone --depth 1 https://github.com/AutomotiveAIChallenge/aichallenge-racingkart /ws/repository
-RUN mv /ws/repository/aichallenge /aichallenge
-RUN rm -rf /aichallenge/simulator
-RUN rm -rf /aichallenge/workspace/src/aichallenge_submit
-RUN chmod 757 /aichallenge
-
+COPY ${SUBMIT_TAR} /tmp/s.tgz
+RUN git clone --depth 1 https://github.com/AutomotiveAIChallenge/aichallenge-racingkart /t \
+ && mv /t/aichallenge /aichallenge \
+ && rm -rf /aichallenge/{simulator,workspace/src/aichallenge_submit} /t \
+ && chmod 757 /aichallenge \
+ && tar zxf /tmp/s.tgz -C /aichallenge/workspace/src \
+ && rm /tmp/s.tgz
 COPY aichallenge/simulator/ /aichallenge/simulator/
-COPY ${SUBMIT_TAR} /ws/aichallenge_submit.tar.gz
-RUN tar zxf /ws/aichallenge_submit.tar.gz -C /aichallenge/workspace/src
-RUN rm -rf /ws
+
 
 RUN bash -c ' \
     source /autoware/install/setup.bash; \
