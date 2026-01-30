@@ -54,7 +54,7 @@ ARG SUBMIT_TAR=submit/aichallenge_submit.tar.gz
 COPY ${SUBMIT_TAR} /tmp/s.tgz
 RUN git clone --depth 1 https://github.com/AutomotiveAIChallenge/aichallenge-racingkart /t \
  && mv /t/aichallenge /aichallenge \
- && rm -rf /aichallenge/{simulator,workspace/src/aichallenge_submit} /t \
+ && rm -rf /aichallenge/simulator /aichallenge/workspace/src/aichallenge_submit /t \
  && chmod 757 /aichallenge \
  && tar zxf /tmp/s.tgz -C /aichallenge/workspace/src \
  && rm /tmp/s.tgz
