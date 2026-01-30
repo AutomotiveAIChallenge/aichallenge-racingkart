@@ -85,6 +85,7 @@ output/_host/<event_id>/
   <script_name>.log
   compose.autoware_multi.yml   # 実行時に生成された override
 output/_host/latest-autoware-parallel-submissions -> <event_id>
+output/_host/latest -> <event_id>
 ```
 
 ## 実行フロー（高レベル）
@@ -96,6 +97,7 @@ output/_host/latest-autoware-parallel-submissions -> <event_id>
 3. Host 側ログを初期化
    - `output/_host/<event_id>/<script_name>.log` に `tee`（stdout/stderr を保存）
    - `output/_host/latest-autoware-parallel-submissions` を更新
+   - `output/_host/latest` を更新
 4. 提出物ごとに eval イメージをビルド（`Dockerfile` の `eval` target）
    - `SUBMIT_TAR=<repo内相対パス>` を build arg として渡す
    - `aichallenge-2025-eval-<submit>-<run_id>-d<domain>` のようなタグを生成

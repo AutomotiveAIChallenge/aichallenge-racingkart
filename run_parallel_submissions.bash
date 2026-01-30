@@ -161,6 +161,7 @@ init_host_log() {
     mkdir -p "${HOST_LOG_DIR}"
 
     ln -nfs "${event_id}" "${REPO_ROOT}/output/_host/latest-autoware-parallel-submissions"
+    ln -nfs "${event_id}" "${REPO_ROOT}/output/_host/latest"
 
     HOST_LOG_FILE="${HOST_LOG_DIR}/${SCRIPT_NAME}.log"
     touch "${HOST_LOG_FILE}" || true
