@@ -28,21 +28,19 @@
 
 ```bash
 ./run_parallel_submissions.bash \
-  --submit submit/aichallenge_submit_A.tar.gz \
-  --submit submit/aichallenge_submit_B.tar.gz \
-  --vehicles 2 \
-  --device auto
+  --submit \
+    submit/aichallenge_submit_A.tar.gz \
+    submit/aichallenge_submit_B.tar.gz
 ```
 
-- `--submit`（必須、複数可）: 提出物 tar.gz（**リポジトリ配下のパスである必要**あり。`docker build` のコンテキスト制約）
-- `--vehicles`（省略可）: 起動数（デフォルトは `--submit` の数）
-- `--device`（省略可）: `auto|gpu|cpu`
-  - `auto`: `nvidia-smi` と `/dev/nvidia0` で判定
-- `--run-id`（省略可）: 出力ディレクトリ名（省略時は timestamp + pid で生成）
+- `--submit`（必須）: 提出物 tar.gz（**リポジトリ配下のパスである必要**あり。`docker build` のコンテキスト制約）
+  - `--submit A B C` のように **1つの `--submit` に複数ファイルを並べる**（最大4つ）
 
 制約:
-- `--vehicles` は `1..4`（Domain ID も `1..4` を使用）
-- `--vehicles` と `--submit` 数は一致している必要があります
+- 起動数は `--submit` の数で決定（`1..4`）
+- Domain ID は `--submit` の順に `1..N` を割り当て
+- GPU/CPU は自動判定（`nvidia-smi` と `/dev/nvidia0` で判定）
+- `run_id` は自動生成（timestamp + pid）
 
 ### 2) 停止（down）
 
@@ -60,6 +58,7 @@
 ```
 
 AWSIM が生成しがちな `dN-result*.json` を、`output/<run_id>/dN/` へ移動して整理します。
+（`--run-id` / `--vehicles` は省略時に `output/latest` と既存ディレクトリから推定します）
 
 ## 出力ディレクトリ構成（重要）
 
@@ -90,7 +89,7 @@ output/_host/latest-autoware-multi -> <event_id>  # legacy
 
 ## 実行フロー（高レベル）
 
-1. `--submit` 等の引数をパース（`--vehicles` は `--submit` 数と整合チェック）
+1. `--submit` の引数をパース（起動数は `--submit` の数）
 2. `output/` 配下のディレクトリを準備
    - `output/<run_id>/d1..dN` を作成
    - `output/latest -> <run_id>` を張る

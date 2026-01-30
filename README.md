@@ -31,7 +31,7 @@ Host (you)
 ## 複数提出物の並列起動（run_parallel_submissions）
 
 ```text
-Host: ./run_parallel_submissions.bash --submit <tar.gz> [--submit <tar.gz> ...]
+Host: ./run_parallel_submissions.bash --submit <tar.gz> [<tar.gz> ...]
 
   1) submitごとに eval イメージをビルド（Dockerfile target=eval）
   2) simulator を1回だけ起動
