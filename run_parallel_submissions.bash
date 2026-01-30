@@ -30,8 +30,8 @@ Behavior:
   - Starts Autoware containers autoware-d1..autoware-dN concurrently.
   - Domain id is assigned by submit order: 1..4 (max 4).
   - Writes logs under output/<run_id>/d<domain_id>/autoware.log and output/latest -> <run_id>.
-  - Writes compose override to output/_host/<event_id>/compose.autoware_multi.yml and
-    output/_host/latest-autoware-parallel-submissions -> <event_id> (also updates legacy: latest-autoware-multi).
+  - Writes compose override to output/_host/<event_id>/compose.autoware_multi.yml
+    (also updates output/_host/latest-autoware-parallel-submissions -> <event_id>).
 EOF
 }
 
@@ -159,7 +159,6 @@ init_host_log() {
     mkdir -p "${HOST_LOG_DIR}"
 
     ln -nfs "${event_id}" "${REPO_ROOT}/output/_host/latest-autoware-parallel-submissions"
-    ln -nfs "${event_id}" "${REPO_ROOT}/output/_host/latest-autoware-multi"
 
     HOST_LOG_FILE="${HOST_LOG_DIR}/run_parallel_submissions.log"
     touch "${HOST_LOG_FILE}" || true
@@ -316,9 +315,6 @@ cleanup_compose_project_best_effort() {
 
 cmd_down() {
     local log_dir="${REPO_ROOT}/output/_host/latest-autoware-parallel-submissions"
-    if [ ! -e "${log_dir}" ]; then
-        log_dir="${REPO_ROOT}/output/_host/latest-autoware-multi"
-    fi
 
     while [ $# -gt 0 ]; do
         case "$1" in
@@ -459,7 +455,7 @@ main() {
     [ "${#submits[@]}" -gt 0 ] || die "At least one --submit is required"
     local vehicles="${#submits[@]}"
     if [ "${vehicles}" -lt 1 ] || [ "${vehicles}" -gt 4 ]; then die "--submit count must be in 1..4"; fi
-    if [ -z "${run_id}" ]; then run_id="$(ts_compact)-autoware-multi-$$"; fi
+    if [ -z "${run_id}" ]; then run_id="$(ts_compact)-run_parallel_submissions-$$"; fi
 
     local gpu_enabled
     gpu_enabled="$(gpu_enabled_from_device auto)"

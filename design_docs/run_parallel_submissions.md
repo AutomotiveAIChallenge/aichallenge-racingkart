@@ -48,7 +48,7 @@
 ./run_parallel_submissions.bash down
 ```
 
-- 直近実行の `output/_host/latest-autoware-parallel-submissions`（互換: `latest-autoware-multi`）を参照し、生成した override を使って `docker compose down --remove-orphans` します
+- 直近実行の `output/_host/latest-autoware-parallel-submissions` を参照し、生成した override を使って `docker compose down --remove-orphans` します
 - `--log-dir output/_host/<event_id>` を指定して、対象の実行を明示することもできます
 
 ### 3) 結果の回収（collect）
@@ -84,7 +84,6 @@ output/_host/<event_id>/
   run_parallel_submissions.log
   compose.autoware_multi.yml   # 実行時に生成された override
 output/_host/latest-autoware-parallel-submissions -> <event_id>
-output/_host/latest-autoware-multi -> <event_id>  # legacy
 ```
 
 ## 実行フロー（高レベル）
@@ -95,7 +94,7 @@ output/_host/latest-autoware-multi -> <event_id>  # legacy
    - `output/latest -> <run_id>` を張る
 3. Host 側ログを初期化
    - `output/_host/<event_id>/run_parallel_submissions.log` に `tee`（stdout/stderr を保存）
-   - `output/_host/latest-autoware-parallel-submissions`（互換: `latest-autoware-multi`）を更新
+   - `output/_host/latest-autoware-parallel-submissions` を更新
 4. 提出物ごとに eval イメージをビルド（`Dockerfile` の `eval` target）
    - `SUBMIT_TAR=<repo内相対パス>` を build arg として渡す
    - `aichallenge-2025-eval-<submit>-<run_id>-d<domain>` のようなタグを生成
@@ -115,7 +114,7 @@ output/_host/latest-autoware-multi -> <event_id>  # legacy
   - `is_number()` / `gpu_enabled_from_device()` / `require_submit_in_build_context()`
 - 出力ディレクトリ
   - `ensure_output_dirs(run_id, vehicles)`（`output/<run_id>/dN`、`output/latest`）
-  - `init_host_log(run_id)`（`output/_host/<event_id>`、`tee` の設定、`latest-autoware-parallel-submissions`（互換: `latest-autoware-multi`））
+- `init_host_log(run_id)`（`output/_host/<event_id>`、`tee` の設定、`latest-autoware-parallel-submissions`）
 - ビルド
   - `build_eval_image(submit_rel, run_id, domain_id)`（eval target をビルドしてイメージ tag を返す）
 - compose 生成/起動
