@@ -19,7 +19,13 @@ case "${mode}" in
 "eval")
     opts+=("--vehicles" "1" "--laps" "6" "--timeout" "600")
     ;;
-"multi-player")
+"2p")
+    opts+=("--vehicles" "2" "--laps" "6" "--timeout" "1200")
+    ;;
+"3p")
+    opts+=("--vehicles" "3" "--laps" "6" "--timeout" "1200")
+    ;;
+"4p")
     opts+=("--vehicles" "4" "--laps" "6" "--timeout" "1200")
     ;;
 *) ;;
