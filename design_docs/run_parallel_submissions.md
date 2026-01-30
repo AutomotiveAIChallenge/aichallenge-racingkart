@@ -40,7 +40,7 @@
 - 起動数は `--submit` の数で決定（`1..4`）
 - Domain ID は `--submit` の順に `1..N` を割り当て
 - AWSIM のモードは起動数で自動選択（`eval` / `2p` / `3p` / `4p`）
-- GPU/CPU は `--device auto|gpu|cpu`（または環境変数 `DEVICE`）で選択
+- GPU/CPU は環境変数 `DEVICE=auto|gpu|cpu` で選択
   - `auto` は **`/dev/nvidia0` の有無のみ**で判定（`nvidia-smi` 非依存）
 - `run_id` は自動生成（`<timestamp>-<script_name>-<pid>`）
 
@@ -51,16 +51,15 @@
 ```
 
 - `output/latest -> <run_id>` を参照し、`output/<run_id>/compose.autoware_multi.yml` を使って `docker compose down --remove-orphans` します
-- 過去 run を明示する場合は `--run-id <run_id>` を指定します
 
 ### 3) 結果の回収（collect）
 
 ```bash
-./run_parallel_submissions.bash collect --run-id <run_id> --vehicles 2
+./run_parallel_submissions.bash collect --vehicles 2
 ```
 
 AWSIM が生成しがちな `dN-result*.json` を、`output/<run_id>/dN/` へ移動して整理します。
-（`--run-id` / `--vehicles` は省略時に `output/latest` と既存ディレクトリから推定します）
+（`--vehicles` は省略時に `output/latest` と既存ディレクトリから推定します）
 
 ## 出力ディレクトリ構成（重要）
 

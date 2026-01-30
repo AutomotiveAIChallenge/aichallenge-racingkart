@@ -20,9 +20,10 @@ ts_compact() { date +%Y%m%d-%H%M%S; }
 usage() {
     cat <<'EOF'
 Usage:
-  ./run_parallel_submissions.bash down [--run-id <run_id>]
-  ./run_parallel_submissions.bash collect [--run-id ID] [--vehicles N]
-  ./run_parallel_submissions.bash [--device <auto|gpu|cpu>] --submit <aichallenge_submit.tar.gz> [<aichallenge_submit.tar.gz> ...]
+  ./run_parallel_submissions.bash down [--log-dir <log_dir>]
+  ./run_parallel_submissions.bash collect [--vehicles N]
+  ./run_parallel_submissions.bash --submit <aichallenge_submit.tar.gz> [<aichallenge_submit.tar.gz> ...]
+  DEVICE=<auto|gpu|cpu> ./run_parallel_submissions.bash --submit <aichallenge_submit.tar.gz> [<aichallenge_submit.tar.gz> ...]
 
 Behavior:
   - Starts AWSIM once (docker compose service: simulator).
@@ -33,8 +34,8 @@ Behavior:
   - Writes this script log to output/<run_id>/<script_name>.log.
   - Writes compose override to output/<run_id>/compose.autoware_multi.yml.
 
-Options:
-  --device auto|gpu|cpu  GPU selection (default: DEVICE env var or auto)
+Env:
+  DEVICE=auto|gpu|cpu    GPU selection (default: auto)
                          auto: enable GPU if /dev/nvidia0 exists
                          gpu : force GPU override (requires Docker-side NVIDIA support)
                          cpu : never use GPU override
@@ -55,7 +56,7 @@ gpu_enabled_from_device() {
         # Only check the device node to avoid depending on NVML (`nvidia-smi`) and Docker daemon access.
         if [ -e /dev/nvidia0 ]; then echo 1; else echo 0; fi
         ;;
-    *) die "invalid --device: '${device}' (use auto|gpu|cpu)" ;;
+    *) die "invalid DEVICE: '${device}' (use auto|gpu|cpu)" ;;
     esac
 }
 
@@ -310,15 +311,10 @@ cleanup_compose_project_best_effort() {
 }
 
 cmd_down() {
-    local run_id=""
     local legacy_log_dir=""
 
     while [ $# -gt 0 ]; do
         case "$1" in
-        --run-id)
-            run_id="${2-}"
-            shift 2
-            ;;
         --log-dir)
             legacy_log_dir="${2-}"
             shift 2
@@ -333,9 +329,8 @@ cmd_down() {
         esac
     done
 
-    if [ -z "${run_id}" ]; then
-        run_id="$(resolve_run_id_default)"
-    fi
+    local run_id=""
+    run_id="$(resolve_run_id_default)"
 
     local override_file=""
     if [ -n "${run_id}" ] && [ -f "${REPO_ROOT}/output/${run_id}/compose.autoware_multi.yml" ]; then
@@ -345,7 +340,7 @@ cmd_down() {
     elif [ -f "${REPO_ROOT}/output/_host/latest-autoware-parallel-submissions/compose.autoware_multi.yml" ]; then
         override_file="${REPO_ROOT}/output/_host/latest-autoware-parallel-submissions/compose.autoware_multi.yml"
     else
-        die "compose override not found (hint: run once or specify --run-id <run_id>)"
+        die "compose override not found (hint: run once to create output/latest, or specify --log-dir <dir>)"
     fi
 
     sanitize_yaml_tabs_in_place_best_effort "${override_file}" || warn "Failed to sanitize tabs in ${override_file} (continuing)"
@@ -377,15 +372,10 @@ cmd_down() {
 }
 
 cmd_collect() {
-    local run_id=""
     local vehicles=""
 
     while [ $# -gt 0 ]; do
         case "$1" in
-        --run-id)
-            run_id="${2-}"
-            shift 2
-            ;;
         --vehicles)
             vehicles="${2-}"
             shift 2
@@ -400,10 +390,9 @@ cmd_collect() {
         esac
     done
 
-    if [ -z "${run_id}" ]; then
-        run_id="$(resolve_run_id_default)"
-    fi
-    [ -n "${run_id}" ] || die "run id not specified and output/latest not found"
+    local run_id=""
+    run_id="$(resolve_run_id_default)"
+    [ -n "${run_id}" ] || die "output/latest not found (run once first)"
 
     if [ -z "${vehicles}" ]; then
         vehicles="$(detect_vehicles "${run_id}")"
@@ -440,16 +429,6 @@ main() {
 
     while [ $# -gt 0 ]; do
         case "$1" in
-        --device)
-            device="${2-}"
-            [ -n "${device}" ] || die "--device requires a value (auto|gpu|cpu)"
-            shift 2
-            ;;
-        --device=*)
-            device="${1#--device=}"
-            [ -n "${device}" ] || die "--device requires a value (auto|gpu|cpu)"
-            shift
-            ;;
         --submit | --submit-tar)
             shift
             [ $# -gt 0 ] || die "--submit requires at least one file path"
