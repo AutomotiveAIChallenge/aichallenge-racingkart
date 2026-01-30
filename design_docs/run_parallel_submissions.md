@@ -40,7 +40,8 @@
 - 起動数は `--submit` の数で決定（`1..4`）
 - Domain ID は `--submit` の順に `1..N` を割り当て
 - AWSIM のモードは起動数で自動選択（`eval` / `2p` / `3p` / `4p`）
-- GPU/CPU は自動判定（`nvidia-smi` と `/dev/nvidia0` で判定）
+- GPU/CPU は `--device auto|gpu|cpu`（または環境変数 `DEVICE`）で選択
+  - `auto` は **`/dev/nvidia0` の有無のみ**で判定（`nvidia-smi` 非依存）
 - `run_id` は自動生成（`<timestamp>-<script_name>-<pid>`）
 
 ### 2) 停止（down）

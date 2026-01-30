@@ -133,7 +133,7 @@ pick_window_id() {
 }
 
 has_gpu=0
-if command -v nvidia-smi >/dev/null 2>&1; then
+if [ -e /dev/nvidia0 ] || command -v nvidia-smi >/dev/null 2>&1; then
     has_gpu=1
 fi
 

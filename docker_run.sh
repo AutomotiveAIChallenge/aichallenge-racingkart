@@ -41,9 +41,9 @@ if [ "${device}" = "cpu" ]; then
 elif [ "${device}" = "gpu" ]; then
     opts="--nvidia"
     echo "[INFO] Running in GPU mode (forced by argument)"
-elif command -v nvidia-smi &>/dev/null && [[ -e /dev/nvidia0 ]]; then
+elif [[ -e /dev/nvidia0 ]]; then
     opts="--nvidia"
-    echo "[INFO] NVIDIA GPU detected → enabling --nvidia"
+    echo "[INFO] NVIDIA device node detected (/dev/nvidia0) → enabling --nvidia"
 else
     opts=""
     echo "[INFO] No NVIDIA GPU detected → running on CPU"

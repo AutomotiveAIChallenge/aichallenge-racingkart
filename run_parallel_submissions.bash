@@ -22,7 +22,7 @@ usage() {
 Usage:
   ./run_parallel_submissions.bash down [--run-id <run_id>]
   ./run_parallel_submissions.bash collect [--run-id ID] [--vehicles N]
-  ./run_parallel_submissions.bash --submit <aichallenge_submit.tar.gz> [<aichallenge_submit.tar.gz> ...]
+  ./run_parallel_submissions.bash [--device <auto|gpu|cpu>] --submit <aichallenge_submit.tar.gz> [<aichallenge_submit.tar.gz> ...]
 
 Behavior:
   - Starts AWSIM once (docker compose service: simulator).
@@ -32,6 +32,12 @@ Behavior:
   - Writes logs under output/<run_id>/d<domain_id>/autoware.log and output/latest -> <run_id>.
   - Writes this script log to output/<run_id>/<script_name>.log.
   - Writes compose override to output/<run_id>/compose.autoware_multi.yml.
+
+Options:
+  --device auto|gpu|cpu  GPU selection (default: DEVICE env var or auto)
+                         auto: enable GPU if /dev/nvidia0 exists
+                         gpu : force GPU override (requires Docker-side NVIDIA support)
+                         cpu : never use GPU override
 EOF
 }
 
@@ -46,7 +52,8 @@ gpu_enabled_from_device() {
     gpu) echo 1 ;;
     cpu) echo 0 ;;
     auto)
-        if command -v nvidia-smi >/dev/null 2>&1 && [ -e /dev/nvidia0 ]; then echo 1; else echo 0; fi
+        # Only check the device node to avoid depending on NVML (`nvidia-smi`) and Docker daemon access.
+        if [ -e /dev/nvidia0 ]; then echo 1; else echo 0; fi
         ;;
     *) die "invalid --device: '${device}' (use auto|gpu|cpu)" ;;
     esac
@@ -428,10 +435,21 @@ main() {
     fi
 
     local run_id=""
+    local device="${DEVICE:-auto}"
     local -a submits=()
 
     while [ $# -gt 0 ]; do
         case "$1" in
+        --device)
+            device="${2-}"
+            [ -n "${device}" ] || die "--device requires a value (auto|gpu|cpu)"
+            shift 2
+            ;;
+        --device=*)
+            device="${1#--device=}"
+            [ -n "${device}" ] || die "--device requires a value (auto|gpu|cpu)"
+            shift
+            ;;
         --submit | --submit-tar)
             shift
             [ $# -gt 0 ] || die "--submit requires at least one file path"
@@ -463,12 +481,13 @@ main() {
     if [ -z "${run_id}" ]; then run_id="$(ts_compact)-${SCRIPT_NAME}-$$"; fi
 
     local gpu_enabled
-    gpu_enabled="$(gpu_enabled_from_device auto)"
+    gpu_enabled="$(gpu_enabled_from_device "${device}")"
 
     mkdir -p "${REPO_ROOT}/output/${run_id}"
     init_run_log "${run_id}"
 
     log "Vehicles: ${vehicles}"
+    log "Device: ${device}"
     log "GPU enabled: ${gpu_enabled}"
 
     ensure_output_dirs "${run_id}" "${vehicles}"
