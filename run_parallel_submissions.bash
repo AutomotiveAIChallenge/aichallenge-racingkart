@@ -437,7 +437,7 @@ main() {
             [ $# -gt 0 ] || die "--submit requires at least one file path"
             while [ $# -gt 0 ]; do
                 case "$1" in
-                --* | -h | --help)
+                -h | --help | --*)
                     break
                     ;;
                 *)
