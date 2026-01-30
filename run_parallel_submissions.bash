@@ -3,6 +3,8 @@
 set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+SCRIPT_BASENAME="$(basename "${BASH_SOURCE[0]}")"
+SCRIPT_NAME="${SCRIPT_BASENAME%.*}"
 COMPOSE_BASE_FILE="${REPO_ROOT}/docker-compose.yml"
 COMPOSE_GPU_FILE="${REPO_ROOT}/docker-compose.gpu.yml"
 HOST_LOG_DIR=""
@@ -153,14 +155,14 @@ init_host_log() {
     mkdir -p "${REPO_ROOT}/output/_host"
 
     local event_id
-    event_id="$(ts_compact)-run_parallel_submissions-$$"
+    event_id="$(ts_compact)-${SCRIPT_NAME}-$$"
 
     HOST_LOG_DIR="${REPO_ROOT}/output/_host/${event_id}"
     mkdir -p "${HOST_LOG_DIR}"
 
     ln -nfs "${event_id}" "${REPO_ROOT}/output/_host/latest-autoware-parallel-submissions"
 
-    HOST_LOG_FILE="${HOST_LOG_DIR}/run_parallel_submissions.log"
+    HOST_LOG_FILE="${HOST_LOG_DIR}/${SCRIPT_NAME}.log"
     touch "${HOST_LOG_FILE}" || true
 
     exec > >(tee -a "${HOST_LOG_FILE}") 2>&1
@@ -455,7 +457,7 @@ main() {
     [ "${#submits[@]}" -gt 0 ] || die "At least one --submit is required"
     local vehicles="${#submits[@]}"
     if [ "${vehicles}" -lt 1 ] || [ "${vehicles}" -gt 4 ]; then die "--submit count must be in 1..4"; fi
-    if [ -z "${run_id}" ]; then run_id="$(ts_compact)-run_parallel_submissions-$$"; fi
+    if [ -z "${run_id}" ]; then run_id="$(ts_compact)-${SCRIPT_NAME}-$$"; fi
 
     local gpu_enabled
     gpu_enabled="$(gpu_enabled_from_device auto)"
