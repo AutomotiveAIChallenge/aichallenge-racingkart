@@ -49,8 +49,8 @@
 ./run_parallel_submissions.bash down
 ```
 
-- 直近実行の `output/_host/latest-autoware-parallel-submissions` を参照し、生成した override を使って `docker compose down --remove-orphans` します
-- `--log-dir output/_host/<event_id>` を指定して、対象の実行を明示することもできます
+- `output/latest -> <run_id>` を参照し、`output/<run_id>/compose.autoware_multi.yml` を使って `docker compose down --remove-orphans` します
+- 過去 run を明示する場合は `--run-id <run_id>` を指定します
 
 ### 3) 結果の回収（collect）
 
@@ -69,6 +69,8 @@ AWSIM が生成しがちな `dN-result*.json` を、`output/<run_id>/dN/` へ移
 
 ```
 output/<run_id>/
+  <script_name>.log
+  compose.autoware_multi.yml
   d1/
     autoware.log
     d1-result-details.json ...（collect で移動される想定）
@@ -78,30 +80,18 @@ output/<run_id>/
 output/latest -> <run_id>
 ```
 
-### Host（オーケストレータ側）
-
-```
-output/_host/<event_id>/
-  <script_name>.log
-  compose.autoware_multi.yml   # 実行時に生成された override
-output/_host/latest-autoware-parallel-submissions -> <event_id>
-output/_host/latest -> <event_id>
-```
-
 ## 実行フロー（高レベル）
 
 1. `--submit` の引数をパース（起動数は `--submit` の数）
 2. `output/` 配下のディレクトリを準備
    - `output/<run_id>/d1..dN` を作成
    - `output/latest -> <run_id>` を張る
-3. Host 側ログを初期化
-   - `output/_host/<event_id>/<script_name>.log` に `tee`（stdout/stderr を保存）
-   - `output/_host/latest-autoware-parallel-submissions` を更新
-   - `output/_host/latest` を更新
+3. ログを初期化
+   - `output/<run_id>/<script_name>.log` に `tee`（stdout/stderr を保存）
 4. 提出物ごとに eval イメージをビルド（`Dockerfile` の `eval` target）
    - `SUBMIT_TAR=<repo内相対パス>` を build arg として渡す
    - `aichallenge-2025-eval-<submit>-<run_id>-d<domain>` のようなタグを生成
-5. compose override を生成（`output/_host/<event_id>/compose.autoware_multi.yml`）
+5. compose override を生成（`output/<run_id>/compose.autoware_multi.yml`）
    - `autoware-d1..autoware-dN` を定義（各 service は対応する eval イメージを使う）
    - `working_dir` を `/output/<run_id>/dN` にして `autoware.log` をその中に出す
 6. AWSIM（simulator）を起動（`docker-compose.yml` の `simulator`。GPU 時は `docker-compose.gpu.yml` を併用）
@@ -118,7 +108,7 @@ output/_host/latest -> <event_id>
   - `is_number()` / `gpu_enabled_from_device()` / `require_submit_in_build_context()`
 - 出力ディレクトリ
   - `ensure_output_dirs(run_id, vehicles)`（`output/<run_id>/dN`、`output/latest`）
-- `init_host_log(run_id)`（`output/_host/<event_id>`、`tee` の設定、`latest-autoware-parallel-submissions`）
+- `init_run_log(run_id)`（`output/<run_id>/<script_name>.log` への `tee` の設定）
 - ビルド
   - `build_eval_image(submit_rel, run_id, domain_id)`（eval target をビルドしてイメージ tag を返す）
 - compose 生成/起動

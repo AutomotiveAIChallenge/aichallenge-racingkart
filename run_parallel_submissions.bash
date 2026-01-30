@@ -7,8 +7,6 @@ SCRIPT_BASENAME="$(basename "${BASH_SOURCE[0]}")"
 SCRIPT_NAME="${SCRIPT_BASENAME%.*}"
 COMPOSE_BASE_FILE="${REPO_ROOT}/docker-compose.yml"
 COMPOSE_GPU_FILE="${REPO_ROOT}/docker-compose.gpu.yml"
-HOST_LOG_DIR=""
-HOST_LOG_FILE=""
 
 log() { echo "[run_parallel_submissions] $*"; }
 warn() { echo "[run_parallel_submissions][WARN] $*" >&2; }
@@ -22,7 +20,7 @@ ts_compact() { date +%Y%m%d-%H%M%S; }
 usage() {
     cat <<'EOF'
 Usage:
-  ./run_parallel_submissions.bash down [--log-dir <output/_host/...>]
+  ./run_parallel_submissions.bash down [--run-id <run_id>]
   ./run_parallel_submissions.bash collect [--run-id ID] [--vehicles N]
   ./run_parallel_submissions.bash --submit <aichallenge_submit.tar.gz> [<aichallenge_submit.tar.gz> ...]
 
@@ -32,8 +30,8 @@ Behavior:
   - Starts Autoware containers autoware-d1..autoware-dN concurrently.
   - Domain id is assigned by submit order: 1..4 (max 4).
   - Writes logs under output/<run_id>/d<domain_id>/autoware.log and output/latest -> <run_id>.
-  - Writes compose override to output/_host/<event_id>/compose.autoware_multi.yml
-    (also updates output/_host/latest-autoware-parallel-submissions -> <event_id>).
+  - Writes this script log to output/<run_id>/<script_name>.log.
+  - Writes compose override to output/<run_id>/compose.autoware_multi.yml.
 EOF
 }
 
@@ -149,27 +147,15 @@ simulator_is_running() {
     [ "${running}" = "true" ]
 }
 
-init_host_log() {
+init_run_log() {
     local run_id="$1"
 
-    mkdir -p "${REPO_ROOT}/output/_host"
+    local log_file="${REPO_ROOT}/output/${run_id}/${SCRIPT_NAME}.log"
+    touch "${log_file}" || true
 
-    local event_id
-    event_id="$(ts_compact)-${SCRIPT_NAME}-$$"
+    exec > >(tee -a "${log_file}") 2>&1
 
-    HOST_LOG_DIR="${REPO_ROOT}/output/_host/${event_id}"
-    mkdir -p "${HOST_LOG_DIR}"
-
-    ln -nfs "${event_id}" "${REPO_ROOT}/output/_host/latest-autoware-parallel-submissions"
-    ln -nfs "${event_id}" "${REPO_ROOT}/output/_host/latest"
-
-    HOST_LOG_FILE="${HOST_LOG_DIR}/${SCRIPT_NAME}.log"
-    touch "${HOST_LOG_FILE}" || true
-
-    exec > >(tee -a "${HOST_LOG_FILE}") 2>&1
-
-    log "Log dir: ${HOST_LOG_DIR}"
-    log "Log file: ${HOST_LOG_FILE}"
+    log "Log file: ${log_file}"
     log "Run id: ${run_id}"
 }
 
@@ -317,12 +303,17 @@ cleanup_compose_project_best_effort() {
 }
 
 cmd_down() {
-    local log_dir="${REPO_ROOT}/output/_host/latest-autoware-parallel-submissions"
+    local run_id=""
+    local legacy_log_dir=""
 
     while [ $# -gt 0 ]; do
         case "$1" in
+        --run-id)
+            run_id="${2-}"
+            shift 2
+            ;;
         --log-dir)
-            log_dir="${2-}"
+            legacy_log_dir="${2-}"
             shift 2
             ;;
         -h | --help)
@@ -335,8 +326,21 @@ cmd_down() {
         esac
     done
 
-    local override_file="${log_dir}/compose.autoware_multi.yml"
-    [ -f "${override_file}" ] || die "compose override not found: ${override_file} (hint: --log-dir output/_host/<event_id>)"
+    if [ -z "${run_id}" ]; then
+        run_id="$(resolve_run_id_default)"
+    fi
+
+    local override_file=""
+    if [ -n "${run_id}" ] && [ -f "${REPO_ROOT}/output/${run_id}/compose.autoware_multi.yml" ]; then
+        override_file="${REPO_ROOT}/output/${run_id}/compose.autoware_multi.yml"
+    elif [ -n "${legacy_log_dir}" ] && [ -f "${legacy_log_dir}/compose.autoware_multi.yml" ]; then
+        override_file="${legacy_log_dir}/compose.autoware_multi.yml"
+    elif [ -f "${REPO_ROOT}/output/_host/latest-autoware-parallel-submissions/compose.autoware_multi.yml" ]; then
+        override_file="${REPO_ROOT}/output/_host/latest-autoware-parallel-submissions/compose.autoware_multi.yml"
+    else
+        die "compose override not found (hint: run once or specify --run-id <run_id>)"
+    fi
+
     sanitize_yaml_tabs_in_place_best_effort "${override_file}" || warn "Failed to sanitize tabs in ${override_file} (continuing)"
 
     # AWSIM result jsons are generated after AWSIM exits.
@@ -346,8 +350,6 @@ cmd_down() {
     if [ -n "${cid}" ] && simulator_is_running "${cid}"; then
         warn "Simulator is still running (cid=${cid}). Skipping result collection. Run later: ./run_parallel_submissions.bash collect"
     else
-        local run_id
-        run_id="$(resolve_run_id_default)"
         if [ -n "${run_id}" ]; then
             local vehicles
             vehicles="$(detect_vehicles "${run_id}")"
@@ -463,7 +465,8 @@ main() {
     local gpu_enabled
     gpu_enabled="$(gpu_enabled_from_device auto)"
 
-    init_host_log "${run_id}"
+    mkdir -p "${REPO_ROOT}/output/${run_id}"
+    init_run_log "${run_id}"
 
     log "Vehicles: ${vehicles}"
     log "GPU enabled: ${gpu_enabled}"
@@ -482,7 +485,7 @@ main() {
         images+=("$(build_eval_image "${submit_rel}" "${run_id}" "${domain_id}")")
     done
 
-    local override_file="${HOST_LOG_DIR}/compose.autoware_multi.yml"
+    local override_file="${REPO_ROOT}/output/${run_id}/compose.autoware_multi.yml"
     write_compose_override "${override_file}" "${run_id}" "${vehicles}" "${gpu_enabled}" "${images[@]}"
 
     log "Starting simulator (once)"

@@ -39,7 +39,7 @@ Host: ./run_parallel_submissions.bash --submit <tar.gz> [<tar.gz> ...]
 
 主な出力:
   output/<run_id>/awsim.log
+  output/<run_id>/<script_name>.log
   output/<run_id>/dN/autoware.log
-  output/_host/<event_id>/<script_name>.log  # デフォルトは run_parallel_submissions.log
-  output/_host/latest -> <event_id>
+  output/<run_id>/compose.autoware_multi.yml
 ```
