@@ -22,8 +22,7 @@ usage() {
 Usage:
   ./run_parallel_submissions.bash down [--log-dir <output/_host/...>]
   ./run_parallel_submissions.bash collect [--run-id ID] [--vehicles N]
-  ./run_parallel_submissions.bash --submit <aichallenge_submit.tar.gz> [--submit <...> ...]
-                                           [--vehicles N] [--device auto|gpu|cpu] [--run-id ID]
+  ./run_parallel_submissions.bash --submit <aichallenge_submit.tar.gz> [<aichallenge_submit.tar.gz> ...]
 
 Behavior:
   - Starts AWSIM once (docker compose service: simulator).
@@ -427,28 +426,25 @@ main() {
         return 0
     fi
 
-    local device="auto"
     local run_id=""
-    local vehicles=""
     local -a submits=()
 
     while [ $# -gt 0 ]; do
         case "$1" in
         --submit | --submit-tar)
-            submits+=("${2-}")
-            shift 2
-            ;;
-        --vehicles)
-            vehicles="${2-}"
-            shift 2
-            ;;
-        --device)
-            device="${2-}"
-            shift 2
-            ;;
-        --run-id)
-            run_id="${2-}"
-            shift 2
+            shift
+            [ $# -gt 0 ] || die "--submit requires at least one file path"
+            while [ $# -gt 0 ]; do
+                case "$1" in
+                --* | -h | --help)
+                    break
+                    ;;
+                *)
+                    submits+=("$1")
+                    shift
+                    ;;
+                esac
+            done
             ;;
         -h | --help)
             usage
@@ -461,21 +457,17 @@ main() {
     done
 
     [ "${#submits[@]}" -gt 0 ] || die "At least one --submit is required"
-    if [ -z "${vehicles}" ]; then vehicles="${#submits[@]}"; fi
-    is_number "${vehicles}" || die "--vehicles must be a number (1..4)"
-    if [ "${vehicles}" -lt 1 ] || [ "${vehicles}" -gt 4 ]; then die "--vehicles must be in 1..4"; fi
-    if [ "${#submits[@]}" -ne "${vehicles}" ]; then
-        die "--vehicles (${vehicles}) must match --submit count (${#submits[@]})"
-    fi
+    local vehicles="${#submits[@]}"
+    if [ "${vehicles}" -lt 1 ] || [ "${vehicles}" -gt 4 ]; then die "--submit count must be in 1..4"; fi
     if [ -z "${run_id}" ]; then run_id="$(ts_compact)-autoware-multi-$$"; fi
 
     local gpu_enabled
-    gpu_enabled="$(gpu_enabled_from_device "${device}")"
+    gpu_enabled="$(gpu_enabled_from_device auto)"
 
     init_host_log "${run_id}"
 
     log "Vehicles: ${vehicles}"
-    log "Device: ${device} (gpu_enabled=${gpu_enabled})"
+    log "GPU enabled: ${gpu_enabled}"
 
     ensure_output_dirs "${run_id}" "${vehicles}"
 
