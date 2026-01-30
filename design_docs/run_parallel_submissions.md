@@ -39,8 +39,9 @@
 制約:
 - 起動数は `--submit` の数で決定（`1..4`）
 - Domain ID は `--submit` の順に `1..N` を割り当て
+- AWSIM のモードは起動数で自動選択（`eval` / `2p` / `3p` / `4p`）
 - GPU/CPU は自動判定（`nvidia-smi` と `/dev/nvidia0` で判定）
-- `run_id` は自動生成（timestamp + pid）
+- `run_id` は自動生成（`<timestamp>-<script_name>-<pid>`）
 
 ### 2) 停止（down）
 
@@ -81,7 +82,7 @@ output/latest -> <run_id>
 
 ```
 output/_host/<event_id>/
-  run_parallel_submissions.log
+  <script_name>.log
   compose.autoware_multi.yml   # 実行時に生成された override
 output/_host/latest-autoware-parallel-submissions -> <event_id>
 ```
@@ -93,7 +94,7 @@ output/_host/latest-autoware-parallel-submissions -> <event_id>
    - `output/<run_id>/d1..dN` を作成
    - `output/latest -> <run_id>` を張る
 3. Host 側ログを初期化
-   - `output/_host/<event_id>/run_parallel_submissions.log` に `tee`（stdout/stderr を保存）
+   - `output/_host/<event_id>/<script_name>.log` に `tee`（stdout/stderr を保存）
    - `output/_host/latest-autoware-parallel-submissions` を更新
 4. 提出物ごとに eval イメージをビルド（`Dockerfile` の `eval` target）
    - `SUBMIT_TAR=<repo内相対パス>` を build arg として渡す
@@ -102,6 +103,7 @@ output/_host/latest-autoware-parallel-submissions -> <event_id>
    - `autoware-d1..autoware-dN` を定義（各 service は対応する eval イメージを使う）
    - `working_dir` を `/output/<run_id>/dN` にして `autoware.log` をその中に出す
 6. AWSIM（simulator）を起動（`docker-compose.yml` の `simulator`。GPU 時は `docker-compose.gpu.yml` を併用）
+   - `SIM_MODE` は起動数に応じて `eval` / `2p` / `3p` / `4p` を自動指定
 7. Autoware を並列起動（`docker compose -f docker-compose.yml [-f docker-compose.gpu.yml] -f compose.autoware_multi.yml up -d ...`）
 
 ## スクリプト内部の構成（主な関数と責務）
@@ -136,6 +138,5 @@ output/_host/latest-autoware-parallel-submissions -> <event_id>
 「無理に変えない」前提で、必要になったら検討できる改善案です。
 
 - **override の DRY 化**: `docker-compose.yml` の `autoware` を再利用する（image と DOMAIN_ID だけ差し替え）と drift が減る
-- **SIM_MODE の明示**: AWSIM を確実に評価モードで動かすため `SIM_MODE=eval` を指定できるようにする（CLI オプション化も可）
 - **ROS ログの集約**: `ROS_HOME/ROS_LOG_DIR` を `output/<run_id>/dN/ros/log` へ寄せると解析が楽
 - **並列起動数の拡張**: 4 を超える場合は Domain/bridge/評価仕様と合わせて設計し直す（単純拡張は危険）
