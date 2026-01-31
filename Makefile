@@ -148,6 +148,7 @@ dev:
 	@echo "Start dev simulation (AWSIM + Autoware, DOMAIN_ID=$(DOMAIN_ID))"
 	@$(MAKE) simulator SIM_MODE=dev
 	@$(MAKE) autoware-simulator DOMAIN_ID=$(DOMAIN_ID)
+	@echo "To stop: make down  (docker compose down --remove-orphans)"
 
 # make eval ROSBAG=true CAPTURE=true
 eval:
