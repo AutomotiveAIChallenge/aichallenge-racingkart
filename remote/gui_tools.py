@@ -15,7 +15,7 @@ from tkinter import messagebox, ttk
 from tkinter.scrolledtext import ScrolledText
 
 ROOT_DIR = Path(__file__).resolve().parent
-REMOTE_DIR = (ROOT_DIR / "remote").resolve()
+REMOTE_DIR = ROOT_DIR
 
 DEFAULT_VEHICLE_ID = "A2"
 DEFAULT_USERNAME = ""  # Deprecated: SSH User input removed.
