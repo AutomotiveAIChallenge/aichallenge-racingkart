@@ -52,7 +52,6 @@ cleanup_test_dir() {
         return 0
     fi
     if [ "${SETUP_TEST_KEEP_DIR:-0}" = "1" ]; then
-        log "${INFO} Keeping temp dir: ${d}"
         return 0
     fi
     if [ "${rc}" -ne 0 ]; then
@@ -178,7 +177,7 @@ Usage:
                             # bootstrap a fresh Ubuntu host (installs Docker if missing)
   ./setup.bash preflight      # same as default
   ./setup.bash bootstrap      # install Docker if missing + clone repo + run setup (for fresh PCs)
-  ./setup.bash test [BRANCH]  # bootstrap into /tmp and cleanup (default: origin/test)
+  ./setup.bash test [BRANCH]  # bootstrap into /tmp (kept by default; default: origin/test)
   ./setup.bash show workspace # print workspace/bootstrap steps (manual)
   ./setup.bash show docker    # print Docker install steps (manual)
   ./setup.bash show rocker    # print rocker install steps (manual, optional)
@@ -194,7 +193,7 @@ Usage:
   ./setup.bash bootstrap --yes
                             # non-interactive bootstrap (auto-yes)
   ./setup.bash bootstrap --temp-dir [--keep-dir]
-                            # clone into a temp dir (deleted on successful exit by default)
+                            # clone into a temp dir (kept by default)
 
 Notes:
   - By design, this script DOES NOT install system packages by default.
@@ -588,9 +587,8 @@ Options:
   --repo URL            Repo URL (default: https://github.com/AutomotiveAIChallenge/aichallenge-racingkart.git)
   --branch NAME         Git branch (default: main)
   --dir PATH            Clone destination (default: ~/aichallenge-racingkart)
-  --temp-dir            Use a temporary directory for --dir (auto-removed on successful exit)
-  --keep-dir            Keep --temp-dir directory (for debugging)
-                       (Note: running 'make dev' keeps the directory automatically)
+  --temp-dir            Use a temporary directory for --dir (kept by default)
+  --keep-dir            Keep --temp-dir directory (default)
   --skip-pull-image     Skip pulling Autoware base image
   --skip-awsim          Skip downloading AWSIM.zip
   --skip-build          Skip ./docker_build.sh dev
@@ -620,10 +618,8 @@ EOF
     fi
 
     if [ "${use_temp_dir}" -eq 1 ]; then
-        if [ "${enter_shell}" -eq 1 ] && [ "${keep_dir}" -ne 1 ]; then
-            keep_dir=1
-            warn "${WARN} --temp-dir with --enter-shell keeps the directory (cannot auto-delete after exec)"
-        fi
+        # Keep temp dirs by default so users can inspect logs/workspace after bootstrap.
+        keep_dir=1
         dest_dir="$(mktemp -d /tmp/aichallenge-racingkart-test.XXXXXX)"
         SETUP_TEST_DIR="${dest_dir}"
         SETUP_TEST_KEEP_DIR="${keep_dir}"
@@ -723,11 +719,6 @@ EOF
             fi
             if confirm_step "Run make dev DOMAIN_ID=${DOMAIN_ID:-1}"; then
                 do_make_dev=1
-                if [ "${use_temp_dir}" -eq 1 ] && [ "${keep_dir}" -ne 1 ]; then
-                    keep_dir=1
-                    SETUP_TEST_KEEP_DIR=1
-                    warn "${WARN} --temp-dir: keeping directory because 'make dev' starts long-lived containers (needed for make down/logs)"
-                fi
             fi
         fi
     else
@@ -799,21 +790,7 @@ EOF
         bootstrap_repo_targets "${dest_dir}" "${DOMAIN_ID:-1}" "${do_make_autoware_build}" "${do_make_dev}" || true
     fi
 
-    if [ "${use_temp_dir}" -eq 1 ] && [ "${keep_dir}" -ne 1 ]; then
-        cat <<EOF
-
-${OK} Bootstrap finished.
-
-Repo dir:
-  (temp dir; auto-removed on exit) ${dest_dir}
-  Tip: re-run with --keep-dir to keep it.
-
-Common commands:
-  make autoware-build
-  make dev DOMAIN_ID=1
-EOF
-    else
-        cat <<EOF
+    cat <<EOF
 
 ${OK} Bootstrap finished.
 
@@ -824,7 +801,6 @@ Common commands:
   make autoware-build
   make dev DOMAIN_ID=1
 EOF
-    fi
 
     if [ "${enter_shell}" -eq 1 ]; then
         if [ -r /dev/tty ]; then
