@@ -43,7 +43,7 @@
 ## `aichallenge/` 配下の主要ファイル（設計思想）
 
 - `aichallenge/run_evaluation.bash`: 評価オーケストレータ。起動→待機→初期化→収集→後処理までを1本で管理
-- `aichallenge/utils/publish.bash`: 単発のROS操作CLI（サービス呼び出し/トピック待ち）。終了コードをそのまま返す
+- `aichallenge/utils/publish.bash`: 単発のROS操作CLI（サービス呼び出し/トピック待ち）。`AIC_SERVICE_CALL_TIMEOUT_S` 等で timeout を調整でき、終了コードをそのまま返す
 - `aichallenge/utils/move_window.bash`: （可能なら）AWSIM/RViz のウィンドウ位置調整。`wmctrl` がない場合は何もしない
 - `aichallenge/build_autoware.bash`: overlay(`aichallenge/workspace/`) のビルド。必要なら `clean` で `build/install/log` を削除
 - `aichallenge/run_simulator.bash`: AWSIM の起動。GPU有無で headless を切り替え、SIM側 Domain を固定（`ROS_DOMAIN_ID=0`）

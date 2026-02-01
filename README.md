@@ -37,6 +37,7 @@ Host: ./run_parallel_submissions.bash --submit <tar.gz> [<tar.gz> ...]
   1) submitごとに eval イメージをビルド（Dockerfile target=eval）
   2) simulator を1回だけ起動
   3) autoware-d1..dN を並列起動（domain id は submit 順に 1..N）
+  4) 停止（down）時に AWSIM 結果（dN-result*.json）を dN/ 配下へ移動して整理
 
 主な出力:
   output/<run_id>/awsim.log

@@ -51,6 +51,7 @@
 ```
 
 - `output/latest -> <run_id>` を参照し、`output/<run_id>/compose.autoware_multi.yml` を使って `docker compose down --remove-orphans` します
+- AWSIM の結果（`dN-result*.json`）は **AWSIM 終了後に生成される**ため、`down` の後に `output/<run_id>/dN/` へ移動して整理します
 
 ### 3) 結果の回収（collect）
 
@@ -60,6 +61,7 @@
 
 AWSIM が生成しがちな `dN-result*.json` を、`output/<run_id>/dN/` へ移動して整理します。
 （`--vehicles` は省略時に `output/latest` と既存ディレクトリから推定します）
+（通常は `down` 実行時に整理される想定ですが、手動で整理したい場合の保険として `collect` を残しています）
 
 ## 出力ディレクトリ構成（重要）
 
@@ -73,7 +75,7 @@ output/<run_id>/
   compose.autoware_multi.yml
   d1/
     autoware.log
-    d1-result-details.json ...（collect で移動される想定）
+    d1-result-details.json ...（down/collect で移動される想定）
   d2/
     autoware.log
   ...
@@ -115,7 +117,7 @@ output/latest -> <run_id>
   - `write_compose_override(out_file, run_id, vehicles, gpu_enabled, images...)`（`autoware-d*` を定義する override を出力）
   - `compose_up(gpu_enabled, ...)`（GPU 時のみ NVIDIA env を付与して `docker compose ...` を呼ぶ薄いラッパ）
 - 終了/回収
-  - `cmd_down()`（override を特定して down、必要なら `collect_results()` を呼ぶ）
+  - `cmd_down()`（override を特定して down の後に `collect_results()` を呼ぶ）
   - `cmd_collect()` / `collect_results()`（`dN-result*.json` を `output/<run_id>/dN/` に整理）
 
 ## compose override の中身（要点）
