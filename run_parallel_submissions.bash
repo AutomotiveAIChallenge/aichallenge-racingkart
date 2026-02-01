@@ -140,21 +140,6 @@ collect_results() {
     done
 }
 
-simulator_container_id() {
-    # Returns the container ID of simulator for the current compose project (if any).
-    local cid=""
-    cid="$(docker compose -f "${COMPOSE_BASE_FILE}" ps -q simulator 2>/dev/null || true)"
-    echo "${cid}"
-}
-
-simulator_is_running() {
-    local cid="${1-}"
-    [ -n "${cid}" ] || return 1
-    local running
-    running="$(docker inspect -f '{{.State.Running}}' "${cid}" 2>/dev/null || echo false)"
-    [ "${running}" = "true" ]
-}
-
 init_run_log() {
     local run_id="$1"
 
@@ -345,30 +330,24 @@ cmd_down() {
 
     sanitize_yaml_tabs_in_place_best_effort "${override_file}" || warn "Failed to sanitize tabs in ${override_file} (continuing)"
 
-    # AWSIM result jsons are generated after AWSIM exits.
-    # Only collect automatically when the simulator container is already not running.
-    local cid
-    cid="$(simulator_container_id)"
-    if [ -n "${cid}" ] && simulator_is_running "${cid}"; then
-        warn "Simulator is still running (cid=${cid}). Skipping result collection. Run later: ./run_parallel_submissions.bash collect"
-    else
-        if [ -n "${run_id}" ]; then
-            local vehicles
-            vehicles="$(detect_vehicles "${run_id}")"
-            if [ "${vehicles}" -gt 0 ]; then
-                log "Collecting AWSIM result jsons into per-domain folders (run_id=${run_id}, vehicles=${vehicles})"
-                collect_results "${run_id}" "${vehicles}" || true
-            fi
-        fi
-    fi
-
     log "docker compose down --remove-orphans (override: ${override_file})"
     if ! docker compose -f "${COMPOSE_BASE_FILE}" -f "${override_file}" config -q >/dev/null 2>&1; then
         warn "docker compose failed to parse override file: ${override_file}"
         cleanup_compose_project_best_effort || true
-        return 0
+    else
+        docker compose -f "${COMPOSE_BASE_FILE}" -f "${override_file}" down --remove-orphans
     fi
-    docker compose -f "${COMPOSE_BASE_FILE}" -f "${override_file}" down --remove-orphans
+
+    # AWSIM result jsons are generated after AWSIM exits.
+    # Collect after stopping simulator so the result files are present.
+    if [ -n "${run_id}" ]; then
+        local vehicles
+        vehicles="$(detect_vehicles "${run_id}")"
+        if [ "${vehicles}" -gt 0 ]; then
+            log "Collecting AWSIM result jsons into per-domain folders (run_id=${run_id}, vehicles=${vehicles})"
+            collect_results "${run_id}" "${vehicles}" || true
+        fi
+    fi
 }
 
 cmd_collect() {

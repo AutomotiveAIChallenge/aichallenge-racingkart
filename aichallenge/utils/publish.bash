@@ -59,24 +59,24 @@ wait_for_topic_once() {
 }
 
 request_capture() {
-    call_service "Capturing screen" 10 \
+    call_service "Capturing screen" "${AIC_SERVICE_CALL_TIMEOUT_S_CAPTURE:-10}" \
         "/debug/service/capture_screen" "std_srvs/srv/Trigger" "{}"
 }
 
 # Function to request control mode
 request_control() {
-    call_service "Requesting control mode change" 10 \
+    call_service "Requesting control mode change" "${AIC_SERVICE_CALL_TIMEOUT_S:-10}" \
         "/control/control_mode_request" "autoware_auto_vehicle_msgs/srv/ControlModeCommand" "{mode: 1}"
 }
 
 # Function to set initial pose
 request_initial_pose_set() {
-    call_service "Requesting initial pose set" 10 \
+    call_service "Requesting initial pose set" "${AIC_SERVICE_CALL_TIMEOUT_S:-10}" \
         "/set_initial_pose" "std_srvs/srv/Trigger" "{}"
 }
 
 check_simulator_ready() {
-    wait_for_topic_once "Waiting for /clock topic to be available" 60 \
+    wait_for_topic_once "Waiting for /clock topic to be available" "${AIC_TOPIC_WAIT_TIMEOUT_S_CLOCK:-60}" \
         "/clock" "rosgraph_msgs/msg/Clock"
 }
 
