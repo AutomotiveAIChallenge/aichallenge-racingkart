@@ -46,12 +46,18 @@ warn() {
 }
 
 cleanup_test_dir() {
+    local rc=$?
     local d="${SETUP_TEST_DIR-}"
     if [ -z "${d}" ]; then
         return 0
     fi
     if [ "${SETUP_TEST_KEEP_DIR:-0}" = "1" ]; then
         log "${INFO} Keeping temp dir: ${d}"
+        return 0
+    fi
+    if [ "${rc}" -ne 0 ]; then
+        warn "${WARN} Keeping temp dir due to non-zero exit code (${rc}): ${d}"
+        warn "${INFO} To delete manually: rm -rf ${d}"
         return 0
     fi
     case "${d}" in
@@ -188,7 +194,7 @@ Usage:
   ./setup.bash bootstrap --yes
                             # non-interactive bootstrap (auto-yes)
   ./setup.bash bootstrap --temp-dir [--keep-dir]
-                            # clone into a temp dir (deleted on exit by default)
+                            # clone into a temp dir (deleted on successful exit by default)
 
 Notes:
   - By design, this script DOES NOT install system packages by default.
@@ -582,7 +588,7 @@ Options:
   --repo URL            Repo URL (default: https://github.com/AutomotiveAIChallenge/aichallenge-racingkart.git)
   --branch NAME         Git branch (default: main)
   --dir PATH            Clone destination (default: ~/aichallenge-racingkart)
-  --temp-dir            Use a temporary directory for --dir (auto-removed on exit)
+  --temp-dir            Use a temporary directory for --dir (auto-removed on successful exit)
   --keep-dir            Keep --temp-dir directory (for debugging)
                        (Note: running 'make dev' keeps the directory automatically)
   --skip-pull-image     Skip pulling Autoware base image
