@@ -56,6 +56,7 @@ cleanup_test_dir() {
     fi
     case "${d}" in
     /tmp/aichallenge-racingkart-test.*)
+        log "${INFO} Removing temp dir: ${d}"
         rm -rf "${d}" >/dev/null 2>&1 || true
         ;;
     *)
@@ -583,6 +584,7 @@ Options:
   --dir PATH            Clone destination (default: ~/aichallenge-racingkart)
   --temp-dir            Use a temporary directory for --dir (auto-removed on exit)
   --keep-dir            Keep --temp-dir directory (for debugging)
+                       (Note: running 'make dev' keeps the directory automatically)
   --skip-pull-image     Skip pulling Autoware base image
   --skip-awsim          Skip downloading AWSIM.zip
   --skip-build          Skip ./docker_build.sh dev
@@ -715,6 +717,11 @@ EOF
             fi
             if confirm_step "Run make dev DOMAIN_ID=${DOMAIN_ID:-1}"; then
                 do_make_dev=1
+                if [ "${use_temp_dir}" -eq 1 ] && [ "${keep_dir}" -ne 1 ]; then
+                    keep_dir=1
+                    SETUP_TEST_KEEP_DIR=1
+                    warn "${WARN} --temp-dir: keeping directory because 'make dev' starts long-lived containers (needed for make down/logs)"
+                fi
             fi
         fi
     else
@@ -786,7 +793,21 @@ EOF
         bootstrap_repo_targets "${dest_dir}" "${DOMAIN_ID:-1}" "${do_make_autoware_build}" "${do_make_dev}" || true
     fi
 
-    cat <<EOF
+    if [ "${use_temp_dir}" -eq 1 ] && [ "${keep_dir}" -ne 1 ]; then
+        cat <<EOF
+
+${OK} Bootstrap finished.
+
+Repo dir:
+  (temp dir; auto-removed on exit) ${dest_dir}
+  Tip: re-run with --keep-dir to keep it.
+
+Common commands:
+  make autoware-build
+  make dev DOMAIN_ID=1
+EOF
+    else
+        cat <<EOF
 
 ${OK} Bootstrap finished.
 
@@ -797,6 +818,7 @@ Common commands:
   make autoware-build
   make dev DOMAIN_ID=1
 EOF
+    fi
 
     if [ "${enter_shell}" -eq 1 ]; then
         if [ -r /dev/tty ]; then
@@ -996,7 +1018,6 @@ EOF
 
     local cookie
     cookie="$(mktemp /tmp/awsim-cookie.XXXXXX)"
-    trap 'rm -f "$cookie"' RETURN
 
     # SharePoint/OneDrive may require cookies across redirects; use a cookie jar.
     # Support resume (-C -) since the file is large.
@@ -1012,6 +1033,7 @@ EOF
             -c "$cookie" -b "$cookie" \
             "$download_url" -o "$zip_path"
     fi
+    rm -f "$cookie" || true
 
     ZIP_PATH="$zip_path" python3 - <<'PY'
 import os
