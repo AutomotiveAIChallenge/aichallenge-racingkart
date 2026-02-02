@@ -83,14 +83,14 @@ TeleopManagerNode::TeleopManagerNode()
     "/ackermann_cmd", 10, std::bind(&TeleopManagerNode::ack_callback, this, _1));
 
   status_sub_ = create_subscription<std_msgs::msg::Float32MultiArray>(
-    "/aichallenge/awsim/status", 10, std::bind(&TeleopManagerNode::status_callback, this, _1));
+    "/admin/awsim/status", 10, std::bind(&TeleopManagerNode::status_callback, this, _1));
 
   drive_pub_   = create_publisher<autoware_auto_control_msgs::msg::AckermannControlCommand>("/awsim/control_cmd", 10);
   trigger_pub_ = create_publisher<std_msgs::msg::Bool>("/rosbag2_recorder/trigger", 10);
 
   awsim_trigger_pub_ = create_publisher<std_msgs::msg::Bool>("/awsim/control_mode_request_topic", 10);
 
-  reset_publisher_ = create_publisher<std_msgs::msg::Empty>("/aichallenge/awsim/reset", 10);
+  reset_publisher_ = create_publisher<std_msgs::msg::Empty>("/admin/awsim/reset", 10);
   initialpose_publisher_ = create_publisher<geometry_msgs::msg::PoseWithCovarianceStamped>("/initialpose", 10);
 
   
@@ -150,7 +150,7 @@ void TeleopManagerNode::joy_callback(const sensor_msgs::msg::Joy::SharedPtr msg)
   if (check_button_press(curr_reset_button, prev_reset_button_pressed_)) {
     auto empty_msg = std::make_unique<std_msgs::msg::Empty>();
     reset_publisher_->publish(std::move(empty_msg));
-    RCLCPP_INFO(get_logger(), "Published Empty message to /aichallenge/awsim/reset");
+    RCLCPP_INFO(get_logger(), "Published Empty message to /admin/awsim/reset");
     auto pose_msg = std::make_unique<geometry_msgs::msg::PoseWithCovarianceStamped>(reset_pose_msg_);
   
     // pose_msg->header.stamp = this->get_clock()->now();

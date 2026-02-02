@@ -92,6 +92,16 @@ aic_eval_backend_wait_sim_ready() {
     dc run --rm --no-deps "${cmd_svc}"
 }
 
+aic_eval_backend_wait_admin_status_ready() {
+    local CMD="env ROS_DOMAIN_ID=${AIC_EVAL_SIM_DOMAIN_ID:-0} /aichallenge/utils/publish.bash wait-admin-status"
+    dc run --rm --no-deps "${cmd_svc}"
+}
+
+aic_eval_backend_wait_d_status_ready() {
+    local CMD="env ROS_DOMAIN_ID=${AIC_EVAL_SIM_DOMAIN_ID:-0} /aichallenge/utils/publish.bash wait-d-status ${AIC_EVAL_DOMAIN_ID}"
+    dc run --rm --no-deps "${cmd_svc}"
+}
+
 aic_eval_backend_start_autoware() {
     local RUN_MODE="awsim"
     dc up -d --force-recreate "${autoware_svc}"
@@ -121,6 +131,14 @@ aic_eval_backend_start_capture_best_effort() {
 aic_eval_backend_start_rosbag_best_effort() {
     dc up -d --force-recreate "${rosbag_svc}" >/dev/null 2>&1 || true
     rosbag_started=1
+}
+
+aic_eval_backend_wait_before_finish() {
+    if [ "${AIC_EVAL_WAIT_ADMIN_STATUS_FINISH:-0}" != "1" ]; then
+        return 0
+    fi
+    local CMD="env ROS_DOMAIN_ID=${AIC_EVAL_SIM_DOMAIN_ID:-0} AIC_TOPIC_WAIT_TIMEOUT_S_ADMIN_STATUS=${AIC_EVAL_ADMIN_STATUS_FINISH_TIMEOUT_S:-1800} /aichallenge/utils/publish.bash wait-admin-status FinishALL"
+    dc run --rm --no-deps "${cmd_svc}" || true
 }
 
 aic_eval_backend_wait_sim_finish() {
