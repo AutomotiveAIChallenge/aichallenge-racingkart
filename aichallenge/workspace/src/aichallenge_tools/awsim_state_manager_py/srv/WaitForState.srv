@@ -1,8 +1,0 @@
-# Wait until /admin/awsim/state becomes one of expected_states.
-# If expected_states is empty, wait until the first state is received.
-string[] expected_states
-int32 timeout_sec
----
-bool success
-string state
-string message
