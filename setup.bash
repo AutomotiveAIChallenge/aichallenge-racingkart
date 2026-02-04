@@ -1232,7 +1232,7 @@ doctor() {
     echo "${INFO} 4) Download AWSIM:     ./setup.bash download awsim"
     echo "${INFO} 5) Build image:        ./docker_build.sh dev"
     echo "${INFO} 6) Build Autoware:     make autoware-build && docker compose logs -f autoware-build"
-    echo "${INFO} 7) Run evaluation:     make eval  (optional: ROSBAG=true CAPTURE=true)"
+    echo "${INFO} 7) Run evaluation:     ./run_evaluation.bash  (optional: ROSBAG=true CAPTURE=true)"
     echo "${INFO} 8) Start dev:          make dev DOMAIN_ID=1"
     echo "${INFO} 9) Dev shell:          docker compose run --rm -it --entrypoint bash autoware"
 

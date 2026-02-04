@@ -20,7 +20,7 @@ Toward the competition, we will update the following pages to provide informatio
 
 ```text
 Host (you)
-  ├─ make autoware-build / make eval / make dev / make simulator ...
+  ├─ make autoware-build / ./run_evaluation.bash / make dev / make simulator ...
   └─ docker compose
         ├─ simulator        (AWSIM)
         ├─ autoware         (Autoware)

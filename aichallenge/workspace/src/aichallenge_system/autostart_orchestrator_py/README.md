@@ -72,7 +72,7 @@ AWSIM の `/admin/awsim/state` は **`ROS_DOMAIN_ID=0` 側**で流れている�
 1. initial pose set（service: `/set_initial_pose` / `std_srvs/srv/Trigger`）
 2. request control mode（topic: `/awsim/control_mode_request_topic` / `std_msgs/msg/Bool`）
 3. （必要なら）screen capture start（service: `/debug/service/capture_screen` / `std_srvs/srv/Trigger`）
-4. （必要なら）rosbag record start（`/aichallenge/utils/record_rosbag.bash` をサブプロセス起動）
+4. （必要なら）rosbag record start（`ros2 bag record` をサブプロセス起動。シェルは使わない）
 
 > 実装（現状）:
 > - initial pose / control mode はノード起動直後に best-effort 実行
@@ -107,7 +107,12 @@ AWSIM の `/admin/awsim/state` は **`ROS_DOMAIN_ID=0` 側**で流れている�
 ### `autostart_orchestrator_py` のノードパラメータ（必要ならlaunch側で上書き）
 - `wait_service_timeout_sec` / `call_timeout_sec`（サービス待ち/呼び出しタイムアウト）
 - `finish_wait_timeout_sec`（開始/停止トリガ待ちのタイムアウト）
-- `rosbag_cmd` / `rosbag_log_file` / `output_dir`（rosbag 実行コマンド、ログ、出力先）
+- `output_dir` / `rosbag_log_file`（rosbag 実行ログ、出力先）
+- `rosbag_topics` / `rosbag_output`（記録対象topic、出力bag名）
+- `rosbag_storage_id` / `rosbag_compression_format` / `rosbag_compression_mode`（保存形式・圧縮設定）
+- `rosbag_extra_args`（`ros2 bag record` への追加引数）
+- `rosbag_argv_override`（`subprocess` に渡すargvを完全上書き。テスト/特殊用途向け）
+- `rosbag_cmd`（deprecated: `shlex` でargv化して実行。シェルは使わない）
 - `initial_pose_service` / `capture_service`（サービス名）
 - `control_mode`（`1`=AUTONOMOUS, `0`=MANUAL）
 - `control_mode_request_topic`（default: `/awsim/control_mode_request_topic`）

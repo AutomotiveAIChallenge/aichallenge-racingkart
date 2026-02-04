@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import os
 import signal
+import shlex
 import subprocess
 import threading
 import time
@@ -14,6 +15,8 @@ from typing import Optional
 import rclpy
 from rclpy.callback_groups import ReentrantCallbackGroup
 from rclpy.node import Node
+from rclpy.parameter import Parameter
+from rcl_interfaces.msg import ParameterDescriptor
 from std_msgs.msg import Bool
 from std_msgs.msg import String
 from std_srvs.srv import Trigger
@@ -60,7 +63,33 @@ class AutostartOrchestrator(Node):
         self.declare_parameter("finish_wait_timeout_sec", 1800)
 
         self.declare_parameter("output_dir", "")  # default: $OUTPUT_RUN_DIR or "."
-        self.declare_parameter("rosbag_cmd", "bash /aichallenge/utils/record_rosbag.bash")
+        # rosbag recording (no shell; executed via subprocess argv)
+        self.declare_parameter(
+            "rosbag_topics",
+            [
+                "/awsim/control_cmd",
+                "/clock",
+                "/localization/acceleration",
+                "/localization/kinematic_state",
+            ],
+        )
+        self.declare_parameter("rosbag_output", "rosbag2_autoware")
+        self.declare_parameter("rosbag_storage_id", "mcap")
+        self.declare_parameter("rosbag_compression_format", "zstd")
+        self.declare_parameter("rosbag_compression_mode", "file")
+        self.declare_parameter(
+            "rosbag_extra_args",
+            [],
+            ParameterDescriptor(type=Parameter.Type.STRING_ARRAY.value),
+        )
+        # Optional: fully override argv (useful for tests / advanced usage).
+        self.declare_parameter(
+            "rosbag_argv_override",
+            [],
+            ParameterDescriptor(type=Parameter.Type.STRING_ARRAY.value),
+        )
+        # Deprecated: kept for backward compatibility; parsed with shlex (no shell execution).
+        self.declare_parameter("rosbag_cmd", "")
         self.declare_parameter("rosbag_log_file", "rosbag_autostart.log")
 
         self.declare_parameter("exit_on_finish", True)
@@ -170,21 +199,54 @@ class AutostartOrchestrator(Node):
         path.mkdir(parents=True, exist_ok=True)
         return path
 
+    def _rosbag_argv(self) -> list[str]:
+        argv_override = list(self.get_parameter("rosbag_argv_override").value or [])
+        argv_override = [str(x) for x in argv_override if str(x).strip()]
+        if argv_override:
+            return argv_override
+
+        rosbag_cmd = str(self.get_parameter("rosbag_cmd").value or "").strip()
+        if rosbag_cmd:
+            self.get_logger().warn("rosbag_cmd is deprecated; prefer rosbag_* parameters (executing without shell)")
+            return shlex.split(rosbag_cmd)
+
+        topics = list(self.get_parameter("rosbag_topics").value or [])
+        topics = [str(t).strip() for t in topics if str(t).strip()]
+        if not topics:
+            return []
+
+        output = str(self.get_parameter("rosbag_output").value)
+        storage_id = str(self.get_parameter("rosbag_storage_id").value)
+        compression_format = str(self.get_parameter("rosbag_compression_format").value)
+        compression_mode = str(self.get_parameter("rosbag_compression_mode").value)
+        extra_args = list(self.get_parameter("rosbag_extra_args").value or [])
+        extra_args = [str(x) for x in extra_args if str(x).strip()]
+
+        argv: list[str] = ["ros2", "bag", "record"]
+        argv.extend(topics)
+        argv.extend(["-o", output, "-s", storage_id])
+        argv.extend(["--compression-format", compression_format, "--compression-mode", compression_mode])
+        argv.extend(extra_args)
+        return argv
+
     def _start_rosbag(self) -> None:
         if self._rosbag_proc is not None:
             return
 
         output_dir = self._output_dir()
         log_path = output_dir / str(self.get_parameter("rosbag_log_file").value)
-        cmd = str(self.get_parameter("rosbag_cmd").value)
+        argv = self._rosbag_argv()
+        if not argv:
+            self.get_logger().warn("skip rosbag start (no topics/argv configured)")
+            return
 
-        self.get_logger().info(f"start-rosbag: {cmd} (cwd={output_dir}) -> {log_path}")
+        self.get_logger().info(f"start-rosbag: argv={argv} (cwd={output_dir}) -> {log_path}")
         log_path.parent.mkdir(parents=True, exist_ok=True)
         log_fp = open(log_path, "ab", buffering=0)  # noqa: SIM115
 
         try:
             self._rosbag_proc = subprocess.Popen(
-                ["bash", "-lc", cmd],
+                argv,
                 cwd=str(output_dir),
                 stdout=log_fp,
                 stderr=subprocess.STDOUT,

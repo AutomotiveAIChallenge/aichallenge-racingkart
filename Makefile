@@ -2,7 +2,7 @@
 SHELL := /bin/bash
 
 .PHONY: autoware-build autoware-vehicle autoware-simulator autoware-request-initialpose autoware-request-control autoware-driver-zenoh \
-	simulator simulator-reset dev eval test driver zenoh download rviz2 down ps
+	simulator simulator-reset dev driver zenoh download rviz2 down ps
 
 # GPU selection:
 # - DEVICE=auto (default): enable GPU override if NVIDIA is detected
@@ -53,9 +53,6 @@ HOST_UID ?= $(shell id -u)
 HOST_GID ?= $(shell id -g)
 export HOST_UID HOST_GID
 
-# Evaluation options (compatible with run_evaluation.bash)
-# Usage:
-#   make eval [ROSBAG=true] [CAPTURE=true] [DOMAIN_ID=1] [OUTPUT_ROOT=/output] [RESULT_WAIT_SECONDS=10]
 ROSBAG ?= false
 CAPTURE ?= false
 DOMAIN_ID ?= 1
@@ -149,27 +146,6 @@ dev:
 	@$(MAKE) simulator SIM_MODE=dev
 	@$(MAKE) autoware-simulator DOMAIN_ID=$(DOMAIN_ID)
 	@echo "To stop: make down  (docker compose down --remove-orphans)"
-
-# make eval ROSBAG=true CAPTURE=true
-eval:
-	@RUN_ID="$(RUN_ID)" RUN_GROUP="$(RUN_GROUP)" \
-		OUTPUT_ROOT="$(OUTPUT_ROOT)" DOMAIN_IDS="$(DOMAIN_IDS)" RESULT_WAIT_SECONDS="$(RESULT_WAIT_SECONDS)" \
-		ROSBAG="$(ROSBAG)" CAPTURE="$(CAPTURE)" \
-		SIMULATOR_SERVICE="$(SIMULATOR_SERVICE)" AUTOWARE_SERVICE="$(AUTOWARE_SERVICE)" \
-		AW_CMD_SERVICE="$(AW_CMD_SERVICE)" \
-		DC="$(DC)" \
-		bash aichallenge/utils/run_sim_eval.bash
-
-# Smoke test: enable capture+rosbag and run AWSIM in "test" mode (1 vehicle, 1 lap).
-test:
-	@RUN_ID="$(RUN_ID)" RUN_GROUP="$(RUN_GROUP)" \
-		OUTPUT_ROOT="$(OUTPUT_ROOT)" DOMAIN_IDS="$(DOMAIN_ID)" RESULT_WAIT_SECONDS="$(RESULT_WAIT_SECONDS)" \
-		ROSBAG="true" CAPTURE="true" \
-		SIMULATOR_SERVICE="$(SIMULATOR_SERVICE)" AUTOWARE_SERVICE="$(AUTOWARE_SERVICE)" \
-		AW_CMD_SERVICE="$(AW_CMD_SERVICE)" \
-		SIM_MODE="test" \
-		DC="$(DC)" \
-		bash aichallenge/utils/run_sim_eval.bash
 
 # remote operation (docker compose up -d rviz2)
 rviz2:

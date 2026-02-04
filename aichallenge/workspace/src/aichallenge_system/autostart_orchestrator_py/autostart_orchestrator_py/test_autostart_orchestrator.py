@@ -145,10 +145,22 @@ def main() -> int:
     output_lock = threading.Lock()
     try:
         out_dir.mkdir(parents=True, exist_ok=True)
-        rosbag_cmd = (
-            "echo 'FAKE_ROSBAG: started'; "
-            "trap \"echo 'FAKE_ROSBAG: exiting'; exit 0\" INT TERM; "
-            "while :; do sleep 1; done"
+        fake_rosbag_code = "\n".join(
+            [
+                "import signal",
+                "import time",
+                "import sys",
+                "",
+                "def _handler(_sig, _frm):",
+                "    print('FAKE_ROSBAG: exiting', flush=True)",
+                "    raise SystemExit(0)",
+                "",
+                "signal.signal(signal.SIGINT, _handler)",
+                "signal.signal(signal.SIGTERM, _handler)",
+                "print('FAKE_ROSBAG: started', flush=True)",
+                "while True:",
+                "    time.sleep(1.0)",
+            ]
         )
 
         params_file = out_dir / "autostart_orchestrator_test_params.yaml"
@@ -171,8 +183,11 @@ def main() -> int:
                     f"    output_dir: \"{str(out_dir)}\"",
                     "    rosbag_log_file: \"rosbag_test.log\"",
                     "    exit_on_finish: true",
-                    "    rosbag_cmd: |",
-                    f"      {rosbag_cmd}",
+                    "    rosbag_argv_override:",
+                    "      - python3",
+                    "      - -c",
+                    "      - |",
+                    *[f"          {line}" for line in fake_rosbag_code.splitlines()],
                     "",
                 ]
             ),

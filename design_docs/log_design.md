@@ -18,8 +18,8 @@
   - `docker_run.sh` は `--volume output:/output` のみ（`eval` の場合）
   - `eval` イメージは `CMD ["bash", "/aichallenge/run_evaluation.bash"]` で評価が走る
   - **注意:** `eval` ではホストの `./aichallenge` がコンテナにマウントされないため、スクリプト変更を反映するには **eval イメージの再ビルドが必要**
-- **推奨（docker compose / Makefile）**
-  - `make eval ...`
+- **推奨（docker compose）**
+  - `./run_evaluation.bash`（必要なら `ROSBAG=true CAPTURE=true DOMAIN_IDS=...` などを付与）
   - `docker-compose.yml` で `./output:/output` と `./aichallenge:/aichallenge` をマウント
   - **注意:** compose ではホスト側の `aichallenge/` が見えるため、スクリプト変更は再ビルド無しで反映される（イメージ依存の部分を除く）
 
@@ -124,7 +124,7 @@ Run ディレクトリに以下の情報を保存する（例）。
 - `eval` は `./aichallenge:/aichallenge` をマウントしないため、**スクリプト変更は `./docker_build.sh eval` が必要**
 - ただし `/output` は常にマウントされるため、**ログ/成果物の集約先は一貫して `/output` にできる**
 
-### 5.2 compose（`make eval`）の注意
+### 5.2 compose（`./run_evaluation.bash`）の注意
 
 - `/aichallenge` はホストマウントされるため、スクリプト改修は反映されやすい
 - 一方で複数サービスを跨ぐため、host 側ログ（`compose.log` 等）を `output/_host` に残す価値が高い

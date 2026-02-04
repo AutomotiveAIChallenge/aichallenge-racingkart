@@ -1,8 +1,45 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+usage() {
+    cat <<'USAGE'
+Usage:
+  ./run_evaluation.bash [test]
+
+Modes:
+  (default)  Evaluation mode (SIM_MODE=eval by default)
+  test       Smoke-test mode (forces SIM_MODE=test, ROSBAG=true, CAPTURE=true, single DOMAIN_ID)
+
+Environment variables (examples):
+  DOMAIN_ID=1 DOMAIN_IDS=1,2,3 OUTPUT_ROOT=/output ROSBAG=true CAPTURE=true ./run_evaluation.bash
+USAGE
+}
+
+mode="${1-}"
+case "${mode}" in
+"") ;;
+test)
+    shift
+    # Equivalent to the old `make test`: run AWSIM in test mode and enable capture+rosbag.
+    export SIM_MODE="test"
+    export ROSBAG="true"
+    export CAPTURE="true"
+    # Force single-domain run for smoke tests.
+    export DOMAIN_IDS="${DOMAIN_ID:-1}"
+    ;;
+-h | --help | help)
+    usage
+    exit 0
+    ;;
+*)
+    echo "invalid argument: '${mode}'" >&2
+    usage >&2
+    exit 2
+    ;;
+esac
+
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-REPO_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
+REPO_ROOT="${SCRIPT_DIR}"
 cd "${REPO_ROOT}"
 
 run_id="${RUN_ID:-$(date +%Y%m%d-%H%M%S)}"
