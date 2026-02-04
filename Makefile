@@ -65,20 +65,6 @@ RESULT_WAIT_SECONDS ?= 10
 RUN_ID ?=
 RUN_GROUP ?=
 
-# Window matching overrides for move_window.bash (optional)
-# Tips:
-#   - Set MOVE_WINDOW_DEBUG=1 to print candidates from wmctrl
-#   - Narrow AWSIM_*_REGEX when it grabs the wrong window
-AWSIM_TITLE_REGEX ?=
-AWSIM_CLASS_REGEX ?=
-RVIZ_TITLE_REGEX ?=
-RVIZ_CLASS_REGEX ?=
-MOVE_WINDOW_DEBUG ?= 0
-MOVE_WINDOW_PREFER_LARGEST ?= 1
-MOVE_WINDOW_QUIET ?= 1
-MOVE_WINDOW_TIMEOUT_S ?= 10
-export AWSIM_TITLE_REGEX AWSIM_CLASS_REGEX RVIZ_TITLE_REGEX RVIZ_CLASS_REGEX MOVE_WINDOW_DEBUG MOVE_WINDOW_PREFER_LARGEST MOVE_WINDOW_QUIET MOVE_WINDOW_TIMEOUT_S
-
 # autowareのbuildのみ
 autoware-build:
 	$(DC) up -d --force-recreate $(AIC_BUILD_SERVICE)
