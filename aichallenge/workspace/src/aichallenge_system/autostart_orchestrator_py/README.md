@@ -94,19 +94,25 @@ AWSIM の `/admin/awsim/state` は **`ROS_DOMAIN_ID=0` 側**で流れている�
 
 ## 失敗時の方針
 - どの段階で失敗しても、可能な範囲で **記録系を停止**してから `ERROR` に遷移する
-- `ERROR` でも result converter などの後処理を回すかは設定で切り替える
+- 開始/停止トリガ待ちのタイムアウトは `fail_on_timeout` で扱いを切り替える（default: true）
+  - true: ERROR 扱い（必要なら記録停止して非0終了）
+  - false: WARN 扱い（可能な範囲で継続）
 
 ## パラメータ
 ### `aichallenge_system_launch/launch/mode/awsim.launch.xml` の引数（AWSIM時のみ有効）
 - `capture`（true/false: 画面キャプチャを開始/停止する）
 - `rosbag`（true/false: rosbag を開始/停止する）
-- `vehicle_ns`（通常は `ROS_DOMAIN_ID` から `d<ROS_DOMAIN_ID>` を自動決定。必要ならノードパラメータで上書き）
-- `start_on_vehicle_state`（default推奨: `TimingStart`。空にすると即開始）
+- `start_on_vehicle_state`（default: 空 = 即開始）
 - `stop_on_vehicle_state`（default推奨: `Finish`。空にすると自動停止しない）
+- `exit_on_finish`（default: false。true だと stop 後にノードが終了する）
+- `fail_on_timeout`（default: true。start/stop トリガ待ちがタイムアウトしたら ERROR 扱いにする）
 
 ### `autostart_orchestrator_py` のノードパラメータ（必要ならlaunch側で上書き）
+- `vehicle_ns` / `vehicle_state_topic`（車両状態topic。デフォルトは `/<vehicle_ns>/awsim/state`）
 - `wait_service_timeout_sec` / `call_timeout_sec`（サービス待ち/呼び出しタイムアウト）
 - `finish_wait_timeout_sec`（開始/停止トリガ待ちのタイムアウト）
+- `exit_on_finish`（stop 完了後にノード終了するか）
+- `fail_on_timeout`（start/stop トリガ待ちタイムアウトを ERROR 扱いにするか）
 - `output_dir` / `rosbag_log_file`（rosbag 実行ログ、出力先）
 - `rosbag_topics` / `rosbag_output`（記録対象topic、出力bag名）
 - `rosbag_storage_id` / `rosbag_compression_format` / `rosbag_compression_mode`（保存形式・圧縮設定）
