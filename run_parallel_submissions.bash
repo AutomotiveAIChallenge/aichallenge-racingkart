@@ -41,8 +41,8 @@ Env:
                          auto: enable GPU if /dev/nvidia0 exists
                          gpu : force GPU override (requires Docker-side NVIDIA support)
                          cpu : never use GPU override
-  CAPTURE=true|false     Enable submit-side autostart capture toggle (default: false)
-  ROSBAG=true|false      Enable submit-side autostart rosbag recording (default: false)
+  CAPTURE=true|false     Enable autostart_orchestrator capture toggle (default: false)
+  ROSBAG=true|false      Enable autostart_orchestrator rosbag recording (default: false)
   AIC_PARALLEL_COMPOSE_PROJECT=<name>
                          Override docker compose project name (default: auto)
 EOF
@@ -374,11 +374,13 @@ cmd_down() {
     fi
 
     log "docker compose down --remove-orphans (project: ${project}, override: ${override_file})"
-    if ! docker compose -p "${project}" -f "${COMPOSE_BASE_FILE}" -f "${COMPOSE_GPU_FILE}" -f "${override_file}" config -q >/dev/null 2>&1; then
+    if docker compose -p "${project}" -f "${COMPOSE_BASE_FILE}" -f "${override_file}" config -q >/dev/null 2>&1; then
+        docker compose -p "${project}" -f "${COMPOSE_BASE_FILE}" -f "${override_file}" down --remove-orphans
+    elif docker compose -p "${project}" -f "${COMPOSE_BASE_FILE}" -f "${COMPOSE_GPU_FILE}" -f "${override_file}" config -q >/dev/null 2>&1; then
+        docker compose -p "${project}" -f "${COMPOSE_BASE_FILE}" -f "${COMPOSE_GPU_FILE}" -f "${override_file}" down --remove-orphans
+    else
         warn "docker compose failed to parse override file: ${override_file}"
         cleanup_compose_project_best_effort "${project}" || true
-    else
-        docker compose -p "${project}" -f "${COMPOSE_BASE_FILE}" -f "${COMPOSE_GPU_FILE}" -f "${override_file}" down --remove-orphans
     fi
 
     # AWSIM result jsons are generated after AWSIM exits.
@@ -431,7 +433,11 @@ run_autoware_command_best_effort() {
     local project="$2"
     local cmd="$3"
 
-    CMD="${cmd}" compose_up "${gpu_enabled}" "${project}" -f "${COMPOSE_BASE_FILE}" -f "${COMPOSE_GPU_FILE}" run --rm --no-deps autoware-command || return 1
+    if [ "${gpu_enabled}" = "1" ]; then
+        CMD="${cmd}" compose_up "${gpu_enabled}" "${project}" -f "${COMPOSE_BASE_FILE}" -f "${COMPOSE_GPU_FILE}" run --rm --no-deps autoware-command || return 1
+    else
+        CMD="${cmd}" compose_up "${gpu_enabled}" "${project}" -f "${COMPOSE_BASE_FILE}" run --rm --no-deps autoware-command || return 1
+    fi
 }
 
 main() {
@@ -536,11 +542,12 @@ main() {
         sim_mode="${vehicles}p"
     fi
     log "Simulator mode: ${sim_mode}"
+    local -a compose_args=(-f "${COMPOSE_BASE_FILE}")
     if [ "${gpu_enabled}" = "1" ]; then
-        EVAL_RUN=1 OUTPUT_RUN_DIR="/output/${run_id}" SIM_MODE="${sim_mode}" compose_up "${gpu_enabled}" "${project}" -f "${COMPOSE_BASE_FILE}" -f "${COMPOSE_GPU_FILE}" up -d --force-recreate simulator
-    else
-        EVAL_RUN=1 OUTPUT_RUN_DIR="/output/${run_id}" SIM_MODE="${sim_mode}" compose_up "${gpu_enabled}" "${project}" -f "${COMPOSE_BASE_FILE}" up -d --force-recreate simulator
+        compose_args+=(-f "${COMPOSE_GPU_FILE}")
     fi
+    EVAL_RUN=1 OUTPUT_RUN_DIR="/output/${run_id}" SIM_MODE="${sim_mode}" \
+        compose_up "${gpu_enabled}" "${project}" "${compose_args[@]}" up -d --force-recreate simulator
 
     local -a autoware_svcs=()
     for domain_id in $(seq 1 "${vehicles}"); do
@@ -548,11 +555,7 @@ main() {
     done
 
     log "Starting ${autoware_svcs[*]} (concurrent)"
-    if [ "${gpu_enabled}" = "1" ]; then
-        compose_up "${gpu_enabled}" "${project}" -f "${COMPOSE_BASE_FILE}" -f "${COMPOSE_GPU_FILE}" -f "${override_file}" up -d --force-recreate "${autoware_svcs[@]}"
-    else
-        compose_up "${gpu_enabled}" "${project}" -f "${COMPOSE_BASE_FILE}" -f "${override_file}" up -d --force-recreate "${autoware_svcs[@]}"
-    fi
+    compose_up "${gpu_enabled}" "${project}" "${compose_args[@]}" -f "${override_file}" up -d --force-recreate "${autoware_svcs[@]}"
 
     log "Waiting for AWSIM readiness (/admin/awsim/state)"
     run_autoware_command_best_effort "${gpu_enabled}" "${project}" "env ROS_DOMAIN_ID=0 /aichallenge/utils/publish.bash wait-admin-state" || die "AWSIM readiness check failed"
@@ -560,7 +563,7 @@ main() {
     log "Waiting for Autoware startup"
     sleep "${AIC_EVAL_AUTOWARE_START_SLEEP_SECONDS:-3}" || true
 
-    log "Initial pose / control request is handled by the submit-side autostart launch (AWSIM only)"
+    log "Initial pose / control / (optional) capture+rosbag are handled by autostart_orchestrator_py (AWSIM only)"
 
     log "Started. Output: output/${run_id}/d*/autoware.log"
     log "Stop: ./run_parallel_submissions.bash down"

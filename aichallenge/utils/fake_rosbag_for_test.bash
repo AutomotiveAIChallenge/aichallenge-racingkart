@@ -13,4 +13,3 @@ trap cleanup INT TERM
 while :; do
     sleep 1
 done
-

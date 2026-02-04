@@ -6,8 +6,6 @@
 ## 設計方針（読みやすさ優先）
 
 - 1コマンド1責務: `run_evaluation.bash` はオーケストレーション、`utils/publish.bash` は「単発のROS操作」に寄せる
-- 失敗は終了コードで返す: 呼び出し側は `$?` か `run_or_exit` で一貫して判定できる
-- 無限待ちを避ける: `timeout` を基本にして、待ち/サービス呼び出しのハングを防ぐ
 - Ctrl+C で確実に止まる: `EXIT` の cleanup と `SIGINT/SIGTERM` のハンドラを分けて扱う
 - Domain ID の副作用を局所化: できるだけ `env ROS_DOMAIN_ID=... <cmd>` で「そのコマンドだけ」切り替える
 - ビルドはコンテナ内で完結: ホスト（src環境）でのビルドは前提にしない
@@ -55,44 +53,6 @@
 
 ## 評価フロー（現状）
 
-以下の流れで評価をオーケストレーションします。
+評価の詳細（オーケストレーション）は、`autostart_orchestrator_py` 側のドキュメントに集約しました。
 
-1. 出力ディレクトリ作成（`/output/<timestamp>/d<domain_id>`、`/output/latest` シンボリックリンク）
-2. ROS/Autoware/overlay 環境の `source` と `ROS_DOMAIN_ID` の設定
-3. ネットワーク設定（`sudo -n ...` を best-effort 実行）
-4. AWSIM 起動（`run_simulator.bash eval` を起動）
-5. AWSIM 準備待ち（`utils/publish.bash wait-admin-state`。`/admin/awsim/state` を受け取るまで待つ。**ROS_DOMAIN_ID=0 のみ**）
-6. Autoware 起動（`run_autoware.bash awsim <domain>` を起動）
-7. （可能なら）ウィンドウ移動（`wmctrl` がある場合のみ、タイムアウト付き）
-8. `aichallenge_system/autostart_orchestrator_py`を起動し、
-   1. `awsim/state`が`Spawned`のとき以下を順に実行:
-      1. `/set_initial_pose`（`std_srvs/srv/Trigger`）
-      2. `/awsim/control_mode_request_topic`（`std_msgs/msg/Bool`。`true`=AUTONOMOUS `false`=MANUAL）
-      3. `capture:=true` のとき `/debug/service/capture_screen`（`std_srvs/srv/Trigger`）
-      4. `rosbag:=true`rosbag開始`utils/record_rosbag.bash`
-   2. `awsim/state`が`Finished`のとき以下を順に実行(heart beatがなくなったときは今後検討)
-      1. d*result.jsonがあればresutl converterの起動（要検討）
-      2. `capture:=true` のとき `/debug/service/capture_screen`（`std_srvs/srv/Trigger`）で停止
-      3. `rosbag:=true`rosbag開始record停止
-9. autowareとawsim終了
-
-### フロー図（Mermaid）
-
-```mermaid
-flowchart TD
-  S([評価開始]) --> O1[1. 出力ディレクトリ作成<br/>/output/&lt;timestamp&gt;/d&lt;domain_id&gt;<br/>/output/latest symlink]
-  O1 --> O2[2. ROS/Autoware/overlay を source<br/>ROS_DOMAIN_ID 設定]
-  O2 --> O3[3. ネットワーク設定<br/>sudo -n ... (best-effort)]
-  O3 --> O4[4. AWSIM 起動<br/>run_simulator.bash eval]
-  O4 --> O5[5. AWSIM 準備待ち<br/>utils/publish.bash wait-admin-state<br/>/admin/awsim/state を受信するまで<br/>※ ROS_DOMAIN_ID=0 のみ]
-  O5 --> O7[6. Autoware 起動<br/>run_autoware.bash awsim &lt;domain&gt;]
-  O7 --> O8[7. ウィンドウ移動 (任意)<br/>wmctrl があれば/timeout付き]
-  O9 --> A1[autostart: /set_initial_pose (Trigger)]
-  O9 --> A2[autostart: /awsim/control_mode_request_topic (Bool)]
-  O9 --> A3[autostart: capture:=true のとき<br/>/debug/service/capture_screen (Trigger)]
-
-  O9 --> O10[9. rosbag 開始 (任意/フラグ指定時)]
-  O10 --> O11[10. 終了判定<br/>デフォルト: AWSIMプロセス終了<br/>AIC_EVAL_WAIT_ADMIN_STATUS_FINISH=1 のとき<br/>wait-admin-state FinishALL Terminate を待つ<br/>※ /admin/awsim/state は Domain 0のみ]
-  O11 --> O12[11. 結果変換/後処理<br/>result-details.json 最大待ち<br/>キャプチャ停止/rosbag停止/権限調整]
-  O12 --> E([終了])
-```
+- `aichallenge/workspace/src/aichallenge_system/autostart_orchestrator_py/README.md`

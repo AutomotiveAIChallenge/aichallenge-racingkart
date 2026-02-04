@@ -16,4 +16,3 @@ CMD_STR="$(printf '%q ' "${cmd[@]}")"
     -e CMD_WORKDIR="/aichallenge" \
     -e CMD="${CMD_STR}" \
     autoware-command
-

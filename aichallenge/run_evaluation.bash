@@ -5,12 +5,10 @@ rosbag=false
 capture=false
 uid=""
 gid=""
-while getopts ":rc" opt; do case "${opt}" in r) rosbag=true ;; c) capture=true ;; *) : ;; esac done
-shift $((OPTIND - 1))
 for arg in "$@"; do
     case "${arg}" in
-    rosbag) rosbag=true ;;
-    capture) capture=true ;;
+    -r | rosbag) rosbag=true ;;
+    -c | capture) capture=true ;;
     *)
         if [[ ${arg} =~ ^[0-9]+$ ]]; then
             if [ -z "${uid}" ]; then uid="${arg}"; elif [ -z "${gid}" ]; then gid="${arg}"; fi

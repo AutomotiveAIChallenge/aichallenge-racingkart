@@ -2,7 +2,8 @@
 <launch>
     <arg name="capture" default="false"/>
     <arg name="rosbag" default="false"/>
-    <arg name="start_on_vehicle_state" default="TimingStart"/>
+    <!-- When capture/rosbag is enabled, start immediately by default (do not wait for a specific state). -->
+    <arg name="start_on_vehicle_state" default=""/>
     <arg name="stop_on_vehicle_state" default="Finish"/>
 
     <!-- Control mode request: publish /awsim/control_mode_request_topic (std_msgs/Bool). -->

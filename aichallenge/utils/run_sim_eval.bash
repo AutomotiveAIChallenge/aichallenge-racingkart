@@ -35,21 +35,13 @@ dc() {
         SIM_MODE="${SIM_MODE-}" RUN_MODE="${RUN_MODE-}" CMD="${CMD-}" "${dc_cmd[@]}" "$@"
 }
 
-stop_svc() {
-    local svc="$1" cid
-    cid="$(dc ps -q "${svc}" 2>/dev/null || true)"
-    if [ -n "${cid}" ]; then docker kill --signal INT "${cid}" >/dev/null 2>&1 || true; fi
-    if [ -n "${cid}" ]; then docker wait "${cid}" >/dev/null 2>&1 || true; fi
-    dc stop "${svc}" >/dev/null 2>&1 || true
-}
-
-cleanup_domain() {
+stop_services_best_effort() {
     set +e
-    stop_svc "${autoware_svc}"
-    stop_svc "${sim_svc}"
+    dc stop "${autoware_svc}" >/dev/null 2>&1 || true
+    dc stop "${sim_svc}" >/dev/null 2>&1 || true
 }
 cleanup_all() {
-    cleanup_domain
+    stop_services_best_effort
     CMD="bash /aichallenge/utils/fix_ownership.bash ${host_uid} ${host_gid} ${output_root} ${run_id}"
     dc run --rm --no-deps "${cmd_svc}" >/dev/null 2>&1 || true
 }
@@ -75,7 +67,11 @@ for domain_id in ${domain_ids}; do
             dc run --rm --no-deps "${cmd_svc}" || true
     fi
 
+    # By default, the evaluation ends when the simulator exits (AWSIM finishes the run).
     sim_cid="$(dc ps -q "${sim_svc}" 2>/dev/null || true)"
-    if [ -n "${sim_cid}" ]; then docker wait "${sim_cid}" >/dev/null 2>&1 || true; fi
-    cleanup_domain
+    if [ -n "${sim_cid}" ]; then
+        docker wait "${sim_cid}" >/dev/null 2>&1 || true
+    fi
+
+    stop_services_best_effort
 done
