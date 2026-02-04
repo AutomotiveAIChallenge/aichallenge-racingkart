@@ -68,7 +68,7 @@ services:
     <<: *autoware-base 
     stop_grace_period: 0.1s
     working_dir: ${OUTPUT_RUN_DIR:-/aichallenge}
-    command: ["bash", "-lc", "if [ \"${EVAL_RUN:-0}\" = \"1\" ]; then exec /aichallenge/run_autoware.bash ${RUN_MODE:-awsim} ${DOMAIN_ID:-1} >autoware.log 2>&1; else exec /aichallenge/run_autoware.bash ${RUN_MODE:-awsim} ${DOMAIN_ID:-1}; fi"]
+    command: ["bash", "-lc", "exec /aichallenge/run_autoware.bash ${RUN_MODE:-awsim} ${DOMAIN_ID:-1} >\"${OUTPUT_RUN_DIR:-/output}/autoware.log\" 2>&1"]
 
   # Autoware service
   autoware-build:
@@ -80,7 +80,7 @@ services:
     <<: *autoware-base 
     stop_grace_period: 0.1s
     working_dir: ${OUTPUT_RUN_DIR:-/aichallenge}
-    command: ["bash", "-lc", "if [ \"${EVAL_RUN:-0}\" = \"1\" ]; then exec /aichallenge/run_simulator.bash ${SIM_MODE:-} >awsim.log 2>&1; else exec /aichallenge/run_simulator.bash ${SIM_MODE:-}; fi"]
+    command: ["bash", "-lc", "exec /aichallenge/run_simulator.bash ${SIM_MODE:-} >\"${OUTPUT_RUN_DIR:-/output}/awsim.log\" 2>&1"]
 
   autoware-command:
     <<: *autoware-base 

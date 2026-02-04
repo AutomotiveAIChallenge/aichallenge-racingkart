@@ -546,7 +546,7 @@ main() {
     if [ "${gpu_enabled}" = "1" ]; then
         compose_args+=(-f "${COMPOSE_GPU_FILE}")
     fi
-    EVAL_RUN=1 OUTPUT_RUN_DIR="/output/${run_id}" SIM_MODE="${sim_mode}" \
+    OUTPUT_RUN_DIR="/output/${run_id}" SIM_MODE="${sim_mode}" \
         compose_up "${gpu_enabled}" "${project}" "${compose_args[@]}" up -d --force-recreate simulator
 
     local -a autoware_svcs=()

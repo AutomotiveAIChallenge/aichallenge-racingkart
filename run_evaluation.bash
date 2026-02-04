@@ -72,7 +72,6 @@ dc() {
         DOMAIN_ID="${domain_id}" \
         AIC_CAPTURE="${capture_enabled}" \
         AIC_ROSBAG="${rosbag_enabled}" \
-        EVAL_RUN=1 \
         CMD_WORKDIR="${output_run_dir}" \
         SIM_MODE="${SIM_MODE-}" \
         RUN_MODE="${RUN_MODE-}" \
