@@ -43,7 +43,7 @@
 ## `aichallenge/` 配下の主要ファイル（設計思想）
 
 - `aichallenge/run_evaluation.bash`: 評価オーケストレータ。起動→待機→初期化→収集→後処理までを1本で管理
-- `aichallenge/utils/publish.bash`: 単発のROS操作CLI（サービス呼び出し/トピック待ち）。`AIC_SERVICE_CALL_TIMEOUT_S` 等で timeout を調整でき、終了コードをそのまま返す
+- `aichallenge/utils/publish.bash`: 単発のROS操作CLI（トピック待ち/リセット等）。終了コードをそのまま返す
 - `aichallenge/utils/move_window.bash`: （可能なら）AWSIM/RViz のウィンドウ位置調整。`wmctrl` がない場合は何もしない
 - `aichallenge/build_autoware.bash`: overlay(`aichallenge/workspace/`) のビルド。必要なら `clean` で `build/install/log` を削除
 - `aichallenge/run_simulator.bash`: AWSIM の起動。GPU有無で headless を切り替え、SIM側 Domain を固定（`ROS_DOMAIN_ID=0`）
@@ -61,10 +61,35 @@
 2. ROS/Autoware/overlay 環境の `source` と `ROS_DOMAIN_ID` の設定
 3. ネットワーク設定（`sudo -n ...` を best-effort 実行）
 4. AWSIM 起動（`run_simulator.bash eval` を起動）
-5. AWSIM 準備待ち（`utils/publish.bash check-awsim`。`/clock` を1回受け取るまで待つ）
+5. AWSIM 準備待ち（`utils/publish.bash wait-admin-state`。`/admin/awsim/state` を受け取るまで待つ。**ROS_DOMAIN_ID=0 のみ**）
 6. Autoware 起動（`run_autoware.bash awsim <domain>` を起動）
 7. （可能なら）ウィンドウ移動（`wmctrl` がある場合のみ、タイムアウト付き）
-8. 初期姿勢/制御要求（`utils/publish.bash request-initialpose` → `request-control`）
-9. 任意で画面キャプチャ・rosbag 開始（フラグ指定時）
-10. AWSIM 終了待ち → 結果変換（`result-details.json` を最大待ち）→ 終了
-11. 終了時後処理（キャプチャ停止/rosbag停止/権限調整）
+8. 初期姿勢/制御要求（および任意の capture）は **AWSIM モード時のみ** 自動実行
+    - `aichallenge_submit_launch/launch/aichallenge_submit.launch.xml` が AWSIM 時に `autostart_orchestrator_py` を起動し、以下を best-effort で実行:
+      - `/set_initial_pose`（`std_srvs/srv/Trigger`）
+      - `/awsim/control_mode_request_topic`（`std_msgs/msg/Bool`。`true`=AUTONOMOUS, `false`=MANUAL）
+      - `capture:=true` のとき `/debug/service/capture_screen`（`std_srvs/srv/Trigger`）
+9. 任意で rosbag 開始（フラグ指定時）
+10. 終了判定（デフォルトは AWSIM プロセス終了。`AIC_EVAL_WAIT_ADMIN_STATUS_FINISH=1` のとき `utils/publish.bash wait-admin-state FinishALL Terminate` を待機。`/admin/awsim/state` は **ROS_DOMAIN_ID=0** で読む）
+11. 結果変換（`result-details.json` を最大待ち）→ 終了時後処理（キャプチャ停止/rosbag停止/権限調整）
+
+### フロー図（Mermaid）
+
+```mermaid
+flowchart TD
+  S([評価開始]) --> O1[1. 出力ディレクトリ作成<br/>/output/&lt;timestamp&gt;/d&lt;domain_id&gt;<br/>/output/latest symlink]
+  O1 --> O2[2. ROS/Autoware/overlay を source<br/>ROS_DOMAIN_ID 設定]
+  O2 --> O3[3. ネットワーク設定<br/>sudo -n ... (best-effort)]
+  O3 --> O4[4. AWSIM 起動<br/>run_simulator.bash eval]
+  O4 --> O5[5. AWSIM 準備待ち<br/>utils/publish.bash wait-admin-state<br/>/admin/awsim/state を受信するまで<br/>※ ROS_DOMAIN_ID=0 のみ]
+  O5 --> O7[6. Autoware 起動<br/>run_autoware.bash awsim &lt;domain&gt;]
+  O7 --> O8[7. ウィンドウ移動 (任意)<br/>wmctrl があれば/timeout付き]
+  O9 --> A1[autostart: /set_initial_pose (Trigger)]
+  O9 --> A2[autostart: /awsim/control_mode_request_topic (Bool)]
+  O9 --> A3[autostart: capture:=true のとき<br/>/debug/service/capture_screen (Trigger)]
+
+  O9 --> O10[9. rosbag 開始 (任意/フラグ指定時)]
+  O10 --> O11[10. 終了判定<br/>デフォルト: AWSIMプロセス終了<br/>AIC_EVAL_WAIT_ADMIN_STATUS_FINISH=1 のとき<br/>wait-admin-state FinishALL Terminate を待つ<br/>※ /admin/awsim/state は Domain 0のみ]
+  O11 --> O12[11. 結果変換/後処理<br/>result-details.json 最大待ち<br/>キャプチャ停止/rosbag停止/権限調整]
+  O12 --> E([終了])
+```

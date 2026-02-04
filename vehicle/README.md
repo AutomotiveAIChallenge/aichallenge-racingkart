@@ -51,8 +51,9 @@ make autoware-driver-zenoh
 # RViz2（前回を止めてから起動）
 make rviz2
 
-# rosbag（対象 domain を指定）
-make autoware-rosbag DOMAIN_ID=1
+# rosbag（手動。対象 domain を指定）
+CMD="env ROS_DOMAIN_ID=1 /aichallenge/utils/record_rosbag.bash" \
+docker compose -f docker-compose.yml run --rm --no-deps autoware-command
 ```
 
 ### 停止 / 状態確認
@@ -61,8 +62,7 @@ make autoware-rosbag DOMAIN_ID=1
 make ps
 make down
 
-# 個別に止めたい場合
-docker compose -f docker-compose.yml stop autoware-rosbag
+# 個別に止めたい場合（rosbag は起動したターミナルで Ctrl+C）
 ```
 
 ### ビルド / データ取得

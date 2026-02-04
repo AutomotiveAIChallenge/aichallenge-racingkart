@@ -19,6 +19,9 @@ x-autoware-base: &autoware-base
     - MOVE_WINDOW_DEBUG=${MOVE_WINDOW_DEBUG:-0}
     - MOVE_WINDOW_PREFER_LARGEST=${MOVE_WINDOW_PREFER_LARGEST:-1}
     - MOVE_WINDOW_QUIET=${MOVE_WINDOW_QUIET:-1}
+    - MOVE_WINDOW_TIMEOUT_S=${MOVE_WINDOW_TIMEOUT_S:-}
+    - AIC_CAPTURE=${AIC_CAPTURE:-}
+    - AIC_ROSBAG=${AIC_ROSBAG:-}
     # GPU (set by Makefile when DEVICE enables GPU, otherwise empty)
     - NVIDIA_VISIBLE_DEVICES=${NVIDIA_VISIBLE_DEVICES:-}
     - NVIDIA_DRIVER_CAPABILITIES=${NVIDIA_DRIVER_CAPABILITIES:-}
@@ -84,12 +87,11 @@ services:
     stop_grace_period: 0.1s
     command: ["bash", "-lc", "source /aichallenge/workspace/install/setup.bash && cd ${CMD_WORKDIR:-/aichallenge} && exec ${CMD:-}"]
 
-  autoware-rosbag:
+  awsim-state-manager:
     <<: *autoware-base
-    stop_signal: SIGINT
-    stop_grace_period: 30s
+    stop_grace_period: 0.1s
     working_dir: ${OUTPUT_RUN_DIR:-/aichallenge}
-    command: ["bash", "-lc", "exec env ROS_DOMAIN_ID=${DOMAIN_ID:-1} /aichallenge/utils/record_rosbag.bash"]
+    command: ["bash", "-lc", "source /aichallenge/workspace/install/setup.bash && export ROS_DOMAIN_ID=0 && if [ \"${EVAL_RUN:-0}\" = \"1\" ]; then exec ros2 run awsim_state_manager_py awsim_state_manager_node.py >awsim_state_manager.log 2>&1; else exec ros2 run awsim_state_manager_py awsim_state_manager_node.py; fi"]
 
 #### vehicle specific services can be added here ####
   # Zenoh service

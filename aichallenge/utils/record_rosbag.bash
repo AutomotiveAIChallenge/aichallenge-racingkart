@@ -1,14 +1,20 @@
 #!/bin/bash
 
-# Function to handle cleanup on exit
+set -euo pipefail
+
+PID=""
+
 cleanup_rosbag() {
-    echo "Rosbag recording cleanup..."
-    # Stop any running ros2 bag record processes
-    pkill -f "ros2 bag record" 2>/dev/null || true
-    sleep 1
+    if [ -z "${PID}" ]; then
+        return 0
+    fi
+    if kill -0 "${PID}" 2>/dev/null; then
+        echo "Rosbag recording cleanup... (PID/PGID=${PID})"
+        kill -INT -- "-${PID}" 2>/dev/null || kill -INT "${PID}" 2>/dev/null || true
+        wait "${PID}" 2>/dev/null || true
+    fi
 }
 
-# Trap signals to ensure cleanup
 trap cleanup_rosbag EXIT SIGINT SIGTERM
 
 # shellcheck disable=SC1091
@@ -22,4 +28,11 @@ TOPICS=(
     "/localization/kinematic_state"
 )
 
-ros2 bag record "${TOPICS[@]}" -o rosbag2_autoware -s mcap --compression-format zstd --compression-mode file
+# Run under its own process group so we can stop reliably without killing other recorders.
+if command -v setsid >/dev/null 2>&1; then
+    setsid ros2 bag record "${TOPICS[@]}" -o rosbag2_autoware -s mcap --compression-format zstd --compression-mode file &
+else
+    ros2 bag record "${TOPICS[@]}" -o rosbag2_autoware -s mcap --compression-format zstd --compression-mode file &
+fi
+PID=$!
+wait "${PID}" || true

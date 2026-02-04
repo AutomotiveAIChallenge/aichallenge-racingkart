@@ -140,12 +140,20 @@ fi
 timeout_s=10
 elapsed=0
 
+if [ -n "${MOVE_WINDOW_TIMEOUT_S-}" ]; then
+    if [[ ${MOVE_WINDOW_TIMEOUT_S} =~ ^[0-9]+$ ]]; then
+        timeout_s="${MOVE_WINDOW_TIMEOUT_S}"
+    else
+        warn "Invalid MOVE_WINDOW_TIMEOUT_S='${MOVE_WINDOW_TIMEOUT_S}' (fallback to ${timeout_s}s)"
+    fi
+fi
+
 desktop="$(get_current_desktop)"
 awsim_id=""
 rviz_id=""
 has_awsim=0
 has_rviz=0
-while [ $elapsed -lt $timeout_s ]; do
+while [ "$elapsed" -lt "$timeout_s" ]; do
     awsim_id="$(pick_window_id "$AWSIM_TITLE_REGEX" "$AWSIM_CLASS_REGEX" "$desktop")"
     rviz_id="$(pick_window_id "$RVIZ_TITLE_REGEX" "$RVIZ_CLASS_REGEX" "$desktop")"
     [ -n "$awsim_id" ] && has_awsim=1 || has_awsim=0
@@ -159,7 +167,7 @@ while [ $elapsed -lt $timeout_s ]; do
     log "Move window: ${elapsed}s elapsed"
 done
 
-if [ $elapsed -ge $timeout_s ]; then
+if [ "$elapsed" -ge "$timeout_s" ]; then
     warn "Timeout waiting for AWSIM/RViz windows after ${timeout_s}s"
     warn "AWSIM window found: $has_awsim"
     warn "RViz window found: $has_rviz"

@@ -20,7 +20,6 @@
 - `autoware-build`（overlay build）
 - `simulator`
 - `autoware-command`（単発コマンド実行用）
-- `autoware-rosbag`
 - `driver`
 - `zenoh`
 - `rviz2`
@@ -51,7 +50,6 @@ service は「操作対象のまとまり」を表します（docker compose の
 - `eval` : 評価オーケストレーション（複数サービスを束ねる）
 - `dev` : 開発用（AWSIM + Autoware 起動のみ）
 - `rviz2` : 可視化（RViz2）
-- `autoware-rosbag` : 記録
 - `driver` : racing_kart_interface
 - `zenoh` : Zenoh bridge
 - `compose` : docker compose の直操作（`compose-ps` / `compose-down` など）

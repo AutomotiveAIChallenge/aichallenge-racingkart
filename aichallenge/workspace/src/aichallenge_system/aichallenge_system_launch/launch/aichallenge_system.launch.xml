@@ -5,6 +5,8 @@
     <arg name="run_rviz"/>
     <arg name="sensor_model" default="racing_kart_sensor_kit"/>
     <arg name="launch_vehicle_interface" default="true"/>
+    <arg name="capture" default="false"/>
+    <arg name="rosbag" default="false"/>
     <arg name="domain_id" default="0"/>
     <!-- Disable multi-vehicle features on the base domain (0). -->
     <arg name="multiple_vehicle" default="$(eval $(var domain_id)!=0)"/>
@@ -20,6 +22,8 @@
     <log message=" - sensor_model: $(var sensor_model)"/>
     <log message=" - launch_vehicle_interface: $(var launch_vehicle_interface)"/>
     <log message=" - rviz config: $(var rviz_config)"/>
+    <log message=" - capture: $(var capture)"/>
+    <log message=" - rosbag: $(var rosbag)"/>
     <log message=" - domain_id: $(var domain_id)"/>
 
     <!-- Main module of AI challenge 2025. -->
@@ -43,7 +47,10 @@
 
     <!-- Adapters for simulation. -->
     <group if="$(var simulation)">
-        <include file="$(find-pkg-share aichallenge_system_launch)/launch/mode/awsim.launch.xml"/>
+        <include file="$(find-pkg-share aichallenge_system_launch)/launch/mode/awsim.launch.xml">
+            <arg name="capture" value="$(var capture)"/>
+            <arg name="rosbag" value="$(var rosbag)"/>
+        </include>
     </group>
 
     <!-- Adapters for real vehicle. -->

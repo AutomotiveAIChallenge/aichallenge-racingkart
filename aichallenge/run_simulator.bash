@@ -17,7 +17,7 @@ case "${mode}" in
     opts+=("--vehicles" "1" "--laps" "600" "--timeout" "60000000")
     ;;
 "eval")
-    opts+=("--vehicles" "1" "--laps" "6" "--timeout" "600")
+    opts+=("--vehicles" "1" "--laps" "1" "--timeout" "600")
     ;;
 "2p")
     opts+=("--vehicles" "2" "--laps" "6" "--timeout" "1200")

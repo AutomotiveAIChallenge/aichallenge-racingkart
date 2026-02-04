@@ -79,5 +79,16 @@ topics:
     remap: /sensing/camera/camera_info
     reversed: True
 
+  # awsim specific command data
+  @VEHICLE_NS@/awsim/state:
+    type: std_msgs/msg/String
+    remap: /awsim/state
+    reversed: True
+
+  @VEHICLE_NS@/awsim/status:
+    type: std_msgs/msg/Float32MultiArray
+    remap: /awsim/status
+    reversed: True
+
   # V2X topics: GNSS from other vehicles (AWSIM -> Autoware)
 @V2X_OTHER_GNSS_TOPICS@

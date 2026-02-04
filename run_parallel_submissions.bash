@@ -7,6 +7,7 @@ SCRIPT_BASENAME="$(basename "${BASH_SOURCE[0]}")"
 SCRIPT_NAME="${SCRIPT_BASENAME%.*}"
 COMPOSE_BASE_FILE="${REPO_ROOT}/docker-compose.yml"
 COMPOSE_GPU_FILE="${REPO_ROOT}/docker-compose.gpu.yml"
+COMPOSE_PROJECT_FILE_NAME="compose.project"
 
 log() { echo "[run_parallel_submissions] $*"; }
 warn() { echo "[run_parallel_submissions][WARN] $*" >&2; }
@@ -22,11 +23,12 @@ usage() {
 Usage:
   ./run_parallel_submissions.bash down [--log-dir <log_dir>]
   ./run_parallel_submissions.bash collect [--vehicles N]
-  ./run_parallel_submissions.bash --submit <aichallenge_submit.tar.gz> [<aichallenge_submit.tar.gz> ...]
-  DEVICE=<auto|gpu|cpu> ./run_parallel_submissions.bash --submit <aichallenge_submit.tar.gz> [<aichallenge_submit.tar.gz> ...]
+  ./run_parallel_submissions.bash [--capture] [--rosbag] --submit <aichallenge_submit.tar.gz> [<aichallenge_submit.tar.gz> ...]
+  DEVICE=<auto|gpu|cpu> ./run_parallel_submissions.bash [--capture] [--rosbag] --submit <aichallenge_submit.tar.gz> [<aichallenge_submit.tar.gz> ...]
 
 Behavior:
   - Starts AWSIM once (docker compose service: simulator).
+  - Starts awsim-state-manager (Domain 0) to monitor /admin/awsim/state.
   - Builds 1 eval image per submit (Dockerfile target: eval).
   - Starts Autoware containers autoware-d1..autoware-dN concurrently.
   - Domain id is assigned by submit order: 1..4 (max 4).
@@ -39,6 +41,10 @@ Env:
                          auto: enable GPU if /dev/nvidia0 exists
                          gpu : force GPU override (requires Docker-side NVIDIA support)
                          cpu : never use GPU override
+  CAPTURE=true|false     Enable submit-side autostart capture toggle (default: false)
+  ROSBAG=true|false      Enable submit-side autostart rosbag recording (default: false)
+  AIC_PARALLEL_COMPOSE_PROJECT=<name>
+                         Override docker compose project name (default: auto)
 EOF
 }
 
@@ -71,6 +77,13 @@ sanitize_tag_fragment() {
     echo "${s:-submit}"
 }
 
+sanitize_project_name() {
+    local s="${1-}"
+    s="$(echo "${s}" | tr -cs 'A-Za-z0-9._-' '-' | sed -E 's/^-+//; s/-+$//')"
+    s="${s,,}"
+    echo "${s:-aichallenge}"
+}
+
 ensure_output_dirs() {
     local run_id="$1"
     local vehicles="$2"
@@ -87,7 +100,7 @@ ensure_output_dirs() {
     ln -nfs "${run_id}" "${REPO_ROOT}/output/latest"
 
     local i
-    for i in $(seq 1 "${vehicles}"); do
+    for ((i = 1; i <= vehicles; i++)); do
         mkdir -p "${REPO_ROOT}/output/${run_id}/d${i}"
     done
 }
@@ -99,12 +112,21 @@ resolve_run_id_default() {
     fi
 }
 
+resolve_project_name_from_run_id_best_effort() {
+    local run_id="$1"
+    local run_root="${REPO_ROOT}/output/${run_id}"
+    local f="${run_root}/${COMPOSE_PROJECT_FILE_NAME}"
+    if [ -f "${f}" ]; then
+        cat "${f}" || true
+    fi
+}
+
 detect_vehicles() {
     local run_id="$1"
     local run_root="${REPO_ROOT}/output/${run_id}"
     local count=0
     local i
-    for i in 1 2 3 4; do
+    for ((i = 1; i <= 4; i++)); do
         if [ -d "${run_root}/d${i}" ]; then
             count=$((count + 1))
         fi
@@ -124,7 +146,7 @@ collect_results() {
     [ -d "${run_root}" ] || die "run root not found: ${run_root}"
 
     local i
-    for i in $(seq 1 "${vehicles}"); do
+    for ((i = 1; i <= vehicles; i++)); do
         local dest="${run_root}/d${i}"
         mkdir -p "${dest}"
 
@@ -150,6 +172,12 @@ init_run_log() {
 
     log "Log file: ${log_file}"
     log "Run id: ${run_id}"
+}
+
+write_compose_project_file() {
+    local run_id="$1"
+    local project="$2"
+    echo "${project}" >"${REPO_ROOT}/output/${run_id}/${COMPOSE_PROJECT_FILE_NAME}"
 }
 
 require_submit_in_build_context() {
@@ -183,13 +211,15 @@ write_compose_override() {
     local run_id="$2"
     local vehicles="$3"
     local gpu_enabled="$4"
-    shift 4
+    local capture_enabled="$5"
+    local rosbag_enabled="$6"
+    shift 6
     local -a images=("$@")
 
     {
         echo "services:"
         local i
-        for i in $(seq 1 "${vehicles}"); do
+        for ((i = 1; i <= vehicles; i++)); do
             local img="${images[$((i - 1))]}"
             cat <<EOF
   autoware-d${i}:
@@ -218,6 +248,8 @@ EOF
       - QT_X11_NO_MITSHM=1
       - TZ=Asia/Tokyo
       - RUN_MODE=awsim
+      - AIC_CAPTURE=${capture_enabled}
+      - AIC_ROSBAG=${rosbag_enabled}
       - DOMAIN_ID=${i}
       - RUN_ID=${run_id}
 EOF
@@ -246,11 +278,12 @@ EOF
 
 compose_up() {
     local gpu_enabled="$1"
-    shift
+    local project="$2"
+    shift 2
     if [ "${gpu_enabled}" = "1" ]; then
-        NVIDIA_VISIBLE_DEVICES="all" NVIDIA_DRIVER_CAPABILITIES="all" docker compose "$@"
+        NVIDIA_VISIBLE_DEVICES="all" NVIDIA_DRIVER_CAPABILITIES="all" docker compose -p "${project}" "$@"
     else
-        docker compose "$@"
+        docker compose -p "${project}" "$@"
     fi
 }
 
@@ -280,19 +313,17 @@ sanitize_yaml_tabs_in_place_best_effort() {
 }
 
 cleanup_compose_project_best_effort() {
-    local project
-    project="$(basename "${REPO_ROOT}")"
+    local project="$1"
 
-    local cids=""
-    cids="$(docker ps -aq --filter "label=com.docker.compose.project=${project}" 2>/dev/null || true)"
-    if [ -z "${cids}" ]; then
+    local -a cids=()
+    mapfile -t cids < <(docker ps -aq --filter "label=com.docker.compose.project=${project}" 2>/dev/null || true)
+    if [ "${#cids[@]}" -eq 0 ]; then
         warn "No containers found for compose project '${project}' (override parse failed)"
         return 0
     fi
 
     warn "Removing containers by label (project='${project}') due to compose override parse failure"
-    # shellcheck disable=SC2086
-    docker rm -f ${cids} >/dev/null 2>&1 || true
+    docker rm -f "${cids[@]}" >/dev/null 2>&1 || true
 }
 
 cmd_down() {
@@ -330,12 +361,24 @@ cmd_down() {
 
     sanitize_yaml_tabs_in_place_best_effort "${override_file}" || warn "Failed to sanitize tabs in ${override_file} (continuing)"
 
-    log "docker compose down --remove-orphans (override: ${override_file})"
-    if ! docker compose -f "${COMPOSE_BASE_FILE}" -f "${override_file}" config -q >/dev/null 2>&1; then
+    local project=""
+    local override_dir
+    override_dir="$(cd "$(dirname "${override_file}")" && pwd)"
+    if [ -f "${override_dir}/${COMPOSE_PROJECT_FILE_NAME}" ]; then
+        project="$(cat "${override_dir}/${COMPOSE_PROJECT_FILE_NAME}" 2>/dev/null || true)"
+    elif [ -n "${run_id}" ]; then
+        project="$(resolve_project_name_from_run_id_best_effort "${run_id}")"
+    fi
+    if [ -z "${project}" ]; then
+        project="$(sanitize_project_name "$(basename "${REPO_ROOT}")")"
+    fi
+
+    log "docker compose down --remove-orphans (project: ${project}, override: ${override_file})"
+    if ! docker compose -p "${project}" -f "${COMPOSE_BASE_FILE}" -f "${COMPOSE_GPU_FILE}" -f "${override_file}" config -q >/dev/null 2>&1; then
         warn "docker compose failed to parse override file: ${override_file}"
-        cleanup_compose_project_best_effort || true
+        cleanup_compose_project_best_effort "${project}" || true
     else
-        docker compose -f "${COMPOSE_BASE_FILE}" -f "${override_file}" down --remove-orphans
+        docker compose -p "${project}" -f "${COMPOSE_BASE_FILE}" -f "${COMPOSE_GPU_FILE}" -f "${override_file}" down --remove-orphans
     fi
 
     # AWSIM result jsons are generated after AWSIM exits.
@@ -385,9 +428,10 @@ cmd_collect() {
 
 run_autoware_command_best_effort() {
     local gpu_enabled="$1"
-    local cmd="$2"
+    local project="$2"
+    local cmd="$3"
 
-    CMD="${cmd}" compose_up "${gpu_enabled}" -f "${COMPOSE_BASE_FILE}" run --rm --no-deps autoware-command || return 1
+    CMD="${cmd}" compose_up "${gpu_enabled}" "${project}" -f "${COMPOSE_BASE_FILE}" -f "${COMPOSE_GPU_FILE}" run --rm --no-deps autoware-command || return 1
 }
 
 main() {
@@ -404,10 +448,20 @@ main() {
 
     local run_id=""
     local device="${DEVICE:-auto}"
+    local capture_enabled="${CAPTURE:-false}"
+    local rosbag_enabled="${ROSBAG:-false}"
     local -a submits=()
 
     while [ $# -gt 0 ]; do
         case "$1" in
+        --capture)
+            capture_enabled="true"
+            shift
+            ;;
+        --rosbag)
+            rosbag_enabled="true"
+            shift
+            ;;
         --submit | --submit-tar)
             shift
             [ $# -gt 0 ] || die "--submit requires at least one file path"
@@ -447,12 +501,14 @@ main() {
     log "Vehicles: ${vehicles}"
     log "Device: ${device}"
     log "GPU enabled: ${gpu_enabled}"
+    log "Capture: ${capture_enabled}"
+    log "Rosbag: ${rosbag_enabled}"
 
     ensure_output_dirs "${run_id}" "${vehicles}"
 
     local -a images=()
     local domain_id
-    for domain_id in $(seq 1 "${vehicles}"); do
+    for ((domain_id = 1; domain_id <= vehicles; domain_id++)); do
         local submit="${submits[$((domain_id - 1))]}"
         [ -f "${submit}" ] || die "submit file not found: ${submit}"
 
@@ -463,7 +519,16 @@ main() {
     done
 
     local override_file="${REPO_ROOT}/output/${run_id}/compose.autoware_multi.yml"
-    write_compose_override "${override_file}" "${run_id}" "${vehicles}" "${gpu_enabled}" "${images[@]}"
+    write_compose_override "${override_file}" "${run_id}" "${vehicles}" "${gpu_enabled}" "${capture_enabled}" "${rosbag_enabled}" "${images[@]}"
+
+    local project="${AIC_PARALLEL_COMPOSE_PROJECT-}"
+    if [ -z "${project}" ]; then
+        project="$(sanitize_project_name "aichallenge-${SCRIPT_NAME}-${run_id}")"
+    else
+        project="$(sanitize_project_name "${project}")"
+    fi
+    write_compose_project_file "${run_id}" "${project}"
+    log "Compose project: ${project}"
 
     log "Starting simulator (once)"
     local sim_mode="eval"
@@ -472,9 +537,16 @@ main() {
     fi
     log "Simulator mode: ${sim_mode}"
     if [ "${gpu_enabled}" = "1" ]; then
-        EVAL_RUN=1 OUTPUT_RUN_DIR="/output/${run_id}" SIM_MODE="${sim_mode}" compose_up "${gpu_enabled}" -f "${COMPOSE_BASE_FILE}" -f "${COMPOSE_GPU_FILE}" up -d --force-recreate simulator
+        EVAL_RUN=1 OUTPUT_RUN_DIR="/output/${run_id}" SIM_MODE="${sim_mode}" compose_up "${gpu_enabled}" "${project}" -f "${COMPOSE_BASE_FILE}" -f "${COMPOSE_GPU_FILE}" up -d --force-recreate simulator
     else
-        EVAL_RUN=1 OUTPUT_RUN_DIR="/output/${run_id}" SIM_MODE="${sim_mode}" compose_up "${gpu_enabled}" -f "${COMPOSE_BASE_FILE}" up -d --force-recreate simulator
+        EVAL_RUN=1 OUTPUT_RUN_DIR="/output/${run_id}" SIM_MODE="${sim_mode}" compose_up "${gpu_enabled}" "${project}" -f "${COMPOSE_BASE_FILE}" up -d --force-recreate simulator
+    fi
+
+    log "Starting awsim-state-manager (Domain 0)"
+    if [ "${gpu_enabled}" = "1" ]; then
+        compose_up "${gpu_enabled}" "${project}" -f "${COMPOSE_BASE_FILE}" -f "${COMPOSE_GPU_FILE}" up -d --force-recreate awsim-state-manager || true
+    else
+        compose_up "${gpu_enabled}" "${project}" -f "${COMPOSE_BASE_FILE}" up -d --force-recreate awsim-state-manager || true
     fi
 
     local -a autoware_svcs=()
@@ -483,28 +555,26 @@ main() {
     done
 
     log "Starting ${autoware_svcs[*]} (concurrent)"
-    compose_up "${gpu_enabled}" -f "${COMPOSE_BASE_FILE}" -f "${override_file}" up -d --force-recreate "${autoware_svcs[@]}"
+    if [ "${gpu_enabled}" = "1" ]; then
+        compose_up "${gpu_enabled}" "${project}" -f "${COMPOSE_BASE_FILE}" -f "${COMPOSE_GPU_FILE}" -f "${override_file}" up -d --force-recreate "${autoware_svcs[@]}"
+    else
+        compose_up "${gpu_enabled}" "${project}" -f "${COMPOSE_BASE_FILE}" -f "${override_file}" up -d --force-recreate "${autoware_svcs[@]}"
+    fi
 
-    log "Waiting for AWSIM readiness (/clock)"
-    run_autoware_command_best_effort "${gpu_enabled}" "env ROS_DOMAIN_ID=0 /aichallenge/utils/publish.bash check-awsim" || die "AWSIM readiness check failed"
+    log "Waiting for AWSIM readiness (/admin/awsim/state)"
+    run_autoware_command_best_effort "${gpu_enabled}" "${project}" "env ROS_DOMAIN_ID=0 /aichallenge/utils/publish.bash wait-admin-state" || die "AWSIM readiness check failed"
 
     log "Waiting for Autoware startup"
     sleep "${AIC_EVAL_AUTOWARE_START_SLEEP_SECONDS:-3}" || true
 
-    log "Request initial pose + control for each domain"
-    for domain_id in $(seq 1 "${vehicles}"); do
-        run_autoware_command_best_effort "${gpu_enabled}" "env ROS_DOMAIN_ID=${domain_id} AIC_SERVICE_CALL_TIMEOUT_S=${AIC_SERVICE_CALL_TIMEOUT_S_INITIALPOSE:-60} /aichallenge/utils/publish.bash request-initialpose" ||
-            warn "Initial pose request failed (domain_id=${domain_id})"
-        run_autoware_command_best_effort "${gpu_enabled}" "env ROS_DOMAIN_ID=${domain_id} AIC_SERVICE_CALL_TIMEOUT_S=${AIC_SERVICE_CALL_TIMEOUT_S_CONTROL:-30} /aichallenge/utils/publish.bash request-control" ||
-            warn "Control request failed (domain_id=${domain_id})"
-    done
+    log "Initial pose / control request is handled by the submit-side autostart launch (AWSIM only)"
 
     log "Started. Output: output/${run_id}/d*/autoware.log"
     log "Stop: ./run_parallel_submissions.bash down"
     if [ "${gpu_enabled}" = "1" ]; then
-        log "  or: docker compose -f docker-compose.yml -f docker-compose.gpu.yml -f ${override_file} down --remove-orphans"
+        log "  or: docker compose -p ${project} -f docker-compose.yml -f docker-compose.gpu.yml -f ${override_file} down --remove-orphans"
     else
-        log "  or: docker compose -f docker-compose.yml -f ${override_file} down --remove-orphans"
+        log "  or: docker compose -p ${project} -f docker-compose.yml -f ${override_file} down --remove-orphans"
     fi
 }
 

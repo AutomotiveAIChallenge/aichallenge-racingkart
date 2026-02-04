@@ -16,7 +16,7 @@ source "/aichallenge/workspace/install/setup.bash"
 
 # Topics with data (excluding 0-message topics from original bag)
 TOPICS=(
-    "/aichallenge/awsim/status"
+    "/admin/awsim/state"
     "/awsim/control_cmd"
     "/control/command/actuation_cmd"
     "/control/command/control_cmd"

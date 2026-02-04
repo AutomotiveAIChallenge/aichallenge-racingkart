@@ -2,7 +2,7 @@
 SHELL := /bin/bash
 
 .PHONY: autoware-build autoware-vehicle autoware-simulator autoware-request-initialpose autoware-request-control autoware-driver-zenoh \
-	simulator simulator-reset dev eval autoware-rosbag driver zenoh download rviz2 down ps
+	simulator simulator-reset dev eval driver zenoh download rviz2 down ps
 
 # GPU selection:
 # - DEVICE=auto (default): enable GPU override if NVIDIA is detected
@@ -44,7 +44,6 @@ endif
 AUTOWARE_SERVICE := autoware
 SIMULATOR_SERVICE := simulator
 AW_CMD_SERVICE := autoware-command
-ROSBAG_SERVICE := autoware-rosbag
 
 AIC_BUILD_SERVICE := autoware-build
 RVIZ2_SERVICE := rviz2
@@ -80,7 +79,8 @@ RVIZ_CLASS_REGEX ?=
 MOVE_WINDOW_DEBUG ?= 0
 MOVE_WINDOW_PREFER_LARGEST ?= 1
 MOVE_WINDOW_QUIET ?= 1
-export AWSIM_TITLE_REGEX AWSIM_CLASS_REGEX RVIZ_TITLE_REGEX RVIZ_CLASS_REGEX MOVE_WINDOW_DEBUG MOVE_WINDOW_PREFER_LARGEST MOVE_WINDOW_QUIET
+MOVE_WINDOW_TIMEOUT_S ?= 10
+export AWSIM_TITLE_REGEX AWSIM_CLASS_REGEX RVIZ_TITLE_REGEX RVIZ_CLASS_REGEX MOVE_WINDOW_DEBUG MOVE_WINDOW_PREFER_LARGEST MOVE_WINDOW_QUIET MOVE_WINDOW_TIMEOUT_S
 
 # autowareのbuildのみ
 autoware-build:
@@ -98,12 +98,12 @@ autoware-simulator:
 
 # autoware command service
 autoware-request-initialpose:
-	CMD="env ROS_DOMAIN_ID=$(DOMAIN_ID) /aichallenge/utils/publish.bash request-initialpose" \
+	CMD="env ROS_DOMAIN_ID=$(DOMAIN_ID) ros2 service call /set_initial_pose std_srvs/srv/Trigger '{}'" \
 	$(DC) up -d $(AW_CMD_SERVICE)
 
 autoware-request-control:
 	@echo "Start control"
-	CMD="env ROS_DOMAIN_ID=$(DOMAIN_ID) /aichallenge/utils/publish.bash request-control" \
+	CMD="env ROS_DOMAIN_ID=$(DOMAIN_ID) ros2 topic pub -1 /awsim/control_mode_request_topic std_msgs/msg/Bool '{data: true}'" \
 	$(DC) up -d $(AW_CMD_SERVICE)
 
 # run simulator (docker compose up -d simulator)
@@ -156,7 +156,7 @@ eval:
 		OUTPUT_ROOT="$(OUTPUT_ROOT)" DOMAIN_IDS="$(DOMAIN_IDS)" RESULT_WAIT_SECONDS="$(RESULT_WAIT_SECONDS)" \
 		ROSBAG="$(ROSBAG)" CAPTURE="$(CAPTURE)" \
 		SIMULATOR_SERVICE="$(SIMULATOR_SERVICE)" AUTOWARE_SERVICE="$(AUTOWARE_SERVICE)" \
-		AW_CMD_SERVICE="$(AW_CMD_SERVICE)" ROSBAG_SERVICE="$(ROSBAG_SERVICE)" \
+		AW_CMD_SERVICE="$(AW_CMD_SERVICE)" \
 		DC="$(DC)" \
 		bash aichallenge/utils/run_sim_eval.bash
 
@@ -164,10 +164,6 @@ eval:
 rviz2:
 	$(DC) stop $(RVIZ2_SERVICE)
 	$(DC) up -d $(RVIZ2_SERVICE)
-
-autoware-rosbag:
-	$(DC) up -d $(ROSBAG_SERVICE)
-
 
 # driver + autoware + zenoh
 autoware-driver-zenoh:

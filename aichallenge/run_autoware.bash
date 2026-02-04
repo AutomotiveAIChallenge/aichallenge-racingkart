@@ -2,6 +2,8 @@
 
 mode="${1}"
 id="${2:-0}" # デフォルト値0を設定
+capture="${AIC_CAPTURE:-false}"
+rosbag="${AIC_ROSBAG:-false}"
 
 case "${mode}" in
 "awsim")
@@ -21,6 +23,9 @@ case "${mode}" in
     exit 1
     ;;
 esac
+
+opts+=("capture:=${capture}")
+opts+=("rosbag:=${rosbag}")
 
 export ROS_DOMAIN_ID=$id
 # shellcheck disable=SC1091
