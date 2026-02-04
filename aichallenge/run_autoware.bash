@@ -30,6 +30,15 @@ opts+=("rosbag:=${rosbag}")
 export ROS_DOMAIN_ID=$id
 # shellcheck disable=SC1091
 source /aichallenge/workspace/install/setup.bash
+
+OUTPUT_RUN_DIR="/output"
+# Persist ROS node logs under the run output directory (so autostart_orchestrator logs are collectible).
+if [ -n "${OUTPUT_RUN_DIR-}" ]; then
+    export ROS_HOME="${OUTPUT_RUN_DIR}/ros"
+    export ROS_LOG_DIR="${ROS_HOME}/log"
+    mkdir -p "${ROS_LOG_DIR}" || true
+fi
+
 sudo ip link set multicast on lo
 sudo sysctl -w net.core.rmem_max=2147483647 >/dev/null
 

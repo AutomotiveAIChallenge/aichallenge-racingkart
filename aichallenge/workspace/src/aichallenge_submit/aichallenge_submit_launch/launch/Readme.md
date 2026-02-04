@@ -36,7 +36,7 @@ AWSIM の `/admin/awsim/state` は **`ROS_DOMAIN_ID=0` 側**で流れている�
 - そのため、`autostart` を「AWSIM state 監視（domain0）」と「Autoware操作（通常ドメイン）」を同一ノード/同一プロセスに統合すると破綻しやすい
 
 推奨アーキテクチャ:
-- **domain0**: AWSIM state 監視用のノード（例: `awsim_state_manager_py`）を起動し、`/admin/awsim/state` を監視して「待ち合わせI/F」を提供する
+- **domain0**: `utils/publish.bash wait-admin-state` で `/admin/awsim/state` を待つ（ROS_DOMAIN_ID=0）
 - **通常ドメイン**: `autostart`（オーケストレータ）を起動し、Autoware の service call や rosbag/capture 等を制御する
 - **通常ドメインで購読できる車両state（`/<vehicle_ns>/awsim/state`）を主トリガにする**と、ドメイン跨ぎの同期を減らせる
 - domain0 側の待ち合わせは、必要な場合のみ別系統で扱う（`autostart.launch` 自体は **通常ドメイン + 車両state**で完結させる）

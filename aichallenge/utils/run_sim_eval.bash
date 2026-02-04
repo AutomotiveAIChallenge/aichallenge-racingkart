@@ -21,7 +21,6 @@ capture_enabled="${CAPTURE:-false}"
 sim_svc="${SIMULATOR_SERVICE:-simulator}"
 autoware_svc="${AUTOWARE_SERVICE:-autoware}"
 cmd_svc="${AW_CMD_SERVICE:-autoware-command}"
-state_mgr_svc="${STATE_MANAGER_SERVICE:-awsim-state-manager}"
 
 host_uid="${HOST_UID:-$(id -u)}"
 host_gid="${HOST_GID:-$(id -g)}"
@@ -48,7 +47,6 @@ cleanup_domain() {
     set +e
     stop_svc "${autoware_svc}"
     stop_svc "${sim_svc}"
-    dc stop "${state_mgr_svc}" >/dev/null 2>&1 || true
 }
 cleanup_all() {
     cleanup_domain
@@ -65,7 +63,6 @@ for domain_id in ${domain_ids}; do
     SIM_MODE="eval"
     dc up -d --force-recreate "${sim_svc}"
     unset SIM_MODE
-    dc up -d --force-recreate "${state_mgr_svc}" >/dev/null 2>&1 || true
     CMD="env ROS_DOMAIN_ID=0 /aichallenge/utils/publish.bash wait-admin-state" dc run --rm --no-deps "${cmd_svc}"
 
     RUN_MODE=awsim

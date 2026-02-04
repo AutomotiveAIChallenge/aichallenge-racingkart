@@ -54,7 +54,7 @@ service_call_succeeded() {
     # Accept both YAML-like and Python repr styles:
     #   success: True
     #   success: true
-    #   WaitForState_Response(success=True, ...)
+    # (legacy) the former state-manager service response format
     local out="$1"
     printf '%s\n' "${out}" | grep -Eiq 'success[[:space:]]*[:=][[:space:]]*(true|True|1)\b'
 }
@@ -70,7 +70,7 @@ yaml_string_list() {
     local out='['
     local i
     for ((i = 0; i < ${#items[@]}; i++)); do
-        if [ $i -gt 0 ]; then
+        if [ "$i" -gt 0 ]; then
             out+=','
         fi
         out+="\"${items[$i]}\""
@@ -95,46 +95,7 @@ extract_string_data() {
 wait_admin_state() {
     local timeout_s="${AIC_TOPIC_WAIT_TIMEOUT_S_ADMIN_STATE:-${AIC_TOPIC_WAIT_TIMEOUT_S_ADMIN_STATUS:-60}}"
     local expected=("$@")
-
-    local wait_svc="${AIC_AWSIM_STATE_MANAGER_WAIT_SERVICE:-/awsim_state_manager/wait}"
-
-    # Prefer manager service (blocks until state matches).
-    # It may start slightly after AWSIM, so do a grace wait (bounded).
-    local grace_s="${AIC_AWSIM_STATE_MANAGER_GRACE_S:-10}"
-    if [ "${grace_s}" -le 0 ] 2>/dev/null; then
-        grace_s=0
-    fi
-    if [ "${grace_s}" -gt "${timeout_s}" ] 2>/dev/null; then
-        grace_s="${timeout_s}"
-    fi
-
-    local i max_tries
-    max_tries=$((grace_s * 5))
-    for ((i = 0; i < max_tries; i++)); do
-        if service_exists "${wait_svc}"; then
-            local expected_yaml req out rc
-            expected_yaml="$(yaml_string_list "${expected[@]}")"
-            req="{expected_states: ${expected_yaml}, timeout_sec: ${timeout_s}}"
-            out=$(timeout "${timeout_s}s" ros2 service call "${wait_svc}" "awsim_state_manager_py/srv/WaitForState" "${req}" 2>/dev/null) || rc=$?
-            rc=${rc:-0}
-            if [ "$rc" -eq 124 ]; then
-                echo "Warning: Waiting for ${wait_svc} timed out after ${timeout_s} seconds"
-                return 124
-            fi
-            if [ "$rc" -ne 0 ]; then
-                echo "Error: Waiting via ${wait_svc} failed (rc=$rc)"
-                return "$rc"
-            fi
-            if service_call_succeeded "${out}"; then
-                return 0
-            fi
-            echo "Warning: Waiting via ${wait_svc} did not report success"
-            return 124
-        fi
-        sleep 0.2
-    done
-
-    # Fallback to direct topic wait.
+    # Wait via topic.
     local deadline now left out rc status last
     deadline=$(($(date +%s) + timeout_s))
     last=""

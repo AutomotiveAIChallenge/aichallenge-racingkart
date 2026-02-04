@@ -28,7 +28,7 @@ Usage:
 
 Behavior:
   - Starts AWSIM once (docker compose service: simulator).
-  - Starts awsim-state-manager (Domain 0) to monitor /admin/awsim/state.
+  - Waits for /admin/awsim/state via topic.
   - Builds 1 eval image per submit (Dockerfile target: eval).
   - Starts Autoware containers autoware-d1..autoware-dN concurrently.
   - Domain id is assigned by submit order: 1..4 (max 4).
@@ -540,13 +540,6 @@ main() {
         EVAL_RUN=1 OUTPUT_RUN_DIR="/output/${run_id}" SIM_MODE="${sim_mode}" compose_up "${gpu_enabled}" "${project}" -f "${COMPOSE_BASE_FILE}" -f "${COMPOSE_GPU_FILE}" up -d --force-recreate simulator
     else
         EVAL_RUN=1 OUTPUT_RUN_DIR="/output/${run_id}" SIM_MODE="${sim_mode}" compose_up "${gpu_enabled}" "${project}" -f "${COMPOSE_BASE_FILE}" up -d --force-recreate simulator
-    fi
-
-    log "Starting awsim-state-manager (Domain 0)"
-    if [ "${gpu_enabled}" = "1" ]; then
-        compose_up "${gpu_enabled}" "${project}" -f "${COMPOSE_BASE_FILE}" -f "${COMPOSE_GPU_FILE}" up -d --force-recreate awsim-state-manager || true
-    else
-        compose_up "${gpu_enabled}" "${project}" -f "${COMPOSE_BASE_FILE}" up -d --force-recreate awsim-state-manager || true
     fi
 
     local -a autoware_svcs=()
