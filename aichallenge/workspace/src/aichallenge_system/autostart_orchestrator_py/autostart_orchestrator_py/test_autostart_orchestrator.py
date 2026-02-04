@@ -86,12 +86,7 @@ def _require_ros2() -> None:
 
 def _run_orchestrator(
     *,
-    vehicle_state_topic: str,
-    start_on: str,
-    stop_on: str,
-    output_dir: Path,
-    rosbag_cmd: str,
-    finish_wait_timeout_sec: int,
+    params_file: Path,
 ) -> subprocess.Popen:
     cmd = [
         "ros2",
@@ -99,34 +94,8 @@ def _run_orchestrator(
         "autostart_orchestrator_py",
         "autostart_orchestrator_node.py",
         "--ros-args",
-        "-p",
-        f"vehicle_state_topic:={vehicle_state_topic}",
-        "-p",
-        f"start_on_vehicle_state:={start_on}",
-        "-p",
-        f"stop_on_vehicle_state:={stop_on}",
-        "-p",
-        "enable_capture:=true",
-        "-p",
-        "enable_rosbag:=true",
-        "-p",
-        "call_initial_pose:=true",
-        "-p",
-        "request_control_mode:=true",
-        "-p",
-        f"wait_service_timeout_sec:={min(5, max(1, finish_wait_timeout_sec))}",
-        "-p",
-        "call_timeout_sec:=3",
-        "-p",
-        f"finish_wait_timeout_sec:={finish_wait_timeout_sec}",
-        "-p",
-        f"output_dir:={str(output_dir)}",
-        "-p",
-        f"rosbag_cmd:={rosbag_cmd}",
-        "-p",
-        "rosbag_log_file:=rosbag_test.log",
-        "-p",
-        "exit_on_finish:=true",
+        "--params-file",
+        str(params_file),
     ]
 
     env = dict(os.environ)
@@ -176,17 +145,41 @@ def main() -> int:
     output_lock = threading.Lock()
     try:
         out_dir.mkdir(parents=True, exist_ok=True)
-        fake_rosbag = (Path(__file__).resolve().parent / "fake_rosbag_for_test.bash").resolve()
-        rosbag_cmd = f"bash {fake_rosbag}"
-
-        proc = _run_orchestrator(
-            vehicle_state_topic=args.vehicle_state_topic,
-            start_on=args.start_on,
-            stop_on=args.stop_on,
-            output_dir=out_dir,
-            rosbag_cmd=rosbag_cmd,
-            finish_wait_timeout_sec=timeout_sec,
+        rosbag_cmd = (
+            "echo 'FAKE_ROSBAG: started'; "
+            "trap \"echo 'FAKE_ROSBAG: exiting'; exit 0\" INT TERM; "
+            "while :; do sleep 1; done"
         )
+
+        params_file = out_dir / "autostart_orchestrator_test_params.yaml"
+        wait_s = min(5, max(1, timeout_sec))
+        params_file.write_text(
+            "\n".join(
+                [
+                    "/**:",
+                    "  ros__parameters:",
+                    f"    vehicle_state_topic: \"{args.vehicle_state_topic}\"",
+                    f"    start_on_vehicle_state: \"{args.start_on}\"",
+                    f"    stop_on_vehicle_state: \"{args.stop_on}\"",
+                    "    enable_capture: true",
+                    "    enable_rosbag: true",
+                    "    call_initial_pose: true",
+                    "    request_control_mode: true",
+                    f"    wait_service_timeout_sec: {wait_s}",
+                    "    call_timeout_sec: 3",
+                    f"    finish_wait_timeout_sec: {timeout_sec}",
+                    f"    output_dir: \"{str(out_dir)}\"",
+                    "    rosbag_log_file: \"rosbag_test.log\"",
+                    "    exit_on_finish: true",
+                    "    rosbag_cmd: |",
+                    f"      {rosbag_cmd}",
+                    "",
+                ]
+            ),
+            encoding="utf-8",
+        )
+
+        proc = _run_orchestrator(params_file=params_file)
 
         t0 = time.monotonic()
 
