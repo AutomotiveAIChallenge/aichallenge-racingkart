@@ -2,7 +2,7 @@
 SHELL := /bin/bash
 
 .PHONY: autoware-build autoware-vehicle autoware-simulator autoware-request-initialpose autoware-request-control autoware-driver-zenoh \
-	simulator simulator-reset dev eval driver zenoh download rviz2 down ps
+	simulator simulator-reset dev eval test driver zenoh download rviz2 down ps
 
 # GPU selection:
 # - DEVICE=auto (default): enable GPU override if NVIDIA is detected
@@ -157,6 +157,17 @@ eval:
 		ROSBAG="$(ROSBAG)" CAPTURE="$(CAPTURE)" \
 		SIMULATOR_SERVICE="$(SIMULATOR_SERVICE)" AUTOWARE_SERVICE="$(AUTOWARE_SERVICE)" \
 		AW_CMD_SERVICE="$(AW_CMD_SERVICE)" \
+		DC="$(DC)" \
+		bash aichallenge/utils/run_sim_eval.bash
+
+# Smoke test: enable capture+rosbag and run AWSIM in "test" mode (1 vehicle, 1 lap).
+test:
+	@RUN_ID="$(RUN_ID)" RUN_GROUP="$(RUN_GROUP)" \
+		OUTPUT_ROOT="$(OUTPUT_ROOT)" DOMAIN_IDS="$(DOMAIN_ID)" RESULT_WAIT_SECONDS="$(RESULT_WAIT_SECONDS)" \
+		ROSBAG="true" CAPTURE="true" \
+		SIMULATOR_SERVICE="$(SIMULATOR_SERVICE)" AUTOWARE_SERVICE="$(AUTOWARE_SERVICE)" \
+		AW_CMD_SERVICE="$(AW_CMD_SERVICE)" \
+		SIM_MODE="test" \
 		DC="$(DC)" \
 		bash aichallenge/utils/run_sim_eval.bash
 

@@ -30,9 +30,17 @@ read -r -a dc_cmd <<<"${dc_str}"
 domain_id=""
 output_run_dir=""
 dc() {
-    OUTPUT_ROOT="${output_root}" OUTPUT_RUN_DIR="${output_run_dir}" DOMAIN_ID="${domain_id}" \
-        AIC_CAPTURE="${capture_enabled}" AIC_ROSBAG="${rosbag_enabled}" EVAL_RUN=1 CMD_WORKDIR="${output_run_dir}" \
-        SIM_MODE="${SIM_MODE-}" RUN_MODE="${RUN_MODE-}" CMD="${CMD-}" "${dc_cmd[@]}" "$@"
+    OUTPUT_ROOT="${output_root}" \
+        OUTPUT_RUN_DIR="${output_run_dir}" \
+        DOMAIN_ID="${domain_id}" \
+        AIC_CAPTURE="${capture_enabled}" \
+        AIC_ROSBAG="${rosbag_enabled}" \
+        EVAL_RUN=1 \
+        CMD_WORKDIR="${output_run_dir}" \
+        SIM_MODE="${SIM_MODE-}" \
+        RUN_MODE="${RUN_MODE-}" \
+        CMD="${CMD-}" \
+        "${dc_cmd[@]}" "$@"
 }
 
 stop_services_best_effort() {
@@ -52,7 +60,7 @@ for domain_id in ${domain_ids}; do
     output_run_dir="${output_root}/${run_rel}/d${domain_id}"
     echo "OUTPUT: output/${run_rel}/d${domain_id} (container: ${output_run_dir})"
 
-    SIM_MODE="eval"
+    SIM_MODE="${SIM_MODE:-eval}"
     dc up -d --force-recreate "${sim_svc}"
     unset SIM_MODE
     CMD="env ROS_DOMAIN_ID=0 /aichallenge/utils/publish.bash wait-admin-state" dc run --rm --no-deps "${cmd_svc}"

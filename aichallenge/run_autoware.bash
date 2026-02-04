@@ -28,16 +28,23 @@ opts+=("capture:=${capture}")
 opts+=("rosbag:=${rosbag}")
 
 export ROS_DOMAIN_ID=$id
+nounset_was_set=0
+case "$-" in *u*)
+    nounset_was_set=1
+    set +u
+    ;;
+esac
 # shellcheck disable=SC1091
 source /aichallenge/workspace/install/setup.bash
-
-OUTPUT_RUN_DIR="/output"
-# Persist ROS node logs under the run output directory (so autostart_orchestrator logs are collectible).
-if [ -n "${OUTPUT_RUN_DIR-}" ]; then
-    export ROS_HOME="${OUTPUT_RUN_DIR}/ros"
-    export ROS_LOG_DIR="${ROS_HOME}/log"
-    mkdir -p "${ROS_LOG_DIR}" || true
+if [ "${nounset_was_set}" = "1" ]; then
+    set -u
 fi
+
+OUTPUT_RUN_DIR="${OUTPUT_RUN_DIR:-/output}"
+# Persist ROS node logs under the run output directory (so autostart_orchestrator logs are collectible).
+export ROS_HOME="${OUTPUT_RUN_DIR}/ros"
+export ROS_LOG_DIR="${ROS_HOME}/log"
+mkdir -p "${ROS_LOG_DIR}"
 
 sudo ip link set multicast on lo
 sudo sysctl -w net.core.rmem_max=2147483647 >/dev/null
