@@ -64,14 +64,17 @@
 5. AWSIM 準備待ち（`utils/publish.bash wait-admin-state`。`/admin/awsim/state` を受け取るまで待つ。**ROS_DOMAIN_ID=0 のみ**）
 6. Autoware 起動（`run_autoware.bash awsim <domain>` を起動）
 7. （可能なら）ウィンドウ移動（`wmctrl` がある場合のみ、タイムアウト付き）
-8. 初期姿勢/制御要求（および任意の capture）は **AWSIM モード時のみ** 自動実行
-    - `aichallenge_submit_launch/launch/aichallenge_submit.launch.xml` が AWSIM 時に `autostart_orchestrator_py` を起動し、以下を best-effort で実行:
-      - `/set_initial_pose`（`std_srvs/srv/Trigger`）
-      - `/awsim/control_mode_request_topic`（`std_msgs/msg/Bool`。`true`=AUTONOMOUS, `false`=MANUAL）
-      - `capture:=true` のとき `/debug/service/capture_screen`（`std_srvs/srv/Trigger`）
-9. 任意で rosbag 開始（フラグ指定時）
-10. 終了判定（デフォルトは AWSIM プロセス終了。`AIC_EVAL_WAIT_ADMIN_STATUS_FINISH=1` のとき `utils/publish.bash wait-admin-state FinishALL Terminate` を待機。`/admin/awsim/state` は **ROS_DOMAIN_ID=0** で読む）
-11. 結果変換（`result-details.json` を最大待ち）→ 終了時後処理（キャプチャ停止/rosbag停止/権限調整）
+8. `aichallenge_system/autostart_orchestrator_py`を起動し、
+   1. `awsim/state`が`Spawned`のとき以下を順に実行:
+      1. `/set_initial_pose`（`std_srvs/srv/Trigger`）
+      2. `/awsim/control_mode_request_topic`（`std_msgs/msg/Bool`。`true`=AUTONOMOUS `false`=MANUAL）
+      3. `capture:=true` のとき `/debug/service/capture_screen`（`std_srvs/srv/Trigger`）
+      4. `rosbag:=true`rosbag開始`utils/record_rosbag.bash`
+   2. `awsim/state`が`Finished`のとき以下を順に実行(heart beatがなくなったときは今後検討)
+      1. d*result.jsonがあればresutl converterの起動（要検討）
+      2. `capture:=true` のとき `/debug/service/capture_screen`（`std_srvs/srv/Trigger`）で停止
+      3. `rosbag:=true`rosbag開始record停止
+9. autowareとawsim終了
 
 ### フロー図（Mermaid）
 
