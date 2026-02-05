@@ -891,6 +891,7 @@ Repo dir:
 Common commands:
   make autoware-build
   make dev DOMAIN_ID=1
+  make down_all   # stop/remove all docker containers (sudo)
 EOF
 
     if [ "${enter_shell}" -eq 1 ]; then

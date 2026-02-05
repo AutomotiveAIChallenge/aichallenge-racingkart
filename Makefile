@@ -119,6 +119,9 @@ autoware-driver-zenoh:
 down:
 	$(DC) down --remove-orphans
 
+down_all:
+	sudo docker rm -f $(sudo docker ps -aq)
+
 ps:
 	$(DC) ps
 
