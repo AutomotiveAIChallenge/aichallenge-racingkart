@@ -248,6 +248,7 @@ EOF
       - QT_X11_NO_MITSHM=1
       - TZ=Asia/Tokyo
       - RUN_MODE=awsim
+      - OUTPUT_RUN_DIR=/output/${run_id}/d${i}
       - AIC_CAPTURE=${capture_enabled}
       - AIC_ROSBAG=${rosbag_enabled}
       - DOMAIN_ID=${i}

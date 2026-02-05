@@ -120,7 +120,7 @@ down:
 	$(DC) down --remove-orphans
 
 down_all:
-	docker ps -aq | xargs -r docker rm -f
+	sudo docker ps -aq | xargs -r sudo docker rm -f
 
 ps:
 	$(DC) ps

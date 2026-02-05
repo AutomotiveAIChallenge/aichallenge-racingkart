@@ -11,13 +11,13 @@ Modes:
   test       Smoke-test mode (forces SIM_MODE=test, ROSBAG=true, CAPTURE=true, single DOMAIN_ID)
 
 Environment variables (examples):
-  DOMAIN_ID=1 DOMAIN_IDS=1,2,3 OUTPUT_ROOT=/output ROSBAG=true CAPTURE=true ./run_evaluation.bash
+  DOMAIN_ID=1 OUTPUT_ROOT=/output ROSBAG=true CAPTURE=true ./run_evaluation.bash
 USAGE
 }
 
-export ROSBAG="true"
-export CAPTURE="true"
-SIM_MODE="eval"
+: "${ROSBAG:=false}"
+: "${CAPTURE:=false}"
+SIM_MODE="${SIM_MODE:-eval}"
 
 mode="${1-}"
 case "${mode}" in
@@ -26,6 +26,8 @@ test)
     shift
     # Equivalent to the old `make test`: run AWSIM in test mode and enable capture+rosbag.
     SIM_MODE="test"
+    ROSBAG="true"
+    CAPTURE="true"
     # Force single-domain run for smoke tests.
     export DOMAIN_IDS="${DOMAIN_ID:-1}"
     ;;
@@ -54,6 +56,13 @@ ln -nfs "${run_id}" output/latest || true
 output_root="${OUTPUT_ROOT:-/output}"
 domain_ids="${DOMAIN_IDS:-${DOMAIN_ID:-1}}"
 domain_ids="${domain_ids//,/ }"
+read -r -a domain_id_list <<<"${domain_ids}"
+if [ "${#domain_id_list[@]}" -ne 1 ]; then
+    echo "DOMAIN_IDS supports only a single domain in run_evaluation.bash (got: ${domain_ids})" >&2
+    echo "Hint: use ./run_parallel_submissions.bash for multi-domain / multi-container runs." >&2
+    exit 2
+fi
+domain_id="${domain_id_list[0]}"
 
 host_uid="${HOST_UID:-$(id -u)}"
 host_gid="${HOST_GID:-$(id -g)}"
@@ -69,12 +78,11 @@ else
 fi
 read -r -a dc_cmd <<<"${dc_str}"
 
-domain_id=""
 output_run_dir=""
 dc() {
     OUTPUT_ROOT="${output_root}" \
         OUTPUT_RUN_DIR="${output_run_dir}" \
-        DOMAIN_ID="${DOMAIN_ID:-1}" \
+        DOMAIN_ID="${domain_id:-${DOMAIN_ID:-1}}" \
         AIC_CAPTURE="${CAPTURE:-false}" \
         AIC_ROSBAG="${ROSBAG:-false}" \
         CMD_WORKDIR="${output_run_dir}" \
@@ -84,27 +92,25 @@ dc() {
         "${dc_cmd[@]}" "$@"
 }
 
+# shellcheck disable=SC2317
 cleanup_all() {
-    docker compose stop
+    set +e
+    dc down --remove-orphans >/dev/null 2>&1 || true
     CMD="bash /aichallenge/utils/fix_ownership.bash ${host_uid} ${host_gid} ${output_root} ${run_id}"
     dc run --rm --no-deps autoware-command >/dev/null 2>&1 || true
-    docker compose down
+    dc down --remove-orphans >/dev/null 2>&1 || true
 }
 trap cleanup_all EXIT INT TERM
 
 # Simulator log should be under output/<run_rel>/awsim.log (not under dN/).
 output_run_dir="${output_root}/${run_rel}"
-SIM_MODE=$SIM_MODE make simulator
+dc up -d --force-recreate simulator
 CMD="env ROS_DOMAIN_ID=0 /aichallenge/utils/publish.bash wait-admin-ready" dc run --rm --no-deps autoware-command
 
-for domain_id in ${domain_ids}; do
-    mkdir -p "output/${run_rel}/d${domain_id}"
-    output_run_dir="${output_root}/${run_rel}/d${domain_id}"
-    echo "OUTPUT: output/${run_rel}/d${domain_id} (container: ${output_run_dir})"
-
-    dc up -d --force-recreate autoware
-done
+mkdir -p "output/${run_rel}/d${domain_id}"
+output_run_dir="${output_root}/${run_rel}/d${domain_id}"
+echo "OUTPUT: output/${run_rel}/d${domain_id} (container: ${output_run_dir})"
+dc up -d --force-recreate autoware
 
 CMD="env ROS_DOMAIN_ID=0 /aichallenge/utils/publish.bash wait-admin-finish" dc run --rm --no-deps autoware-command
-sleep 10
-cleanup_all
+exit 0

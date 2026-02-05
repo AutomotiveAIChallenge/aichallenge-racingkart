@@ -113,12 +113,10 @@ select_branch_from_remote() {
 
     printf "[setup] Available branches (remote):\n" >/dev/tty
     local i=0
-    local default_idx=0
     while IFS= read -r b; do
         [ -n "${b}" ] || continue
         i=$((i + 1))
         if [ "${b}" = "${default_branch}" ]; then
-            default_idx="${i}"
             printf "[setup]  %2d) %s (default)\n" "${i}" "${b}" >/dev/tty
         else
             printf "[setup]  %2d) %s\n" "${i}" "${b}" >/dev/tty
@@ -143,7 +141,7 @@ EOF
             echo "${default_branch}"
             return 0
         fi
-        if [[ "${ans}" =~ ^[0-9]+$ ]]; then
+        if [[ ${ans} =~ ^[0-9]+$ ]]; then
             local n="${ans}"
             local chosen=""
             chosen="$(printf "%s\n" "${branches}" | awk -v n="${n}" 'NF{c++} c==n{print; exit}')"

@@ -28,23 +28,11 @@ Host (you)
         └─ output/ にログ・結果を出力（output/latest は最新runへのsymlink）
 ```
 
-## 複数提出物の並列起動（run_parallel_submissions）
+## まずは読んでほしいもの
 
-```text
-Host: ./run_parallel_submissions.bash --submit <tar.gz> [<tar.gz> ...]
-      DEVICE=auto|gpu|cpu ./run_parallel_submissions.bash --submit <tar.gz> [<tar.gz> ...]
+[初学者向けセットアップ資料](./design_docs/HowToSetup.md)
 
-  1) submitごとに eval イメージをビルド（Dockerfile target=eval）
-  2) simulator を1回だけ起動
-  3) autoware-d1..dN を並列起動（domain id は submit 順に 1..N）
-  4) 停止（down）時に AWSIM 結果（dN-result*.json）を dN/ 配下へ移動して整理
-
-主な出力:
-  output/<run_id>/awsim.log
-  output/<run_id>/<script_name>.log
-  output/<run_id>/dN/autoware.log
-  output/<run_id>/compose.autoware_multi.yml
-```
+[初学者向け説明資料](./design_docs/Introduction.md)
 
 ## OSS貢献にあたって
 
