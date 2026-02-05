@@ -21,10 +21,10 @@ curl -fsSL "https://raw.githubusercontent.com/AutomotiveAIChallenge/aichallenge-
 - Docker / AWSIM / ビルドなど、必要な準備を揃えて「試せる状態」へ持っていきます
 - 終わると “次にやること（Next steps）” が表示されます
 
-> PR版（Testing）を入口にしたい場合（必要な時だけ）:
+> PR版（Testing）を入口にしたい場合（必要な時だけ）: PRのIDを入れてください
 >
 > ```bash
-> curl -fsSL "https://raw.githubusercontent.com/AutomotiveAIChallenge/aichallenge-racingkart/refs/pull/175/head/setup.bash" | bash -s -- test
+> curl -fsSL "https://raw.githubusercontent.com/AutomotiveAIChallenge/aichallenge-racingkart/refs/pull/<PR_ID>/head/setup.bash" | bash -s -- test
 > ```
 
 ---
@@ -51,52 +51,3 @@ curl -fsSL "https://raw.githubusercontent.com/AutomotiveAIChallenge/aichallenge-
 - 代表コマンド:
   - `./setup.bash doctor`
 - 完了の目安: “Docker” や “AWSIM asset” の欄で、次に何をすべきかが分かる
-
-### (B) Docker を使える状態にする
-
-- やること: Docker / Compose をインストールし、権限も整える
-- 代表コマンド:
-  - `./setup.bash show docker`
-- 完了の目安: `./setup.bash doctor` の Docker 欄が OK になる
-
-### (C) リポジトリを用意する
-
-- やること: このリポジトリを作業できる場所に置く（clone済ならスキップ）
-- 代表コマンド:
-  - `./setup.bash show workspace`
-- 完了の目安: リポジトリのルートで `./setup.bash doctor` が実行できる
-
-### (D) AWSIM を用意する（シミュレータ）
-
-- やること: AWSIM を所定の場所に置く
-- 代表コマンド:
-  - `./setup.bash download awsim`
-- 完了の目安: `./setup.bash doctor` の “AWSIM asset” が OK になる
-
-### (E) 開発用Dockerイメージを用意する
-
-- やること: 開発用イメージ（`aichallenge-2025-dev`）を作る
-- 代表コマンド:
-  - `./docker_build.sh dev`
-- 完了の目安: `make dev` を実行しても「イメージが無い」系で止まらない
-
-### (F) ワークスペースをビルドする（初回だけ重い）
-
-- やること: 起動に必要なビルド成果物（`install/`）を作る
-- 代表コマンド:
-  - `make autoware-build`
-- 完了の目安: `./setup.bash doctor` の次の案内が “Run evaluation / Start dev” になる
-
-### (G) 起動して止められることを確認する（まずCPU）
-
-- やること: まずCPUで起動できることを確認する（GPUは後でOK）
-- 代表コマンド:
-  - `DEVICE=cpu make dev`
-- 完了の目安: 起動できて、終了時に `make down` で止められる
-
----
-
-## 3) 次に読む（使い方）
-
-- 使い方の入口（`make dev` / `./run_evaluation.bash` の使い分け）: `design_docs/Introduction.md`
-- ログの考え方（困った時の見方）: `design_docs/log_design.md`
