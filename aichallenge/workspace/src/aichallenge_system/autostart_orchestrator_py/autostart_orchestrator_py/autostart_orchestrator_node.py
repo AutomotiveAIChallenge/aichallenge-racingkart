@@ -419,7 +419,7 @@ def main() -> int:
     try:
         rclpy.spin(node)
     except KeyboardInterrupt:
-        pass
+        node.get_logger().info("KeyboardInterrupt received, shutting down node gracefully.")
     finally:
         exit_code = int(getattr(node, "exit_code", 0))
         try:
