@@ -82,6 +82,87 @@ normalize_branch_ref() {
     esac
 }
 
+list_remote_branches() {
+    local repo_url="${1-}"
+    if [ -z "${repo_url}" ]; then
+        return 1
+    fi
+    require_cmd git || return 1
+    git ls-remote --heads "${repo_url}" 2>/dev/null | awk '{print $2}' | sed 's#^refs/heads/##' | sort -u
+}
+
+select_branch_from_remote() {
+    local repo_url="${1-}"
+    local default_branch="${2:-main}"
+
+    if [ "${SETUP_ASSUME_YES}" = "1" ]; then
+        echo "${default_branch}"
+        return 0
+    fi
+    if ! [ -r /dev/tty ]; then
+        echo "${default_branch}"
+        return 0
+    fi
+
+    local branches=""
+    branches="$(list_remote_branches "${repo_url}" || true)"
+    if [ -z "${branches}" ]; then
+        echo "${default_branch}"
+        return 0
+    fi
+
+    printf "[setup] Available branches (remote):\n" >/dev/tty
+    local i=0
+    local default_idx=0
+    while IFS= read -r b; do
+        [ -n "${b}" ] || continue
+        i=$((i + 1))
+        if [ "${b}" = "${default_branch}" ]; then
+            default_idx="${i}"
+            printf "[setup]  %2d) %s (default)\n" "${i}" "${b}" >/dev/tty
+        else
+            printf "[setup]  %2d) %s\n" "${i}" "${b}" >/dev/tty
+        fi
+        if [ "${i}" -ge 50 ]; then
+            printf "[setup]  ... (showing first 50)\n" >/dev/tty
+            break
+        fi
+    done <<EOF
+${branches}
+EOF
+
+    local ans=""
+    while true; do
+        printf "[setup] Select branch [default: %s]: " "${default_branch}" >/dev/tty
+        if ! IFS= read -r ans </dev/tty; then
+            echo "${default_branch}"
+            return 0
+        fi
+        ans="${ans//[[:space:]]/}"
+        if [ -z "${ans}" ]; then
+            echo "${default_branch}"
+            return 0
+        fi
+        if [[ "${ans}" =~ ^[0-9]+$ ]]; then
+            local n="${ans}"
+            local chosen=""
+            chosen="$(printf "%s\n" "${branches}" | awk -v n="${n}" 'NF{c++} c==n{print; exit}')"
+            if [ -n "${chosen}" ]; then
+                echo "${chosen}"
+                return 0
+            fi
+            printf "[setup] Invalid selection: %s\n" "${ans}" >/dev/tty
+            continue
+        fi
+
+        if printf "%s\n" "${branches}" | grep -Fxq "${ans}"; then
+            echo "${ans}"
+            return 0
+        fi
+        printf "[setup] Unknown branch: %s\n" "${ans}" >/dev/tty
+    done
+}
+
 on_interrupt() {
     echo ""
     warn "${WARN} Interrupted (Ctrl+C)"
@@ -518,6 +599,10 @@ bootstrap() {
         repo_url_explicit=1
     fi
     local branch="${AIC_BRANCH:-main}"
+    local branch_explicit=0
+    if [ -n "${AIC_BRANCH-}" ]; then
+        branch_explicit=1
+    fi
     local dest_dir="${AIC_DIR:-$HOME/aichallenge-racingkart}"
     local skip_pull_image=0
     local skip_awsim=0
@@ -540,6 +625,7 @@ bootstrap() {
             ;;
         --branch)
             branch="${2-}"
+            branch_explicit=1
             shift 2
             ;;
         --dir)
@@ -635,6 +721,11 @@ EOF
     fi
 
     require_tty_or_yes
+
+    # If branch is not explicitly set, allow picking from remote branches (default: main).
+    if [ "${branch_explicit}" -ne 1 ]; then
+        branch="$(select_branch_from_remote "${repo_url}" "main")"
+    fi
 
     local do_install_base=0
     local do_install_docker=0
@@ -930,7 +1021,7 @@ EOF
 }
 
 download_awsim() {
-    local default_url='https://tier4inc-my.sharepoint.com/:u:/g/personal/taiki_tanaka_tier4_jp/IQDqT8YLAS2IToPdt9K3abOwAfqJRSTZy0SCEvaAbUtY2AI?e=16MsVT'
+    local default_url='https://tier4inc-my.sharepoint.com/:u:/g/personal/taiki_tanaka_tier4_jp/IQBPAz39bTOuSbAhNIhYi8SnAQ91zs1rEUq71hMITWWd3ew?e=Ra7Lw2'
     local url="${AWSIM_ZIP_URL:-$default_url}"
 
     local force=0
@@ -1259,11 +1350,16 @@ main() {
         #   ./setup.bash test [BRANCH] [bootstrap-options...]
         #   curl .../setup.bash | bash -s -- test [BRANCH]
         #
-        # Default BRANCH is "origin/test".
-        local test_branch="origin/test"
+        # Default BRANCH is "main".
+        local test_branch="main"
         if [ $# -gt 0 ] && [[ ${1} != -* ]]; then
             test_branch="${1}"
             shift
+        else
+            # Interactive selection from remote branches.
+            local repo_url_default="https://github.com/AutomotiveAIChallenge/aichallenge-racingkart.git"
+            local repo_url="${AIC_REPO_URL:-$repo_url_default}"
+            test_branch="$(select_branch_from_remote "${repo_url}" "main")"
         fi
         bootstrap --branch "${test_branch}" --temp-dir "$@"
         ;;
