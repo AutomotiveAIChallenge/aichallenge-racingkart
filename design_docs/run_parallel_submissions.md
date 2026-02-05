@@ -1,4 +1,86 @@
-# run_parallel_submissions.bash（複数提出物の同時起動）設計メモ
+# 実現したいこと
+
+## 評価のオーケストレーションの簡素化
+
+目指したい姿として下記が挙げられる。
+
+1. make devのような簡素なコマンドのみで評価を完了すること
+2. 複数台走行をオンラインで実行するためのオーケストレーションと管理の徹底
+
+> Note:
+> 本ドキュメントは **ホスト側** の複数台起動オーケストレーション（`run_parallel_submissions.bash`）の指針です。
+> 車両状態（`/dN/awsim/state`）に基づく「initial pose / control mode / capture / rosbag / finish 後処理」などの詳細は、
+> `aichallenge/workspace/src/aichallenge_system/autostart_orchestrator_py/README.md` を参照してください。
+
+## 現在の実装
+
+shell scriptの組み合わせによるオーケストレーションだが、なかなか複雑な実装となっており、扱いやすいとは言い難い。
+できるだけ複数台走行の完成系から入りたいが、一旦テストなども考慮し、まずは単独で評価ができるところまでを目指したい。
+
+- run_parallel_submissions.bashが複数台の走行起動コマンド
+- run_evaluation.bashが単独走行の評価コマンドとなっている
+
+## 課題
+
+### P0（いま困る・壊れやすい）
+
+- **終了条件が手動**:
+  `run_parallel_submissions.bash` は基本的に「起動」までで、終了/結果確定は `./run_parallel_submissions.bash down` に依存します。
+  AWSIM の `dN-result*.json` は simulator 終了後に生成されるため、`down` せずに出力確認すると「結果が無い」と誤解されがちです。
+- **オーケストレーション依存が暗黙**:
+  capture/rosbag は `AIC_CAPTURE/AIC_ROSBAG` を Autoware コンテナに渡すだけなので、
+  `awsim.launch` 側で `autostart_orchestrator_py` が起動していないと **何も起きません**（“効いていない”に見える）。
+- **admin readiness が domain0 前提**:
+  readiness は `env ROS_DOMAIN_ID=0 /aichallenge/utils/publish.bash wait-admin-state` の成功が前提で、
+  ここが失敗/ハングすると全体が止まります（タイムアウト/ログ導線が重要）。
+- **CPU/GPU 分岐の破綻リスク**:
+  GPU override（例: `docker-compose.gpu.yml` や override 内の NVIDIA device reservation）を CPU-only ホストに混ぜると、
+  `docker compose up` 自体が失敗し得ます。**GPU を有効にしない時は GPU compose を混ぜない**ことが必須です。
+
+### P1（すぐではないが積み残すと辛い）
+
+- **compose override の drift**:
+  `docker-compose.yml` の `x-autoware-base` と `run_parallel_submissions.bash` の override が二重管理になっており、
+  volume/env の差分がズレると不具合が出ます。
+- **ビルド時間が支配的**:
+  submit ごとに eval image build するため、台数が増えるほど待ち時間が増えます（キャッシュ前提・再利用の余地）。
+- **デバッグ動線が弱い**:
+  失敗時に「どの domain のどのログを見るか」が迷子になりやすいです。
+
+## まず見るログ（最短導線）
+
+失敗時は次の順で見るのが最短です。
+
+1. `output/<run_id>/run_parallel_submissions.log`（ホスト側の起動ログ）
+2. `output/<run_id>/awsim.log`（simulator 側ログ）
+3. `output/<run_id>/dN/autoware.log`（domain ごとの Autoware ログ）
+
+capture/rosbag の開始/停止が動いているかは、上記に加えて
+`aichallenge/workspace/src/aichallenge_system/autostart_orchestrator_py/README.md` の成果物/ログ規約（出力先）も確認してください。
+
+## 複数台走行の評価実行フローとして目指したい形（高レベル）
+
+1. `--submit` の引数をパースをして何台動かすか把握
+2. `output/` 配下のディレクトリを準備
+   1. `output/<run_id>/d1..dN` を作成
+   2. `output/latest -> <run_id>` を張る
+3. ログを初期化
+   1. `output/<run_id>/<script_name>.log` に `tee`（stdout/stderr を保存）
+4. 提出物ごとに eval イメージをビルド（`Dockerfile` の `eval` で合わせてautowareがbuildされる）
+   1. `SUBMIT_TAR=<repo内相対パス>` を build arg として渡す
+   2. `aichallenge-2025-eval-<submit>-<run_id>-d<domain>` のようなタグを生成
+5. compose override を生成（`output/<run_id>/compose.autoware_multi.yml`）
+   - `autoware-d1..autoware-dN` を定義（各 service は対応する eval イメージを使う）
+   - `working_dir` を `/output/<run_id>/dN` にして `autoware.log` をその中に出す
+6. AWSIM（simulator）を起動（`docker-compose.yml` の `simulator`。GPU 時は `docker-compose.gpu.yml` を併用）
+   - `SIM_MODE` は起動数に応じて `eval` / `2p` / `3p` / `4p` を自動指定
+7. Autoware を並列起動
+   1. （`docker compose -f docker-compose.yml [-f docker-compose.gpu.yml] -f compose.autoware_multi.yml up -d ...`）
+   2. オーケストレーターがAWSIMからstateをもらい、一斉に走行許可
+   3. 走行終了後にオーケストレーターが後処理
+8. 後処理・起動終了
+
+## run_parallel_submissions.bash（複数提出物の同時起動）以下すべて設計メモ
 
 `run_parallel_submissions.bash` は、**複数の提出物（`aichallenge_submit.tar.gz`）をそれぞれ別の eval イメージとしてビルド**し、**Domain ID を 1..N で割り当てた Autoware コンテナ（`autoware-d1..dN`）を並列起動**するためのホスト側オーケストレータです。
 
@@ -82,23 +164,7 @@ output/<run_id>/
 output/latest -> <run_id>
 ```
 
-## 実行フロー（高レベル）
 
-1. `--submit` の引数をパース（起動数は `--submit` の数）
-2. `output/` 配下のディレクトリを準備
-   - `output/<run_id>/d1..dN` を作成
-   - `output/latest -> <run_id>` を張る
-3. ログを初期化
-   - `output/<run_id>/<script_name>.log` に `tee`（stdout/stderr を保存）
-4. 提出物ごとに eval イメージをビルド（`Dockerfile` の `eval` target）
-   - `SUBMIT_TAR=<repo内相対パス>` を build arg として渡す
-   - `aichallenge-2025-eval-<submit>-<run_id>-d<domain>` のようなタグを生成
-5. compose override を生成（`output/<run_id>/compose.autoware_multi.yml`）
-   - `autoware-d1..autoware-dN` を定義（各 service は対応する eval イメージを使う）
-   - `working_dir` を `/output/<run_id>/dN` にして `autoware.log` をその中に出す
-6. AWSIM（simulator）を起動（`docker-compose.yml` の `simulator`。GPU 時は `docker-compose.gpu.yml` を併用）
-   - `SIM_MODE` は起動数に応じて `eval` / `2p` / `3p` / `4p` を自動指定
-7. Autoware を並列起動（`docker compose -f docker-compose.yml [-f docker-compose.gpu.yml] -f compose.autoware_multi.yml up -d ...`）
 
 ## スクリプト内部の構成（主な関数と責務）
 
@@ -131,6 +197,13 @@ output/latest -> <run_id>
 
 「無理に変えない」前提で、必要になったら検討できる改善案です。
 
-- **override の DRY 化**: `docker-compose.yml` の `autoware` を再利用する（image と DOMAIN_ID だけ差し替え）と drift が減る
-- **ROS ログの集約**: `ROS_HOME/ROS_LOG_DIR` を `output/<run_id>/dN/ros/log` へ寄せると解析が楽
-- **並列起動数の拡張**: 4 を超える場合は Domain/bridge/評価仕様と合わせて設計し直す（単純拡張は危険）
+- **P0: 運用の明文化**:
+  - `down` が「停止 + 結果整理（dN-result*.json 回収）」も含むことを明記し、推奨手順（起動→観察→down→確認）を固定する
+  - capture/rosbag は `autostart_orchestrator_py` 起動が前提であることを明記し、参照先を統一する
+- **P1: ログ導線**:
+  - “最初に見るログ3点セット” を README/スクリプト出力と一致させる
+  - `ROS_LOG_DIR` などで ROS2 のログを `output/<run_id>/dN/ros/log` に寄せる（必要になってから）
+- **P1: override の DRY 化**:
+  - `docker-compose.yml` の `x-autoware-base` をテンプレにして差分だけ生成すると drift が減る（急がない）
+- **P2: 並列起動数の拡張**:
+  - 4 を超える場合は Domain/bridge/評価仕様/負荷を含めて再設計が必要（単純拡張は禁止）
