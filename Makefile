@@ -41,13 +41,6 @@ NVIDIA_DRIVER_CAPABILITIES ?= all
 export NVIDIA_VISIBLE_DEVICES NVIDIA_DRIVER_CAPABILITIES
 endif
 
-AUTOWARE_SERVICE := autoware
-SIMULATOR_SERVICE := simulator
-AW_CMD_SERVICE := autoware-command
-
-AIC_BUILD_SERVICE := autoware-build
-RVIZ2_SERVICE := rviz2
-
 # Used by docker-compose.yml for build/eval artifact ownership.
 HOST_UID ?= $(shell id -u)
 HOST_GID ?= $(shell id -g)
@@ -58,46 +51,45 @@ CAPTURE ?= false
 DOMAIN_ID ?= 1
 DOMAIN_IDS ?= $(DOMAIN_ID)
 OUTPUT_ROOT ?= /output
-RESULT_WAIT_SECONDS ?= 10
 # Output layout overrides (optional)
-# - RUN_ID: run directory name under output/ (default: timestamp)
+# - RUN_ID: run directory name under /output/ (default: timestamp)
 # - RUN_GROUP: optional subdirectory under RUN_ID (e.g., submit name)
 RUN_ID ?=
 RUN_GROUP ?=
 
 # autowareのbuildのみ
 autoware-build:
-	$(DC) up --force-recreate $(AIC_BUILD_SERVICE)
+	$(DC) up --force-recreate autoware-build
 
 # run autoware for vehicle
 autoware-vehicle:
 	@echo "Start Autoware for Vehicle"
-	RUN_MODE=vehicle $(DC) up -d $(AUTOWARE_SERVICE)
+	RUN_MODE=vehicle $(DC) up -d autoware
 
 # run autoware for simulator
 autoware-simulator:
 	@echo "Start Autoware for AWSIM"
-	RUN_MODE=awsim DOMAIN_ID=$(DOMAIN_ID) $(DC) up -d $(AUTOWARE_SERVICE)
+	RUN_MODE=awsim DOMAIN_ID=$(DOMAIN_ID) $(DC) up -d autoware
 
 # autoware command service
 autoware-request-initialpose:
 	CMD="env ROS_DOMAIN_ID=$(DOMAIN_ID) ros2 service call /set_initial_pose std_srvs/srv/Trigger '{}'" \
-	$(DC) up -d $(AW_CMD_SERVICE)
+	$(DC) up -d autoware-command
 
 autoware-request-control:
 	@echo "Start control"
 	CMD="env ROS_DOMAIN_ID=$(DOMAIN_ID) ros2 topic pub -1 /awsim/control_mode_request_topic std_msgs/msg/Bool '{data: true}'" \
-	$(DC) up -d $(AW_CMD_SERVICE)
+	$(DC) up -d autoware-command
 
 # run simulator (docker compose up -d simulator)
 simulator:
 	@echo "Start AWSIM"
-	SIM_MODE=$(SIM_MODE) $(DC) up -d $(SIMULATOR_SERVICE)
+	SIM_MODE=$(SIM_MODE) $(DC) up -d simulator
 
 simulator-reset:
 	@echo "Reset simulation"
 	CMD="bash /aichallenge/utils/simulator_reset.bash $(DOMAIN_ID)" \
-	$(DC) up -d $(AW_CMD_SERVICE)
+	$(DC) up -d autoware-command
 
 # racing kart (docker compose up -d driver)
 driver:
@@ -135,12 +127,12 @@ dev:
 
 # remote operation (docker compose up -d rviz2)
 rviz2:
-	$(DC) stop $(RVIZ2_SERVICE)
-	$(DC) up -d $(RVIZ2_SERVICE)
+	$(DC) stop rviz2
+	$(DC) up -d rviz2
 
 # driver + autoware + zenoh
 autoware-driver-zenoh:
-	RUN_MODE=vehicle $(DC) up -d driver $(AUTOWARE_SERVICE)
+	RUN_MODE=vehicle $(DC) up -d driver autoware
 	sleep 15
 	$(DC) up -d zenoh
 

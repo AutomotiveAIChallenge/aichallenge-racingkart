@@ -1,4 +1,9 @@
 x-gpu: &gpu
+  # Ensure the NVIDIA runtime exposes devices+capabilities even when the
+  # host environment variables are unset.
+  environment:
+    - NVIDIA_VISIBLE_DEVICES=${NVIDIA_VISIBLE_DEVICES:-all}
+    - NVIDIA_DRIVER_CAPABILITIES=${NVIDIA_DRIVER_CAPABILITIES:-all}
   deploy:
     resources:
       reservations:
