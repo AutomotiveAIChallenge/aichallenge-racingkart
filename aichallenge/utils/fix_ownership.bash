@@ -39,6 +39,8 @@ target="${OUTPUT_ROOT}/${TS}"
 log "Running as root. Changing ownership of artifacts to ${HOST_UID}:${HOST_GID}..."
 log "Target directory: ${target}"
 
+# Ensure the output root itself remains writable by the host user.
+chown "${HOST_UID}:${HOST_GID}" "${OUTPUT_ROOT}" || true
 chown -R "${HOST_UID}:${HOST_GID}" "${target}" || true
 chown -h "${HOST_UID}:${HOST_GID}" "${OUTPUT_ROOT}/latest" || true
 

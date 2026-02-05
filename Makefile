@@ -2,7 +2,7 @@
 SHELL := /bin/bash
 
 .PHONY: autoware-build autoware-vehicle autoware-simulator autoware-request-initialpose autoware-request-control autoware-driver-zenoh \
-	simulator simulator-reset dev driver zenoh download rviz2 down ps
+	simulator simulator-reset dev driver zenoh download rviz2 down ps print-dc print-gpu-env
 
 # GPU selection:
 # - DEVICE=auto (default): enable GPU override if NVIDIA is detected
@@ -59,7 +59,7 @@ RUN_GROUP ?=
 
 # autowareのbuildのみ
 autoware-build:
-	$(DC) up --force-recreate autoware-build
+	$(DC) run --rm --no-deps autoware-build
 
 # run autoware for vehicle
 autoware-vehicle:
@@ -74,12 +74,12 @@ autoware-simulator:
 # autoware command service
 autoware-request-initialpose:
 	CMD="env ROS_DOMAIN_ID=$(DOMAIN_ID) ros2 service call /set_initial_pose std_srvs/srv/Trigger '{}'" \
-	$(DC) up -d autoware-command
+	$(DC) run --rm --no-deps autoware-command
 
 autoware-request-control:
 	@echo "Start control"
 	CMD="env ROS_DOMAIN_ID=$(DOMAIN_ID) ros2 topic pub -1 /awsim/control_mode_request_topic std_msgs/msg/Bool '{data: true}'" \
-	$(DC) up -d autoware-command
+	$(DC) run --rm --no-deps autoware-command
 
 # run simulator (docker compose up -d simulator)
 simulator:
@@ -89,7 +89,7 @@ simulator:
 simulator-reset:
 	@echo "Reset simulation"
 	CMD="bash /aichallenge/utils/simulator_reset.bash $(DOMAIN_ID)" \
-	$(DC) up -d autoware-command
+	$(DC) run --rm --no-deps autoware-command
 
 # racing kart (docker compose up -d driver)
 driver:
@@ -98,26 +98,6 @@ driver:
 # zenoh (docker compose up -d zenoh)
 zenoh:
 	$(DC) up -d zenoh
-
-# Download submission data by asking for credentials interactively
-# Usage:
-#   make download [SUBMISSION_ID=<id>]
-# Usage (Only Admins):
-#   make download [USER_ID=<id>] [SUBMISSION_ID=<id>]
-download:
-	@if [ -n "$(USER_ID)" ]; then \
-		if [ -n "$(SUBMISSION_ID)" ]; then \
-			vehicle/download_submission.sh --output aichallenge/workspace/src/ --user-id $(USER_ID) --submission-id $(SUBMISSION_ID); \
-		else \
-			vehicle/download_submission.sh --output aichallenge/workspace/src/ --user-id $(USER_ID); \
-		fi; \
-	else \
-		if [ -n "$(SUBMISSION_ID)" ]; then \
-			vehicle/download_submission.sh --output aichallenge/workspace/src/ --submission-id $(SUBMISSION_ID); \
-		else \
-			vehicle/download_submission.sh --output aichallenge/workspace/src/; \
-		fi; \
-	fi
 
 dev:
 	@echo "Start dev simulation (AWSIM + Autoware, DOMAIN_ID=$(DOMAIN_ID))"
@@ -141,3 +121,35 @@ down:
 
 ps:
 	$(DC) ps
+
+# Helpers for scripts: keep compose/GPU selection centralized in this Makefile.
+print-dc:
+	@echo "$(DC)"
+
+print-gpu-env:
+ifeq ($(GPU_ENABLED),1)
+	@echo "export NVIDIA_VISIBLE_DEVICES=$(NVIDIA_VISIBLE_DEVICES)"
+	@echo "export NVIDIA_DRIVER_CAPABILITIES=$(NVIDIA_DRIVER_CAPABILITIES)"
+else
+	@:
+endif
+
+# Download submission data by asking for credentials interactively
+# Usage:
+#   make download [SUBMISSION_ID=<id>]
+# Usage (Only Admins):
+#   make download [USER_ID=<id>] [SUBMISSION_ID=<id>]
+download:
+	@if [ -n "$(USER_ID)" ]; then \
+		if [ -n "$(SUBMISSION_ID)" ]; then \
+			vehicle/download_submission.sh --output aichallenge/workspace/src/ --user-id $(USER_ID) --submission-id $(SUBMISSION_ID); \
+		else \
+			vehicle/download_submission.sh --output aichallenge/workspace/src/ --user-id $(USER_ID); \
+		fi; \
+	else \
+		if [ -n "$(SUBMISSION_ID)" ]; then \
+			vehicle/download_submission.sh --output aichallenge/workspace/src/ --submission-id $(SUBMISSION_ID); \
+		else \
+			vehicle/download_submission.sh --output aichallenge/workspace/src/; \
+		fi; \
+	fi

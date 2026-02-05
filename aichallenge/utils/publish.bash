@@ -7,6 +7,8 @@ usage() {
     echo "Usage: $0 [OPTION]"
     echo "Options:"
     echo "  wait-admin-state    Wait for /admin/awsim/state (prefer manager service if available)"
+    echo "  wait-admin-finish   Wait up to 600s for FinishALL or Terminate on /admin/awsim/state"
+    echo "  wait-admin-ready    Wait up to 600s for any /admin/awsim/state message"
     echo "  reset-awsim         Reset AWSIM (topic publish)"
     echo "  help                Display this help message"
 }
@@ -101,15 +103,25 @@ wait_admin_state() {
     last=""
 
     local topic="${AIC_AWSIM_ADMIN_STATE_TOPIC:-/admin/awsim/state}"
+    local label="${AIC_ADMIN_WAIT_LABEL:-admin}"
+    local expected_str=""
+    if [ "${#expected[@]}" -eq 0 ]; then
+        expected_str="any"
+    else
+        expected_str="$(
+            IFS='|'
+            echo "${expected[*]}"
+        )"
+    fi
 
-    echo "Waiting for ${topic}..."
+    echo "[${label}] wait until: topic=${topic} expected=${expected_str} timeout=${timeout_s}s"
     while :; do
         now=$(date +%s)
         left=$((deadline - now))
         if [ "${left}" -le 0 ]; then
-            echo "Warning: Waiting for ${topic} timed out after ${timeout_s} seconds"
+            echo "[${label}][WARN] timed out: topic=${topic} expected=${expected_str} timeout=${timeout_s}s"
             if [ -n "${last}" ]; then
-                echo "Last ${topic}: ${last}"
+                echo "[${label}] last state: ${last}"
             fi
             return 124
         fi
@@ -119,14 +131,14 @@ wait_admin_state() {
             --qos-durability transient_local --qos-reliability reliable 2>/dev/null)
         rc=$?
         if [ "$rc" -eq 124 ]; then
-            echo "Warning: Waiting for ${topic} timed out after ${timeout_s} seconds"
+            echo "[${label}][WARN] timed out: topic=${topic} expected=${expected_str} timeout=${timeout_s}s"
             if [ -n "${last}" ]; then
-                echo "Last ${topic}: ${last}"
+                echo "[${label}] last state: ${last}"
             fi
             return 124
         fi
         if [ "$rc" -ne 0 ]; then
-            echo "Error: Waiting for ${topic} failed (rc=$rc)"
+            echo "[${label}][ERROR] wait failed: topic=${topic} (rc=$rc)"
             return "$rc"
         fi
 
@@ -136,21 +148,37 @@ wait_admin_state() {
         fi
 
         if [ "${status}" != "${last}" ]; then
-            echo "AWSIM admin status: ${status}"
+            echo "[${label}] state: ${status}"
             last="${status}"
         fi
 
         if [ "${#expected[@]}" -eq 0 ]; then
+            echo "[${label}] done (received any state)"
             return 0
         fi
         for e in "${expected[@]}"; do
             if [ "${status}" = "${e}" ] || [ "${status,,}" = "${e,,}" ]; then
+                echo "[${label}] done (matched: ${e})"
                 return 0
             fi
         done
 
         sleep 1
     done
+}
+
+wait_admin_finish() {
+    local timeout_s="${AIC_TOPIC_WAIT_TIMEOUT_S_ADMIN_FINISH:-600}"
+    AIC_ADMIN_WAIT_LABEL="${AIC_ADMIN_WAIT_LABEL:-admin-finish}" \
+        AIC_TOPIC_WAIT_TIMEOUT_S_ADMIN_STATE="${timeout_s}" \
+        wait_admin_state FinishALL Terminate
+}
+
+wait_admin_ready() {
+    local timeout_s="${AIC_TOPIC_WAIT_TIMEOUT_S_ADMIN_READY:-600}"
+    AIC_ADMIN_WAIT_LABEL="${AIC_ADMIN_WAIT_LABEL:-admin-ready}" \
+        AIC_TOPIC_WAIT_TIMEOUT_S_ADMIN_STATE="${timeout_s}" \
+        wait_admin_state
 }
 
 reset_awsim() {
@@ -170,6 +198,14 @@ rc=0
 case "$1" in
 wait-admin-state)
     wait_admin_state "${@:2}"
+    rc=$?
+    ;;
+wait-admin-finish)
+    wait_admin_finish
+    rc=$?
+    ;;
+wait-admin-ready)
+    wait_admin_ready
     rc=$?
     ;;
 reset-awsim)

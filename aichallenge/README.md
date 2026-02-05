@@ -44,7 +44,7 @@
 - `aichallenge/utils/publish.bash`: 単発のROS操作CLI（トピック待ち/リセット等）。終了コードをそのまま返す
 - `aichallenge/utils/move_window.bash`: （可能なら）AWSIM/RViz のウィンドウ位置調整。`wmctrl` がない場合は何もしない
 - `aichallenge/build_autoware.bash`: overlay(`aichallenge/workspace/`) のビルド。必要なら `clean` で `build/install/log` を削除
-- `aichallenge/run_simulator.bash`: AWSIM の起動。GPU有無で headless を切り替え、SIM側 Domain を固定（`ROS_DOMAIN_ID=0`）
+- `aichallenge/run_simulator.bash`: AWSIM の起動。GPUデバイスの有無で headless を切り替え、SIM側 Domain を固定（`ROS_DOMAIN_ID=0`）
 - `aichallenge/run_autoware.bash`: Autoware の起動。`awsim/vehicle/rosbag` などモード別に launch 引数を整理
 - `aichallenge/utils/run_rviz.bash`: RViz の起動補助（ローカル/実車/remote 用）。可視化は本質ではないので簡易スクリプトで十分
 - `aichallenge/utils/record_rosbag.bash`: rosbag 記録。`SIGINT/SIGTERM/EXIT` で `ros2 bag record` を止める

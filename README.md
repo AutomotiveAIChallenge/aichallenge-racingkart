@@ -45,3 +45,18 @@ Host: ./run_parallel_submissions.bash --submit <tar.gz> [<tar.gz> ...]
   output/<run_id>/dN/autoware.log
   output/<run_id>/compose.autoware_multi.yml
 ```
+
+## OSS貢献にあたって
+
+`pre-commit run -a`を必ず通すこと
+
+```.sh
+check for merge conflicts................................................Passed
+check xml................................................................Passed
+check yaml...............................................................Passed
+detect private key.......................................................Passed
+fix end of files.........................................................Passed
+mixed line ending........................................................Passed
+shellcheck...............................................................Passed
+shfmt....................................................................Passed
+```

@@ -303,8 +303,10 @@ class AutostartOrchestrator(Node):
                 self._capture_started = False
             return
         ok, msg = self._call_trigger(self._cli_capture, call_s)
-        self.get_logger().info(f"capture {'start' if start else 'stop'}: success={ok} msg={msg}")
-        self._capture_started = bool(start)
+        level = "info" if ok else "warn"
+        getattr(self.get_logger(), level)(f"capture {'start' if start else 'stop'}: success={ok} msg={msg}")
+        if ok:
+            self._capture_started = bool(start)
 
     def _run(self) -> None:
         enable_capture = False

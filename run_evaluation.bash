@@ -15,6 +15,9 @@ Environment variables (examples):
 USAGE
 }
 
+export ROSBAG="true"
+export CAPTURE="true"
+
 mode="${1-}"
 case "${mode}" in
 "") ;;
@@ -35,9 +38,6 @@ test)
     exit 2
     ;;
 esac
-
-export ROSBAG="true"
-export CAPTURE="true"
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="${SCRIPT_DIR}"
@@ -83,15 +83,11 @@ dc() {
         "${dc_cmd[@]}" "$@"
 }
 
-stop_services_best_effort() {
-    set +e
-    dc stop autoware >/dev/null 2>&1 || true
-    dc stop simulator >/dev/null 2>&1 || true
-}
 cleanup_all() {
-    stop_services_best_effort
+    docker compose stop
     CMD="bash /aichallenge/utils/fix_ownership.bash ${host_uid} ${host_gid} ${output_root} ${run_id}"
     dc run --rm --no-deps autoware-command >/dev/null 2>&1 || true
+    docker compose down
 }
 trap cleanup_all EXIT INT TERM
 
@@ -100,26 +96,12 @@ for domain_id in ${domain_ids}; do
     output_run_dir="${output_root}/${run_rel}/d${domain_id}"
     echo "OUTPUT: output/${run_rel}/d${domain_id} (container: ${output_run_dir})"
 
-    SIM_MODE="${SIM_MODE:-eval}"
-    dc up -d --force-recreate simulator
-    unset SIM_MODE
-    #CMD="env ROS_DOMAIN_ID=0 /aichallenge/utils/publish.bash wait-admin-state" dc run --rm --no-deps "${cmd_svc}"
+    # Simulator log should be under output/<run_rel>/awsim.log (not under dN/).
+    (output_run_dir="${output_root}/${run_rel}" SIM_MODE="${SIM_MODE:-eval}" dc up -d simulator)
 
-    RUN_MODE=awsim
+    CMD="env ROS_DOMAIN_ID=0 /aichallenge/utils/publish.bash wait-admin-ready" dc run --rm --no-deps autoware-command
     dc up -d --force-recreate autoware
-    unset RUN_MODE
-    sleep "${AIC_EVAL_AUTOWARE_START_SLEEP_SECONDS:-3}" || true
-
-    if [ "${AIC_EVAL_WAIT_ADMIN_STATUS_FINISH:-0}" = "1" ]; then
-        CMD="env ROS_DOMAIN_ID=0 AIC_TOPIC_WAIT_TIMEOUT_S_ADMIN_STATE=${AIC_EVAL_ADMIN_STATUS_FINISH_TIMEOUT_S:-1800} /aichallenge/utils/publish.bash wait-admin-state FinishALL Terminate" \
-            dc run --rm --no-deps autoware-command || true
-    fi
-
-    # By default, the evaluation ends when the simulator exits (AWSIM finishes the run).
-    sim_cid="$(dc ps -q simulator 2>/dev/null || true)"
-    if [ -n "${sim_cid}" ]; then
-        docker wait "${sim_cid}" >/dev/null 2>&1 || true
-    fi
-
-    stop_services_best_effort
 done
+
+CMD="env ROS_DOMAIN_ID=0 /aichallenge/utils/publish.bash wait-admin-finish" dc run --rm --no-deps autoware-command
+docker compose down
