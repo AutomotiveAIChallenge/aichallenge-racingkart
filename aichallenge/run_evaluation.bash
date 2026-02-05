@@ -31,23 +31,28 @@ source /aichallenge/workspace/install/setup.bash
 pid_sim=""
 pid_aw=""
 cleanup() {
+    local exit_code=$?
     set +e
-    if [ -n "${pid_aw}" ]; then
+    trap - EXIT INT TERM
+    if [ -n "${pid_aw-}" ]; then
         kill -INT "${pid_aw}" >/dev/null 2>&1 || true
         wait "${pid_aw}" >/dev/null 2>&1 || true
     fi
-    if [ -n "${pid_sim}" ]; then
+    if [ -n "${pid_sim-}" ]; then
         kill -INT "${pid_sim}" >/dev/null 2>&1 || true
         wait "${pid_sim}" >/dev/null 2>&1 || true
     fi
     bash /aichallenge/utils/fix_ownership.bash "${uid}" "${gid}" "${output_root}" "${ts}" >/dev/null 2>&1 || true
+    return "${exit_code}"
 }
-trap cleanup EXIT INT TERM
+trap cleanup EXIT
+trap 'exit 130' INT
+trap 'exit 143' TERM
 
-/aichallenge/run_simulator.bash eval >awsim.log 2>&1 &
-pid_sim=$!
-env ROS_DOMAIN_ID=0 /aichallenge/utils/publish.bash wait-admin-state
-env AIC_CAPTURE="${capture}" AIC_ROSBAG="${rosbag}" OUTPUT_RUN_DIR="${out_dir}" /aichallenge/run_autoware.bash awsim "${domain_id}" >autoware.log 2>&1 &
-pid_aw=$!
-if [ "${AIC_EVAL_WAIT_ADMIN_STATUS_FINISH:-0}" = "1" ]; then env ROS_DOMAIN_ID=0 AIC_TOPIC_WAIT_TIMEOUT_S_ADMIN_STATE="${AIC_EVAL_ADMIN_STATUS_FINISH_TIMEOUT_S:-1800}" /aichallenge/utils/publish.bash wait-admin-state FinishALL Terminate || true; fi
-wait "${pid_sim}" || true
+# AWSIM
+/aichallenge/run_simulator.bash eval >awsim.log 2>&1 & pid_sim=$!
+env ROS_DOMAIN_ID=0 /aichallenge/utils/publish.bash wait-admin-ready
+# Autoware
+env AIC_CAPTURE="${capture}" AIC_ROSBAG="${rosbag}" OUTPUT_RUN_DIR="${out_dir}" /aichallenge/run_autoware.bash awsim "${domain_id}" >autoware.log 2>&1 & pid_aw=$!
+# Wait AWSIM finish
+env ROS_DOMAIN_ID=0 /aichallenge/utils/publish.bash wait-admin-finished

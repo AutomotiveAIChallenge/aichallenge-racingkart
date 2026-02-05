@@ -78,7 +78,7 @@ services:
   autoware-command:
     <<: *autoware-base 
     stop_grace_period: 0.1s
-    command: ["bash", "-lc", "source /aichallenge/workspace/install/setup.bash && cd ${CMD_WORKDIR:-/aichallenge} && exec ${CMD:-}"]
+    command: ["bash", "-lc", "source /aichallenge/workspace/install/setup.bash && cd ${CMD_WORKDIR:-/aichallenge} && exec bash -lc \"${CMD:-}\""]
 
 #### vehicle specific services can be added here ####
   # Zenoh service
