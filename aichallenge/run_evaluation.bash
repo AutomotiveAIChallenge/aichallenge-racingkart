@@ -50,9 +50,11 @@ trap 'exit 130' INT
 trap 'exit 143' TERM
 
 # AWSIM
-/aichallenge/run_simulator.bash eval >awsim.log 2>&1 & pid_sim=$!
+/aichallenge/run_simulator.bash eval >awsim.log 2>&1 &
+pid_sim=$!
 env ROS_DOMAIN_ID=0 /aichallenge/utils/publish.bash wait-admin-ready
 # Autoware
-env AIC_CAPTURE="${capture}" AIC_ROSBAG="${rosbag}" OUTPUT_RUN_DIR="${out_dir}" /aichallenge/run_autoware.bash awsim "${domain_id}" >autoware.log 2>&1 & pid_aw=$!
+env AIC_CAPTURE="${capture}" AIC_ROSBAG="${rosbag}" OUTPUT_RUN_DIR="${out_dir}" /aichallenge/run_autoware.bash awsim "${domain_id}" >autoware.log 2>&1 &
+pid_aw=$!
 # Wait AWSIM finish
 env ROS_DOMAIN_ID=0 /aichallenge/utils/publish.bash wait-admin-finished
