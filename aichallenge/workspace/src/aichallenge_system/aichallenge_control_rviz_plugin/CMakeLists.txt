@@ -42,6 +42,7 @@ ament_target_dependencies(${PROJECT_NAME} PUBLIC
   rcpputils
   rviz_common
   geometry_msgs
+  autoware_auto_planning_msgs
   rosidl_typesupport_introspection_cpp
   std_msgs
   std_srvs

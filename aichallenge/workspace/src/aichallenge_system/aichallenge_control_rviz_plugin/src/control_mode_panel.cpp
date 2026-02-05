@@ -2,28 +2,15 @@
 
 #include <chrono>
 #include <cmath>
-#include <cstddef>
-#include <cstdint>
-#include <cstring>
 #include <limits>
 #include <memory>
-#include <new>
-#include <stdexcept>
 #include <utility>
 
 #include <QHBoxLayout>
 #include <QMetaObject>
 
-#include <rcpputils/shared_library.hpp>
-
-#include <rclcpp/create_generic_subscription.hpp>
-#include <rclcpp/serialization.hpp>
-#include <rclcpp/serialized_message.hpp>
-#include <rclcpp/typesupport_helpers.hpp>
-
-#include <rosidl_runtime_c/message_type_support_struct.h>
-#include <rosidl_typesupport_introspection_cpp/field_types.hpp>
-#include <rosidl_typesupport_introspection_cpp/message_introspection.hpp>
+#include <rclcpp/node_options.hpp>
+#include <rmw/qos_profiles.h>
 
 #include <rviz_common/display_context.hpp>
 #include <rviz_common/ros_integration/ros_node_abstraction.hpp>
@@ -58,86 +45,6 @@ bool isFinitePoint2d(const geometry_msgs::msg::Point & p)
 {
   return std::isfinite(p.x) && std::isfinite(p.y);
 }
-
-const rosidl_typesupport_introspection_cpp::MessageMembers_s * toMessageMembers(
-  const rosidl_message_type_support_t * type_support)
-{
-  if (!type_support || !type_support->data) {
-    return nullptr;
-  }
-  return static_cast<const rosidl_typesupport_introspection_cpp::MessageMembers_s *>(type_support->data);
-}
-
-const rosidl_typesupport_introspection_cpp::MessageMember * findMember(
-  const rosidl_typesupport_introspection_cpp::MessageMembers_s * members, const char * name)
-{
-  if (!members || !members->members_ || !name) {
-    return nullptr;
-  }
-
-  for (uint32_t i = 0; i < members->member_count_; ++i) {
-    const auto & member = members->members_[i];
-    if (member.name_ && std::strcmp(member.name_, name) == 0) {
-      return &member;
-    }
-  }
-
-  return nullptr;
-}
-
-bool readNumericAsDouble(
-  const rosidl_typesupport_introspection_cpp::MessageMember * member, const void * message,
-  double & out)
-{
-  if (!member || !message) {
-    return false;
-  }
-  const auto * ptr =
-    reinterpret_cast<const uint8_t *>(message) + static_cast<size_t>(member->offset_);
-
-  switch (member->type_id_) {
-    case rosidl_typesupport_introspection_cpp::ROS_TYPE_DOUBLE:
-      out = *reinterpret_cast<const double *>(ptr);
-      return true;
-    case rosidl_typesupport_introspection_cpp::ROS_TYPE_FLOAT:
-      out = static_cast<double>(*reinterpret_cast<const float *>(ptr));
-      return true;
-    default:
-      return false;
-  }
-}
-
-class MessageMemory final
-{
-public:
-  explicit MessageMemory(const rosidl_typesupport_introspection_cpp::MessageMembers_s * members)
-  : members_(members), memory_(nullptr)
-  {
-    if (!members_ || !members_->init_function || !members_->fini_function) {
-      throw std::runtime_error("message introspection members are not initialized");
-    }
-    memory_ = ::operator new(members_->size_of_);
-    members_->init_function(memory_, rosidl_runtime_cpp::MessageInitialization::ALL);
-  }
-
-  MessageMemory(const MessageMemory &) = delete;
-  MessageMemory & operator=(const MessageMemory &) = delete;
-
-  ~MessageMemory()
-  {
-    if (memory_) {
-      members_->fini_function(memory_);
-      ::operator delete(memory_);
-    }
-  }
-
-  void * get() { return memory_; }
-  const void * get() const { return memory_; }
-
-private:
-  const rosidl_typesupport_introspection_cpp::MessageMembers_s * members_;
-  void * memory_;
-};
 
 bool tryComputeYawFromAdjacentPoints(
   const std::vector<geometry_msgs::msg::Point> & points, const size_t closest_index, double & yaw)
@@ -185,7 +92,6 @@ ControlModePanel::ControlModePanel(QWidget * parent)
   topic_name_("/awsim/control_mode_request_topic"),
   gnss_pose_topic_name_("/sensing/gnss/pose_with_covariance"),
   trajectory_topic_name_("/planning/scenario_planning/trajectory"),
-  trajectory_topic_type_name_("autoware_auto_planning_msgs/msg/Trajectory"),
   initial_pose_topic_name_("/initialpose"),
   initial_pose_service_name_("/set_initial_pose"),
   topic_label_(new QLabel(this)),
@@ -213,6 +119,16 @@ ControlModePanel::ControlModePanel(QWidget * parent)
   connect(initial_pose_button_, &QPushButton::clicked, this, &ControlModePanel::sendInitialPoseSet);
 }
 
+ControlModePanel::~ControlModePanel()
+{
+  if (initial_pose_executor_) {
+    initial_pose_executor_->cancel();
+  }
+  if (initial_pose_spin_thread_.joinable()) {
+    initial_pose_spin_thread_.join();
+  }
+}
+
 void ControlModePanel::onInitialize()
 {
   auto context = getDisplayContext();
@@ -228,6 +144,7 @@ void ControlModePanel::onInitialize()
   }
 
   ensurePublisher();
+  ensureInitialPoseWorker();
   ensureInitialPosePublisher();
   ensureInitialPoseService();
   ensureSubscriptions();
@@ -243,239 +160,167 @@ void ControlModePanel::ensurePublisher()
 
 void ControlModePanel::ensureInitialPosePublisher()
 {
-  if (!initial_pose_publisher_ && ros_node_) {
+  auto node = initial_pose_node_ ? initial_pose_node_ : ros_node_;
+  if (!initial_pose_publisher_ && node) {
     const auto qos = rclcpp::QoS(rclcpp::KeepLast(1)).durability_volatile().reliable();
     initial_pose_publisher_ =
-      ros_node_->create_publisher<geometry_msgs::msg::PoseWithCovarianceStamped>(
-        initial_pose_topic_name_, qos);
+      node->create_publisher<geometry_msgs::msg::PoseWithCovarianceStamped>(initial_pose_topic_name_, qos);
   }
 }
 
 void ControlModePanel::ensureInitialPoseService()
 {
-  if (!initial_pose_service_ && ros_node_) {
-    initial_pose_service_ = ros_node_->create_service<std_srvs::srv::Trigger>(
+  ensureInitialPoseWorker();
+  if (!initial_pose_service_ && initial_pose_node_) {
+    initial_pose_service_ = initial_pose_node_->create_service<std_srvs::srv::Trigger>(
       initial_pose_service_name_,
       [this](
         const std::shared_ptr<std_srvs::srv::Trigger::Request> /*request*/,
         std::shared_ptr<std_srvs::srv::Trigger::Response> response)
       {
-        QString status;
-        const bool success = tryPublishInitialPose(status);
+        // Make sure subscriptions/publisher are ready before waiting.
+        ensureSubscriptions();
+        ensureInitialPosePublisher();
 
-        response->success = success;
+        // Wait until GNSS and trajectory are ready, then publish /initialpose.
+        // This service is executed on a dedicated MultiThreadedExecutor thread (not the RViz executor),
+        // so waiting here won't stall RViz callbacks.
+        constexpr int kWaitTimeoutSec = 60;
+        const auto deadline =
+          std::chrono::steady_clock::now() + std::chrono::seconds(kWaitTimeoutSec);
+
+        while (std::chrono::steady_clock::now() < deadline) {
+          {
+            std::unique_lock<std::mutex> lock(data_mutex_);
+            const bool ready =
+              static_cast<bool>(last_gnss_pose_) && last_trajectory_points_.size() >= 2;
+            if (ready) {
+              break;
+            }
+            data_cv_.wait_for(lock, std::chrono::milliseconds(200));
+          }
+
+          // Trajectory type may not be known at service call time; keep trying to attach the subscription.
+          ensureSubscriptions();
+        }
+
+        const bool have_gnss = [&]() -> bool {
+          std::lock_guard<std::mutex> lock(data_mutex_);
+          return static_cast<bool>(last_gnss_pose_);
+        }();
+        const bool have_traj = [&]() -> bool {
+          std::lock_guard<std::mutex> lock(data_mutex_);
+          return last_trajectory_points_.size() >= 2;
+        }();
+
+        if (!(have_gnss && have_traj)) {
+
+          response->success = false;
+          response->message = have_gnss ? "timeout waiting for trajectory" : "timeout waiting for GNSS";
+          if (initial_pose_node_) {
+            RCLCPP_ERROR(
+              initial_pose_node_->get_logger(),
+              "Initial pose service timed out (%ds): gnss=%s traj=%s",
+              kWaitTimeoutSec, have_gnss ? "ready" : "missing", have_traj ? "ready" : "missing");
+          }
+          if (status_label_) {
+            const QString text = have_gnss ? tr("Initial Pose: timeout waiting for trajectory")
+                                           : tr("Initial Pose: timeout waiting for GNSS");
+            QMetaObject::invokeMethod(status_label_, "setText", Qt::QueuedConnection, Q_ARG(QString, text));
+          }
+          return;
+        }
+
+        QString status;
+        const bool ok = tryPublishInitialPose(status, /*warn_if_not_ready=*/false);
+        response->success = ok;
         response->message = status.toStdString();
 
         if (status_label_) {
-          QMetaObject::invokeMethod(
-            status_label_, "setText", Qt::QueuedConnection, Q_ARG(QString, status));
+          QMetaObject::invokeMethod(status_label_, "setText", Qt::QueuedConnection, Q_ARG(QString, status));
         }
-      });
+      },
+      rmw_qos_profile_services_default,
+      initial_pose_service_group_);
   }
+}
+
+void ControlModePanel::ensureInitialPoseWorker()
+{
+  if (initial_pose_node_) {
+    return;
+  }
+
+  // Run subscriptions/service on a dedicated executor to avoid blocking RViz callbacks.
+  rclcpp::NodeOptions options;
+  if (ros_node_) {
+    options.context(ros_node_->get_node_base_interface()->get_context());
+  }
+  initial_pose_node_ = std::make_shared<rclcpp::Node>("aichallenge_control_mode_panel_initial_pose", options);
+  initial_pose_service_group_ =
+    initial_pose_node_->create_callback_group(rclcpp::CallbackGroupType::MutuallyExclusive);
+  initial_pose_sub_group_ =
+    initial_pose_node_->create_callback_group(rclcpp::CallbackGroupType::Reentrant);
+  initial_pose_executor_ = std::make_shared<rclcpp::executors::MultiThreadedExecutor>(
+    rclcpp::ExecutorOptions(), 2);
+  initial_pose_executor_->add_node(initial_pose_node_);
+  initial_pose_spin_thread_ = std::thread([exec = initial_pose_executor_]() { exec->spin(); });
+
+  RCLCPP_INFO(initial_pose_node_->get_logger(), "Initial pose worker started (service=%s).", initial_pose_service_name_.c_str());
 }
 
 void ControlModePanel::ensureSubscriptions()
 {
-  if (!ros_node_) {
+  ensureInitialPoseWorker();
+  if (!initial_pose_node_) {
     return;
   }
 
   if (!gnss_pose_sub_) {
-    const auto qos = rclcpp::QoS(rclcpp::KeepLast(1)).durability_volatile().best_effort();
-    gnss_pose_sub_ = ros_node_->create_subscription<geometry_msgs::msg::PoseWithCovarianceStamped>(
+    const auto qos = rclcpp::QoS(rclcpp::KeepLast(1)).durability_volatile().reliable();
+    rclcpp::SubscriptionOptions options;
+    options.callback_group = initial_pose_sub_group_;
+    gnss_pose_sub_ = initial_pose_node_->create_subscription<geometry_msgs::msg::PoseWithCovarianceStamped>(
       gnss_pose_topic_name_, qos,
       [this](const geometry_msgs::msg::PoseWithCovarianceStamped::SharedPtr msg)
       {
         std::lock_guard<std::mutex> lock(data_mutex_);
         last_gnss_pose_ = msg;
-      });
+        data_cv_.notify_all();
+      },
+      options);
+    RCLCPP_INFO(initial_pose_node_->get_logger(), "Subscribed GNSS: %s", gnss_pose_topic_name_.c_str());
   }
 
-  if (!trajectory_sub_) {
+  if (!trajectory_typed_sub_) {
     const auto qos = rclcpp::QoS(rclcpp::KeepLast(1)).durability_volatile().best_effort();
-    if (!ensureTrajectoryTypeSupport()) {
-      return;
-    }
-
-    try {
-      trajectory_sub_ = rclcpp::create_generic_subscription(
-        ros_node_->get_node_topics_interface(), trajectory_topic_name_, trajectory_topic_type_name_,
-        qos,
-        [this](std::shared_ptr<rclcpp::SerializedMessage> msg)
-        {
-          if (!msg) {
-            return;
-          }
-
-          std::vector<geometry_msgs::msg::Point> points;
-          std::string frame_id;
-          if (!parseTrajectoryMessage(*msg, points, frame_id)) {
-            RCLCPP_WARN_THROTTLE(
-              ros_node_->get_logger(), *ros_node_->get_clock(), std::chrono::milliseconds(5000).count(),
-              "Failed to parse trajectory message on %s", trajectory_topic_name_.c_str());
-            return;
-          }
-
-          std::lock_guard<std::mutex> lock(data_mutex_);
-          last_trajectory_points_ = std::move(points);
-          last_trajectory_frame_id_ = std::move(frame_id);
-        });
-    } catch (const std::exception & e) {
-      RCLCPP_ERROR(
-        ros_node_->get_logger(), "Failed to create generic subscription for %s (%s): %s",
-        trajectory_topic_name_.c_str(), trajectory_topic_type_name_.c_str(), e.what());
-      trajectory_sub_.reset();
-    }
-  }
-}
-
-bool ControlModePanel::ensureTrajectoryTypeSupport()
-{
-  if (trajectory_members_ && trajectory_ts_cpp_ && trajectory_ts_introspection_) {
-    return true;
-  }
-  if (!ros_node_) {
-    return false;
-  }
-
-  try {
-    trajectory_ts_lib_cpp_ =
-      rclcpp::get_typesupport_library(trajectory_topic_type_name_, "rosidl_typesupport_cpp");
-    trajectory_ts_cpp_ = rclcpp::get_typesupport_handle(
-      trajectory_topic_type_name_, "rosidl_typesupport_cpp", *trajectory_ts_lib_cpp_);
-
-    trajectory_ts_lib_introspection_ = rclcpp::get_typesupport_library(
-      trajectory_topic_type_name_, "rosidl_typesupport_introspection_cpp");
-    trajectory_ts_introspection_ = rclcpp::get_typesupport_handle(
-      trajectory_topic_type_name_, "rosidl_typesupport_introspection_cpp", *trajectory_ts_lib_introspection_);
-
-    trajectory_members_ = toMessageMembers(trajectory_ts_introspection_);
-    if (!trajectory_members_) {
-      throw std::runtime_error("trajectory introspection data is null");
-    }
-  } catch (const std::exception & e) {
-    RCLCPP_ERROR(
-      ros_node_->get_logger(), "Failed to load typesupport for %s: %s",
-      trajectory_topic_type_name_.c_str(), e.what());
-    trajectory_ts_lib_cpp_.reset();
-    trajectory_ts_lib_introspection_.reset();
-    trajectory_ts_cpp_ = nullptr;
-    trajectory_ts_introspection_ = nullptr;
-    trajectory_members_ = nullptr;
-    return false;
-  }
-
-  return true;
-}
-
-bool ControlModePanel::parseTrajectoryMessage(
-  const rclcpp::SerializedMessage & serialized, std::vector<geometry_msgs::msg::Point> & points,
-  std::string & frame_id)
-{
-  points.clear();
-  frame_id.clear();
-
-  if (!ensureTrajectoryTypeSupport() || !trajectory_members_ || !trajectory_ts_cpp_) {
-    return false;
-  }
-
-  try {
-    MessageMemory message(trajectory_members_);
-    {
-      rclcpp::SerializationBase serializer(trajectory_ts_cpp_);
-      serializer.deserialize_message(&serialized, message.get());
-    }
-
-    const auto * header_member = findMember(trajectory_members_, "header");
-    if (
-      header_member &&
-      header_member->type_id_ == rosidl_typesupport_introspection_cpp::ROS_TYPE_MESSAGE)
-    {
-      const auto * header_members = toMessageMembers(header_member->members_);
-      const auto * frame_id_member = findMember(header_members, "frame_id");
-      if (
-        frame_id_member &&
-        frame_id_member->type_id_ == rosidl_typesupport_introspection_cpp::ROS_TYPE_STRING)
+    rclcpp::SubscriptionOptions options;
+    options.callback_group = initial_pose_sub_group_;
+    trajectory_typed_sub_ = initial_pose_node_->create_subscription<autoware_auto_planning_msgs::msg::Trajectory>(
+      trajectory_topic_name_, qos,
+      [this](const autoware_auto_planning_msgs::msg::Trajectory::SharedPtr msg)
       {
-        const auto * header_ptr =
-          reinterpret_cast<const uint8_t *>(message.get()) + header_member->offset_;
-        const auto * frame_ptr = header_ptr + frame_id_member->offset_;
-        frame_id = *reinterpret_cast<const std::string *>(frame_ptr);
-      }
-    }
+        if (!msg) {
+          return;
+        }
 
-    const auto * points_member = findMember(trajectory_members_, "points");
-    if (
-      !points_member ||
-      points_member->type_id_ != rosidl_typesupport_introspection_cpp::ROS_TYPE_MESSAGE ||
-      !points_member->is_array_ || !points_member->size_function ||
-      !points_member->get_const_function)
-    {
-      return false;
-    }
+        std::vector<geometry_msgs::msg::Point> points;
+        points.reserve(msg->points.size());
+        for (const auto & tp : msg->points) {
+          geometry_msgs::msg::Point p;
+          p.x = tp.pose.position.x;
+          p.y = tp.pose.position.y;
+          p.z = 0.0;
+          points.push_back(p);
+        }
 
-    const auto * points_ptr =
-      reinterpret_cast<const uint8_t *>(message.get()) + points_member->offset_;
-    const size_t points_size = points_member->size_function(points_ptr);
-    points.reserve(points_size);
-
-    const auto * traj_point_members = toMessageMembers(points_member->members_);
-    const auto * pose_member = findMember(traj_point_members, "pose");
-    if (
-      !pose_member ||
-      pose_member->type_id_ != rosidl_typesupport_introspection_cpp::ROS_TYPE_MESSAGE)
-    {
-      return false;
-    }
-    const auto * pose_members = toMessageMembers(pose_member->members_);
-    const auto * position_member = findMember(pose_members, "position");
-    if (
-      !position_member ||
-      position_member->type_id_ != rosidl_typesupport_introspection_cpp::ROS_TYPE_MESSAGE)
-    {
-      return false;
-    }
-    const auto * position_members = toMessageMembers(position_member->members_);
-    const auto * x_member = findMember(position_members, "x");
-    const auto * y_member = findMember(position_members, "y");
-    if (!x_member || !y_member) {
-      return false;
-    }
-
-    for (size_t i = 0; i < points_size; ++i) {
-      const auto * traj_point = points_member->get_const_function(points_ptr, i);
-      if (!traj_point) {
-        continue;
-      }
-
-      const auto * pose_ptr =
-        reinterpret_cast<const uint8_t *>(traj_point) + static_cast<size_t>(pose_member->offset_);
-      const auto * position_ptr = pose_ptr + static_cast<size_t>(position_member->offset_);
-
-      double x = 0.0;
-      double y = 0.0;
-      if (
-        !readNumericAsDouble(x_member, position_ptr, x) ||
-        !readNumericAsDouble(y_member, position_ptr, y))
-      {
-        continue;
-      }
-
-      geometry_msgs::msg::Point p;
-      p.x = x;
-      p.y = y;
-      p.z = 0.0;
-      points.push_back(p);
-    }
-
-    return true;
-  } catch (const std::exception & e) {
-    if (ros_node_) {
-      RCLCPP_DEBUG(ros_node_->get_logger(), "Failed to parse trajectory message: %s", e.what());
-    }
-    points.clear();
-    frame_id.clear();
-    return false;
+        std::lock_guard<std::mutex> lock(data_mutex_);
+        last_trajectory_points_ = std::move(points);
+        last_trajectory_frame_id_ = msg->header.frame_id;
+        data_cv_.notify_all();
+      },
+      options);
+    RCLCPP_INFO(initial_pose_node_->get_logger(), "Subscribed Trajectory: %s", trajectory_topic_name_.c_str());
   }
 }
 
@@ -496,7 +341,7 @@ void ControlModePanel::sendInitialPoseSet()
   status_label_->setText(status);
 }
 
-bool ControlModePanel::tryPublishInitialPose(QString & status_text)
+bool ControlModePanel::tryPublishInitialPose(QString & status_text, bool warn_if_not_ready)
 {
   status_text.clear();
 
@@ -524,12 +369,16 @@ bool ControlModePanel::tryPublishInitialPose(QString & status_text)
 
   if (!gnss_pose) {
     status_text = tr("Initial Pose: waiting for GNSS pose");
-    RCLCPP_WARN(ros_node_->get_logger(), "Initial pose set requested, but GNSS pose is not received yet.");
+    if (warn_if_not_ready) {
+      RCLCPP_WARN(ros_node_->get_logger(), "Initial pose set requested, but GNSS pose is not received yet.");
+    }
     return false;
   }
   if (trajectory_points.empty()) {
     status_text = tr("Initial Pose: waiting for trajectory");
-    RCLCPP_WARN(ros_node_->get_logger(), "Initial pose set requested, but trajectory is not received yet.");
+    if (warn_if_not_ready) {
+      RCLCPP_WARN(ros_node_->get_logger(), "Initial pose set requested, but trajectory is not received yet.");
+    }
     return false;
   }
 
