@@ -59,7 +59,7 @@ RUN_GROUP ?=
 
 # autowareのbuildのみ
 autoware-build:
-	$(DC) run --rm --no-deps autoware-build
+	$(DC) run -T --rm --no-deps autoware-build
 
 # run autoware for vehicle
 autoware-vehicle:
