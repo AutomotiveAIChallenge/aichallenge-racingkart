@@ -67,7 +67,7 @@ RUN_GROUP ?=
 
 # autowareのbuildのみ
 autoware-build:
-	$(DC) up -d --force-recreate $(AIC_BUILD_SERVICE)
+	$(DC) up --force-recreate $(AIC_BUILD_SERVICE)
 
 # run autoware for vehicle
 autoware-vehicle:
