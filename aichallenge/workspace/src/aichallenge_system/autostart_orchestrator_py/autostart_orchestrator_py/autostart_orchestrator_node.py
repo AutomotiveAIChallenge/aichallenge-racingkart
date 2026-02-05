@@ -35,7 +35,7 @@ class AutostartOrchestrator(Node):
         str_arr_desc = ParameterDescriptor(type=Parameter.Type.STRING_ARRAY.value)
         for spec in [
             ("vehicle_ns", default_vehicle_ns),
-            ("vehicle_state_topic", ""),
+            ("vehicle_state_topic", "/awsim/state"),
             # Default: start immediately (no wait).
             ("start_on_vehicle_state", ""),
             ("stop_on_vehicle_state", "Finish"),
@@ -84,7 +84,7 @@ class AutostartOrchestrator(Node):
         vehicle_ns = str(self.get_parameter("vehicle_ns").value)
         vehicle_state_topic = str(self.get_parameter("vehicle_state_topic").value or "").strip()
         if not vehicle_state_topic:
-            vehicle_state_topic = f"/{vehicle_ns}/awsim/state"
+            vehicle_state_topic = f"/awsim/state"
         self._vehicle_state_topic = vehicle_state_topic
 
         self._cond = threading.Condition()

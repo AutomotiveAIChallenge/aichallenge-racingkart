@@ -17,6 +17,7 @@ USAGE
 
 export ROSBAG="true"
 export CAPTURE="true"
+SIM_MODE="eval"
 
 mode="${1-}"
 case "${mode}" in
@@ -24,7 +25,7 @@ case "${mode}" in
 test)
     shift
     # Equivalent to the old `make test`: run AWSIM in test mode and enable capture+rosbag.
-    export SIM_MODE="test"
+    SIM_MODE="test"
     # Force single-domain run for smoke tests.
     export DOMAIN_IDS="${DOMAIN_ID:-1}"
     ;;
@@ -77,7 +78,7 @@ dc() {
         AIC_CAPTURE="${CAPTURE:-false}" \
         AIC_ROSBAG="${ROSBAG:-false}" \
         CMD_WORKDIR="${output_run_dir}" \
-        SIM_MODE="${SIM_MODE-}" \
+        SIM_MODE="${SIM_MODE}" \
         RUN_MODE="${RUN_MODE-}" \
         CMD="${CMD-}" \
         "${dc_cmd[@]}" "$@"
@@ -91,17 +92,19 @@ cleanup_all() {
 }
 trap cleanup_all EXIT INT TERM
 
+# Simulator log should be under output/<run_rel>/awsim.log (not under dN/).
+output_run_dir="${output_root}/${run_rel}"
+SIM_MODE=$SIM_MODE make simulator
+CMD="env ROS_DOMAIN_ID=0 /aichallenge/utils/publish.bash wait-admin-ready" dc run --rm --no-deps autoware-command
+
 for domain_id in ${domain_ids}; do
     mkdir -p "output/${run_rel}/d${domain_id}"
     output_run_dir="${output_root}/${run_rel}/d${domain_id}"
     echo "OUTPUT: output/${run_rel}/d${domain_id} (container: ${output_run_dir})"
 
-    # Simulator log should be under output/<run_rel>/awsim.log (not under dN/).
-    (output_run_dir="${output_root}/${run_rel}" SIM_MODE="${SIM_MODE:-eval}" dc up -d simulator)
-
-    CMD="env ROS_DOMAIN_ID=0 /aichallenge/utils/publish.bash wait-admin-ready" dc run --rm --no-deps autoware-command
     dc up -d --force-recreate autoware
 done
 
 CMD="env ROS_DOMAIN_ID=0 /aichallenge/utils/publish.bash wait-admin-finish" dc run --rm --no-deps autoware-command
-docker compose down
+sleep 10
+cleanup_all

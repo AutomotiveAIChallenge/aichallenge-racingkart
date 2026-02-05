@@ -26,4 +26,3 @@
   - 対象: `run_parallel_submissions.bash`, `aichallenge_system_launch`, 競技仕様
 - 終了自動化（finish 検知→ `down` 相当までを自動化するかは要件次第）
   - 対象: `run_parallel_submissions.bash`, `autostart_orchestrator_py`
-
