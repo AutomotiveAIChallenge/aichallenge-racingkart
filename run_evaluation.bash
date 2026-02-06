@@ -82,6 +82,8 @@ output_run_dir=""
 dc() {
     OUTPUT_ROOT="${output_root}" \
         OUTPUT_RUN_DIR="${output_run_dir}" \
+        AIC_CAPTURE="${CAPTURE:-false}" \
+        AIC_ROSBAG="${ROSBAG:-false}" \
         DOMAIN_ID="${domain_id:-${DOMAIN_ID:-1}}" \
         CMD_WORKDIR="${output_run_dir}" \
         SIM_MODE="${SIM_MODE}" \
