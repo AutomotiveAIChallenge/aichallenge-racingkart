@@ -81,7 +81,6 @@ class AutostartOrchestrator(Node):
 
         cbg = ReentrantCallbackGroup()
 
-        vehicle_ns = str(self.get_parameter("vehicle_ns").value)
         vehicle_state_topic = str(self.get_parameter("vehicle_state_topic").value or "").strip()
         if not vehicle_state_topic:
             vehicle_state_topic = f"/awsim/state"
