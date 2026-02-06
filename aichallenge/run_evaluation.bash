@@ -6,7 +6,7 @@ ts="$(date +%Y%m%d-%H%M%S)"
 out_dir="${output_root}/${ts}/d${domain_id}"
 mkdir -p "${out_dir}"
 ln -nfs "${ts}" "${output_root}/latest" || true
-cd "${out_dir}"
+cd "${out_dir}" || exit
 
 # shellcheck disable=SC1091
 source /aichallenge/workspace/install/setup.bash
@@ -35,5 +35,5 @@ trap 'cleanup;exit 143' TERM
 /aichallenge/run_simulator.bash eval >awsim.log 2>&1 &
 pid_sim=$!
 # Autoware
-env AIC_CAPTURE="${capture}" AIC_ROSBAG="${rosbag}" OUTPUT_RUN_DIR="${out_dir}" /aichallenge/run_autoware.bash awsim "${domain_id}" >autoware.log 2>&1
+env OUTPUT_RUN_DIR="${out_dir}" /aichallenge/run_autoware.bash awsim "${domain_id}" >autoware.log 2>&1
 pid_aw=$!

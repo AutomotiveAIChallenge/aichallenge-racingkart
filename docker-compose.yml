@@ -13,8 +13,9 @@ x-autoware-base: &autoware-base
     - RUN_MODE=${RUN_MODE:-}
     - SIM_MODE=${SIM_MODE:-}
     - CMD=${CMD:-}
-    - AIC_CAPTURE=${AIC_CAPTURE:-}
-    - AIC_ROSBAG=${AIC_ROSBAG:-}
+    - COLCON_TRACE=${COLCON_TRACE:-}
+    - AIC_CAPTURE=${AIC_CAPTURE:-false}
+    - AIC_ROSBAG=${AIC_ROSBAG:-false}
     # GPU (set by Makefile when DEVICE enables GPU, otherwise empty)
     - NVIDIA_VISIBLE_DEVICES=${NVIDIA_VISIBLE_DEVICES:-}
     - NVIDIA_DRIVER_CAPABILITIES=${NVIDIA_DRIVER_CAPABILITIES:-}
