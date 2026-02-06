@@ -133,4 +133,3 @@ Windows ドライブ上だと symlink の扱いが厳しくなるため、やは
   - 併せて WSLg（`/mnt/wslg` 等）向けの環境変数/マウントを整理
 - `Makefile` 側で WSL を自動検出し、`-f docker-compose.wsl.yml` を自動付与
 - `make doctor`（または既存 doctor の拡張）で、CRLF/GUI/Docker の前提を起動前にチェック
-

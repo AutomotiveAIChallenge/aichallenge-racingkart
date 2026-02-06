@@ -1,21 +1,4 @@
 #!/usr/bin/env bash
-set -euo pipefail
-
-rosbag=false
-capture=false
-uid=""
-gid=""
-for arg in "$@"; do
-    case "${arg}" in
-    -r | rosbag) rosbag=true ;;
-    -c | capture) capture=true ;;
-    *)
-        if [[ ${arg} =~ ^[0-9]+$ ]]; then
-            if [ -z "${uid}" ]; then uid="${arg}"; elif [ -z "${gid}" ]; then gid="${arg}"; fi
-        fi
-        ;;
-    esac
-done
 
 domain_id="${ROS_DOMAIN_ID:-${DOMAIN_ID:-1}}"
 output_root="${OUTPUT_ROOT:-/output}"
@@ -42,19 +25,15 @@ cleanup() {
         kill -INT "${pid_sim}" >/dev/null 2>&1 || true
         wait "${pid_sim}" >/dev/null 2>&1 || true
     fi
-    bash /aichallenge/utils/fix_ownership.bash "${uid}" "${gid}" "${output_root}" "${ts}" >/dev/null 2>&1 || true
     return "${exit_code}"
 }
 trap cleanup EXIT
-trap 'exit 130' INT
-trap 'exit 143' TERM
+trap 'cleanup;exit 130' INT
+trap 'cleanup;exit 143' TERM
 
 # AWSIM
 /aichallenge/run_simulator.bash eval >awsim.log 2>&1 &
 pid_sim=$!
-env ROS_DOMAIN_ID=0 /aichallenge/utils/publish.bash wait-admin-ready
 # Autoware
-env AIC_CAPTURE="${capture}" AIC_ROSBAG="${rosbag}" OUTPUT_RUN_DIR="${out_dir}" /aichallenge/run_autoware.bash awsim "${domain_id}" >autoware.log 2>&1 &
+env AIC_CAPTURE="${capture}" AIC_ROSBAG="${rosbag}" OUTPUT_RUN_DIR="${out_dir}" /aichallenge/run_autoware.bash awsim "${domain_id}" >autoware.log 2>&1
 pid_aw=$!
-# Wait AWSIM finish
-env ROS_DOMAIN_ID=0 /aichallenge/utils/publish.bash wait-admin-finished
