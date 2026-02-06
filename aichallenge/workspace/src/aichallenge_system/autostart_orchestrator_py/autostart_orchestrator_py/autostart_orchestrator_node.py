@@ -245,12 +245,15 @@ class AutostartOrchestrator(Node):
         log_fp = open(log_path, "ab", buffering=0)  # noqa: SIM115
         self._rosbag_log_fp = log_fp
         try:
+            # os.setsid and preexec_fn are only available/meaningful on POSIX systems.
+            # Guard this so the code can be imported or run on non-Unix platforms.
+            preexec_fn = os.setsid if hasattr(os, "setsid") else None
             self._rosbag_proc = subprocess.Popen(
                 argv,
                 cwd=str(output_dir),
                 stdout=log_fp,
                 stderr=subprocess.STDOUT,
-                preexec_fn=os.setsid,
+                preexec_fn=preexec_fn,
             )
         except Exception:  # noqa: BLE001
             try:
