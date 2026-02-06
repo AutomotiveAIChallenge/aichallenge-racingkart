@@ -20,7 +20,7 @@
 - `submit/`: 提出物（tar.gz）置き場
 - `Dockerfile`: dev/eval 向けイメージ定義
 - `docker_build.sh` / `docker_run.sh` / `docker_exec.sh`: Docker/rocker のラッパ（ホスト側ログを `output/_host/latest/` に残す）
-- `run_parallel_submissions.bash`: 複数提出物を別 eval イメージとしてビルドし、`autoware-d1..dN` を並列起動する（設計メモ: `../design_docs/run_parallel_submissions.md`）
+- `run_parallel_submissions.bash`: 複数提出物を別 eval イメージとしてビルドし、`autoware-domain1..autoware-domainN`（最大4）を並列起動する（設計メモ: `../design_docs/run_parallel_submissions.md`）
 - `create_submit_file.bash`: `aichallenge/workspace/src/aichallenge_submit` を tar 化して提出物を作成
 - `remote/gui_tools.py`: `remote/` 配下の操作をGUI化（最終的な実体はシェルスクリプトに寄せる）
 - `design_docs/`: 開発/運用メモ（例: `design_docs/run_parallel_submissions.md`）

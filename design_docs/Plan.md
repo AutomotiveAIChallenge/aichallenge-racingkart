@@ -13,8 +13,8 @@
 
 ## P1（見通し改善 / デバッグ性）
 
-- compose override の DRY 化（`docker-compose.yml` の `x-autoware-base` をテンプレ利用して drift を減らす）
-  - 対象: `run_parallel_submissions.bash`, `docker-compose.yml`
+- 固定サービス構成（`autoware-domain1..4`）と `docker-compose.yml` の drift 防止
+  - 対象: `docker-compose.yml`, `design_docs/run_parallel_submissions.md`
 - ROS2 ログの集約（`ROS_LOG_DIR` 等を `output/<run_id>/dN/ros/log` へ）
   - 対象: `run_parallel_submissions.bash`, `run_evaluation.bash`, `aichallenge/run_evaluation.bash`
 - “最初に見るログ3点セット” の徹底（スクリプト出力 / README / docs の整合）
@@ -122,7 +122,7 @@
 #### 3.3.2 multi-submit 時の前提（複数車両の想定）
 
 - `./docker_build_run.bash all` の `--submit` 指定順に domain id を `1..4` へ固定割当（最大4件）。
-- 提出物はホストへ展開しない（作業ツリーを汚さない）。Docker volume に展開し、compose override で `/aichallenge/workspace/src/aichallenge_submit` にマウントして切替える。
+- 提出物はホストへ展開しない（作業ツリーを汚さない）。Docker 内で submit ごとの eval image をビルドして切替える。
 
 #### 3.3.3 改善したい点（fail-fast とログ）
 

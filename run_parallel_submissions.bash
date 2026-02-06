@@ -30,11 +30,11 @@ Behavior:
   - Starts AWSIM once (docker compose service: simulator).
   - Waits for /admin/awsim/state via topic.
   - Builds 1 eval image per submit (Dockerfile target: eval).
-  - Starts Autoware containers autoware-d1..autoware-dN concurrently.
+  - Starts Autoware containers autoware-domain1..autoware-domainN.
   - Domain id is assigned by submit order: 1..4 (max 4).
   - Writes logs under output/<run_id>/d<domain_id>/autoware.log and output/latest -> <run_id>.
   - Writes this script log to output/<run_id>/<script_name>.log.
-  - Writes compose override to output/<run_id>/compose.autoware_multi.yml.
+  - Uses static services in docker-compose.yml (no compose override generation).
 
 Env:
   DEVICE=auto|gpu|cpu    GPU selection (default: auto)
@@ -206,77 +206,6 @@ build_eval_image() {
     echo "${tag}"
 }
 
-write_compose_override() {
-    local out_file="$1"
-    local run_id="$2"
-    local vehicles="$3"
-    local gpu_enabled="$4"
-    local capture_enabled="$5"
-    local rosbag_enabled="$6"
-    shift 6
-    local -a images=("$@")
-
-    {
-        echo "services:"
-        local i
-        for ((i = 1; i <= vehicles; i++)); do
-            local img="${images[$((i - 1))]}"
-            cat <<EOF
-  autoware-d${i}:
-    image: "${img}"
-    privileged: true
-    pull_policy: never
-    network_mode: host
-EOF
-            if [ "${gpu_enabled}" = "1" ]; then
-                cat <<'EOF'
-    deploy:
-      resources:
-        reservations:
-          devices:
-            - driver: nvidia
-              count: all
-              capabilities: ["gpu"]
-EOF
-            fi
-            cat <<EOF
-    environment:
-      - DISPLAY=\${DISPLAY}
-      - USER=\${USER}
-      - ROS_DISTRO=humble
-      - XAUTHORITY=\${XAUTHORITY}
-      - QT_X11_NO_MITSHM=1
-      - TZ=Asia/Tokyo
-      - RUN_MODE=awsim
-      - OUTPUT_RUN_DIR=/output/${run_id}/d${i}
-      - AIC_CAPTURE=${capture_enabled}
-      - AIC_ROSBAG=${rosbag_enabled}
-      - DOMAIN_ID=${i}
-      - RUN_ID=${run_id}
-EOF
-            if [ "${gpu_enabled}" = "1" ]; then
-                cat <<EOF
-      - NVIDIA_VISIBLE_DEVICES=all
-      - NVIDIA_DRIVER_CAPABILITIES=all
-EOF
-            fi
-            cat <<EOF
-    volumes:
-      - ./output:/output
-      - /tmp/.X11-unix:/tmp/.X11-unix:rw
-      - /dev/dri:/dev/dri
-      - \${XAUTHORITY}:\${XAUTHORITY}:rw
-    devices:
-      - /dev/dri
-      - /dev/input
-    working_dir: /output/${run_id}/d${i}
-    command: ["bash", "-lc", "exec /aichallenge/run_autoware.bash awsim ${i} >autoware.log 2>&1"]
-
-EOF
-        done
-    } >"${out_file}"
-}
-
 compose_up() {
     local gpu_enabled="$1"
     local project="$2"
@@ -288,42 +217,17 @@ compose_up() {
     fi
 }
 
-sanitize_yaml_tabs_in_place_best_effort() {
-    local file="$1"
-    [ -f "${file}" ] || return 0
-
-    if LC_ALL=C grep -q $'\t' "${file}"; then
-        warn "compose override contains tab characters (invalid YAML). Sanitizing in place: ${file}"
-        local tmp="${file}.tmp.$$"
-        if command -v expand >/dev/null 2>&1; then
-            expand -t 2 "${file}" >"${tmp}" || {
-                rm -f "${tmp}"
-                return 1
-            }
-        else
-            sed $'s/\t/  /g' "${file}" >"${tmp}" || {
-                rm -f "${tmp}"
-                return 1
-            }
-        fi
-        mv -f "${tmp}" "${file}" || {
-            rm -f "${tmp}"
-            return 1
-        }
-    fi
-}
-
 cleanup_compose_project_best_effort() {
     local project="$1"
 
     local -a cids=()
     mapfile -t cids < <(docker ps -aq --filter "label=com.docker.compose.project=${project}" 2>/dev/null || true)
     if [ "${#cids[@]}" -eq 0 ]; then
-        warn "No containers found for compose project '${project}' (override parse failed)"
+        warn "No containers found for compose project '${project}'"
         return 0
     fi
 
-    warn "Removing containers by label (project='${project}') due to compose override parse failure"
+    warn "Removing containers by label (project='${project}') due to compose parse failure"
     docker rm -f "${cids[@]}" >/dev/null 2>&1 || true
 }
 
@@ -349,38 +253,24 @@ cmd_down() {
     local run_id=""
     run_id="$(resolve_run_id_default)"
 
-    local override_file=""
-    if [ -n "${run_id}" ] && [ -f "${REPO_ROOT}/output/${run_id}/compose.autoware_multi.yml" ]; then
-        override_file="${REPO_ROOT}/output/${run_id}/compose.autoware_multi.yml"
-    elif [ -n "${legacy_log_dir}" ] && [ -f "${legacy_log_dir}/compose.autoware_multi.yml" ]; then
-        override_file="${legacy_log_dir}/compose.autoware_multi.yml"
-    elif [ -f "${REPO_ROOT}/output/_host/latest-autoware-parallel-submissions/compose.autoware_multi.yml" ]; then
-        override_file="${REPO_ROOT}/output/_host/latest-autoware-parallel-submissions/compose.autoware_multi.yml"
-    else
-        die "compose override not found (hint: run once to create output/latest, or specify --log-dir <dir>)"
-    fi
-
-    sanitize_yaml_tabs_in_place_best_effort "${override_file}" || warn "Failed to sanitize tabs in ${override_file} (continuing)"
-
     local project=""
-    local override_dir
-    override_dir="$(cd "$(dirname "${override_file}")" && pwd)"
-    if [ -f "${override_dir}/${COMPOSE_PROJECT_FILE_NAME}" ]; then
-        project="$(cat "${override_dir}/${COMPOSE_PROJECT_FILE_NAME}" 2>/dev/null || true)"
-    elif [ -n "${run_id}" ]; then
+    if [ -n "${run_id}" ]; then
         project="$(resolve_project_name_from_run_id_best_effort "${run_id}")"
+    fi
+    if [ -z "${project}" ] && [ -n "${legacy_log_dir}" ] && [ -f "${legacy_log_dir}/${COMPOSE_PROJECT_FILE_NAME}" ]; then
+        project="$(cat "${legacy_log_dir}/${COMPOSE_PROJECT_FILE_NAME}" 2>/dev/null || true)"
     fi
     if [ -z "${project}" ]; then
         project="$(sanitize_project_name "$(basename "${REPO_ROOT}")")"
     fi
 
-    log "docker compose down --remove-orphans (project: ${project}, override: ${override_file})"
-    if docker compose -p "${project}" -f "${COMPOSE_BASE_FILE}" -f "${override_file}" config -q >/dev/null 2>&1; then
-        docker compose -p "${project}" -f "${COMPOSE_BASE_FILE}" -f "${override_file}" down --remove-orphans
-    elif docker compose -p "${project}" -f "${COMPOSE_BASE_FILE}" -f "${COMPOSE_GPU_FILE}" -f "${override_file}" config -q >/dev/null 2>&1; then
-        docker compose -p "${project}" -f "${COMPOSE_BASE_FILE}" -f "${COMPOSE_GPU_FILE}" -f "${override_file}" down --remove-orphans
+    log "docker compose down --remove-orphans (project: ${project})"
+    if docker compose -p "${project}" -f "${COMPOSE_BASE_FILE}" config -q >/dev/null 2>&1; then
+        docker compose -p "${project}" -f "${COMPOSE_BASE_FILE}" down --remove-orphans
+    elif docker compose -p "${project}" -f "${COMPOSE_BASE_FILE}" -f "${COMPOSE_GPU_FILE}" config -q >/dev/null 2>&1; then
+        docker compose -p "${project}" -f "${COMPOSE_BASE_FILE}" -f "${COMPOSE_GPU_FILE}" down --remove-orphans
     else
-        warn "docker compose failed to parse override file: ${override_file}"
+        warn "docker compose failed to parse compose files"
         cleanup_compose_project_best_effort "${project}" || true
     fi
 
@@ -525,9 +415,6 @@ main() {
         images+=("$(build_eval_image "${submit_rel}" "${run_id}" "${domain_id}")")
     done
 
-    local override_file="${REPO_ROOT}/output/${run_id}/compose.autoware_multi.yml"
-    write_compose_override "${override_file}" "${run_id}" "${vehicles}" "${gpu_enabled}" "${capture_enabled}" "${rosbag_enabled}" "${images[@]}"
-
     local project="${AIC_PARALLEL_COMPOSE_PROJECT-}"
     if [ -z "${project}" ]; then
         project="$(sanitize_project_name "aichallenge-${SCRIPT_NAME}-${run_id}")"
@@ -552,11 +439,23 @@ main() {
 
     local -a autoware_svcs=()
     for domain_id in $(seq 1 "${vehicles}"); do
-        autoware_svcs+=("autoware-d${domain_id}")
+        autoware_svcs+=("autoware-domain${domain_id}")
     done
 
-    log "Starting ${autoware_svcs[*]} (concurrent)"
-    compose_up "${gpu_enabled}" "${project}" "${compose_args[@]}" -f "${override_file}" up -d --force-recreate "${autoware_svcs[@]}"
+    log "Starting ${autoware_svcs[*]}"
+    for domain_id in $(seq 1 "${vehicles}"); do
+        local svc="autoware-domain${domain_id}"
+        local img="${images[$((domain_id - 1))]}"
+        local out_dir="/output/${run_id}/d${domain_id}"
+        local image_var="AUTOWARE_DOMAIN${domain_id}_IMAGE"
+
+        log "  - ${svc} (image: ${img}, output: ${out_dir})"
+        export "${image_var}=${img}"
+        RUN_MODE="awsim" OUTPUT_RUN_DIR="${out_dir}" RUN_ID="${run_id}" \
+            AIC_CAPTURE="${capture_enabled}" AIC_ROSBAG="${rosbag_enabled}" \
+            compose_up "${gpu_enabled}" "${project}" "${compose_args[@]}" up -d --force-recreate "${svc}"
+        unset "${image_var}"
+    done
 
     log "Waiting for AWSIM readiness (/admin/awsim/state)"
     run_autoware_command_best_effort "${gpu_enabled}" "${project}" "env ROS_DOMAIN_ID=0 /aichallenge/utils/publish.bash wait-admin-state" || die "AWSIM readiness check failed"
@@ -568,11 +467,7 @@ main() {
 
     log "Started. Output: output/${run_id}/d*/autoware.log"
     log "Stop: ./run_parallel_submissions.bash down"
-    if [ "${gpu_enabled}" = "1" ]; then
-        log "  or: docker compose -p ${project} -f docker-compose.yml -f docker-compose.gpu.yml -f ${override_file} down --remove-orphans"
-    else
-        log "  or: docker compose -p ${project} -f docker-compose.yml -f ${override_file} down --remove-orphans"
-    fi
+    log "  or: docker compose -p ${project} -f docker-compose.yml down --remove-orphans"
 }
 
 main "$@"
