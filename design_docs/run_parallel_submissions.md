@@ -5,6 +5,7 @@
 > 車両状態（`/dN/awsim/state`）に基づく initial pose / control mode / finish 後処理の詳細は、
 > `aichallenge/workspace/src/aichallenge_system/autostart_orchestrator_py/README.md` を参照してください。
 > recordとcaptureは処理負荷がそこそこかかるので、現在は未実装です。実際に複数台走行に実装する場合は「あり方」から考えます。
+> (Rvizによるcaptureは現在音が取れないなどの課題があります)
 
 ## 概要
 

@@ -14,6 +14,15 @@ Toward the competition, we will update the following pages to provide informatio
 - [English Page](https://automotiveaichallenge.github.io/aichallenge-documentation-racingkart/en/)
 - [スクリプト設計メモ（評価/ビルド/起動）](aichallenge/README.md)
 
+## リポジトリ構成（トップレベル）
+
+- `aichallenge/`: シミュレータ/Autoware/評価の起動・操作スクリプト群
+- `vehicle/`: 実車環境向け（セットアップ確認、Zenoh、rosbag など）
+- `remote/`: 実車/遠隔接続の補助（SSH/Zenoh/RViz/joy）
+- `design_docs/`: 開発・運用メモ
+- `submit/`: 提出物（tar.gz）置き場
+- `output/`: 実行結果・ログ出力先（生成物）
+
 ## Docker Compose（推奨）
 
 ### 全体像（開発: Makefile / 個別起動）

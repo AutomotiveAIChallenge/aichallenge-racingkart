@@ -12,6 +12,7 @@ vehicle/.env
 metadata.yaml
 output/
 outputs/
+aichallenge/capture/
 
 # local notes (do not commit)
 /memo.md
