@@ -2,54 +2,45 @@
 
 > Note:
 > 本ドキュメントは **ホスト側** の複数台起動オーケストレーション（`run_parallel_submissions.bash`）の説明です。
-> 車両状態（`/dN/awsim/state`）に基づく initial pose / control mode / capture / rosbag / finish 後処理の詳細は、
+> 車両状態（`/dN/awsim/state`）に基づく initial pose / control mode / finish 後処理の詳細は、
 > `aichallenge/workspace/src/aichallenge_system/autostart_orchestrator_py/README.md` を参照してください。
+> recordとcaptureは処理負荷がそこそこかかるので、現在は未実装です。実際に複数台走行に実装する場合は「あり方」から考えます。
 
 ## 概要
 
 `run_parallel_submissions.bash` は、複数の提出物（`aichallenge_submit.tar.gz`）をそれぞれ eval イメージとしてビルドし、
-`docker-compose.yml` に固定定義された `autoware-domain1..autoware-domain4` を使って並列起動します。
+`docker-compose.yml` に固定定義された `autoware-d1..autoware-d4` を使って並列起動します。
 
-- submit の並び順に Domain ID を `1..N` で割り当て（最大 4）
+- submit の並び順に Domain ID を `1..N` で割り当て（最大4）
 - simulator は 1 台だけ起動
-- `output/<run_id>/dN/autoware.log` に各ドメインのログを集約
+- `output/<run_id>/dN/autoware.log` に各ドメインのログを出力
 - `output/latest -> <run_id>` を更新
-
-旧実装で使っていた compose override 生成（`compose.autoware_multi.yml`）は廃止済みです。
 
 ## 前提
 
 - `docker compose` が使えること（Compose v2）
 - 提出物 tar.gz はリポジトリ配下にあること（Docker build context 制約）
-- `docker-compose.yml` に `autoware-domain1..4` が定義済みであること
+- `docker-compose.yml` に `autoware-d1..4` が定義済みであること
 
 ## 実行フロー（高レベル）
 
 1. `--submit` をパースし、台数 `N`（`1..4`）を決定
 2. `output/<run_id>/d1..dN` を作成し、`output/latest` を更新
 3. submit ごとに eval イメージをビルド
-4. compose project 名を決定し、`output/<run_id>/compose.project` に保存
-5. simulator を 1 台起動
+   - `docker build --target eval --build-arg SUBMIT_TAR=<repo相対path> -t autoware-dN`
+4. simulator を 1 台起動
    - `SIM_MODE` は台数に応じて `eval` / `2p` / `3p` / `4p`
-6. `autoware-domain1..autoware-domainN` を順に起動
-   - `AUTOWARE_DOMAIN{N}_IMAGE` でサービスごとの image を差し替え
+5. `autoware-command` を `ROS_DOMAIN_ID=0` で実行し、`wait-admin-ready` を待機
+6. `autoware-d1..autoware-dN` を順に起動
    - `OUTPUT_RUN_DIR=/output/<run_id>/dN` を渡してログ出力先を分離
-7. `autoware-command` で `wait-admin-state` を実行し readiness を待機
-8. 停止時（`down`）に simulator 終了後の `dN-result*.json` を `output/<run_id>/dN/` へ回収
+7. `autoware-command` を `ROS_DOMAIN_ID=0` で実行し、`wait-admin-finish` を待機
 
 ## サービス対応
 
-- `autoware-domain1` -> Domain ID 1
-- `autoware-domain2` -> Domain ID 2
-- `autoware-domain3` -> Domain ID 3
-- `autoware-domain4` -> Domain ID 4
-
-各サービスの image は次の環境変数で差し替えます。
-
-- `AUTOWARE_DOMAIN1_IMAGE`
-- `AUTOWARE_DOMAIN2_IMAGE`
-- `AUTOWARE_DOMAIN3_IMAGE`
-- `AUTOWARE_DOMAIN4_IMAGE`
+- `autoware-d1` -> Domain ID 1
+- `autoware-d2` -> Domain ID 2
+- `autoware-d3` -> Domain ID 3
+- `autoware-d4` -> Domain ID 4
 
 ## コマンド
 
@@ -74,23 +65,13 @@
 ./run_parallel_submissions.bash down
 ```
 
-- `output/latest`（または `--log-dir`）から compose project 名を解決して `docker compose down --remove-orphans` を実行
-- 停止後に `dN-result*.json` を各 `dN/` に回収
-
-### 3) 結果回収のみ
-
-```bash
-./run_parallel_submissions.bash collect --vehicles 2
-```
-
-- `dN-result*.json` を `output/<run_id>/dN/` に整理
+- 現行実装は `docker compose down` を実行
 
 ## 出力構成
 
 ```text
 output/<run_id>/
   run_parallel_submissions.log
-  compose.project
   awsim.log
   d1/
     autoware.log
@@ -110,7 +91,7 @@ output/latest -> <run_id>
 
 ## 既知の注意点
 
-- `run_parallel_submissions.bash` は起動まで担当し、終了確定は `down` に依存
-- `AIC_CAPTURE` / `AIC_ROSBAG` は orchestrator 起動が前提
+- submit tar.gz は Docker build context 制約によりリポジトリ配下必須
+- build された image tag は `autoware-dN`（再実行で同名tagを上書き）
 - readiness は `ROS_DOMAIN_ID=0` の admin state 依存
-- 最大 4 台（`autoware-domain1..4` 固定）
+- 最大 4 台（`autoware-d1..4` 固定）
