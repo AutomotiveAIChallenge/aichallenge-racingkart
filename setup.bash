@@ -12,12 +12,22 @@ SETUP_ASSUME_YES=0
 
 log() { echo "[setup] $*"; }
 warn() { echo "[setup][WARN] $*" >&2; }
-die() { echo "[setup][ERROR] $*" >&2; exit 1; }
-on_interrupt() { echo ""; warn "Interrupted (Ctrl+C)"; exit 130; }
+die() {
+    echo "[setup][ERROR] $*" >&2
+    exit 1
+}
+on_interrupt() {
+    echo ""
+    warn "Interrupted (Ctrl+C)"
+    exit 130
+}
 trap on_interrupt INT
 
 cmd_exists() { command -v "$1" >/dev/null 2>&1; }
-require_cmd() { cmd_exists "$1" || { warn "Missing required command: $1"; return 1; }; }
+require_cmd() { cmd_exists "$1" || {
+    warn "Missing required command: $1"
+    return 1
+}; }
 
 os_id() {
     [ -r /etc/os-release ] || return 1
@@ -27,7 +37,7 @@ os_id() {
 }
 
 is_repo_root_dir() { [ -f "$1/docker-compose.yml" ] && [ -f "$1/Dockerfile" ] && [ -f "$1/Makefile" ]; }
-normalize_branch_ref() { case "${1-}" in origin/*) echo "${1#origin/}" ;; *) echo "${1-}" ;; esac; }
+normalize_branch_ref() { case "${1-}" in origin/*) echo "${1#origin/}" ;; *) echo "${1-}" ;; esac }
 
 sudo_refresh() {
     [ "$(id -u)" -eq 0 ] && return 0
@@ -36,7 +46,10 @@ sudo_refresh() {
 }
 
 apt_run() {
-    if [ "$(id -u)" -eq 0 ]; then apt-get "$@"; else sudo_refresh; sudo apt-get "$@"; fi
+    if [ "$(id -u)" -eq 0 ]; then apt-get "$@"; else
+        sudo_refresh
+        sudo apt-get "$@"
+    fi
 }
 
 in_group() { id -nG "${USER-}" 2>/dev/null | tr ' ' '\n' | grep -qx "$1"; }
@@ -51,11 +64,17 @@ docker_compose_available() {
 
 confirm_step() {
     local prompt="$1" ans=""
-    if [ "${SETUP_ASSUME_YES}" = "1" ]; then log "${INFO} ${prompt} (auto-yes)"; return 0; fi
-    if ! [ -r /dev/tty ]; then warn "No TTY available. Re-run with --yes."; return 1; fi
+    if [ "${SETUP_ASSUME_YES}" = "1" ]; then
+        log "${INFO} ${prompt} (auto-yes)"
+        return 0
+    fi
+    if ! [ -r /dev/tty ]; then
+        warn "No TTY available. Re-run with --yes."
+        return 1
+    fi
     printf "[setup] %s [y/N]: " "${prompt}" >/dev/tty
     IFS= read -r ans </dev/tty || return 1
-    case "${ans}" in y|Y) return 0 ;; *) return 1 ;; esac
+    case "${ans}" in y | Y) return 0 ;; *) return 1 ;; esac
 }
 
 install_base_packages() {
@@ -105,7 +124,10 @@ install_docker_if_missing() {
 
 ensure_docker_group() {
     [ "$(id -u)" -eq 0 ] && return 0
-    if in_group docker; then log "${OK} user is already in docker group"; return 0; fi
+    if in_group docker; then
+        log "${OK} user is already in docker group"
+        return 0
+    fi
     sudo_refresh
     sudo usermod -aG docker "${USER-}"
     warn "${WARN} Added ${USER-} to docker group. Re-login is required."
@@ -213,10 +235,22 @@ bootstrap() {
 
     while [ $# -gt 0 ]; do
         case "$1" in
-        --repo) repo_url="${2-}"; shift 2 ;;
-        --branch) branch="${2-}"; shift 2 ;;
-        --dir) dest_dir="${2-}"; shift 2 ;;
-        --yes | -y) SETUP_ASSUME_YES=1; shift ;;
+        --repo)
+            repo_url="${2-}"
+            shift 2
+            ;;
+        --branch)
+            branch="${2-}"
+            shift 2
+            ;;
+        --dir)
+            dest_dir="${2-}"
+            shift 2
+            ;;
+        --yes | -y)
+            SETUP_ASSUME_YES=1
+            shift
+            ;;
         -h | --help)
             cat <<BOOT_HELP
 Usage:
@@ -228,7 +262,10 @@ Defaults:
 BOOT_HELP
             return 0
             ;;
-        *) warn "Unknown option for bootstrap: $1"; return 2 ;;
+        *)
+            warn "Unknown option for bootstrap: $1"
+            return 2
+            ;;
         esac
     done
 
@@ -312,13 +349,19 @@ USAGE_HELP
 }
 
 main() {
-    if [ $# -eq 0 ]; then preflight; return $?; fi
+    if [ $# -eq 0 ]; then
+        preflight
+        return $?
+    fi
 
     case "$1" in
     -h | --help | help) usage ;;
     preflight)
         shift
-        [ $# -eq 0 ] || { warn "preflight takes no options"; return 2; }
+        [ $# -eq 0 ] || {
+            warn "preflight takes no options"
+            return 2
+        }
         preflight
         ;;
     bootstrap)
@@ -326,7 +369,11 @@ main() {
         bootstrap "$@"
         ;;
     doctor | test | show | pull | download | env) unsupported_command "$1" ;;
-    *) warn "Unknown command: $1"; usage; return 2 ;;
+    *)
+        warn "Unknown command: $1"
+        usage
+        return 2
+        ;;
     esac
 }
 
