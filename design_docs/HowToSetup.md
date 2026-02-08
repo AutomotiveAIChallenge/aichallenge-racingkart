@@ -17,14 +17,14 @@ curl -fsSL "https://raw.githubusercontent.com/AutomotiveAIChallenge/aichallenge-
 
 このコマンドで起きること（ざっくり）:
 
-- いくつかのステップを **y/N で確認**しながら進みます（不安なら `N` にして止めてOK）
-- Docker / AWSIM / ビルドなど、必要な準備を揃えて「試せる状態」へ持っていきます
-- 終わると “次にやること（Next steps）” が表示されます
+- 現在位置で `preflight`（環境診断）を実行します
+- 初期セットアップを進める場合は `./setup.bash bootstrap` を実行します
+- `bootstrap` では必要ステップを **y/N で確認**しながら進められます
 
 > PR版（Testing）を入口にしたい場合（必要な時だけ）: PRのIDを入れてください
 >
 > ```bash
-> curl -fsSL "https://raw.githubusercontent.com/AutomotiveAIChallenge/aichallenge-racingkart/refs/pull/<PR_ID>/head/setup.bash" | bash -s -- test
+> curl -fsSL "https://raw.githubusercontent.com/AutomotiveAIChallenge/aichallenge-racingkart/refs/pull/<PR_ID>/head/setup.bash" | bash -s -- preflight
 > ```
 
 ---
@@ -49,5 +49,5 @@ curl -fsSL "https://raw.githubusercontent.com/AutomotiveAIChallenge/aichallenge-
 
 - やること: 足りないものを洗い出す
 - 代表コマンド:
-  - `./setup.bash doctor`
-- 完了の目安: “Docker” や “AWSIM asset” の欄で、次に何をすべきかが分かる
+  - `./setup.bash preflight`
+- 完了の目安: “Docker” や “Repository” の欄で、次に何をすべきかが分かる
