@@ -332,7 +332,7 @@ BOOT_DONE
 unsupported_command() {
     warn "Command '$1' is not supported in the simplified setup.bash."
     echo "Supported commands: preflight, bootstrap"
-    echo "See docs: design_docs/HowToSetup.md"
+    echo "See docs: design_docs/how_to_setup.md"
     return 2
 }
 
