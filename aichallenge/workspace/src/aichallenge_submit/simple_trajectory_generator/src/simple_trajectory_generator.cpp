@@ -52,8 +52,8 @@ public:
     
     RCLCPP_INFO(get_logger(), "Loaded trajectory from CSV with %zu points", csv_trajectory_.points.size());
 
-    timer_ = create_wall_timer(
-      std::chrono::seconds(1),
+    timer_ = rclcpp::create_timer(
+      this, get_clock(), std::chrono::seconds(1),
       std::bind(&CSVToTrajectory::publish_trajectory, this));
 
   }
