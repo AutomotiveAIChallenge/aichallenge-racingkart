@@ -39,9 +39,9 @@ Host (you)
 
 ## まずは読んでほしいもの
 
-[初学者向けセットアップ資料](./design_docs/HowToSetup.md)
+[初学者向けセットアップ資料](./design_docs/how_to_setup.md)
 
-[初学者向け説明資料](./design_docs/Introduction.md)
+[初学者向け説明資料](./design_docs/introduction.md)
 
 ## OSS貢献にあたって
 
