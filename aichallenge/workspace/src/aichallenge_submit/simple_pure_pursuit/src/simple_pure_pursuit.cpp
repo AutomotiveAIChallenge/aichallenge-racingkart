@@ -36,8 +36,7 @@ SimplePurePursuit::SimplePurePursuit()
     "input/trajectory", bv_qos, [this](const Trajectory::SharedPtr msg) { trajectory_ = msg; });
 
   using namespace std::literals::chrono_literals;
-  timer_ =
-    rclcpp::create_timer(this, get_clock(), 10ms, std::bind(&SimplePurePursuit::onTimer, this));
+  timer_ = create_wall_timer(10ms, std::bind(&SimplePurePursuit::onTimer, this));
 }
 
 AckermannControlCommand zeroAckermannControlCommand(rclcpp::Time stamp)

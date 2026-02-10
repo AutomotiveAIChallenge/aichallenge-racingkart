@@ -3,8 +3,8 @@
 GoalPosePublisher::GoalPosePublisher() : Node("goal_pose_publisher")
 {
     ekf_trigger_client_ = this->create_client<std_srvs::srv::SetBool>("/localization/trigger_node");
-    timer_ = rclcpp::create_timer(
-        this, get_clock(), std::chrono::milliseconds(300),
+    timer_ = create_wall_timer(
+        std::chrono::milliseconds(300),
         std::bind(&GoalPosePublisher::on_timer, this));
 }
 
