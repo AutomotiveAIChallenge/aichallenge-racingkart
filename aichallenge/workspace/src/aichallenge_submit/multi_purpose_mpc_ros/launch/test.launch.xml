@@ -1,0 +1,7 @@
+<launch>
+
+  <!-- <node pkg="multi_purpose_mpc_ros" exec="run.bash" output="screen" /> -->
+
+  <node pkg="multi_purpose_mpc_ros" exec="simulation.bash" output="screen" />
+
+</launch>

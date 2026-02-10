@@ -1,0 +1,2 @@
+autoware_auto_control_msgs/AckermannControlCommand command
+bool boost_mode

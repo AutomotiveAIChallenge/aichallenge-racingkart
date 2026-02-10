@@ -1,0 +1,107 @@
+common:
+  save_config: true
+
+sim_logger:
+  animation_enabled: false
+
+map:
+  # path from pkg share dir
+  yaml_path: "env/final_ver3/occupancy_grid_map.yaml"
+
+waypoints:
+  # path from pkg share dir
+  # csv_path: "maps/occupancy_grid_map_waypoints.csv"
+  csv_path: ""
+
+obstacles:
+  # path from pkg share dir
+  csv_path: "" # If empty, the obstacles information will be subscribed from the topic
+  # csv_path: "maps/occupancy_grid_map_obstacles.csv"
+  radius: 1.25
+
+reference_path:
+  update_by_topic: false # When true, 'circle' must be false
+  # path from pkg share dir
+  # csv_path: ""
+  csv_path: "env/final_ver3/traj_mincurv.csv"
+  resolution: 0.6
+  smoothing_distance: 2
+  max_width: 6.0
+  circular: true
+  use_path_constraints_topic: false
+  use_border_cells_topic: false
+  # use_path_constraints_topic: true
+  # use_border_cells_topic: true
+
+bicycle_model:
+  length: 1.087
+  # width: 1.45   # real machine width
+  width: 2.30   # +safety margin
+
+mpc:
+  N: 20
+  # Q: [e_y, e_psi, t]
+  # R: [v, delta]
+  # QN: [e_y, e_psi, t]
+  R: [100000.0, 0.0]
+  a_min: -1.6 # m/s^2
+  a_max: 0.7 # m/s^2
+  delta_max_deg: 32.0 # degrees
+  steer_rate_max: 0.35 # rad/s
+  control_rate: 40.0 # Hz
+  steering_tire_angle_gain_var: 1.639
+  # steering_tire_angle_gain_var: 1.0
+  # accel_low_pass_gain: 0.1
+  # steer_low_pass_gain: 0.3
+  accel_low_pass_gain: 1.0
+  steer_low_pass_gain: 1.0
+  wp_id_offset: 2
+  use_max_kappa_pred: true
+
+
+  ## ---------- 究極 ------------- ##
+  ## Lap1: 53s, Lap2: 47s
+
+  # v_max: 30.0   # km/h
+  # ay_max: 12.0  # m/s^2, maximum lateral acceleration in curves
+  # Q: [600000.0, 100000000.0, 2000000.0]
+  # QN: [1000000.0, 1000000.0, 10000.0]
+
+  ## --- 高速 (gnss delay 0.3) --- ##
+  ## Lap1: 55s, Lap2: 49s
+
+  # v_max: 30.0
+  # ay_max: 9.5
+  # Q: [1000000.0, 100000000.0, 850000.0]
+  # QN: [1000000.0, 1000.0, 10000.0]
+
+  ## --- 高速 (gnss delay 0.4) --- ##
+  ## Lap1: 55s, Lap2: 49s
+
+  # v_max: 30.0
+  # ay_max: 9.5
+  # Q: [1000000.0, 100000000.0, 1850000.0]
+  # QN: [1000000.0, 1000.0, 10000.0]
+
+  ## --- 中高速 --- ##
+  ## Lap1: 59s, Lap2: 54s
+  # v_max: 25.0
+  # ay_max: 7.0
+  # Q: [1000000.0, 100000000.0, 850000.0]
+  # QN: [1000000.0, 1000.0, 10000.0]
+
+  ## --------- 中速 -------------- ##
+  ## Lap1: 67s, Lap2: 64s
+
+  v_max: 20.0
+  ay_max: 6.5
+  Q: [3000000.0, 90000000.0, 100000.0] # 低速だとインを攻めがちなので、あえて外に膨らむパラメータ
+  QN: [1000000.0, 1000.0, 10000.0]
+
+  ## -------- 低速 -------------- ##
+  ## Lap1: 86s
+
+  # v_max: 15.0
+  # ay_max: 5.5
+  # Q: [5000000.0, 100000000.0, 200000.0] # 低速だとインを攻めがちなので、あえて外に膨らむパラメータ
+  # QN: [1000000.0, 1000.0, 10000.0]

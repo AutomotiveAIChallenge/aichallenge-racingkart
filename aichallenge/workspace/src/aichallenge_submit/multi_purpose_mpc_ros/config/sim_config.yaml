@@ -1,0 +1,51 @@
+sim_logger:
+  animation_enabled: true
+
+map:
+  # path from pkg share dir
+  yaml_path: "maps/occupancy_grid_map.yaml"
+
+waypoints:
+  # path from pkg share dir
+  csv_path: "maps/occupancy_grid_map_waypoints.csv"
+
+obstacles:
+  # path from pkg share dir
+  # csv_path: "" # If empty, the obstacles information will be subscribed from the topic
+  # csv_path: "maps/occupancy_grid_map_obstacles.csv"
+  csv_path: "maps/obstacles_rosbag2_2024_09_16-12_17_03_0.csv"
+  radius: 1.25
+
+
+reference_path:
+  update_by_topic: false # When true, 'circle' must be false
+  # path from pkg share dir
+  csv_path: ""
+  csv_path: "maps/optimized_traj_mincurv.csv"
+  resolution: 0.6
+  smoothing_distance: 3
+  max_width: 6.0
+  circular: true
+  use_path_constraints_topic: false
+  use_border_cells_topic: false
+
+bicycle_model:
+  length: 1.087
+  width: 1.45
+
+mpc:
+  N: 20
+  Q: [3.0, 100.0, 5.0]  # [v, delta, t]
+  # Q: [5.0, 90.0, 5.0]  # [v, delta, t]
+  # Q: [10.0, 80.0, 5.0]  # [v, delta, t]
+  R: [0.0, 300.0]      # [v, delta]
+  QN: [3.0, 1.5, 5.0]
+  v_max: 30.0 # km/h
+  a_min: -3.2 # m/s^2
+  a_max: 3.2 # m/s^2
+  ay_max: 50.0 # m/s^2, maximum lateral acceleration in curves
+  delta_max_deg: 80.0 # degrees
+  control_rate: 50.0 # Hz
+  steering_tire_angle_gain_var: 1.0
+  wp_id_offset: 0
+

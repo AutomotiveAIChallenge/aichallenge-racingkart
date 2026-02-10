@@ -1,0 +1,39 @@
+#!/usr/bin/env python3
+
+import sys
+import threading
+
+# ROS 2
+import rclpy
+from rclpy.signals import SignalHandlerOptions
+from rclpy.executors import MultiThreadedExecutor
+
+# Project
+from multi_purpose_mpc_ros.path_constraints_provider import PathConstraintsProvider
+from multi_purpose_mpc_ros.common import parse_args_without_ros
+
+
+def main(argv = sys.argv) -> None:
+
+    args = parse_args_without_ros(argv)
+    rclpy.init(args=argv, signal_handler_options=SignalHandlerOptions.NO)
+    executor = MultiThreadedExecutor(num_threads=2)
+
+    try:
+        node = PathConstraintsProvider(args.config_path)
+        executor.add_node(node)
+        executor_thread = threading.Thread(target=executor.spin)
+        executor_thread.start()
+        node.run()
+    except KeyboardInterrupt:
+        node.get_logger().info("Shutdown requested")
+    finally:
+        rclpy.shutdown()
+        for node in executor._nodes:
+            node.destroy_node()
+        executor.shutdown()
+        # executor._executor.shutdown()
+
+
+if __name__ == "__main__":
+    main(sys.argv)

@@ -1,0 +1,73 @@
+#!/usr/bin/env python3
+
+import time
+
+# ROS 2
+import rclpy
+from rclpy.node import Node
+from geometry_msgs.msg import PoseWithCovarianceStamped
+
+
+class PublishInitialPoseGnss(Node):
+    def __init__(self):
+        super().__init__("publish_initialpose_gnss")
+
+        self._gnss_pose = None
+
+        self.sub = self.create_subscription(PoseWithCovarianceStamped, '/sensing/gnss/pose_with_covariance', self.on_gnss_cov_pose, 1)
+        self.pub = self.create_publisher(PoseWithCovarianceStamped, '/localization/initial_pose3d', 1)
+
+    def on_gnss_cov_pose(self, msg: PoseWithCovarianceStamped):
+        self.get_logger().info("Received GNSS pose with covariance")
+        self._gnss_pose = msg
+
+    def wait_for_subscriber_and_gnss_received(self, pub):
+        while rclpy.ok() and pub.get_subscription_count() == 0:
+            self.get_logger().info("Waiting for subscriber...")
+            rclpy.spin_once(self, timeout_sec=0.5)
+        self.get_logger().info("Subscriber found")
+
+        while rclpy.ok() and self._gnss_pose is None:
+            self.get_logger().info("Waiting for GNSS pose with covariance...")
+            rclpy.spin_once(self, timeout_sec=0.5)
+        self.get_logger().info("GNSS pose received")
+
+    def publish(self):
+        # create initialpose message
+        initialpose = PoseWithCovarianceStamped()
+        initialpose.header.stamp = self.get_clock().now().to_msg()
+        initialpose.header.frame_id = 'map'
+        initialpose.pose.pose.position.x = self._gnss_pose.pose.pose.position.x
+        initialpose.pose.pose.position.y = self._gnss_pose.pose.pose.position.y
+        initialpose.pose.pose.position.z = 0.0
+        initialpose.pose.pose.orientation.x = 0.0
+        initialpose.pose.pose.orientation.y = 0.0
+        initialpose.pose.pose.orientation.z = self._gnss_pose.pose.pose.orientation.z
+        initialpose.pose.pose.orientation.w = self._gnss_pose.pose.pose.orientation.w
+        initialpose.pose.covariance[0] = 0.25
+        initialpose.pose.covariance[7] = 0.25
+        initialpose.pose.covariance[35] = 0.06853891909122467
+
+        # publish initialpose
+        for _ in range(5):
+            self.get_logger().info("Publishing initial pose...")
+            self.pub.publish(initialpose)
+            time.sleep(0.2)
+
+
+def main(args=None):
+    rclpy.init(args=args)
+
+    try:
+        node = PublishInitialPoseGnss()
+        node.wait_for_subscriber_and_gnss_received(node.pub)
+        node.publish()
+    except KeyboardInterrupt:
+        node.get_logger().info("Shutdown requested")
+    finally:
+        rclpy.shutdown()
+
+
+if __name__ == "__main__":
+    main()
+

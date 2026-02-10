@@ -1,0 +1,22 @@
+<?xml version="1.0"?>
+<?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
+<package format="3">
+  <name>multi_purpose_mpc_ros</name>
+  <version>0.0.0</version>
+  <description>The multi_purpose_mpc_ros package</description>
+  <maintainer email="t.sato17123@gmail.com">Takashi Sato</maintainer>
+  <maintainer email="kenta.kato.4321@gmail.com">Kenta Kato</maintainer>
+  <license>TODO</license>
+
+  <buildtool_depend>ament_cmake_auto</buildtool_depend>
+  <buildtool_depend>ament_cmake_python</buildtool_depend>
+
+
+  <depend>rclcpp</depend>
+  <depend>multi_purpose_mpc_ros_msgs</depend>
+  <depend>autoware_auto_control_msgs</depend>
+
+  <export>
+    <build_type>ament_cmake</build_type>
+  </export>
+</package>
