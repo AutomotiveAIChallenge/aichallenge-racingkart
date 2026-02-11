@@ -3388,44 +3388,6 @@
     <tag k="type" v="line_thin"/>
     <tag k="subtype" v="solid"/>
   </way>
-  <way id="9598">
-    <nd ref="9580"/>
-    <nd ref="9581"/>
-    <nd ref="9582"/>
-    <nd ref="9583"/>
-    <nd ref="9584"/>
-    <nd ref="9585"/>
-    <nd ref="9586"/>
-    <nd ref="9587"/>
-    <nd ref="9588"/>
-    <nd ref="9589"/>
-    <nd ref="9590"/>
-    <nd ref="9591"/>
-    <nd ref="9592"/>
-    <nd ref="9593"/>
-    <nd ref="9594"/>
-    <nd ref="9595"/>
-    <nd ref="9596"/>
-    <nd ref="9597"/>
-    <tag k="type" v="line_thin"/>
-    <tag k="subtype" v="solid"/>
-  </way>
-  <way id="9609">
-    <nd ref="9578"/>
-    <nd ref="9599"/>
-    <nd ref="9600"/>
-    <nd ref="9601"/>
-    <nd ref="9602"/>
-    <nd ref="9603"/>
-    <nd ref="9604"/>
-    <nd ref="9605"/>
-    <nd ref="9606"/>
-    <nd ref="9607"/>
-    <nd ref="9608"/>
-    <nd ref="9580"/>
-    <tag k="type" v="line_thin"/>
-    <tag k="subtype" v="solid"/>
-  </way>
   <way id="9743">
     <nd ref="9741"/>
     <nd ref="9753"/>
@@ -3598,7 +3560,6 @@
   <relation id="9157">
     <member type="way" role="left" ref="9159"/>
     <member type="way" role="right" ref="9161"/>
-    <member type="way" role="centerline" ref="9609"/>
     <tag k="type" v="lanelet"/>
     <tag k="subtype" v="road"/>
     <tag k="speed_limit" v="15"/>
@@ -3608,7 +3569,6 @@
   <relation id="9163">
     <member type="way" role="left" ref="9160"/>
     <member type="way" role="right" ref="9162"/>
-    <member type="way" role="centerline" ref="9598"/>
     <tag k="type" v="lanelet"/>
     <tag k="subtype" v="road"/>
     <tag k="speed_limit" v="15"/>
