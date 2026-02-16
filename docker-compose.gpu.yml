@@ -18,3 +18,15 @@ services:
 
   simulator:
     <<: *gpu
+
+  autoware-d1:
+    <<: *gpu
+
+  autoware-d2:
+    <<: *gpu
+
+  autoware-d3:
+    <<: *gpu
+
+  autoware-d4:
+    <<: *gpu
