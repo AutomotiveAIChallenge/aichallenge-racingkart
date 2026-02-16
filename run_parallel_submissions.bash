@@ -102,7 +102,13 @@ build_eval_image() {
 
 main() {
     if [ "${1-}" = "down" ]; then
-        docker compose down
+        local -a compose_args=(-f "${COMPOSE_BASE_FILE}")
+        local gpu_enabled
+        gpu_enabled="$(gpu_enabled_from_device "${DEVICE:-auto}")"
+        if [ "${gpu_enabled}" = "1" ]; then
+            compose_args+=(-f "${COMPOSE_GPU_FILE}")
+        fi
+        docker compose "${compose_args[@]}" down
         return 0
     fi
 
