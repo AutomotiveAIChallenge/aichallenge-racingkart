@@ -43,6 +43,8 @@ Host (you)
 
 [初学者向け説明資料](./design_docs/introduction.md)
 
+[初学者向けリポジトリ入門スライド (Marp)](./design_docs/beginner_marp_deck.marp.md)
+
 ## OSS貢献にあたって
 
 `pre-commit run -a`を必ず通すこと
