@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<launch>
+    <arg name="domain_id" default="1"/>
+    <arg name="sim_mode" default="eval"/>
+    <arg name="output_run_dir" default="/output"/>
+    <arg name="capture" default="false"/>
+    <arg name="rosbag" default="false"/>
+    <arg name="simulation" default="true"/>
+    <arg name="use_sim_time" default="true"/>
+    <arg name="run_rviz" default="true"/>
+
+    <log message="Launching evaluation bundle (simulator + autoware)."/>
+    <log message=" - domain_id: $(var domain_id)"/>
+    <log message=" - sim_mode: $(var sim_mode)"/>
+    <log message=" - output_run_dir: $(var output_run_dir)"/>
+    <log message=" - capture: $(var capture)"/>
+    <log message=" - rosbag: $(var rosbag)"/>
+    <log message=" - simulation: $(var simulation)"/>
+    <log message=" - use_sim_time: $(var use_sim_time)"/>
+    <log message=" - run_rviz: $(var run_rviz)"/>
+
+    <executable
+        name="aichallenge_awsim"
+        cwd="$(var output_run_dir)"
+        output="both"
+        cmd="/aichallenge/run_simulator.bash $(var sim_mode)"/>
+
+    <group>
+        <set_env name="OUTPUT_RUN_DIR" value="$(var output_run_dir)"/>
+        <set_env name="ROS_HOME" value="$(var output_run_dir)/ros"/>
+        <set_env name="ROS_LOG_DIR" value="$(var output_run_dir)/ros/log"/>
+        <include file="$(find-pkg-share aichallenge_system_launch)/launch/aichallenge_system.launch.xml">
+            <arg name="simulation" value="$(var simulation)"/>
+            <arg name="use_sim_time" value="$(var use_sim_time)"/>
+            <arg name="run_rviz" value="$(var run_rviz)"/>
+            <arg name="capture" value="$(var capture)"/>
+            <arg name="rosbag" value="$(var rosbag)"/>
+            <arg name="domain_id" value="$(var domain_id)"/>
+        </include>
+    </group>
+</launch>
