@@ -26,6 +26,7 @@
         cmd="/aichallenge/run_simulator.bash $(var sim_mode)"/>
 
     <group>
+        <set_env name="ROS_DOMAIN_ID" value="$(var domain_id)"/>
         <set_env name="OUTPUT_RUN_DIR" value="$(var output_run_dir)"/>
         <set_env name="ROS_HOME" value="$(var output_run_dir)/ros"/>
         <set_env name="ROS_LOG_DIR" value="$(var output_run_dir)/ros/log"/>
