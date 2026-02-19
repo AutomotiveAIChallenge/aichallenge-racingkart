@@ -9,6 +9,8 @@ cd "${out_dir}" || exit
 
 # shellcheck disable=SC1091
 source /aichallenge/workspace/install/setup.bash
+sudo ip link set multicast on lo || true
+sudo sysctl -w net.core.rmem_max=2147483647 >/dev/null || true
 
 sim_mode="${SIM_MODE:-eval}"
 capture="${AIC_CAPTURE:-true}"

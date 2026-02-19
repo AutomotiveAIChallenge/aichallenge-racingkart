@@ -20,10 +20,12 @@
     <log message=" - run_rviz: $(var run_rviz)"/>
 
     <executable
-        name="aichallenge_awsim"
+        name="aichallenge_awsim_eval"
         cwd="$(var output_run_dir)"
         output="both"
-        cmd="/aichallenge/run_simulator.bash $(var sim_mode)"/>
+        cmd="/aichallenge/simulator/AWSIM/AWSIM.x86_64 --vehicles 1 --laps 6 --timeout 600">
+        <env name="ROS_DOMAIN_ID" value="0"/>
+    </executable>
 
     <group>
         <set_env name="ROS_DOMAIN_ID" value="$(var domain_id)"/>
