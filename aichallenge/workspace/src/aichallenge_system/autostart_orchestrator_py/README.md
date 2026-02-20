@@ -77,6 +77,8 @@ AWSIM の `/admin/awsim/state` は **`ROS_DOMAIN_ID=0` 側**で流れている�
 > 実装（現状）:
 > - initial pose / control mode はノード起動直後に best-effort 実行
 > - 記録開始は `start_on_vehicle_state` 到達時（default: 空 = 即開始）
+> - control mode request は `std_msgs/msg/Bool` で `data=true` を publish
+> - start/stop 待機はタイムアウトなし（対象状態が来るまで待機）
 
 ### 3) 停止トリガ（推奨: 車両ごとの `Finish`）
 次の順序で実行する:
@@ -94,9 +96,7 @@ AWSIM の `/admin/awsim/state` は **`ROS_DOMAIN_ID=0` 側**で流れている�
 
 ## 失敗時の方針
 - どの段階で失敗しても、可能な範囲で **記録系を停止**してから `ERROR` に遷移する
-- 開始/停止トリガ待ちのタイムアウトは `fail_on_timeout` で扱いを切り替える（default: true）
-  - true: ERROR 扱い（必要なら記録停止して非0終了）
-  - false: WARN 扱い（可能な範囲で継続）
+- 記録停止・終了待機にはタイムアウトを設けていない（状態変化はワーカーが検知するまで継続待ち）
 
 ## パラメータ
 ### `aichallenge_system_launch/launch/mode/awsim.launch.xml` の引数（AWSIM時のみ有効）
@@ -105,34 +105,37 @@ AWSIM の `/admin/awsim/state` は **`ROS_DOMAIN_ID=0` 側**で流れている�
 - `start_on_vehicle_state`（default: 空 = 即開始）
 - `stop_on_vehicle_state`（default推奨: `Finish`。空にすると自動停止しない）
 - `exit_on_finish`（default: false。true だと stop 後にノードが終了する）
-- `fail_on_timeout`（default: true。start/stop トリガ待ちがタイムアウトしたら ERROR 扱いにする）
+- `autostart_orchestrator_params`（default: `autostart_orchestrator_py` の `config/autostart_orchestrator.param.yaml`）
+- 追加可能なノード引数は上記 YAML で管理でき、launch 側の引数は必要時に上書きする方針になっています
 
 ### `autostart_orchestrator_py` のノードパラメータ（必要ならlaunch側で上書き）
-- `vehicle_ns` / `vehicle_state_topic`（車両状態topic。デフォルトは `/<vehicle_ns>/awsim/state`）
-- `wait_service_timeout_sec` / `call_timeout_sec`（サービス待ち/呼び出しタイムアウト）
-- `finish_wait_timeout_sec`（開始/停止トリガ待ちのタイムアウト）
+- `vehicle_state_topic`（車両状態topic。デフォルトは `/<vehicle_ns>/awsim/state` は想定される形式）
 - `exit_on_finish`（stop 完了後にノード終了するか）
-- `fail_on_timeout`（start/stop トリガ待ちタイムアウトを ERROR 扱いにするか）
-- `output_dir` / `rosbag_log_file`（rosbag 実行ログ、出力先）
+- `enable_debug_visualization`（デバッグ表示の全状態可視化を有効化する: true/false、default: false）
+- `call_initial_pose`（起動直後に初期姿勢 service を呼ぶか）
+- `request_control_mode`（起動直後に control mode を要求するか）
 - `rosbag_topics` / `rosbag_output`（記録対象topic、出力bag名）
 - `rosbag_storage_id` / `rosbag_compression_format` / `rosbag_compression_mode`（保存形式・圧縮設定）
-- `rosbag_extra_args`（`ros2 bag record` への追加引数）
-- `rosbag_argv_override`（`subprocess` に渡すargvを完全上書き。テスト/特殊用途向け）
-- `rosbag_cmd`（deprecated: `shlex` でargv化して実行。シェルは使わない）
 - `initial_pose_service` / `capture_service`（サービス名）
-- `control_mode`（`1`=AUTONOMOUS, `0`=MANUAL）
 - `control_mode_request_topic`（default: `/awsim/control_mode_request_topic`）
 
+### デバッグ可視化
+- `enable_debug_visualization: true` のとき、Qt パネルでオーケストレーションの全状態を表示し、現在状態を青字で強調します。
+  - 全状態: `BOOT -> WAIT_INITIAL_POSE -> REQUEST_CONTROL_MODE -> IDLE -> WAIT_START -> RECORDING -> WAIT_STOP -> AUTO_STOP_DISABLED -> STOPPING -> FINISHED -> ERROR`
+  - `QListWidget` で縦並び表示し、現在状態だけ青字でハイライトします。
+  - パネルサイズに応じて、表示文字サイズが自動的に拡縮されます。
+  - パネル描画には `PySide6`（または `PyQt5`）が必要です。未インストール時は標準ログにフォールバックします。
+
 ## 成果物（Artifacts）
-`output_dir` 配下に、タイムスタンプ付きで保存する想定:
+実行カレントディレクトリ配下に、タイムスタンプ付きで保存する想定:
 - `rosbag2/`（bag一式）
 - `screen_capture/`（動画/画像）
 - `logs/`（オーケストレータのログ、実行コマンドのstdout/stderr）
 - `results/`（result converter の出力）
-- `ros/log/`（ROS 2 launch/node のログ。`ROS_LOG_DIR` を `<output_dir>/ros/log` に設定して保存）
+- `ros/log/`（ROS 2 launch/node のログ。`ROS_LOG_DIR` は実行環境側で `<rosbag 出力先>/ros/log` 相当へ設定）
 
 ## 改善候補
 - トリガ整理: initial pose/control を `Spawned` 到達後に実行するオプション（現状はノード起動直後）
-- 記録開始の安全性: `start_on_vehicle_state` が来ない場合の扱い（タイムアウト/フォールバック方針）
-- 停止保険: `/<vehicle_ns>/awsim/state` が来なくなった場合（heartbeat消失など）の終了判定
+- 記録開始の安全性: `start_on_vehicle_state` が未設定なら即時開始
+- 停止保険: `/<vehicle_ns>/awsim/state` が長時間変化しない場合の停止保証（設計検討）
 - result converter: 対象ファイル・起動タイミング・失敗時の扱いの明確化

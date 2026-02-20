@@ -18,19 +18,19 @@ case "${mode}" in
     opts+=("--vehicles" "1" "--laps" "600" "--timeout" "60000000")
     ;;
 "eval")
-    opts+=("--vehicles" "1" "--laps" "6" "--timeout" "600")
+    opts+=("--start-mode" "sync" "--vehicles" "1" "--laps" "6" "--timeout" "600")
     ;;
 "test")
-    opts+=("--vehicles" "1" "--laps" "1" "--timeout" "90")
+    opts+=("--start-mode" "sync" "--vehicles" "1" "--laps" "1" "--timeout" "90")
     ;;
 "2p")
-    opts+=("--vehicles" "2" "--laps" "6" "--timeout" "1200")
+    opts+=("--start-mode" "sync" "--vehicles" "2" "--laps" "6" "--timeout" "1200")
     ;;
 "3p")
-    opts+=("--vehicles" "3" "--laps" "6" "--timeout" "1200")
+    opts+=("--start-mode" "sync" "--vehicles" "3" "--laps" "6" "--timeout" "1200")
     ;;
 "4p")
-    opts+=("--vehicles" "4" "--laps" "6" "--timeout" "1200")
+    opts+=("--start-mode" "sync" "--vehicles" "4" "--laps" "6" "--timeout" "1200")
     ;;
 *) ;;
 esac

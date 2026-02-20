@@ -1,0 +1,23 @@
+/**:
+  ros__parameters:
+    vehicle_state_topic: /awsim/state
+    start_on_vehicle_state: "" # any state, e.g. "Ready", "Start", "Finish". If empty, start immediately.
+    stop_on_vehicle_state: "Finish"
+    enable_capture: false
+    enable_rosbag: false
+    call_initial_pose: true
+    request_control_mode: true
+    initial_pose_service: /set_initial_pose
+    control_mode_request_topic: /awsim/control_mode_request_topic
+    capture_service: /debug/service/capture_screen
+    enable_debug_visualization: true
+    rosbag_topics:
+      - /awsim/control_cmd
+      - /clock
+      - /localization/acceleration
+      - /localization/kinematic_state
+    rosbag_output: rosbag2_autoware
+    rosbag_storage_id: mcap
+    rosbag_compression_format: zstd
+    rosbag_compression_mode: file
+    exit_on_finish: true

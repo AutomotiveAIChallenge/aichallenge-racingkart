@@ -2,22 +2,44 @@
 <launch>
     <arg name="domain_id" default="1"/>
     <arg name="sim_mode" default="eval"/>
+    <arg name="awsim_args" default=""/>
     <arg name="output_run_dir" default="/output"/>
     <arg name="capture" default="false"/>
     <arg name="rosbag" default="false"/>
     <arg name="simulation" default="true"/>
     <arg name="use_sim_time" default="true"/>
     <arg name="run_rviz" default="true"/>
+    <arg name="state_manager_exit_on_finish" default="true"/>
+    <arg name="state_manager_fail_on_timeout" default="false"/>
+    <arg name="state_manager_ready_wait_timeout_sec" default="60"/>
+    <arg name="state_manager_finish_wait_timeout_sec" default="600"/>
+    <arg name="state_manager_vehicle_state_topics" default="/d$(var domain_id)/awsim/state"/>
+    <arg name="state_manager_required_ready_count" default="1"/>
+    <arg name="state_manager_ready_states" default="Ready"/>
+    <arg name="state_manager_finish_states" default="FinishALL,Terminate"/>
 
     <log message="Launching evaluation bundle (simulator + autoware)."/>
     <log message=" - domain_id: $(var domain_id)"/>
     <log message=" - sim_mode: $(var sim_mode)"/>
+    <log message=" - awsim_args: $(var awsim_args)"/>
     <log message=" - output_run_dir: $(var output_run_dir)"/>
     <log message=" - capture: $(var capture)"/>
     <log message=" - rosbag: $(var rosbag)"/>
     <log message=" - simulation: $(var simulation)"/>
     <log message=" - use_sim_time: $(var use_sim_time)"/>
     <log message=" - run_rviz: $(var run_rviz)"/>
+    <log message=" - state_manager_exit_on_finish: $(var state_manager_exit_on_finish)"/>
+    <log message=" - state_manager_fail_on_timeout: $(var state_manager_fail_on_timeout)"/>
+    <log message=" - state_manager_ready_wait_timeout_sec: $(var state_manager_ready_wait_timeout_sec)"/>
+    <log message=" - state_manager_finish_wait_timeout_sec: $(var state_manager_finish_wait_timeout_sec)"/>
+    <log message=" - state_manager_vehicle_state_topics: $(var state_manager_vehicle_state_topics)"/>
+    <log message=" - state_manager_required_ready_count: $(var state_manager_required_ready_count)"/>
+    <log message=" - state_manager_ready_states: $(var state_manager_ready_states)"/>
+    <log message=" - state_manager_finish_states: $(var state_manager_finish_states)"/>
+
+    <set_env name="OUTPUT_RUN_DIR" value="$(var output_run_dir)"/>
+    <set_env name="ROS_HOME" value="$(var output_run_dir)/ros"/>
+    <set_env name="ROS_LOG_DIR" value="$(var output_run_dir)/ros/log"/>
 
     <executable
         name="aichallenge_awsim_eval"
@@ -26,6 +48,20 @@
         cmd="/aichallenge/simulator/AWSIM/AWSIM.x86_64 --vehicles 1 --laps 6 --timeout 600">
         <env name="ROS_DOMAIN_ID" value="0"/>
     </executable>
+
+    <group>
+        <set_env name="ROS_DOMAIN_ID" value="0"/>
+        <node pkg="autostart_orchestrator_py" exec="awsim_state_manager_node.py" name="awsim_state_manager" output="both">
+            <param name="vehicle_state_topics" value="$(var state_manager_vehicle_state_topics)"/>
+            <param name="required_ready_count" value="$(var state_manager_required_ready_count)"/>
+            <param name="ready_states" value="$(var state_manager_ready_states)"/>
+            <param name="finish_states" value="$(var state_manager_finish_states)"/>
+            <param name="exit_on_finish" value="$(var state_manager_exit_on_finish)"/>
+            <param name="fail_on_timeout" value="$(var state_manager_fail_on_timeout)"/>
+            <param name="ready_wait_timeout_sec" value="$(var state_manager_ready_wait_timeout_sec)"/>
+            <param name="finish_wait_timeout_sec" value="$(var state_manager_finish_wait_timeout_sec)"/>
+        </node>
+    </group>
 
     <group>
         <set_env name="ROS_DOMAIN_ID" value="$(var domain_id)"/>

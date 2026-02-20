@@ -111,6 +111,7 @@ mkdir -p "output/${run_rel}/d${domain_id}"
 output_run_dir="${output_root}/${run_rel}/d${domain_id}"
 echo "OUTPUT: output/${run_rel}/d${domain_id} (container: ${output_run_dir})"
 dc up -d --force-recreate autoware
+CMD="env ROS_DOMAIN_ID=0 ros2 topic pub --once --qos-durability transient_local /admin/awsim/start std_msgs/msg/Bool '{data: True}'" dc run --rm --no-deps autoware-command
 
 CMD="env ROS_DOMAIN_ID=0 /aichallenge/utils/publish.bash wait-admin-finish" dc run --rm --no-deps autoware-command
 exit 0
