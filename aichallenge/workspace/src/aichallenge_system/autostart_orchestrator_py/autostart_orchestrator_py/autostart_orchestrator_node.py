@@ -63,6 +63,8 @@ class AutostartOrchestrator(Node):
         required_parameters = (
             "vehicle_state_topic",
             "start_on_vehicle_state",
+            "admin_ready_topic",
+            "prepare_on_admin_ready",
             "stop_on_vehicle_state",
             "enable_capture",
             "enable_rosbag",
@@ -88,6 +90,12 @@ class AutostartOrchestrator(Node):
             raise ValueError("vehicle_state_topic must not be empty")
         self._vehicle_state_topic = vehicle_state_topic
 
+        admin_ready_topic = str(self.get_parameter("admin_ready_topic").value).strip()
+        if not admin_ready_topic:
+            raise ValueError("admin_ready_topic must not be empty")
+        self._admin_ready_topic = admin_ready_topic
+        self._prepare_on_admin_ready = bool(self.get_parameter("prepare_on_admin_ready").value)
+
         self._workflow_state = self._STATE_BOOT
         self._workflow_detail = ""
         self._state_lock = threading.Lock()
@@ -95,14 +103,26 @@ class AutostartOrchestrator(Node):
         self._debug_panel_queue: Optional[queue.Queue[tuple[str, str, Optional[str], bool, bool]]] = None
         self._debug_panel_active = False
         self._debug_panel_error_logged = False
+        self._debug_panel_thread: Optional[threading.Thread] = None
+        self._debug_panel_stop_event: Optional[threading.Event] = None
         if self._debug_visualization_enabled:
             self._debug_panel_queue = queue.Queue(maxsize=128)
             self._start_debug_visualization()
 
         self._cond = threading.Condition()
         self._last_vehicle_state: Optional[str] = None
+        self._admin_ready_received = False
 
         self._sub = self.create_subscription(String, vehicle_state_topic, self._on_vehicle_state, 10, callback_group=cbg)
+        self._sub_admin_ready = self.create_subscription(
+            String,
+            admin_ready_topic,
+            self._on_admin_ready,
+            10,
+            callback_group=cbg,
+        )
+
+        self.get_logger().info(f"Subscribing admin ready: {admin_ready_topic}")
 
         self._cli_initial_pose = self.create_client(
             Trigger, str(self.get_parameter("initial_pose_service").value), callback_group=cbg
@@ -196,7 +216,9 @@ class AutostartOrchestrator(Node):
             self.get_logger().info("workflow:\n" + "\n".join(state_text_lines) + " | " + ", ".join(detail_fragments))
 
     def _start_debug_visualization(self) -> None:
-        def _run() -> None:
+        self._debug_panel_stop_event = threading.Event()
+
+        def _run(stop_event: threading.Event) -> None:
             try:
                 try:
                     from PySide6 import QtCore, QtGui, QtWidgets
@@ -306,12 +328,8 @@ class AutostartOrchestrator(Node):
             window.show()
             self._debug_panel_active = True
 
-            timer = QtCore.QTimer(window)
-
-            def refresh() -> None:
-                if not self._debug_panel_active:
-                    return
-                latest = (
+            def refresh() -> tuple[str, str, Optional[str], bool, bool]:
+                payload = (
                     self._workflow_state,
                     self._workflow_detail,
                     self._last_vehicle_state,
@@ -320,18 +338,37 @@ class AutostartOrchestrator(Node):
                 )
                 while self._debug_panel_queue is not None:
                     try:
-                        latest = self._debug_panel_queue.get_nowait()
+                        payload = self._debug_panel_queue.get_nowait()
                     except queue.Empty:
                         break
-                window.update_state(*latest)
+                return payload
 
-            timer.timeout.connect(refresh)
-            timer.start(120)
-            refresh()
-            app.exec()
+            while not stop_event.is_set():
+                if self._debug_panel_queue is not None:
+                    latest = refresh()
+                    window.update_state(*latest)
+                app.processEvents()
+                stop_event.wait(0.12)
+
+            window.close()
             self._debug_panel_active = False
+            self._debug_panel_queue = None
+            app.quit()
 
-        threading.Thread(target=_run, daemon=True).start()
+        self._debug_panel_thread = threading.Thread(target=_run, args=(self._debug_panel_stop_event,), daemon=True)
+        self._debug_panel_thread.start()
+
+    def _stop_debug_visualization(self) -> None:
+        self._debug_panel_active = False
+        stop_event = self._debug_panel_stop_event
+        if stop_event is not None:
+            stop_event.set()
+        thread = self._debug_panel_thread
+        if thread is not None and thread.is_alive():
+            thread.join(timeout=1.0)
+        self._debug_panel_stop_event = None
+        self._debug_panel_thread = None
+        self._debug_panel_queue = None
 
     @property
     def exit_code(self) -> int:
@@ -354,6 +391,53 @@ class AutostartOrchestrator(Node):
             self._last_vehicle_state = state
             self._cond.notify_all()
 
+    def _on_admin_ready(self, msg: String) -> None:
+        if not self._prepare_on_admin_ready:
+            return
+        state = (msg.data or "").strip()
+        if state != "Ready":
+            return
+        with self._cond:
+            if self._admin_ready_received:
+                return
+            self._admin_ready_received = True
+            self._cond.notify_all()
+
+    @staticmethod
+    def _normalize_state(raw: Optional[str]) -> str:
+        return "".join(ch for ch in (raw or "").strip().lower() if ch.isalnum())
+
+    def _state_matches(self, actual: Optional[str], expected: str) -> bool:
+        actual_norm = self._normalize_state(actual)
+        expected_norm = self._normalize_state(expected)
+        if not actual_norm or not expected_norm:
+            return False
+        if actual_norm == expected_norm:
+            return True
+        if expected_norm in {"finish", "finished"} and actual_norm in {"finishedall", "terminate", "terminated"}:
+            return True
+        if expected_norm.startswith("finish") and actual_norm.startswith("finish"):
+            return True
+        return False
+
+    def _wait_for_start(
+        self,
+        expected_vehicle_state: str,
+        wait_admin_ready: bool,
+    ) -> tuple[bool, Optional[str], bool]:
+        expected_vehicle_state = (expected_vehicle_state or "").strip()
+        if not expected_vehicle_state and not wait_admin_ready:
+            return True, self._last_vehicle_state, self._admin_ready_received
+
+        with self._cond:
+            while rclpy.ok():
+                if expected_vehicle_state and self._state_matches(self._last_vehicle_state, expected_vehicle_state):
+                    return True, self._last_vehicle_state, self._admin_ready_received
+                if wait_admin_ready and self._admin_ready_received:
+                    return True, self._last_vehicle_state, self._admin_ready_received
+                self._cond.wait()
+        return False, self._last_vehicle_state, self._admin_ready_received
+
     def _wait_for_vehicle_state(self, expected: str) -> tuple[bool, Optional[str]]:
         expected = (expected or "").strip()
         if not expected:
@@ -361,7 +445,7 @@ class AutostartOrchestrator(Node):
 
         with self._cond:
             while rclpy.ok():
-                if self._last_vehicle_state == expected:
+                if self._state_matches(self._last_vehicle_state, expected):
                     return True, self._last_vehicle_state
                 self._cond.wait()
         return False, self._last_vehicle_state
@@ -510,6 +594,7 @@ class AutostartOrchestrator(Node):
             enable_rosbag = bool(self.get_parameter("enable_rosbag").value)
 
             start_on = str(self.get_parameter("start_on_vehicle_state").value or "").strip()
+            prepare_on_admin_ready = bool(self._prepare_on_admin_ready)
             stop_on = str(self.get_parameter("stop_on_vehicle_state").value or "").strip()
             exit_on_finish = bool(self.get_parameter("exit_on_finish").value)
 
@@ -543,16 +628,35 @@ class AutostartOrchestrator(Node):
                 self.get_logger().info("capture/rosbag are disabled; orchestrator is idle")
                 return
 
-            if start_on:
-                self._set_workflow_state(self._STATE_WAIT_START, f"waiting for '{start_on}' on {self._vehicle_state_topic}")
-                self.get_logger().info(f"wait start: {self._vehicle_state_topic} == {start_on}")
-                ok, last = self._wait_for_vehicle_state(start_on)
+            if start_on or prepare_on_admin_ready:
+                waits: list[str] = []
+                if start_on:
+                    waits.append(f"'{start_on}' on {self._vehicle_state_topic}")
+                if prepare_on_admin_ready:
+                    waits.append(f"\"Ready\" on {self._admin_ready_topic}")
+                wait_msg = " or ".join(waits)
+
+                self._set_workflow_state(self._STATE_WAIT_START, f"waiting for {wait_msg}")
+                self.get_logger().info(f"wait start: {wait_msg}")
+                ok, last, admin_ready = self._wait_for_start(start_on, prepare_on_admin_ready)
                 if not ok:
-                    self.get_logger().error(f"failed waiting start: expected={start_on} last={last}")
-                    self._set_workflow_state(self._STATE_ERROR, f"failed waiting start: expected={start_on} last={last}")
+                    self.get_logger().error(
+                        f"failed waiting start: expected_vehicle={start_on} prepare_on_admin_ready={prepare_on_admin_ready} "
+                        f"last={last} admin_ready={admin_ready}"
+                    )
+                    self._set_workflow_state(
+                        self._STATE_ERROR,
+                        f"failed waiting start: expected_vehicle={start_on} prepare_on_admin_ready={prepare_on_admin_ready} "
+                        f"last={last} admin_ready={admin_ready}",
+                    )
                     self._set_exit_code(2)
                     self._shutdown()
                     return
+                if start_on and last == start_on:
+                    self.get_logger().info(f"start condition met: {self._vehicle_state_topic} == {start_on}")
+                elif admin_ready:
+                    self.get_logger().info(f'start condition met: {self._admin_ready_topic} == "Ready"')
+                self._set_workflow_state(self._STATE_RECORDING, "start condition met")
             else:
                 self._set_workflow_state(self._STATE_RECORDING, "no start_on specified; start immediately")
 
@@ -609,6 +713,7 @@ class AutostartOrchestrator(Node):
 
     def destroy_node(self) -> bool:
         try:
+            self._stop_debug_visualization()
             self._stop_rosbag()
             self._capture(False)
         finally:

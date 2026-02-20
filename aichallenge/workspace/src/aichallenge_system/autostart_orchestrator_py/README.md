@@ -28,12 +28,21 @@
 8. 後処理（`/aichallenge/utils/fix_ownership.bash` による ownership 調整は best-effort）
 
 ### `run_evaluation.bash` の引数
-`run_evaluation.bash` は引数で記録の on/off を切り替えます。
+`run_evaluation.bash` は環境変数と launch 引数を使って設定を受け付けます。
 
 - `capture`: 画面キャプチャ有効（launch arg `capture:=true` が渡る）
 - `rosbag`: rosbag 記録有効（launch arg `rosbag:=true` が渡る）
 - `online`: `capture` と `rosbag` を同時に有効化
 - `<UID> <GID>`: 終了時の ownership 調整に使用（`fix_ownership.bash` に委譲）
+- `state_manager_exit_on_finish`（launch arg）: AWSIM の終了通知を受けたときに `state_manager` で shutdown を発火するか
+- `state_manager_awsim_kill_patterns`（launch arg）: `awsim_state_manager` が対象にするプロセス名パターン（`,` 区切り）
+
+追加環境変数:
+
+- `AIC_STATE_MANAGER_EXIT_ON_FINISH`（`true`/`false`）
+- `AIC_STATE_MANAGER_AWSIM_KILL_PATTERNS`（`,` 区切り）
+
+※ `AIC_CAPTURE` / `AIC_ROSBAG` / `AIC_PREPARE_ON_ADMIN_READY` は従来どおり有効です。
 
 ## 入出力（I/F）
 ### Subscribe
@@ -61,11 +70,12 @@ AWSIM の `/admin/awsim/state` は **`ROS_DOMAIN_ID=0` 側**で流れている�
 - **通常ドメイン**: `autostart_orchestrator_py` を起動し、`/<vehicle_ns>/awsim/state` に基づき開始/停止を制御する
 
 ## 処理フロー（要件）
-### 1) 開始トリガ（推奨: 車両ごとの `TimingStart`）
-開始タイミングは **車両ごとの `/<vehicle_ns>/awsim/state`** を主に使うことを推奨します。
+### 1) 開始トリガ
+開始タイミングは `start_on_vehicle_state` と `prepare_on_admin_ready` のどちらかで判断します。
 
-- 推奨: `TimingStart` を “計測開始” とみなし、記録（screen capture / rosbag）を開始する
-- 代替: `Running` を開始トリガにする（計測開始より早く録画したい場合）
+- `start_on_vehicle_state`（例: `TimingStart`, `Running`）に到達した時
+- `prepare_on_admin_ready: true` 時は `"/admin/awsim/state"` の値が `Ready` になった時
+- どちらも指定しない場合は即開始
 
 ### 2) 走行開始前処理（initial pose / control）
 次の順序で実行する（**順序が重要**）:
@@ -76,7 +86,7 @@ AWSIM の `/admin/awsim/state` は **`ROS_DOMAIN_ID=0` 側**で流れている�
 
 > 実装（現状）:
 > - initial pose / control mode はノード起動直後に best-effort 実行
-> - 記録開始は `start_on_vehicle_state` 到達時（default: 空 = 即開始）
+> - 記録開始は `start_on_vehicle_state` または `/admin/awsim/state == Ready`（`prepare_on_admin_ready: true` 時）到達時
 > - control mode request は `std_msgs/msg/Bool` で `data=true` を publish
 > - start/stop 待機はタイムアウトなし（対象状態が来るまで待機）
 
@@ -103,6 +113,8 @@ AWSIM の `/admin/awsim/state` は **`ROS_DOMAIN_ID=0` 側**で流れている�
 - `capture`（true/false: 画面キャプチャを開始/停止する）
 - `rosbag`（true/false: rosbag を開始/停止する）
 - `start_on_vehicle_state`（default: 空 = 即開始）
+- `prepare_on_admin_ready`（default: false）
+- `admin_ready_topic`（default: `/admin/awsim/state`）
 - `stop_on_vehicle_state`（default推奨: `Finish`。空にすると自動停止しない）
 - `exit_on_finish`（default: false。true だと stop 後にノードが終了する）
 - `autostart_orchestrator_params`（default: `autostart_orchestrator_py` の `config/autostart_orchestrator.param.yaml`）
@@ -110,6 +122,8 @@ AWSIM の `/admin/awsim/state` は **`ROS_DOMAIN_ID=0` 側**で流れている�
 
 ### `autostart_orchestrator_py` のノードパラメータ（必要ならlaunch側で上書き）
 - `vehicle_state_topic`（車両状態topic。デフォルトは `/<vehicle_ns>/awsim/state` は想定される形式）
+- `admin_ready_topic`（`/admin/awsim/state`）
+- `prepare_on_admin_ready`（`/admin/awsim/state == "Ready"` を開始トリガに使用するか）
 - `exit_on_finish`（stop 完了後にノード終了するか）
 - `enable_debug_visualization`（デバッグ表示の全状態可視化を有効化する: true/false、default: false）
 - `call_initial_pose`（起動直後に初期姿勢 service を呼ぶか）
@@ -119,12 +133,22 @@ AWSIM の `/admin/awsim/state` は **`ROS_DOMAIN_ID=0` 側**で流れている�
 - `initial_pose_service` / `capture_service`（サービス名）
 - `control_mode_request_topic`（default: `/awsim/control_mode_request_topic`）
 
+### `awsim_state_manager_node.py` のノードパラメータ（`mode/awsim.launch.xml` で利用）
+- `awsim_kill_patterns`（初期: `AWSIM.x86_64,aichallenge_awsim_eval`）
+- `shutdown_grace_sec` / `kill_wait_sec`
+- `exit_on_finish` / `shutdown_on_exit`
+- `enable_debug_visualization`（default: false）
+- `admin_state_topic`（default: `/admin/awsim/state`）
+- `awsim_state_manager.param.yaml` がデフォルトソース:
+  - `autostart_orchestrator_py/config/awsim_state_manager.param.yaml`
+
 ### デバッグ可視化
 - `enable_debug_visualization: true` のとき、Qt パネルでオーケストレーションの全状態を表示し、現在状態を青字で強調します。
-  - 全状態: `BOOT -> WAIT_INITIAL_POSE -> REQUEST_CONTROL_MODE -> IDLE -> WAIT_START -> RECORDING -> WAIT_STOP -> AUTO_STOP_DISABLED -> STOPPING -> FINISHED -> ERROR`
+  - 全状態: `BOOT -> WAIT_AWSIM -> RUNNING -> SHUTTING_DOWN -> FINISHED -> ERROR`
   - `QListWidget` で縦並び表示し、現在状態だけ青字でハイライトします。
   - パネルサイズに応じて、表示文字サイズが自動的に拡縮されます。
   - パネル描画には `PySide6`（または `PyQt5`）が必要です。未インストール時は標準ログにフォールバックします。
+  - `enable_debug_visualization: true` 時は `/admin/awsim/state` の最新値も同パネルに `admin state` として表示します。
 
 ## 成果物（Artifacts）
 実行カレントディレクトリ配下に、タイムスタンプ付きで保存する想定:

@@ -2,6 +2,8 @@
   ros__parameters:
     vehicle_state_topic: /awsim/state
     start_on_vehicle_state: "" # any state, e.g. "Ready", "Start", "Finish". If empty, start immediately.
+    admin_ready_topic: /admin/awsim/state
+    prepare_on_admin_ready: false
     stop_on_vehicle_state: "Finish"
     enable_capture: false
     enable_rosbag: false

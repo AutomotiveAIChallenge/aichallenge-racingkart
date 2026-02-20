@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import queue
 import signal
 import subprocess
 import threading
@@ -10,62 +11,48 @@ import time
 from typing import Optional
 
 import rclpy
-from rclpy.callback_groups import ReentrantCallbackGroup
 from rclpy.node import Node
 from std_msgs.msg import String
 
 
-class AwsimStateManager(Node):
-    """Manage evaluation shutdown from AWSIM admin/vehicle state transitions.
+_DashboardPayload = tuple[str, list[int], float, str]
 
-    The manager runs on ROS_DOMAIN_ID=0 and coordinates process cleanup in phases:
-    1) stop autostart orchestrators first (graceful SIGINT/SIGTERM/SIGKILL)
-    2) stop extra recorder-related processes
-    3) stop remaining AWSIM/Autoware processes
-    """
+
+class AwsimStateManager(Node):
+    """Monitor AWSIM process lifecycle and trigger cleanup when it exits."""
+
+    _DEFAULT_AWSIM_KILL_PATTERNS = "AWSIM.x86_64,aichallenge_awsim_eval"
+    _DEBUG_AWSIM_STATES = (
+        "BOOT",
+        "WAIT_AWSIM",
+        "RUNNING",
+        "SHUTTING_DOWN",
+        "FINISHED",
+        "ERROR",
+    )
+    _PARAM_DEFAULTS = (
+        ("awsim_kill_patterns", _DEFAULT_AWSIM_KILL_PATTERNS),
+        ("shutdown_grace_sec", 2),
+        ("kill_wait_sec", 10),
+        ("exit_on_finish", True),
+        ("shutdown_on_exit", False),
+        ("enable_debug_visualization", False),
+        ("admin_state_topic", "/admin/awsim/state"),
+    )
+    _SHUTDOWN_DELAY_SEC = 10.0
 
     def __init__(self) -> None:
         super().__init__("awsim_state_manager")
 
-        defaults = [
-            ("admin_state_topic", "/admin/awsim/state"),
-            ("vehicle_state_topics", "/d1/awsim/state"),
-            ("required_ready_count", 1),
-            ("ready_states", "Ready"),
-            ("finish_states", "FinishALL,Terminate"),
-            ("ready_wait_timeout_sec", 60),
-            ("finish_wait_timeout_sec", 600),
-            ("shutdown_grace_sec", 2),
-            ("kill_wait_sec", 10),
-            ("orchestrator_shutdown_wait_sec", 2),
-            (
-                "orchestrator_kill_patterns",
-                "autostart_orchestrator_node.py,autostart_orchestrator",
-            ),
-            (
-                "kill_patterns",
-                "AWSIM.x86_64,"
-                "component_container,"
-                "domain_bridge,"
-                "rviz2,"
-                "relay"
-            ),
-            ("shutdown_extra_patterns", "ros2 bag record"),
-            ("exit_on_finish", True),
-            ("fail_on_timeout", False),
-            ("shutdown_on_exit", False),
-        ]
-
-        for key, default in defaults:
+        for key, default in self._PARAM_DEFAULTS:
             self.declare_parameter(key, default)
 
-        self._cbg = ReentrantCallbackGroup()
-
-        self._admin_state_topic = str(self.get_parameter("admin_state_topic").value or "").strip()
-        if not self._admin_state_topic:
-            self._admin_state_topic = "/admin/awsim/state"
-
-        self._vehicle_state_topics = self._split_csv(str(self.get_parameter("vehicle_state_topics").value))
+        self._awsim_kill_patterns = self._split_csv(str(self.get_parameter("awsim_kill_patterns").value))
+        self._debug_visualization_enabled = bool(self.get_parameter("enable_debug_visualization").value)
+        self._debug_panel_queue: Optional[queue.Queue[_DashboardPayload]] = None
+        self._debug_panel_active = False
+        self._debug_panel_error_logged = False
+        self._admin_state_topic = str(self.get_parameter("admin_state_topic").value).strip() or "/admin/awsim/state"
 
         ros_domain_id = os.environ.get("ROS_DOMAIN_ID", "").strip()
         if ros_domain_id and ros_domain_id != "0":
@@ -75,40 +62,36 @@ class AwsimStateManager(Node):
             )
 
         self._cond = threading.Condition()
-        self._last_admin_state: Optional[str] = None
-        self._vehicle_last_state: dict[str, str] = {topic: "" for topic in self._vehicle_state_topics}
-
+        self._current_state = "BOOT"
+        self._last_seen_pids: list[int] = []
+        # admin_state is set via topic callback (default topic is /admin/awsim/state).
+        self._last_admin_state = ""
         self._shutdown_started = False
         self._shutdown_reason: Optional[str] = None
         self._exit_code = 0
 
-        self._admin_sub = self.create_subscription(
-            String,
-            self._admin_state_topic,
-            self._on_admin_state,
-            10,
-            callback_group=self._cbg,
-        )
-
-        self._vehicle_subs = []
-        for topic in self._vehicle_state_topics:
-            sub = self.create_subscription(
-                String,
-                topic,
-                lambda msg, t=topic: self._on_vehicle_state(t, msg),
-                10,
-                callback_group=self._cbg,
-            )
-            self._vehicle_subs.append(sub)
+        self.create_subscription(String, self._admin_state_topic, self._on_admin_state, 10)
 
         self._worker = threading.Thread(target=self._run, daemon=True)
         self._worker.start()
 
-        self.get_logger().info(f"admin state topic: {self._admin_state_topic}")
-        if self._vehicle_state_topics:
-            self.get_logger().info(f"vehicle state topics: {self._vehicle_state_topics}")
-        else:
-            self.get_logger().warn("vehicle_state_topics is empty; vehicle Ready gating is disabled")
+        self.get_logger().info(f"monitoring patterns: {self._awsim_kill_patterns or ['(empty)']}")
+        self.get_logger().info(f"exit_on_finish: {bool(self.get_parameter('exit_on_finish').value)}")
+
+        if self._debug_visualization_enabled:
+            self._start_debug_visualization()
+            self._emit_state_snapshot()
+
+    @staticmethod
+    def _normalize_admin_state(raw: str) -> str:
+        return "".join(ch for ch in (raw or "").strip().lower() if ch.isalnum())
+
+    @classmethod
+    def _is_admin_finish_state(cls, state: str) -> bool:
+        norm = cls._normalize_admin_state(state)
+        if not norm:
+            return False
+        return norm in {"finishall", "finishedall", "terminate", "terminated"}
 
     @property
     def exit_code(self) -> int:
@@ -137,80 +120,212 @@ class AwsimStateManager(Node):
         except Exception:
             return int(default)
 
-    def _on_admin_state(self, msg: String) -> None:
-        state = (msg.data or "").strip()
-        if not state:
+    def _set_state(self, state: str) -> None:
+        with self._cond:
+            self._current_state = state
+            self._cond.notify_all()
+        self._emit_state_snapshot()
+
+    def _emit_state_snapshot(self) -> None:
+        if not self._debug_visualization_enabled:
+            return
+        queue_ref = self._debug_panel_queue
+        if queue_ref is None:
             return
 
         with self._cond:
-            changed = state != self._last_admin_state
-            self._last_admin_state = state
-            self._cond.notify_all()
-
-        if changed:
-            self.get_logger().info(f"admin state: {state}")
-
-    def _on_vehicle_state(self, topic: str, msg: String) -> None:
-        state = (msg.data or "").strip()
-        if not state:
+            state = self._current_state
+            pids = list(self._last_seen_pids)
+            admin_state = self._last_admin_state
+        now = time.monotonic()
+        payload = (state, pids, now, admin_state)
+        try:
+            queue_ref.put_nowait(payload)
             return
+        except queue.Full:
+            pass
+        try:
+            queue_ref.get_nowait()
+            queue_ref.put_nowait(payload)
+        except Exception:
+            pass
 
-        with self._cond:
-            before = self._vehicle_last_state.get(topic, "")
-            changed = state != before
-            self._vehicle_last_state[topic] = state
-            self._cond.notify_all()
+    def _start_debug_visualization(self) -> None:
+        def _run() -> None:
+            try:
+                try:
+                    from PySide6 import QtCore, QtGui, QtWidgets
+                except Exception:
+                    from PyQt5 import QtCore, QtGui, QtWidgets
+            except Exception as exc:  # noqa: BLE001
+                if not self._debug_panel_error_logged:
+                    self.get_logger().warn(f"failed to import Qt binding for visualization: {exc}")
+                    self._debug_panel_error_logged = True
+                self._debug_panel_active = False
+                self._debug_panel_queue = None
+                return
 
-        if changed:
-            self.get_logger().info(f"vehicle state: topic={topic} state={state}")
+            class _DashboardWindow(QtWidgets.QWidget):
+                def __init__(self, awsim_states: tuple[str, ...]) -> None:
+                    super().__init__()
+                    self._active_color = QtGui.QColor("#1E90FF")
+                    self._inactive_color = QtGui.QColor("#444444")
 
-    def _wait_until(self, predicate, timeout_sec: int) -> bool:
-        deadline = time.monotonic() + max(1, int(timeout_sec))
-        with self._cond:
-            while rclpy.ok():
-                if predicate():
-                    return True
-                remaining = deadline - time.monotonic()
-                if remaining <= 0:
-                    return False
-                self._cond.wait(timeout=min(0.5, remaining))
-        return False
+                    self.setWindowTitle("AWSIM State Monitor")
+                    self.setMinimumWidth(640)
+                    self.setMinimumHeight(360)
 
-    def _wait_for_admin_ready(self, timeout_sec: int) -> tuple[bool, Optional[str]]:
-        ok = self._wait_until(lambda: self._last_admin_state is not None, timeout_sec)
-        return ok, self._last_admin_state
+                    layout = QtWidgets.QVBoxLayout(self)
+                    layout.setContentsMargins(12, 12, 12, 12)
+                    layout.setSpacing(6)
 
-    def _ready_vehicle_count(self, ready_states: set[str]) -> int:
-        return sum(1 for state in self._vehicle_last_state.values() if state in ready_states)
+                    layout.addWidget(QtWidgets.QLabel("AWSIM Process State"))
+                    self._state_label = QtWidgets.QLabel("state: --")
+                    self._state_label.setWordWrap(True)
+                    layout.addWidget(self._state_label)
 
-    def _wait_for_vehicle_ready(
-        self,
-        ready_states: set[str],
-        required_ready_count: int,
-        timeout_sec: int,
-    ) -> tuple[bool, int, dict[str, str]]:
-        required = max(0, int(required_ready_count))
-        ok = self._wait_until(
-            lambda: self._ready_vehicle_count(ready_states) >= required,
-            timeout_sec,
-        )
-        with self._cond:
-            snapshot = dict(self._vehicle_last_state)
-        return ok, self._ready_vehicle_count(ready_states), snapshot
+                    layout.addWidget(QtWidgets.QLabel("Workflow"))
+                    self._state_list = QtWidgets.QListWidget()
+                    self._state_list.setSelectionMode(QtWidgets.QAbstractItemView.NoSelection)
+                    self._state_list.setFocusPolicy(QtCore.Qt.NoFocus)
+                    self._state_items: list[QtWidgets.QListWidgetItem] = []
+                    self._state_lookup: dict[str, QtWidgets.QListWidgetItem] = {}
+                    for state in awsim_states:
+                        item = QtWidgets.QListWidgetItem(state)
+                        item.setForeground(self._inactive_color)
+                        self._state_items.append(item)
+                        self._state_lookup[state] = item
+                        self._state_list.addItem(item)
+                    layout.addWidget(self._state_list, 2)
 
-    def _wait_for_finish_state(self, finish_states: set[str], timeout_sec: int) -> tuple[bool, Optional[str]]:
-        ok = self._wait_until(lambda: self._last_admin_state in finish_states, timeout_sec)
-        return ok, self._last_admin_state
+                    self._state_indicator = QtWidgets.QLabel("no value yet")
+                    self._state_indicator.setWordWrap(True)
+                    layout.addWidget(self._state_indicator)
+
+                    self._pids_label = QtWidgets.QLabel("pids: --")
+                    self._pids_label.setWordWrap(True)
+                    layout.addWidget(self._pids_label)
+
+                    self._admin_state_label = QtWidgets.QLabel("admin state: --")
+                    self._admin_state_label.setWordWrap(True)
+                    layout.addWidget(self._admin_state_label)
+
+                    self._meta = QtWidgets.QLabel("monitoring AWSIM process by kill pattern")
+                    self._meta.setWordWrap(True)
+                    layout.addWidget(self._meta)
+                    self._resize_fonts()
+
+                def _resize_fonts(self) -> None:
+                    width = max(420, self.width())
+                    height = max(260, self.height())
+                    state_font = max(10, min(28, min(width // 40, height // 18)))
+                    body_font = max(9, min(22, min(width // 55, height // 22)))
+
+                    self._state_label.setFont(QtGui.QFont("Verdana", state_font))
+                    self._state_indicator.setFont(QtGui.QFont("Verdana", body_font))
+                    self._pids_label.setFont(QtGui.QFont("Verdana", max(8, body_font)))
+                    self._admin_state_label.setFont(QtGui.QFont("Verdana", max(8, body_font)))
+                    self._state_list.setFont(QtGui.QFont("Verdana", body_font))
+                    self._meta.setFont(QtGui.QFont("Verdana", max(6, body_font - 3)))
+
+                def resizeEvent(self, event: object) -> None:  # type: ignore[override]
+                    super().resizeEvent(event)  # type: ignore[misc]
+                    self._resize_fonts()
+
+                def update_state(self, state: str, pids: list[int], _now: float, admin_state: str) -> None:
+                    state_clean = state or "(unknown)"
+                    self._state_label.setText(f"state: {state_clean}")
+                    self._state_indicator.setText(f"workflow state: {state_clean}")
+                    self._pids_label.setText(f"pids: {', '.join(str(pid) for pid in pids) or '(none)'}")
+                    self._admin_state_label.setText(f"admin state: {admin_state or '(none)'}")
+
+                    active_font = QtGui.QFont("Verdana", self._state_list.font().pointSize())
+                    active_font.setBold(True)
+                    inactive_font = QtGui.QFont("Verdana", max(9, self._state_list.font().pointSize()))
+
+                    for item in self._state_items:
+                        item.setForeground(self._inactive_color)
+                        item.setFont(inactive_font)
+
+                    if state and state in self._state_lookup:
+                        active_item = self._state_lookup[state]
+                        active_item.setForeground(self._active_color)
+                        active_item.setFont(active_font)
+                        self._state_list.setCurrentItem(active_item)
+                        self._state_list.scrollToItem(active_item)
+
+                    self._meta.setText("monitoring target: AWSIM process by pattern")
+
+            self._debug_panel_queue = queue.Queue(maxsize=128)
+            self._debug_panel_active = True
+
+            app = QtWidgets.QApplication.instance()
+            if app is None:
+                app = QtWidgets.QApplication(["awsim_state_manager"])
+            dashboard = _DashboardWindow(
+                self._DEBUG_AWSIM_STATES,
+            )
+
+            def _on_timer() -> None:
+                if not self._debug_panel_active:
+                    return
+                next_payload: Optional[_DashboardPayload] = None
+                while True:
+                    try:
+                        next_payload = self._debug_panel_queue.get_nowait()
+                    except queue.Empty:
+                        break
+                if next_payload is None:
+                    return
+                state, pids, now, admin_state = next_payload
+                dashboard.update_state(state, pids, now, admin_state)
+
+            timer = QtCore.QTimer()
+            timer.timeout.connect(_on_timer)
+            timer.start(250)
+
+            dashboard.show()
+            app.exec()
+            self._debug_panel_active = False
+            self._debug_panel_queue = None
+
+        threading.Thread(target=_run, daemon=True).start()
 
     @staticmethod
     def _is_alive(pid: int) -> bool:
         try:
+            if pid <= 1:
+                return False
             os.kill(pid, 0)
+            with open(f"/proc/{pid}/stat", "r", encoding="utf-8") as f:
+                parts = f.read().split()
+            # /proc/<pid>/stat: 3rd field is process state
+            # R/D/S/Z/T (sleeping/stopped/done etc.) / Z means zombie -> treat as dead for orchestration.
+            if len(parts) > 2 and parts[2] == "Z":
+                return False
             return True
         except ProcessLookupError:
             return False
+        except FileNotFoundError:
+            return False
         except Exception:
             return False
+
+    def _on_admin_state(self, msg: String) -> None:
+        state = (msg.data or "").strip()
+        with self._cond:
+            self._last_admin_state = state
+            self._cond.notify_all()
+        if self._is_admin_finish_state(state) and not self._shutdown_started:
+            self._shutdown_reason = f"admin state reached: {state}"
+            self._start_shutdown()
+        self._emit_state_snapshot()
+
+    def _snapshot_awsim_pids(self) -> list[int]:
+        all_pids: list[int] = []
+        for pattern in self._awsim_kill_patterns:
+            all_pids.extend(self._find_pids(pattern))
+        return sorted(set(all_pids))
 
     @staticmethod
     def _signal_name(sig: int) -> str:
@@ -314,23 +429,19 @@ class AwsimStateManager(Node):
                 return
             self._shutdown_started = True
 
+        self._set_state("SHUTTING_DOWN")
         reason = self._shutdown_reason or "unknown"
         self.get_logger().warn(f"shutdown sequence started (reason={reason})")
 
-        orchestrator_patterns = self._split_csv(str(self.get_parameter("orchestrator_kill_patterns").value))
-        self._kill_by_patterns(orchestrator_patterns, "phase1-orchestrator")
+        delay = self._SHUTDOWN_DELAY_SEC
+        if delay > 0:
+            self.get_logger().warn(f"waiting {delay}s before killing awsim processes")
+            time.sleep(delay)
 
-        orchestrator_wait = max(0, self._parse_int("orchestrator_shutdown_wait_sec", 2))
-        if orchestrator_wait > 0:
-            time.sleep(orchestrator_wait)
-
-        extra_patterns = self._split_csv(str(self.get_parameter("shutdown_extra_patterns").value))
-        self._kill_by_patterns(extra_patterns, "phase2-extra")
-
-        kill_patterns = self._split_csv(str(self.get_parameter("kill_patterns").value))
-        self._kill_by_patterns(kill_patterns, "phase3-main")
+        self._kill_by_patterns(self._awsim_kill_patterns, "phase1-awsim")
 
         if bool(self.get_parameter("exit_on_finish").value):
+            self._set_state("FINISHED")
             self.get_logger().info("exit_on_finish=true; shutting down ROS")
             if rclpy.ok():
                 rclpy.shutdown()
@@ -339,84 +450,40 @@ class AwsimStateManager(Node):
             os._exit(0)
 
     def _run(self) -> None:
-        ready_timeout = max(1, self._parse_int("ready_wait_timeout_sec", 60))
-        finish_timeout = max(1, self._parse_int("finish_wait_timeout_sec", 600))
-        fail_on_timeout = bool(self.get_parameter("fail_on_timeout").value)
+        if not self._awsim_kill_patterns:
+            self._set_state("ERROR")
+            self._set_exit_code(1)
+            self._shutdown_reason = "awsim_kill_patterns is empty"
+            self.get_logger().error("awsim_kill_patterns is empty; shutdown logic disabled")
+            return
 
-        required_ready_count = max(0, self._parse_int("required_ready_count", 1))
-        ready_states = set(self._split_csv(str(self.get_parameter("ready_states").value)))
-        finish_states = set(self._split_csv(str(self.get_parameter("finish_states").value)))
+        self._set_state("WAIT_AWSIM")
+        while rclpy.ok():
+            pids = self._snapshot_awsim_pids()
+            with self._cond:
+                self._last_seen_pids = pids
+            self._emit_state_snapshot()
+            if pids:
+                break
+            time.sleep(1.0)
 
-        if required_ready_count > len(self._vehicle_state_topics):
-            self.get_logger().warn(
-                "required_ready_count exceeds configured topics; "
-                f"clamping {required_ready_count} -> {len(self._vehicle_state_topics)}"
-            )
-            required_ready_count = len(self._vehicle_state_topics)
+        if not rclpy.ok():
+            return
 
-        self.get_logger().info(
-            f"wait admin readiness: topic={self._admin_state_topic} timeout={ready_timeout}s"
-        )
-        ok, last_admin = self._wait_for_admin_ready(ready_timeout)
-        if not ok:
-            self.get_logger().warn(
-                f"timeout waiting admin readiness: topic={self._admin_state_topic} last={last_admin or 'none'}"
-            )
-            if fail_on_timeout:
-                self._set_exit_code(2)
-                self._shutdown_reason = "admin_ready_timeout"
+        self.get_logger().info(f"awsim process detected: pids={pids}")
+        self._set_state("RUNNING")
+        while rclpy.ok():
+            pids = self._snapshot_awsim_pids()
+            with self._cond:
+                self._last_seen_pids = pids
+            self._emit_state_snapshot()
+            if not pids:
+                self._set_state("FINISHED")
+                self._shutdown_reason = "awsim process disappeared"
+                self.get_logger().warn("awsim process disappeared; starting shutdown")
                 self._start_shutdown()
-            return
-
-        if required_ready_count > 0:
-            if not ready_states:
-                self.get_logger().warn("ready_states is empty; skipping vehicle Ready gating")
-            else:
-                self.get_logger().info(
-                    "wait vehicle readiness: "
-                    f"states={sorted(ready_states)} required={required_ready_count}/{len(self._vehicle_state_topics)} "
-                    f"timeout={ready_timeout}s"
-                )
-                ok, count, snapshot = self._wait_for_vehicle_ready(
-                    ready_states,
-                    required_ready_count,
-                    ready_timeout,
-                )
-                if not ok:
-                    self.get_logger().warn(
-                        "timeout waiting vehicle readiness: "
-                        f"ready_count={count}/{required_ready_count} states={snapshot}"
-                    )
-                    if fail_on_timeout:
-                        self._set_exit_code(3)
-                        self._shutdown_reason = "vehicle_ready_timeout"
-                        self._start_shutdown()
-                        return
-                else:
-                    self.get_logger().info(
-                        f"vehicle readiness reached: ready_count={count}/{required_ready_count}"
-                    )
-
-        if not finish_states:
-            self.get_logger().warn("finish_states is empty; manager will not auto-shutdown")
-            return
-
-        self.get_logger().info(
-            f"wait finish: topic={self._admin_state_topic} states={sorted(finish_states)} timeout={finish_timeout}s"
-        )
-        ok, last_admin = self._wait_for_finish_state(finish_states, finish_timeout)
-        if ok:
-            self._shutdown_reason = f"admin_state={last_admin}"
-            self._start_shutdown()
-            return
-
-        self.get_logger().error(
-            f"timeout waiting finish state: expected={sorted(finish_states)} last={last_admin or 'none'}"
-        )
-        if fail_on_timeout:
-            self._set_exit_code(4)
-            self._shutdown_reason = "finish_wait_timeout"
-            self._start_shutdown()
+                return
+            time.sleep(1.0)
 
     def destroy_node(self) -> bool:
         if not self._shutdown_started and bool(self.get_parameter("shutdown_on_exit").value):
