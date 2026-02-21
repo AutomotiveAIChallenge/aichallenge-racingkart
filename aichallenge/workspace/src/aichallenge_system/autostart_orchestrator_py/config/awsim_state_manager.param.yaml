@@ -7,3 +7,11 @@
     shutdown_on_exit: false
     enable_debug_visualization: true
     admin_state_topic: /admin/awsim/state
+    # AWSIM Sync mode start trigger bridge.
+    admin_start_topic: /admin/awsim/start
+    # Trigger publish when /admin/awsim/state transitions to one of these states.
+    admin_start_trigger_state: waitstart,ready
+    # Publish start message at most once.
+    admin_start_enabled: true
+    # If false, publish every time the trigger state is observed.
+    admin_start_once: true

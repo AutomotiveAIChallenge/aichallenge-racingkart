@@ -12,16 +12,37 @@ from typing import Optional
 
 import rclpy
 from rclpy.node import Node
-from std_msgs.msg import String
+from rclpy.qos import DurabilityPolicy, QoSProfile, ReliabilityPolicy
+from std_msgs.msg import Bool, String
 
 
 _DashboardPayload = tuple[str, list[int], float, str]
 
 
 class AwsimStateManager(Node):
-    """Monitor AWSIM process lifecycle and trigger cleanup when it exits."""
+    """Monitor AWSIM process lifecycle and trigger cleanup when it exits.
+
+    Also handles AWSIM admin control in Sync mode by publishing
+    ``std_msgs/Bool`` to ``/admin/awsim/start`` when configured trigger
+    state is observed on ``/admin/awsim/state``.
+    """
 
     _DEFAULT_AWSIM_KILL_PATTERNS = "AWSIM.x86_64,aichallenge_awsim_eval"
+    _DEFAULT_ADMIN_START_TOPIC = "/admin/awsim/start"
+    _DEFAULT_ADMIN_START_TRIGGER_STATE = "waitstart,ready"
+    _KNOWN_ADMIN_STATES = (
+        "selectmode",
+        "playstart",
+        "ready",
+        "waitstart",
+        "start",
+        "lapcomplete",
+        "finish",
+        "finishall",
+        "terminate",
+    )
+    _KNOWN_VEHICLE_STATES = ("spawned", "grounded", "ready", "start", "finish")
+    _ADMIN_FINISH_STATES = frozenset({"finish", "finishall", "finishedall", "terminate", "terminated"})
     _DEBUG_AWSIM_STATES = (
         "BOOT",
         "WAIT_AWSIM",
@@ -38,6 +59,10 @@ class AwsimStateManager(Node):
         ("shutdown_on_exit", False),
         ("enable_debug_visualization", False),
         ("admin_state_topic", "/admin/awsim/state"),
+        ("admin_start_topic", _DEFAULT_ADMIN_START_TOPIC),
+        ("admin_start_trigger_state", _DEFAULT_ADMIN_START_TRIGGER_STATE),
+        ("admin_start_enabled", True),
+        ("admin_start_once", True),
     )
     _SHUTDOWN_DELAY_SEC = 10.0
 
@@ -53,6 +78,20 @@ class AwsimStateManager(Node):
         self._debug_panel_active = False
         self._debug_panel_error_logged = False
         self._admin_state_topic = str(self.get_parameter("admin_state_topic").value).strip() or "/admin/awsim/state"
+        self._admin_start_topic = str(self.get_parameter("admin_start_topic").value).strip() or self._DEFAULT_ADMIN_START_TOPIC
+        self._admin_start_trigger_states = self._normalize_admin_state_list(
+            str(self.get_parameter("admin_start_trigger_state").value)
+        ) or self._normalize_admin_state_list(self._DEFAULT_ADMIN_START_TRIGGER_STATE)
+        self._admin_start_enabled = bool(self.get_parameter("admin_start_enabled").value)
+        self._admin_start_once = bool(self.get_parameter("admin_start_once").value)
+        self._admin_start_published = False
+        if self._admin_start_enabled:
+            unknown = [state for state in self._admin_start_trigger_states if state not in self._KNOWN_ADMIN_STATES]
+            if unknown:
+                self.get_logger().warn(
+                    f"admin_start_trigger_state contains unknown state(s): {', '.join(unknown)}"
+                    f" (known: {', '.join(self._KNOWN_ADMIN_STATES)})"
+                )
 
         ros_domain_id = os.environ.get("ROS_DOMAIN_ID", "").strip()
         if ros_domain_id and ros_domain_id != "0":
@@ -70,7 +109,24 @@ class AwsimStateManager(Node):
         self._shutdown_reason: Optional[str] = None
         self._exit_code = 0
 
-        self.create_subscription(String, self._admin_state_topic, self._on_admin_state, 10)
+        admin_state_qos = QoSProfile(
+            depth=1,
+            reliability=ReliabilityPolicy.RELIABLE,
+            durability=DurabilityPolicy.TRANSIENT_LOCAL,
+        )
+        self.create_subscription(String, self._admin_state_topic, self._on_admin_state, qos_profile=admin_state_qos)
+        admin_start_qos = QoSProfile(
+            depth=1,
+            reliability=ReliabilityPolicy.RELIABLE,
+            durability=DurabilityPolicy.TRANSIENT_LOCAL,
+        )
+        self._pub_admin_start = self.create_publisher(Bool, self._admin_start_topic, qos_profile=admin_start_qos)
+
+        self.get_logger().info(
+            "admin state-manager start sender configured: "
+            f"enabled={self._admin_start_enabled} topic={self._admin_start_topic} "
+            f"trigger={','.join(self._admin_start_trigger_states)}"
+        )
 
         self._worker = threading.Thread(target=self._run, daemon=True)
         self._worker.start()
@@ -86,12 +142,21 @@ class AwsimStateManager(Node):
     def _normalize_admin_state(raw: str) -> str:
         return "".join(ch for ch in (raw or "").strip().lower() if ch.isalnum())
 
+    @staticmethod
+    def _normalize_admin_state_list(raw: str) -> list[str]:
+        normalized_items = []
+        for item in AwsimStateManager._split_csv(raw):
+            normalized = AwsimStateManager._normalize_admin_state(item)
+            if normalized:
+                normalized_items.append(normalized)
+        return normalized_items
+
     @classmethod
     def _is_admin_finish_state(cls, state: str) -> bool:
         norm = cls._normalize_admin_state(state)
         if not norm:
             return False
-        return norm in {"finishall", "finishedall", "terminate", "terminated"}
+        return norm in cls._ADMIN_FINISH_STATES
 
     @property
     def exit_code(self) -> int:
@@ -218,15 +283,15 @@ class AwsimStateManager(Node):
                 def _resize_fonts(self) -> None:
                     width = max(420, self.width())
                     height = max(260, self.height())
-                    state_font = max(10, min(28, min(width // 40, height // 18)))
-                    body_font = max(9, min(22, min(width // 55, height // 22)))
+                    state_font = max(9, min(24, min(width // 42, height // 20)))
+                    body_font = max(8, min(18, min(width // 58, height // 24)))
 
                     self._state_label.setFont(QtGui.QFont("Verdana", state_font))
                     self._state_indicator.setFont(QtGui.QFont("Verdana", body_font))
-                    self._pids_label.setFont(QtGui.QFont("Verdana", max(8, body_font)))
-                    self._admin_state_label.setFont(QtGui.QFont("Verdana", max(8, body_font)))
+                    self._pids_label.setFont(QtGui.QFont("Verdana", max(7, body_font)))
+                    self._admin_state_label.setFont(QtGui.QFont("Verdana", max(7, body_font)))
                     self._state_list.setFont(QtGui.QFont("Verdana", body_font))
-                    self._meta.setFont(QtGui.QFont("Verdana", max(6, body_font - 3)))
+                    self._meta.setFont(QtGui.QFont("Verdana", max(6, body_font - 2)))
 
                 def resizeEvent(self, event: object) -> None:  # type: ignore[override]
                     super().resizeEvent(event)  # type: ignore[misc]
@@ -241,7 +306,7 @@ class AwsimStateManager(Node):
 
                     active_font = QtGui.QFont("Verdana", self._state_list.font().pointSize())
                     active_font.setBold(True)
-                    inactive_font = QtGui.QFont("Verdana", max(9, self._state_list.font().pointSize()))
+                    inactive_font = QtGui.QFont("Verdana", max(8, self._state_list.font().pointSize()))
 
                     for item in self._state_items:
                         item.setForeground(self._inactive_color)
@@ -316,10 +381,26 @@ class AwsimStateManager(Node):
         with self._cond:
             self._last_admin_state = state
             self._cond.notify_all()
+        if self._should_send_admin_start(state):
+            self._send_admin_start(state)
         if self._is_admin_finish_state(state) and not self._shutdown_started:
             self._shutdown_reason = f"admin state reached: {state}"
             self._start_shutdown()
         self._emit_state_snapshot()
+
+    def _should_send_admin_start(self, state: str) -> bool:
+        if not self._admin_start_enabled or not state:
+            return False
+        if self._admin_start_once and self._admin_start_published:
+            return False
+        return self._normalize_admin_state(state) in self._admin_start_trigger_states
+
+    def _send_admin_start(self, state: str) -> None:
+        msg = Bool()
+        msg.data = True
+        self._pub_admin_start.publish(msg)
+        self._admin_start_published = True
+        self.get_logger().info(f"published admin start from state={state!r} to {self._admin_start_topic}")
 
     def _snapshot_awsim_pids(self) -> list[int]:
         all_pids: list[int] = []
@@ -363,7 +444,7 @@ class AwsimStateManager(Node):
             return
 
         grace = max(0, self._parse_int("shutdown_grace_sec", 2))
-        kill_wait = max(1, self._parse_int("kill_wait_sec", 10))
+        kill_wait = max(1, self._parse_int("kill_wait_sec", 2))
 
         for sig in (signal.SIGINT, signal.SIGTERM):
             if not self._is_alive(pid):

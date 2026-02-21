@@ -36,7 +36,6 @@ class _Harness(Node):
         self._vehicle_state_topic = vehicle_state_topic
 
         self._pub_state = self.create_publisher(String, vehicle_state_topic, 10)
-        self._pub_admin_ready = self.create_publisher(String, "/admin/awsim/state", 10)
         self._sub_control_mode = self.create_subscription(
             Bool, "/awsim/control_mode_request_topic", self._on_control_mode, 10
         )
@@ -79,11 +78,6 @@ class _Harness(Node):
         msg.data = state
         self._pub_state.publish(msg)
 
-    def publish_admin_ready(self, state: str) -> None:
-        msg = String()
-        msg.data = state
-        self._pub_admin_ready.publish(msg)
-
 
 def _require_ros2() -> None:
     if shutil.which("ros2") is None:
@@ -121,7 +115,6 @@ def main() -> int:
     parser = argparse.ArgumentParser(description="Smoke test for autostart_orchestrator_py.")
     parser.add_argument("--vehicle-state-topic", default="/test/awsim/state")
     parser.add_argument("--start-on", default="TimingStart")
-    parser.add_argument("--prepare-on-admin-ready", action="store_true")
     parser.add_argument("--stop-on", default="Finish")
     parser.add_argument("--timeout-sec", type=int, default=20)
     parser.add_argument("--output-dir", default="")
@@ -161,8 +154,6 @@ def main() -> int:
                     "  ros__parameters:",
                     f"    vehicle_state_topic: \"{args.vehicle_state_topic}\"",
                     f"    start_on_vehicle_state: \"{args.start_on}\"",
-                    f"    admin_ready_topic: /admin/awsim/state",
-                    f"    prepare_on_admin_ready: {str(bool(args.prepare_on_admin_ready)).lower()}",
                     f"    stop_on_vehicle_state: \"{args.stop_on}\"",
                     "    enable_capture: true",
                     "    enable_rosbag: true",
@@ -192,6 +183,10 @@ def main() -> int:
         reader_thread = threading.Thread(target=read_output, daemon=True)
         reader_thread.start()
 
+        while not harness._evt_initial_pose_called.is_set() and proc.poll() is None and not timed_out():
+            harness.publish_state(args.start_on)
+            time.sleep(0.2)
+
         if not harness._evt_initial_pose_called.wait(timeout=5.0):
             raise RuntimeError("initial pose service was not called")
 
@@ -199,8 +194,6 @@ def main() -> int:
             raise RuntimeError("control mode request topic was not observed")
 
         while not harness._evt_capture_called_once.is_set() and proc.poll() is None and not timed_out():
-            if args.prepare_on_admin_ready:
-                harness.publish_admin_ready("Ready")
             if args.start_on:
                 harness.publish_state(args.start_on)
             time.sleep(0.2)

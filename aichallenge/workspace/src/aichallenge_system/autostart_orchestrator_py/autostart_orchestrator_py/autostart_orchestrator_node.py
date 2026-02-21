@@ -7,7 +7,6 @@ import signal
 import subprocess
 import queue
 import threading
-import time
 from pathlib import Path
 from typing import Optional
 
@@ -63,8 +62,6 @@ class AutostartOrchestrator(Node):
         required_parameters = (
             "vehicle_state_topic",
             "start_on_vehicle_state",
-            "admin_ready_topic",
-            "prepare_on_admin_ready",
             "stop_on_vehicle_state",
             "enable_capture",
             "enable_rosbag",
@@ -90,12 +87,6 @@ class AutostartOrchestrator(Node):
             raise ValueError("vehicle_state_topic must not be empty")
         self._vehicle_state_topic = vehicle_state_topic
 
-        admin_ready_topic = str(self.get_parameter("admin_ready_topic").value).strip()
-        if not admin_ready_topic:
-            raise ValueError("admin_ready_topic must not be empty")
-        self._admin_ready_topic = admin_ready_topic
-        self._prepare_on_admin_ready = bool(self.get_parameter("prepare_on_admin_ready").value)
-
         self._workflow_state = self._STATE_BOOT
         self._workflow_detail = ""
         self._state_lock = threading.Lock()
@@ -111,18 +102,8 @@ class AutostartOrchestrator(Node):
 
         self._cond = threading.Condition()
         self._last_vehicle_state: Optional[str] = None
-        self._admin_ready_received = False
 
         self._sub = self.create_subscription(String, vehicle_state_topic, self._on_vehicle_state, 10, callback_group=cbg)
-        self._sub_admin_ready = self.create_subscription(
-            String,
-            admin_ready_topic,
-            self._on_admin_ready,
-            10,
-            callback_group=cbg,
-        )
-
-        self.get_logger().info(f"Subscribing admin ready: {admin_ready_topic}")
 
         self._cli_initial_pose = self.create_client(
             Trigger, str(self.get_parameter("initial_pose_service").value), callback_group=cbg
@@ -265,8 +246,8 @@ class AutostartOrchestrator(Node):
                     def _resize_fonts(self) -> None:
                         width = max(320, self.width())
                         height = max(220, self.height())
-                        state_font_size = max(10, min(24, min(width // 45, height // 16)))
-                        detail_font_size = max(9, min(20, min(width // 55, height // 18)))
+                        state_font_size = max(9, min(20, min(width // 48, height // 18)))
+                        detail_font_size = max(8, min(18, min(width // 58, height // 20)))
 
                         self._state_list.setFont(QtGui.QFont("Verdana", state_font_size))
                         self._label_detail.setFont(QtGui.QFont("Verdana", detail_font_size))
@@ -285,7 +266,7 @@ class AutostartOrchestrator(Node):
                         rosbag_running: bool,
                     ) -> None:
                         detail_text = detail
-                        active_font_size = max(10, self._state_list.font().pointSize())
+                        active_font_size = max(8, self._state_list.font().pointSize())
                         normal_font = QtGui.QFont("Verdana", active_font_size)
                         active_font = QtGui.QFont("Verdana", active_font_size)
                         active_font.setBold(True)
@@ -391,64 +372,82 @@ class AutostartOrchestrator(Node):
             self._last_vehicle_state = state
             self._cond.notify_all()
 
-    def _on_admin_ready(self, msg: String) -> None:
-        if not self._prepare_on_admin_ready:
-            return
-        state = (msg.data or "").strip()
-        if state != "Ready":
-            return
-        with self._cond:
-            if self._admin_ready_received:
-                return
-            self._admin_ready_received = True
-            self._cond.notify_all()
-
     @staticmethod
     def _normalize_state(raw: Optional[str]) -> str:
         return "".join(ch for ch in (raw or "").strip().lower() if ch.isalnum())
 
-    def _state_matches(self, actual: Optional[str], expected: str) -> bool:
+    @staticmethod
+    def _normalize_state_list(raw: str) -> list[str]:
+        states: list[str] = []
+        for item in (raw or "").split(","):
+            state = item.strip()
+            if state:
+                states.append(state)
+        return states
+
+    def _state_matches(self, actual: Optional[str], expected_states: list[str]) -> bool:
         actual_norm = self._normalize_state(actual)
-        expected_norm = self._normalize_state(expected)
-        if not actual_norm or not expected_norm:
+        if not actual_norm or not expected_states:
             return False
-        if actual_norm == expected_norm:
-            return True
-        if expected_norm in {"finish", "finished"} and actual_norm in {"finishedall", "terminate", "terminated"}:
-            return True
-        if expected_norm.startswith("finish") and actual_norm.startswith("finish"):
-            return True
+
+        for expected in expected_states:
+            expected_norm = self._normalize_state(expected)
+            if not expected_norm:
+                continue
+            if actual_norm == expected_norm:
+                return True
+            if expected_norm in {"finish", "finished"} and actual_norm in {"finishedall", "terminate", "terminated"}:
+                return True
+            if expected_norm.startswith("finish") and actual_norm.startswith("finish"):
+                return True
         return False
 
-    def _wait_for_start(
-        self,
-        expected_vehicle_state: str,
-        wait_admin_ready: bool,
-    ) -> tuple[bool, Optional[str], bool]:
-        expected_vehicle_state = (expected_vehicle_state or "").strip()
-        if not expected_vehicle_state and not wait_admin_ready:
-            return True, self._last_vehicle_state, self._admin_ready_received
-
-        with self._cond:
-            while rclpy.ok():
-                if expected_vehicle_state and self._state_matches(self._last_vehicle_state, expected_vehicle_state):
-                    return True, self._last_vehicle_state, self._admin_ready_received
-                if wait_admin_ready and self._admin_ready_received:
-                    return True, self._last_vehicle_state, self._admin_ready_received
-                self._cond.wait()
-        return False, self._last_vehicle_state, self._admin_ready_received
-
     def _wait_for_vehicle_state(self, expected: str) -> tuple[bool, Optional[str]]:
-        expected = (expected or "").strip()
-        if not expected:
+        expected_states = self._normalize_state_list(expected)
+        if not expected_states:
             return True, self._last_vehicle_state
+        expected_label = ", ".join(expected_states)
 
         with self._cond:
             while rclpy.ok():
-                if self._state_matches(self._last_vehicle_state, expected):
+                if self._state_matches(self._last_vehicle_state, expected_states):
                     return True, self._last_vehicle_state
                 self._cond.wait()
         return False, self._last_vehicle_state
+
+    def _do_start_initialization(self, call_initial_pose: bool, request_control_mode: bool) -> None:
+        if not (call_initial_pose or request_control_mode):
+            self._set_workflow_state(
+                self._STATE_REQUEST_CONTROL_MODE,
+                "initial pose / control mode disabled",
+            )
+            return
+
+        if call_initial_pose:
+            self._set_workflow_state(
+                self._STATE_WAIT_INITIAL_POSE,
+                f"waiting service and calling {self.get_parameter('initial_pose_service').value}",
+            )
+            if self._wait_for_service(self._cli_initial_pose):
+                ok, msg = self._call_trigger(self._cli_initial_pose)
+                self.get_logger().info(f"initial pose: success={ok} msg={msg}")
+            else:
+                self.get_logger().warn("skip initial pose (service not found)")
+
+        self._set_workflow_state(self._STATE_REQUEST_CONTROL_MODE, "initial pose completed")
+
+        if request_control_mode:
+            self._set_workflow_state(
+                self._STATE_REQUEST_CONTROL_MODE,
+                f"requesting control mode on {self.get_parameter('control_mode_request_topic').value}",
+            )
+            ok, msg = self._publish_control_mode()
+            if ok:
+                self.get_logger().info(f"control mode request: success={ok} msg={msg}")
+            else:
+                self.get_logger().warn(f"skip control mode request: {msg}")
+
+        self._set_workflow_state(self._STATE_REQUEST_CONTROL_MODE, "initialization done")
 
     def _wait_for_service(self, client) -> bool:
         return client.wait_for_service()
@@ -594,71 +593,41 @@ class AutostartOrchestrator(Node):
             enable_rosbag = bool(self.get_parameter("enable_rosbag").value)
 
             start_on = str(self.get_parameter("start_on_vehicle_state").value or "").strip()
-            prepare_on_admin_ready = bool(self._prepare_on_admin_ready)
             stop_on = str(self.get_parameter("stop_on_vehicle_state").value or "").strip()
             exit_on_finish = bool(self.get_parameter("exit_on_finish").value)
+            if start_on:
+                wait_targets = ", ".join(self._normalize_state_list(start_on))
+                wait_msg = f"{wait_targets} on {self._vehicle_state_topic}" if wait_targets else self._vehicle_state_topic
+                self._set_workflow_state(self._STATE_WAIT_START, f"waiting for {wait_msg}")
+                self.get_logger().info(f"wait start: {wait_msg}")
+                ok, last = self._wait_for_vehicle_state(start_on)
+                if not ok:
+                    self.get_logger().error(
+                        f"failed waiting start: expected_vehicle={wait_targets or start_on} "
+                        f"last={last}"
+                    )
+                    self._set_workflow_state(
+                        self._STATE_ERROR,
+                        f"failed waiting start: expected_vehicle={wait_targets or start_on} last={last}",
+                    )
+                    self._set_exit_code(2)
+                    self._shutdown()
+                    return
 
-            if call_initial_pose:
-                self._set_workflow_state(self._STATE_WAIT_INITIAL_POSE, f"waiting service and calling {self.get_parameter('initial_pose_service').value}")
-                if self._wait_for_service(self._cli_initial_pose):
-                    ok, msg = self._call_trigger(self._cli_initial_pose)
-                    self.get_logger().info(f"initial pose: success={ok} msg={msg}")
-                else:
-                    self.get_logger().warn("skip initial pose (service not found)")
-                self._set_workflow_state(
-                    self._STATE_REQUEST_CONTROL_MODE,
-                    f"call_initial_pose done (enabled={call_initial_pose})",
-                )
+                if last is not None:
+                    self.get_logger().info(f"start condition met: {self._vehicle_state_topic} == {last}")
             else:
-                self._set_workflow_state(self._STATE_REQUEST_CONTROL_MODE, "initial pose skipped")
+                self._set_workflow_state(self._STATE_WAIT_START, "start_on_vehicle_state is empty; start immediately")
+                self.get_logger().info("start_on_vehicle_state is empty; starting immediately")
 
-            if request_control_mode:
-                self._set_workflow_state(
-                    self._STATE_REQUEST_CONTROL_MODE,
-                    f"requesting control mode on {self.get_parameter('control_mode_request_topic').value}",
-                )
-                ok, msg = self._publish_control_mode()
-                if ok:
-                    self.get_logger().info(f"control mode request: success={ok} msg={msg}")
-                else:
-                    self.get_logger().warn(f"skip control mode request: {msg}")
+            self._do_start_initialization(call_initial_pose, request_control_mode)
 
             if not (enable_capture or enable_rosbag):
                 self._set_workflow_state(self._STATE_IDLE, "capture and rosbag are both disabled")
                 self.get_logger().info("capture/rosbag are disabled; orchestrator is idle")
                 return
 
-            if start_on or prepare_on_admin_ready:
-                waits: list[str] = []
-                if start_on:
-                    waits.append(f"'{start_on}' on {self._vehicle_state_topic}")
-                if prepare_on_admin_ready:
-                    waits.append(f"\"Ready\" on {self._admin_ready_topic}")
-                wait_msg = " or ".join(waits)
-
-                self._set_workflow_state(self._STATE_WAIT_START, f"waiting for {wait_msg}")
-                self.get_logger().info(f"wait start: {wait_msg}")
-                ok, last, admin_ready = self._wait_for_start(start_on, prepare_on_admin_ready)
-                if not ok:
-                    self.get_logger().error(
-                        f"failed waiting start: expected_vehicle={start_on} prepare_on_admin_ready={prepare_on_admin_ready} "
-                        f"last={last} admin_ready={admin_ready}"
-                    )
-                    self._set_workflow_state(
-                        self._STATE_ERROR,
-                        f"failed waiting start: expected_vehicle={start_on} prepare_on_admin_ready={prepare_on_admin_ready} "
-                        f"last={last} admin_ready={admin_ready}",
-                    )
-                    self._set_exit_code(2)
-                    self._shutdown()
-                    return
-                if start_on and last == start_on:
-                    self.get_logger().info(f"start condition met: {self._vehicle_state_topic} == {start_on}")
-                elif admin_ready:
-                    self.get_logger().info(f'start condition met: {self._admin_ready_topic} == "Ready"')
-                self._set_workflow_state(self._STATE_RECORDING, "start condition met")
-            else:
-                self._set_workflow_state(self._STATE_RECORDING, "no start_on specified; start immediately")
+            self._set_workflow_state(self._STATE_RECORDING, "start condition met")
 
             if enable_capture:
                 self._capture(True)

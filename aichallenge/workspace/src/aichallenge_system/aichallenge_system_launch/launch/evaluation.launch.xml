@@ -2,7 +2,6 @@
 <launch>
     <arg name="domain_id" default="1"/>
     <arg name="sim_mode" default="eval"/>
-    <arg name="awsim_args" default=""/>
     <arg name="output_run_dir" default="/output"/>
     <arg name="capture" default="false"/>
     <arg name="rosbag" default="false"/>
@@ -13,7 +12,6 @@
     <log message="Launching evaluation bundle (simulator + autoware)."/>
     <log message=" - domain_id: $(var domain_id)"/>
     <log message=" - sim_mode: $(var sim_mode)"/>
-    <log message=" - awsim_args: $(var awsim_args)"/>
     <log message=" - output_run_dir: $(var output_run_dir)"/>
     <log message=" - capture: $(var capture)"/>
     <log message=" - rosbag: $(var rosbag)"/>
@@ -21,23 +19,16 @@
     <log message=" - use_sim_time: $(var use_sim_time)"/>
     <log message=" - run_rviz: $(var run_rviz)"/>
 
-    <set_env name="OUTPUT_RUN_DIR" value="$(var output_run_dir)"/>
-    <set_env name="ROS_HOME" value="$(var output_run_dir)/ros"/>
-    <set_env name="ROS_LOG_DIR" value="$(var output_run_dir)/ros/log"/>
-
     <executable
         name="aichallenge_awsim_eval"
         cwd="$(var output_run_dir)"
         output="both"
-        cmd="/aichallenge/simulator/AWSIM/AWSIM.x86_64 --vehicles 1 --laps 6 --timeout 600">
+        cmd="/aichallenge/simulator/AWSIM/AWSIM.x86_64 --start-mode sync --vehicles 1 --laps 2 --timeout 600">
         <env name="ROS_DOMAIN_ID" value="0"/>
     </executable>
 
     <group>
         <set_env name="ROS_DOMAIN_ID" value="$(var domain_id)"/>
-        <set_env name="OUTPUT_RUN_DIR" value="$(var output_run_dir)"/>
-        <set_env name="ROS_HOME" value="$(var output_run_dir)/ros"/>
-        <set_env name="ROS_LOG_DIR" value="$(var output_run_dir)/ros/log"/>
         <include file="$(find-pkg-share aichallenge_system_launch)/launch/aichallenge_system.launch.xml">
             <arg name="simulation" value="$(var simulation)"/>
             <arg name="use_sim_time" value="$(var use_sim_time)"/>

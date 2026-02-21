@@ -6,6 +6,13 @@ ts="$(date +%Y%m%d-%H%M%S)"
 out_dir="${output_root}/${ts}/d${domain_id}"
 mkdir -p "${out_dir}"
 cd "${out_dir}" || exit
+mkdir -p "${out_dir}/ros/log"
+
+log_file="${out_dir}/run_evaluation.log"
+export ROS_HOME="${out_dir}/ros"
+export ROS_LOG_DIR="${ROS_HOME}/log"
+# Keep launch output in-file while still streaming to container stdout.
+exec > >(tee -a "${log_file}") 2>&1
 
 # shellcheck disable=SC1091
 source /aichallenge/workspace/install/setup.bash
