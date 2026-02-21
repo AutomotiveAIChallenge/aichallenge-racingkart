@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<launch>
+    <group>
+        <set_env name="ROS_DOMAIN_ID" value="0"/>
+        <node pkg="autostart_orchestrator_py" exec="awsim_state_manager_node.py" name="awsim_state_manager" output="both">
+            <param from="$(find-pkg-share autostart_orchestrator_py)/config/awsim_state_manager.param.yaml"/>
+        </node>
+    </group>
+</launch>

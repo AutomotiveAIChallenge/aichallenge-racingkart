@@ -3,9 +3,6 @@
     <arg name="capture" default="false"/>
     <arg name="rosbag" default="false"/>
     <arg name="autostart_orchestrator_params" default="$(find-pkg-share autostart_orchestrator_py)/config/autostart_orchestrator.param.yaml"/>
-    <arg name="state_manager_params" default="$(find-pkg-share autostart_orchestrator_py)/config/awsim_state_manager.param.yaml"/>
-    <arg name="state_manager_exit_on_finish" default="true"/>
-    <arg name="state_manager_awsim_kill_patterns" default="AWSIM.x86_64,aichallenge_awsim_eval"/>
     <!-- When capture/rosbag is enabled, start immediately by default (do not wait for a specific state). -->
     <arg name="start_on_vehicle_state" default=""/>
     <arg name="prepare_on_admin_ready" default="true"/>
@@ -19,15 +16,6 @@
     <!-- Adaptors for AWSIM -->
     <group>
         <include file="$(find-pkg-share aichallenge_awsim_adapter)/launch/aichallenge_awsim_adapter.launch.xml"/>
-    </group>
-
-    <group>
-        <set_env name="ROS_DOMAIN_ID" value="0"/>
-        <node pkg="autostart_orchestrator_py" exec="awsim_state_manager_node.py" name="awsim_state_manager" output="both">
-            <param from="$(var state_manager_params)"/>
-            <param name="exit_on_finish" value="$(var state_manager_exit_on_finish)"/>
-            <param name="awsim_kill_patterns" value="$(var state_manager_awsim_kill_patterns)"/>
-        </node>
     </group>
 
 	<!-- AWSIM only: auto request initialpose/control (+ optional capture/rosbag) -->

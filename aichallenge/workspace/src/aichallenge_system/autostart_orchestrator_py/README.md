@@ -3,8 +3,8 @@
 `autostart_orchestrator_py` は **オーケストレータ**（orchestrator）として動作し、車両ごとの AWSIM 状態（`/<vehicle_ns>/awsim/state`）を監視して、競技走行に必要な一連の準備〜実行〜後処理を自動化します。
 
 > Note:
-> `autostart_orchestrator_py` は submit 側 launch ではなく、
-> `aichallenge_system_launch/launch/mode/awsim.launch.xml` から起動される想定です。
+> `autostart_orchestrator_py` は `evaluation.launch.xml` で
+> `awsim_state_manager` と共にまとめて起動される前提です。
 
 ## 目的
 - AWSIM の state 変化に追従して、必要な補助処理を **順序・タイミング通り**に実行する
@@ -34,15 +34,9 @@
 - `rosbag`: rosbag 記録有効（launch arg `rosbag:=true` が渡る）
 - `online`: `capture` と `rosbag` を同時に有効化
 - `<UID> <GID>`: 終了時の ownership 調整に使用（`fix_ownership.bash` に委譲）
-- `state_manager_exit_on_finish`（launch arg）: AWSIM の終了通知を受けたときに `state_manager` で shutdown を発火するか
-- `state_manager_awsim_kill_patterns`（launch arg）: `awsim_state_manager` が対象にするプロセス名パターン（`,` 区切り）
-
 追加環境変数:
 
-- `AIC_STATE_MANAGER_EXIT_ON_FINISH`（`true`/`false`）
-- `AIC_STATE_MANAGER_AWSIM_KILL_PATTERNS`（`,` 区切り）
-
-※ `AIC_CAPTURE` / `AIC_ROSBAG` / `AIC_PREPARE_ON_ADMIN_READY` は従来どおり有効です。
+- `AIC_CAPTURE` / `AIC_ROSBAG` / `AIC_PREPARE_ON_ADMIN_READY` は従来どおり有効です。
 
 ## 入出力（I/F）
 ### Subscribe
@@ -133,8 +127,8 @@ AWSIM の `/admin/awsim/state` は **`ROS_DOMAIN_ID=0` 側**で流れている�
 - `initial_pose_service` / `capture_service`（サービス名）
 - `control_mode_request_topic`（default: `/awsim/control_mode_request_topic`）
 
-### `awsim_state_manager_node.py` のノードパラメータ（`mode/awsim.launch.xml` で利用）
-- `awsim_kill_patterns`（初期: `AWSIM.x86_64,aichallenge_awsim_eval`）
+### `awsim_state_manager_node.py` のノードパラメータ（`mode/awsim_state_manager.launch.xml` で利用）
+- `awsim_kill_patterns`（初期: `AWSIM.x86_64`）
 - `shutdown_grace_sec` / `kill_wait_sec`
 - `exit_on_finish` / `shutdown_on_exit`
 - `enable_debug_visualization`（default: false）

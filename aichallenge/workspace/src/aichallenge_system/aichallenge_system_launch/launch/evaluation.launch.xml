@@ -29,7 +29,7 @@
         name="aichallenge_awsim_eval"
         cwd="$(var output_run_dir)"
         output="both"
-        cmd="/aichallenge/simulator/AWSIM/AWSIM.x86_64 --vehicles 1 --laps 1 --timeout 600">
+        cmd="/aichallenge/simulator/AWSIM/AWSIM.x86_64 --vehicles 1 --laps 6 --timeout 600">
         <env name="ROS_DOMAIN_ID" value="0"/>
     </executable>
 
@@ -47,4 +47,6 @@
             <arg name="domain_id" value="$(var domain_id)"/>
         </include>
     </group>
+
+    <include file="$(find-pkg-share aichallenge_system_launch)/launch/mode/awsim_state_manager.launch.xml"/>
 </launch>
