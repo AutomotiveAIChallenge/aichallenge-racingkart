@@ -36,7 +36,7 @@ if [ "${nounset_was_set}" = "1" ]; then
 fi
 
 ts="$(date +%Y%m%d-%H%M%S)"
-out_dir="/output/${ts}/d${domain_id}"
+out_dir="/output/${ts}/d${id}"
 mkdir -p "${out_dir}"
 cd "${out_dir}" || exit
 mkdir -p "${out_dir}/ros/log"
