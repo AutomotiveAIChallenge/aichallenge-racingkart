@@ -61,6 +61,8 @@ AWSIM が起動したことを監視し、必要なら `/admin/awsim/start` を 
 - `aichallenge_system_launch/launch/mode/awsim_state_manager.launch.xml`
   - `ROS_DOMAIN_ID=0` をセットして起動
   - `awsim_state_manager.param.yaml` を読む
+- `aichallenge_system_launch/launch/simulator.launch.xml`
+  - AWSIM executable と同じ Domain 0 グループで include される
 - 既定パラメータ（`config/awsim_state_manager.param.yaml`）:
   - `awsim_kill_patterns`
   - `shutdown_grace_sec`
@@ -78,4 +80,4 @@ AWSIM が起動したことを監視し、必要なら `/admin/awsim/start` を 
 
 - 本ノードは「AWSIM実行の監視・終了処理」を担当
 - `/admin/awsim/start` の送信や AWSIM プロセス監視は本ノードに集約
-- `autostart_orchestrator_node.py` は車両状態 (`/<vehicle_ns>/awsim/state`) と記録制御を担当
+- `autostart_orchestrator_node.py` は車両状態（`vehicle_state_topic`, default: `/awsim/state`）と記録制御を担当

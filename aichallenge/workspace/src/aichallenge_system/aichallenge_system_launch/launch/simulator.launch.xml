@@ -1,15 +1,17 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <launch>
-    <arg name="mode" default="eval"/>
-    <arg name="simulator_method" default="direct"/>
-    <arg name="direct_exec_args" default="--vehicles 1 --laps 6 --timeout 600"/>
-    <arg name="simulator_ros_domain_id" default="0"/>
-    <arg name="working_dir" default="/aichallenge"/>
-    <executable
-        name="aichallenge_awsim_eval"
-        cwd="$(var working_dir)"
-        output="both"
-        cmd="bash -lc 'if [ &quot;$(var simulator_method)&quot; = &quot;script&quot; ]; then exec /aichallenge/run_simulator.bash $(var mode); else exec /aichallenge/simulator/AWSIM/AWSIM.x86_64 $(var direct_exec_args); fi'">
-        <env name="ROS_DOMAIN_ID" value="$(var simulator_ros_domain_id)"/>
-    </executable>
+    <arg name="output_run_dir" default="/output"/>
+    <arg name="vehicles" default="2"/>
+    <arg name="laps" default="6"/>
+    <arg name="timeout" default="600"/>
+
+    <group>
+        <set_env name="ROS_DOMAIN_ID" value="0"/>
+        <executable
+            name="aichallenge_awsim_eval"
+            cwd="$(var output_run_dir)"
+            output="both"
+            cmd="/aichallenge/simulator/AWSIM/AWSIM.x86_64 --start-mode sync --vehicles $(var vehicles) --laps $(var laps) --timeout $(var timeout)"/>
+        <include file="$(find-pkg-share aichallenge_system_launch)/launch/mode/awsim_state_manager.launch.xml"/>
+    </group>
 </launch>

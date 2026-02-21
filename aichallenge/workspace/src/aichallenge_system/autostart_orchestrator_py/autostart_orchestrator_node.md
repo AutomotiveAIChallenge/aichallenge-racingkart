@@ -19,7 +19,7 @@ Autostart オーケストレータは、車両状態を起点にデータ収集�
 
 ## 購読
 
-- `/<vehicle_ns>/awsim/state` (`std_msgs/String`)
+- `vehicle_state_topic`（default: `/awsim/state`）`std_msgs/String`
   - 値: `Spawned`, `Grounded`, `Ready`, `Start`, `Finish`
 
 ## サービス呼び出し
@@ -38,6 +38,7 @@ Autostart オーケストレータは、車両状態を起点にデータ収集�
 - capture service 開始/停止
 - 初期姿勢要求（`/set_initial_pose`）
 - ログ監視・デバッグ可視化（`enable_debug_visualization`）
+  - Qtパネル表示: `state`, `detail`, `vehicle`, `vehicle_state`, `vehicle_topic`
 
 ## ワークフロー状態
 
@@ -90,6 +91,7 @@ Autostart オーケストレータは、車両状態を起点にデータ収集�
 - `aichallenge_system_launch/launch/mode/awsim.launch.xml`
   - autoware 起動とセットでノードを立てる想定
   - `capture` / `rosbag` / `start_on_vehicle_state` / `stop_on_vehicle_state` / `exit_on_finish` を受ける
+  - 既定 `start_on_vehicle_state` は `Ready,Start`
 
 ## 責務境界
 

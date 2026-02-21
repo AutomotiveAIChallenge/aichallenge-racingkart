@@ -12,10 +12,20 @@
 `run_parallel_submissions.bash` は、複数の提出物（`aichallenge_submit.tar.gz`）をそれぞれ eval イメージとしてビルドし、
 `docker-compose.yml` に固定定義された `autoware-d1..autoware-d4` を使って並列起動します。
 
-- submit の並び順に Domain ID を `1..N` で割り当て（最大4）
-- simulator は 1 台だけ起動
+- `--submit` 件数に応じて 1〜4 台（`autoware-d1..autoware-dN`）を起動
+- simulator は `simulator.launch.xml`（AWSIM + awsim_state_manager）を 1 つ起動
 - `output/<run_id>/dN/autoware.log` に各ドメインのログを出力
-- `output/latest -> <run_id>` を更新
+  - `run_id` は timestamp（`YYYYMMDD-HHMMSS`）を自動採番して使用する
+
+## 現行の固定仕様
+
+- `run_id` はスクリプト内部で timestamp から自動生成する
+- `RUN_ID` / `RUN_GROUP` / `OUTPUT_ROOT` の外部指定は使わない
+- `output/latest` シンボリックリンクは作らない
+- compose 呼び出しはスクリプト内で固定
+  - `docker compose -f docker-compose.yml -f docker-compose.gpu.yml`
+- `wait-admin-ready` / `wait-admin-finish` は `run_parallel_submissions.bash` では行わない
+  - 開始同期は `awsim_state_manager`（`/admin/awsim/start` publish）に委譲する
 
 ## 前提
 
@@ -25,23 +35,19 @@
 
 ## 実行フロー（高レベル）
 
-1. `--submit` をパースし、台数 `N`（`1..4`）を決定
-2. `output/<run_id>/d1..dN` を作成し、`output/latest` を更新
+1. `--submit` をパースし、提出物 1〜4 件を受け取る
+2. `output/<run_id>/d1..dN` を作成
 3. submit ごとに eval イメージをビルド
    - `docker build --target eval --build-arg SUBMIT_TAR=<repo相対path> -t autoware-dN`
-4. simulator を 1 台起動
-   - `SIM_MODE` は台数に応じて `eval` / `2p` / `3p` / `4p`
-5. `autoware-command` を `ROS_DOMAIN_ID=0` で実行し、`wait-admin-ready` を待機
-6. `autoware-d1..autoware-dN` を順に起動
-   - `OUTPUT_RUN_DIR=/output/<run_id>/dN` を渡してログ出力先を分離
-7. `autoware-command` を `ROS_DOMAIN_ID=0` で実行し、`wait-admin-finish` を待機
+4. `autoware-command` サービスで `simulator.launch.xml` を起動
+   - launch 内で AWSIM + awsim_state_manager を Domain 0 で起動
+5. `autoware-d1..autoware-dN` を起動
+   - `OUTPUT_RUN_DIR=/output/<run_id>/d1|d2` を渡してログ出力先を分離
 
 ## サービス対応
 
-- `autoware-d1` -> Domain ID 1
-- `autoware-d2` -> Domain ID 2
-- `autoware-d3` -> Domain ID 3
-- `autoware-d4` -> Domain ID 4
+- `autoware-dN` -> Domain ID N（`docker-compose.yml` 側で `ROS_DOMAIN_ID=N` を付与）
+- `autoware-command` -> `simulator.launch.xml` 起動
 
 ## コマンド
 
@@ -56,9 +62,8 @@
 
 制約:
 
-- `--submit` は 1 つ以上、最大 4 つ
-- Domain ID は submit の順で `1..N`
-- `DEVICE=auto|gpu|cpu` で GPU 使用を制御
+- `--submit` は 1〜4 件
+- Domain ID は `dN = N` の固定対応
 
 ### 2) 停止
 
@@ -81,8 +86,9 @@ output/<run_id>/
     autoware.log
     d2-result*.json
   ...
-output/latest -> <run_id>
 ```
+
+`run_id` は timestamp（`YYYYMMDD-HHMMSS`）で自動生成する。
 
 ## まず見るログ（最短導線）
 
@@ -94,5 +100,4 @@ output/latest -> <run_id>
 
 - submit tar.gz は Docker build context 制約によりリポジトリ配下必須
 - build された image tag は `autoware-dN`（再実行で同名tagを上書き）
-- readiness は `ROS_DOMAIN_ID=0` の admin state 依存
-- 最大 4 台（`autoware-d1..4` 固定）
+- `run_parallel_submissions.bash` 自体は admin ready/finish 待機を行わない

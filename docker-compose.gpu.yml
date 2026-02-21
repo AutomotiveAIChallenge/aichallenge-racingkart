@@ -16,6 +16,9 @@ services:
   autoware:
     <<: *gpu
 
+  autoware-command:
+    <<: *gpu
+
   autoware-simulator-evaluation:
     <<: *gpu
 

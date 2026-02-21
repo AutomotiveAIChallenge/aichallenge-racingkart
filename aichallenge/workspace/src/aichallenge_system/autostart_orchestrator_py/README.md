@@ -17,7 +17,7 @@ Autostart Orchestrator (aichallenge_system)
 
 - `autostart_orchestrator_node.py` は `/admin/awsim/start` の送受信を行いません。
 - `/admin/awsim/start` の publish/subscribe は `awsim_state_manager_node.py` の責務です。
-- `autostart_orchestrator_node.py` は `/<vehicle_ns>/awsim/state` と記録/初期化フローに集中します。
+- `autostart_orchestrator_node.py` は `vehicle_state_topic`（default: `/awsim/state`）と記録/初期化フローに集中します。
 
 ## 起動先（launch）
 
@@ -33,3 +33,4 @@ Autostart Orchestrator (aichallenge_system)
 
 - Auto startノードは Autoware ドメイン側のワークフローを担当します。
 - state managerノードは AWSIM 側（通常 `ROS_DOMAIN_ID=0`）の管理状態監視と終了処理を担当します。
+- `autostart_orchestrator_node.py` の debug 可視化では `vehicle`（`ROS_DOMAIN_ID` 由来）と `vehicle_topic` を表示します。

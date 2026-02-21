@@ -19,6 +19,9 @@ from std_msgs.msg import String
 from std_srvs.srv import Trigger
 
 
+_DashboardPayload = tuple[str, str, Optional[str], bool, bool, str, str]
+
+
 class AutostartOrchestrator(Node):
     _STATE_BOOT = "BOOT"
     _STATE_WAIT_INITIAL_POSE = "WAIT_INITIAL_POSE"
@@ -92,8 +95,9 @@ class AutostartOrchestrator(Node):
         self._workflow_state = self._STATE_BOOT
         self._workflow_detail = ""
         self._state_lock = threading.Lock()
+        self._vehicle_label = self._vehicle_label_from_domain_id(os.environ.get("ROS_DOMAIN_ID", ""))
         self._debug_visualization_enabled = bool(self.get_parameter("enable_debug_visualization").value)
-        self._debug_panel_queue: Optional[queue.Queue[tuple[str, str, Optional[str], bool, bool]]] = None
+        self._debug_panel_queue: Optional[queue.Queue[_DashboardPayload]] = None
         self._debug_panel_active = False
         self._debug_panel_error_logged = False
         self._debug_panel_thread: Optional[threading.Thread] = None
@@ -157,12 +161,14 @@ class AutostartOrchestrator(Node):
             state = self._workflow_state
             detail = self._workflow_detail or fallback_detail
 
-        payload = (
+        payload: _DashboardPayload = (
             state,
             detail or self._workflow_detail,
             self._last_vehicle_state,
             self._capture_started,
             self._rosbag_proc is not None,
+            self._vehicle_label,
+            self._vehicle_state_topic,
         )
         if self._debug_panel_queue is None:
             return
@@ -190,6 +196,8 @@ class AutostartOrchestrator(Node):
                 state_text_lines.append(state_token)
 
             detail_fragments = [
+                f"vehicle={self._vehicle_label}",
+                f"vehicle_topic={self._vehicle_state_topic}",
                 f"state={self._last_vehicle_state!r}",
                 f"capture_started={self._capture_started}",
                 f"rosbag_running={self._rosbag_proc is not None}",
@@ -266,6 +274,8 @@ class AutostartOrchestrator(Node):
                         vehicle_state: Optional[str],
                         capture_started: bool,
                         rosbag_running: bool,
+                        vehicle_label: str,
+                        vehicle_topic: str,
                     ) -> None:
                         detail_text = detail
                         active_font_size = max(8, self._state_list.font().pointSize())
@@ -291,7 +301,9 @@ class AutostartOrchestrator(Node):
                         self._label_detail.setText(
                             f"<b>state</b>: {state}<br/>"
                             f"<b>detail</b>: {detail_text}<br/>"
+                            f"<b>vehicle</b>: {vehicle_label}<br/>"
                             f"<b>vehicle_state</b>: {vehicle_state!r}<br/>"
+                            f"<b>vehicle_topic</b>: {vehicle_topic}<br/>"
                         )
                         self._label_metrics.setText(
                             f"capture_started={capture_started}, rosbag_running={rosbag_running}"
@@ -311,13 +323,15 @@ class AutostartOrchestrator(Node):
             window.show()
             self._debug_panel_active = True
 
-            def refresh() -> tuple[str, str, Optional[str], bool, bool]:
-                payload = (
+            def refresh() -> _DashboardPayload:
+                payload: _DashboardPayload = (
                     self._workflow_state,
                     self._workflow_detail,
                     self._last_vehicle_state,
                     self._capture_started,
                     self._rosbag_proc is not None,
+                    self._vehicle_label,
+                    self._vehicle_state_topic,
                 )
                 while self._debug_panel_queue is not None:
                     try:
@@ -377,6 +391,15 @@ class AutostartOrchestrator(Node):
     @staticmethod
     def _normalize_state(raw: Optional[str]) -> str:
         return "".join(ch for ch in (raw or "").strip().lower() if ch.isalnum())
+
+    @staticmethod
+    def _vehicle_label_from_domain_id(raw: str) -> str:
+        value = (raw or "").strip()
+        if value.isdigit():
+            domain_id = int(value)
+            if domain_id > 0:
+                return f"d{domain_id}"
+        return "d?"
 
     @staticmethod
     def _normalize_state_list(raw: str) -> list[str]:

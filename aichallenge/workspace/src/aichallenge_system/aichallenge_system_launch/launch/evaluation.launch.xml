@@ -19,13 +19,17 @@
     <log message=" - use_sim_time: $(var use_sim_time)"/>
     <log message=" - run_rviz: $(var run_rviz)"/>
 
-    <executable
-        name="aichallenge_awsim_eval"
-        cwd="$(var output_run_dir)"
-        output="both"
-        cmd="/aichallenge/simulator/AWSIM/AWSIM.x86_64 --start-mode sync --vehicles 1 --laps 6 --timeout 600">
-        <env name="ROS_DOMAIN_ID" value="0"/>
-    </executable>
+    <group>
+        <group>
+            <set_env name="ROS_DOMAIN_ID" value="0"/>
+            <executable
+                name="aichallenge_awsim_eval"
+                cwd="$(var output_run_dir)"
+                output="both"
+                cmd="/aichallenge/simulator/AWSIM/AWSIM.x86_64 --start-mode sync --vehicles 1 --laps 6 --timeout 600"/>
+            <include file="$(find-pkg-share aichallenge_system_launch)/launch/mode/awsim_state_manager.launch.xml"/>
+        </group>
+    </group>
 
     <group>
         <set_env name="ROS_DOMAIN_ID" value="$(var domain_id)"/>
@@ -39,5 +43,4 @@
         </include>
     </group>
 
-    <include file="$(find-pkg-share aichallenge_system_launch)/launch/mode/awsim_state_manager.launch.xml"/>
 </launch>
