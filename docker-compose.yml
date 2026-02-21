@@ -63,8 +63,7 @@ x-racing_kart_interface-base: &racing_kart_interface-base
 services:
   # Autoware service
   autoware:
-    <<: *autoware-base 
-    working_dir: ${OUTPUT_RUN_DIR:-/aichallenge}
+    <<: *autoware-base
     command: ["bash", "-lc", "exec /aichallenge/run_autoware.bash ${RUN_MODE:-awsim} ${DOMAIN_ID:-1} >\"${OUTPUT_RUN_DIR:-/output}/autoware.log\" 2>&1"]
 
   # Autoware service
@@ -80,6 +79,14 @@ services:
   autoware-command:
     <<: *autoware-base
     command: ["bash", "-lc", "source /aichallenge/workspace/install/setup.bash && cd ${CMD_WORKDIR:-/aichallenge} && exec bash -lc \"${CMD:-}\""]
+
+  awsim-state-manager:
+    <<: *autoware-base
+    command: ["bash", "-lc", "source /aichallenge/workspace/install/setup.bash && exec ros2 launch aichallenge_system_launch awsim_state_manager.launch.xml >\"${OUTPUT_RUN_DIR:-/output}/awsim_state_manager.log\" 2>&1"]
+
+  autoware-simulator-evaluation:
+    <<: *autoware-base 
+    command: ["bash", "-lc", "exec /aichallenge/run_evaluation.bash"]
 
 ### Autoware Service For Parallel Execution ###
   autoware-d1:

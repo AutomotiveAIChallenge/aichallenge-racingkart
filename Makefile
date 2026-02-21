@@ -2,7 +2,7 @@
 SHELL := /bin/bash
 
 .PHONY: autoware-build autoware-vehicle autoware-simulator autoware-request-initialpose autoware-request-control autoware-driver-zenoh \
-	simulator simulator-reset dev driver zenoh download rviz2 down ps print-dc print-gpu-env
+	simulator simulator-reset awsim-state-manager awsim-state-manager-stop dev driver zenoh download rviz2 down ps print-dc print-gpu-env
 
 # GPU selection:
 # - DEVICE=auto (default): enable GPU override if NVIDIA is detected
@@ -86,6 +86,13 @@ simulator:
 	@echo "Start AWSIM"
 	SIM_MODE=$(SIM_MODE) $(DC) up -d simulator
 
+awsim-state-manager:
+	@echo "Start AWSIM state manager"
+	$(DC) up -d awsim-state-manager
+
+awsim-state-manager-stop:
+	$(DC) stop awsim-state-manager
+
 simulator-reset:
 	@echo "Reset simulation"
 	CMD="bash /aichallenge/utils/simulator_reset.bash $(DOMAIN_ID)" \
@@ -103,6 +110,11 @@ dev:
 	@echo "Start dev simulation (AWSIM + Autoware, DOMAIN_ID=$(DOMAIN_ID))"
 	@$(MAKE) simulator SIM_MODE=dev
 	@$(MAKE) autoware-simulator DOMAIN_ID=$(DOMAIN_ID)
+	@echo "To stop: make down  (docker compose down --remove-orphans)"
+
+eval:
+	@echo "Start evaluation simulation (AWSIM + Autoware, DOMAIN_ID=$(DOMAIN_ID))"
+	$(DC) up -d autoware-simulator-evaluation
 	@echo "To stop: make down  (docker compose down --remove-orphans)"
 
 # remote operation (docker compose up -d rviz2)

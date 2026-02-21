@@ -11,6 +11,7 @@ from pathlib import Path
 from typing import Optional
 
 import rclpy
+from rcl_interfaces.msg import ParameterDescriptor
 from rclpy.callback_groups import ReentrantCallbackGroup
 from rclpy.node import Node
 from std_msgs.msg import Bool
@@ -77,8 +78,9 @@ class AutostartOrchestrator(Node):
             "rosbag_compression_mode",
             "exit_on_finish",
         )
+        required_param_desc = ParameterDescriptor(dynamic_typing=True)
         for name in required_parameters:
-            self.declare_parameter(name)
+            self.declare_parameter(name, descriptor=required_param_desc)
             self._require_parameter(name)
         self.declare_parameter("enable_debug_visualization", False)
 

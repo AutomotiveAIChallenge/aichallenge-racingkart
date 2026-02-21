@@ -1,9 +1,8 @@
 #!/usr/bin/env bash
 
 domain_id="${ROS_DOMAIN_ID:-${DOMAIN_ID:-1}}"
-output_root="${OUTPUT_ROOT:-/output}"
 ts="$(date +%Y%m%d-%H%M%S)"
-out_dir="${output_root}/${ts}/d${domain_id}"
+out_dir="/output/${ts}/d${domain_id}"
 mkdir -p "${out_dir}"
 cd "${out_dir}" || exit
 mkdir -p "${out_dir}/ros/log"
