@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import os
 import signal
+import shlex
 import subprocess
 import queue
 import threading
@@ -33,6 +34,7 @@ class AutostartOrchestrator(Node):
     _STATE_AUTO_STOP_DISABLED = "AUTO_STOP_DISABLED"
     _STATE_STOPPING = "STOPPING"
     _STATE_FINISHED = "FINISHED"
+    _STATE_POST_PROCESS = "POST_PROCESS"
     _STATE_ERROR = "ERROR"
     _WORKFLOW_STATES = (
         _STATE_BOOT,
@@ -44,6 +46,7 @@ class AutostartOrchestrator(Node):
         _STATE_WAIT_STOP,
         _STATE_AUTO_STOP_DISABLED,
         _STATE_STOPPING,
+        _STATE_POST_PROCESS,
         _STATE_FINISHED,
         _STATE_ERROR,
     )
@@ -86,6 +89,9 @@ class AutostartOrchestrator(Node):
             self.declare_parameter(name, descriptor=required_param_desc)
             self._require_parameter(name)
         self.declare_parameter("enable_debug_visualization", False)
+        self.declare_parameter("enable_motion_analytics", True)
+        self.declare_parameter("motion_analytics_cmd", "ros2 run aichallenge_system_launch motion_analytics.py")
+        self.declare_parameter("motion_analytics_input_dir", "")
 
         vehicle_state_topic = str(self.get_parameter("vehicle_state_topic").value).strip()
         if not vehicle_state_topic:
@@ -124,6 +130,9 @@ class AutostartOrchestrator(Node):
         self._capture_started = False
         self._rosbag_proc: Optional[subprocess.Popen] = None
         self._rosbag_log_fp: Optional[object] = None
+        self._motion_analytics_run_once = False
+        self._motion_analytics_lock = threading.Lock()
+        self._latest_link_lock = threading.Lock()
 
         self._exit_code = 0
 
@@ -518,11 +527,22 @@ class AutostartOrchestrator(Node):
 
         output = str(self.get_parameter("rosbag_output").value)
         storage_id = str(self.get_parameter("rosbag_storage_id").value)
-        compression_format = str(self.get_parameter("rosbag_compression_format").value)
-        compression_mode = str(self.get_parameter("rosbag_compression_mode").value)
+        compression_format = str(self.get_parameter("rosbag_compression_format").value).strip()
+        compression_mode = str(self.get_parameter("rosbag_compression_mode").value).strip()
 
         argv: list[str] = ["ros2", "bag", "record", *topics, "-o", output, "-s", storage_id]
-        argv += ["--compression-format", compression_format, "--compression-mode", compression_mode]
+        compression_enabled = bool(compression_format) and bool(compression_mode)
+        compression_misconfigured = bool(compression_format) ^ bool(compression_mode)
+
+        if compression_enabled:
+            argv += ["--compression-format", compression_format, "--compression-mode", compression_mode]
+        elif compression_misconfigured:
+            self.get_logger().warn(
+                "rosbag compression is partially configured; "
+                f"format='{compression_format}' mode='{compression_mode}'. "
+                "Skipping compression options."
+            )
+
         return argv
 
     def _start_rosbag(self) -> None:
@@ -589,6 +609,229 @@ class AutostartOrchestrator(Node):
             except Exception:  # noqa: BLE001
                 pass
 
+    def _param_str(self, name: str, default: str = "") -> str:
+        value = self.get_parameter(name).value
+        if value is None:
+            return default
+        text = str(value).strip()
+        return text if text else default
+
+    @staticmethod
+    def _latest_existing(paths: list[Optional[Path]]) -> Optional[Path]:
+        candidates = [path for path in paths if path is not None and path.is_file()]
+        if not candidates:
+            return None
+        try:
+            return max(candidates, key=lambda path: path.stat().st_mtime_ns)
+        except Exception:
+            return candidates[-1]
+
+    def _motion_analytics_input_dir(self, output_dir: Path) -> Path:
+        configured_input_dir = self._param_str("motion_analytics_input_dir")
+        if configured_input_dir:
+            return Path(configured_input_dir)
+
+        rosbag_output = self._param_str("rosbag_output")
+        return output_dir / rosbag_output if rosbag_output else output_dir
+
+    def _run_motion_analytics(self) -> None:
+        if not bool(self.get_parameter("enable_motion_analytics").value):
+            return
+
+        with self._motion_analytics_lock:
+            if self._motion_analytics_run_once:
+                return
+            self._motion_analytics_run_once = True
+
+        output_dir = self._output_dir()
+        input_dir = self._motion_analytics_input_dir(output_dir)
+        if not input_dir.exists():
+            self.get_logger().warn(f"skip motion_analytics (input not found): {input_dir}")
+            return
+
+        cmd_raw = self._param_str("motion_analytics_cmd")
+        if not cmd_raw:
+            self.get_logger().warn("skip motion_analytics (motion_analytics_cmd is empty)")
+            return
+
+        try:
+            cmd = shlex.split(cmd_raw)
+        except ValueError as exc:
+            self.get_logger().warn(f"skip motion_analytics (invalid motion_analytics_cmd): {exc}")
+            return
+
+        if not cmd:
+            self.get_logger().warn("skip motion_analytics (motion_analytics_cmd is empty after parsing)")
+            return
+
+        argv = [*cmd, "--input", str(input_dir)]
+        self.get_logger().info(f"run motion_analytics: argv={argv} (cwd={output_dir})")
+        try:
+            result = subprocess.run(
+                argv,
+                cwd=str(output_dir),
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                text=True,
+                check=False,
+            )
+        except Exception as exc:  # noqa: BLE001
+            self.get_logger().warn(f"motion_analytics execution failed: {exc}")
+            return
+
+        if result.returncode != 0:
+            output_tail = (result.stdout or "").strip()
+            if output_tail:
+                output_tail = output_tail[-2000:]
+                self.get_logger().warn(
+                    "motion_analytics exited with non-zero code: "
+                    f"{result.returncode}; output_tail={output_tail!r}"
+                )
+            else:
+                self.get_logger().warn(
+                    f"motion_analytics exited with non-zero code: {result.returncode}"
+                )
+            return
+
+        self.get_logger().info("motion_analytics completed successfully")
+
+    def _stop_rosbag_with_postprocess(self, enable_motion_analytics: bool) -> None:
+        had_rosbag = self._rosbag_proc is not None
+        self._stop_rosbag()
+        if had_rosbag and enable_motion_analytics:
+            self._set_workflow_state(self._STATE_POST_PROCESS, "running motion_analytics")
+            self._run_motion_analytics()
+
+    @staticmethod
+    def _latest_file_by_pattern(base_dir: Path, pattern: str) -> Optional[Path]:
+        if not base_dir.exists():
+            return None
+        try:
+            matches = [path for path in base_dir.glob(pattern) if path.is_file()]
+        except Exception:
+            return None
+        if not matches:
+            return None
+        try:
+            return max(matches, key=lambda path: path.stat().st_mtime_ns)
+        except Exception:
+            return matches[-1]
+
+    @staticmethod
+    def _replace_symlink(link_path: Path, target_path: Path) -> bool:
+        try:
+            if link_path.exists() and not link_path.is_symlink():
+                return False
+            if link_path.is_symlink():
+                link_path.unlink()
+            rel_target = os.path.relpath(str(target_path), str(link_path.parent))
+            link_path.symlink_to(rel_target)
+            return True
+        except Exception:
+            return False
+
+    def _ensure_latest_root(self, output_dir: Path) -> Optional[Path]:
+        run_dir = output_dir.parent
+        output_root = run_dir.parent
+
+        latest_path = output_root / "latest"
+        try:
+            if latest_path.is_symlink():
+                latest_path.unlink()
+            elif latest_path.exists() and not latest_path.is_dir():
+                self.get_logger().warn(
+                    f"skip latest artifact links (latest is not a directory): {latest_path}"
+                )
+                return None
+            latest_path.mkdir(parents=True, exist_ok=True)
+        except Exception as exc:  # noqa: BLE001
+            self.get_logger().warn(f"failed to prepare latest directory: {exc}")
+            return None
+        return latest_path
+
+    def _link_if_found(self, link_path: Path, target_path: Optional[Path], label: str) -> None:
+        if target_path is None or not target_path.exists():
+            self.get_logger().warn(f"skip latest link for {label} (target not found)")
+            return
+        link_path.parent.mkdir(parents=True, exist_ok=True)
+        if not self._replace_symlink(link_path, target_path):
+            if link_path.exists() and not link_path.is_symlink():
+                self.get_logger().info(
+                    f"keep existing regular file for {label}: {link_path}"
+                )
+            else:
+                self.get_logger().warn(
+                    f"failed to create latest link for {label}: {link_path} -> {target_path}"
+                )
+            return
+        self.get_logger().info(f"latest link updated: {link_path} -> {target_path}")
+
+    def _resolve_result_details_target(
+        self,
+        output_dir: Path,
+        run_dir: Path,
+        vehicle_dir_name: str,
+    ) -> Optional[Path]:
+        result_file_name = f"{vehicle_dir_name}-result-details.json"
+        return self._latest_existing([output_dir / result_file_name, run_dir / result_file_name])
+
+    def _resolve_rosbag_target(self, output_dir: Path) -> Optional[Path]:
+        rosbag_output = self._param_str("rosbag_output", "rosbag2_autoware")
+        rosbag_dir = output_dir / rosbag_output
+        return self._latest_existing(
+            [
+                rosbag_dir / f"{rosbag_output}_0.mcap",
+                rosbag_dir / f"{rosbag_output}_0.mcap.zstd",
+                self._latest_file_by_pattern(rosbag_dir, "*.mcap"),
+                self._latest_file_by_pattern(rosbag_dir, "*.mcap.zstd"),
+            ]
+        )
+
+    def _refresh_latest_artifact_links(self) -> None:
+        output_dir = self._output_dir()
+        with self._latest_link_lock:
+            latest_root = self._ensure_latest_root(output_dir)
+            if latest_root is None:
+                return
+
+            vehicle_dir_name = output_dir.name if output_dir.name.startswith("d") else self._vehicle_label
+            latest_vehicle_dir = latest_root / vehicle_dir_name
+            latest_vehicle_dir.mkdir(parents=True, exist_ok=True)
+
+            run_dir = output_dir.parent
+            capture_target = self._latest_file_by_pattern(output_dir / "capture", "cap-*.mp4")
+            rosbag_target = self._resolve_rosbag_target(output_dir)
+            targets: list[tuple[str, Optional[Path]]] = [
+                ("result-details.json", self._resolve_result_details_target(output_dir, run_dir, vehicle_dir_name)),
+                ("capture.mp4", capture_target),
+                ("rosbag2_autoware.mcap", rosbag_target),
+                ("motion_analytics.html", self._latest_file_by_pattern(output_dir, "motion_analytics-*.html")),
+            ]
+            for file_name, target in targets:
+                self._link_if_found(latest_vehicle_dir / file_name, target, file_name)
+
+            # Legacy link cleanup.
+            legacy_cap_link = latest_vehicle_dir / "cap.mp4"
+            if legacy_cap_link.is_symlink():
+                try:
+                    legacy_cap_link.unlink()
+                except Exception as exc:  # noqa: BLE001
+                    self.get_logger().warn(f"failed to remove legacy link cap.mp4: {exc}")
+            legacy_rosbag0_link = latest_vehicle_dir / "rosbag2_autoware_0.mcap"
+            if legacy_rosbag0_link.is_symlink():
+                try:
+                    legacy_rosbag0_link.unlink()
+                except Exception as exc:  # noqa: BLE001
+                    self.get_logger().warn(f"failed to remove legacy link rosbag2_autoware_0.mcap: {exc}")
+            legacy_rosbag_link = latest_vehicle_dir / "rosbag.mcap"
+            if legacy_rosbag_link.is_symlink():
+                try:
+                    legacy_rosbag_link.unlink()
+                except Exception as exc:  # noqa: BLE001
+                    self.get_logger().warn(f"failed to remove legacy link rosbag.mcap: {exc}")
+
+            self._link_if_found(latest_vehicle_dir / "autoware.log", output_dir / "autoware.log", "autoware.log")
+
     def _capture(self, start: bool) -> None:
         if start and self._capture_started:
             return
@@ -609,6 +852,7 @@ class AutostartOrchestrator(Node):
     def _run(self) -> None:
         enable_capture = False
         enable_rosbag = False
+        enable_motion_analytics = False
         try:
             self._set_workflow_state(self._STATE_BOOT, "worker started")
 
@@ -616,6 +860,7 @@ class AutostartOrchestrator(Node):
             request_control_mode = bool(self.get_parameter("request_control_mode").value)
             enable_capture = bool(self.get_parameter("enable_capture").value)
             enable_rosbag = bool(self.get_parameter("enable_rosbag").value)
+            enable_motion_analytics = bool(self.get_parameter("enable_motion_analytics").value)
 
             start_on = str(self.get_parameter("start_on_vehicle_state").value or "").strip()
             stop_on = str(self.get_parameter("stop_on_vehicle_state").value or "").strip()
@@ -672,7 +917,7 @@ class AutostartOrchestrator(Node):
                 self.get_logger().error(f"failed waiting stop: expected={stop_on} last={last}")
                 self._set_workflow_state(self._STATE_STOPPING, f"stop wait failed: expected={stop_on} last={last}")
                 if enable_rosbag:
-                    self._stop_rosbag()
+                    self._stop_rosbag_with_postprocess(enable_motion_analytics)
                 if enable_capture:
                     self._capture(False)
                 self._set_workflow_state(self._STATE_ERROR, f"failed waiting stop: expected={stop_on} last={last}")
@@ -682,7 +927,7 @@ class AutostartOrchestrator(Node):
 
             self._set_workflow_state(self._STATE_STOPPING, "stopping capture/rosbag")
             if enable_rosbag:
-                self._stop_rosbag()
+                self._stop_rosbag_with_postprocess(enable_motion_analytics)
             if enable_capture:
                 self._capture(False)
 
@@ -694,7 +939,7 @@ class AutostartOrchestrator(Node):
             self._set_workflow_state(self._STATE_ERROR, f"unhandled exception: {e}")
             try:
                 if enable_rosbag:
-                    self._stop_rosbag()
+                    self._stop_rosbag_with_postprocess(enable_motion_analytics)
             except Exception:  # noqa: BLE001
                 pass
             try:
@@ -704,11 +949,17 @@ class AutostartOrchestrator(Node):
                 pass
             self._set_exit_code(10)
             self._shutdown()
+        finally:
+            try:
+                self._refresh_latest_artifact_links()
+            except Exception as exc:  # noqa: BLE001
+                self.get_logger().warn(f"failed to refresh latest artifact links: {exc}")
 
     def destroy_node(self) -> bool:
         try:
             self._stop_debug_visualization()
-            self._stop_rosbag()
+            enable_motion_analytics = bool(self.get_parameter("enable_motion_analytics").value)
+            self._stop_rosbag_with_postprocess(enable_motion_analytics)
             self._capture(False)
         finally:
             return super().destroy_node()

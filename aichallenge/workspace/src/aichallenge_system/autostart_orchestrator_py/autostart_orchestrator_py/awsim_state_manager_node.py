@@ -55,6 +55,8 @@ class AwsimStateManager(Node):
         ("awsim_kill_patterns", _DEFAULT_AWSIM_KILL_PATTERNS),
         ("shutdown_grace_sec", 2),
         ("kill_wait_sec", 10),
+        ("shutdown_delay_sec", 20.0),
+        ("request_launch_shutdown", True),
         ("exit_on_finish", True),
         ("shutdown_on_exit", False),
         ("enable_debug_visualization", False),
@@ -64,7 +66,6 @@ class AwsimStateManager(Node):
         ("admin_start_enabled", True),
         ("admin_start_once", True),
     )
-    _SHUTDOWN_DELAY_SEC = 10.0
 
     def __init__(self) -> None:
         super().__init__("awsim_state_manager")
@@ -184,6 +185,12 @@ class AwsimStateManager(Node):
             return int(self.get_parameter(name).value)
         except Exception:
             return int(default)
+
+    def _parse_float(self, name: str, default: float) -> float:
+        try:
+            return float(self.get_parameter(name).value)
+        except Exception:
+            return float(default)
 
     def _set_state(self, state: str) -> None:
         with self._cond:
@@ -420,16 +427,14 @@ class AwsimStateManager(Node):
 
     def _send_signal(self, pid: int, sig: int) -> bool:
         try:
-            os.killpg(os.getpgid(pid), sig)
+            # Intentionally signal only the target PID.
+            # Do not signal the whole process group to avoid cascading SIGINT.
+            os.kill(pid, sig)
             return True
+        except ProcessLookupError:
+            return False
         except Exception:
-            try:
-                os.kill(pid, sig)
-                return True
-            except ProcessLookupError:
-                return False
-            except Exception:
-                return False
+            return False
 
     def _wait_for_exit(self, pid: int, timeout_sec: float) -> bool:
         deadline = time.monotonic() + max(0.0, float(timeout_sec))
@@ -439,28 +444,52 @@ class AwsimStateManager(Node):
             time.sleep(0.1)
         return not self._is_alive(pid)
 
+    def _send_signal_and_wait(self, pid: int, sig: int, wait_sec: float) -> bool:
+        if not self._is_alive(pid):
+            return True
+
+        wait_sec = max(0.0, float(wait_sec))
+        self.get_logger().warning(
+            f"stopping pid={pid}: send {self._signal_name(sig)} and wait up to {wait_sec}s"
+        )
+        sent = self._send_signal(pid, sig)
+        if not sent:
+            return not self._is_alive(pid)
+        return self._wait_for_exit(pid, wait_sec)
+
     def _stop_process(self, pid: int) -> None:
         if pid == os.getpid() or not self._is_alive(pid):
             return
 
-        grace = max(0, self._parse_int("shutdown_grace_sec", 2))
-        kill_wait = max(1, self._parse_int("kill_wait_sec", 2))
+        kill_wait_sec = max(1.0, self._parse_float("kill_wait_sec", 10.0))
+        sigint_grace_sec = max(0.0, self._parse_float("shutdown_grace_sec", 2.0))
+        self.get_logger().warning(
+            "stop flow order: "
+            f"[1/4] SIGINT(wait={kill_wait_sec}s) -> "
+            f"[2/4] grace(wait={sigint_grace_sec}s) -> "
+            f"[3/4] SIGTERM(wait={kill_wait_sec}s) -> "
+            "[4/4] SIGKILL (if needed) "
+            f"(pid={pid})"
+        )
 
-        for sig in (signal.SIGINT, signal.SIGTERM):
-            if not self._is_alive(pid):
-                return
-            self.get_logger().warning(f"stopping pid={pid} with {self._signal_name(sig)}")
-            if not self._send_signal(pid, sig):
-                return
-            if self._wait_for_exit(pid, kill_wait):
-                return
-            if sig == signal.SIGINT and grace > 0:
-                time.sleep(grace)
+        self.get_logger().warning(f"[1/4] stopping pid={pid} with SIGINT")
+        if self._send_signal_and_wait(pid, signal.SIGINT, kill_wait_sec):
+            return
+
+        if sigint_grace_sec > 0 and self._is_alive(pid):
+            self.get_logger().warning(
+                f"[2/4] pid={pid} still alive after SIGINT; waiting grace {sigint_grace_sec}s"
+            )
+            time.sleep(sigint_grace_sec)
+
+        self.get_logger().warning(f"[3/4] stopping pid={pid} with SIGTERM")
+        if self._send_signal_and_wait(pid, signal.SIGTERM, kill_wait_sec):
+            return
 
         if self._is_alive(pid):
-            self.get_logger().warning(f"forcing pid={pid} with SIGKILL")
+            self.get_logger().warning(f"[4/4] pid={pid} still alive after SIGTERM; forcing SIGKILL")
             self._send_signal(pid, signal.SIGKILL)
-            self._wait_for_exit(pid, kill_wait)
+            self._wait_for_exit(pid, kill_wait_sec)
 
     def _find_pids(self, pattern: str) -> list[int]:
         try:
@@ -504,6 +533,43 @@ class AwsimStateManager(Node):
                 self._stop_process(pid)
         self.get_logger().warning(f"{label}: done")
 
+    @staticmethod
+    def _read_cmdline(pid: int) -> str:
+        try:
+            with open(f"/proc/{pid}/cmdline", "rb") as f:
+                raw = f.read()
+        except Exception:
+            return ""
+        return " ".join(part.decode("utf-8", errors="replace") for part in raw.split(b"\x00") if part)
+
+    def _request_launch_shutdown(self) -> None:
+        parent_pid = os.getppid()
+        if parent_pid <= 1:
+            self.get_logger().warn("skip launch shutdown request (invalid parent pid)")
+            return
+
+        parent_cmdline = self._read_cmdline(parent_pid)
+        if "ros2" not in parent_cmdline or "launch" not in parent_cmdline:
+            self.get_logger().warn(
+                "skip launch shutdown request (parent is not ros2 launch): "
+                f"pid={parent_pid} cmdline={parent_cmdline!r}"
+            )
+            return
+
+        try:
+            os.kill(parent_pid, signal.SIGINT)
+            self.get_logger().info(
+                f"requested launch shutdown by SIGINT to parent pid={parent_pid}"
+            )
+        except ProcessLookupError:
+            self.get_logger().warn(
+                f"skip launch shutdown request (parent pid not found): pid={parent_pid}"
+            )
+        except Exception as exc:  # noqa: BLE001
+            self.get_logger().warn(
+                f"failed to request launch shutdown: pid={parent_pid} err={exc}"
+            )
+
     def _start_shutdown(self) -> None:
         with self._cond:
             if self._shutdown_started:
@@ -514,7 +580,13 @@ class AwsimStateManager(Node):
         reason = self._shutdown_reason or "unknown"
         self.get_logger().warn(f"shutdown sequence started (reason={reason})")
 
-        delay = self._SHUTDOWN_DELAY_SEC
+        delay = max(0.0, self._parse_float("shutdown_delay_sec", 20.0))
+        kill_wait_sec = max(1.0, self._parse_float("kill_wait_sec", 10.0))
+        sigint_grace_sec = max(0.0, self._parse_float("shutdown_grace_sec", 2.0))
+        self.get_logger().warn(
+            "shutdown timing: "
+            f"shutdown_delay_sec={delay}s, kill_wait_sec={kill_wait_sec}s, shutdown_grace_sec={sigint_grace_sec}s"
+        )
         if delay > 0:
             self.get_logger().warn(f"waiting {delay}s before killing awsim processes")
             time.sleep(delay)
@@ -522,6 +594,8 @@ class AwsimStateManager(Node):
         self._kill_by_patterns(self._awsim_kill_patterns, "phase1-awsim")
 
         if bool(self.get_parameter("exit_on_finish").value):
+            if bool(self.get_parameter("request_launch_shutdown").value):
+                self._request_launch_shutdown()
             self._set_state("FINISHED")
             self.get_logger().info("exit_on_finish=true; shutting down ROS")
             if rclpy.ok():

@@ -19,10 +19,10 @@ migrate_legacy_output_latest() {
 
 case "${target}" in
 "eval")
-    volume="output:/output"
+    volume="output:/output /run/user:/run/user:rw"
     ;;
 "dev")
-    volume="output:/output aichallenge:/aichallenge remote:/remote vehicle:/vehicle /dev/input:/dev/input"
+    volume="output:/output aichallenge:/aichallenge remote:/remote vehicle:/vehicle /dev/input:/dev/input /run/user:/run/user:rw"
     ;;
 "rm")
     # clean up old <none> images
@@ -62,4 +62,4 @@ LOG_FILE="${LOG_DIR}/docker_run.log"
 echo "A rocker run log is stored at : $LOG_FILE"
 
 # shellcheck disable=SC2086
-rocker ${opts} --x11 --devices ${device_drivers} --user --net host --privileged --name "aichallenge-2025-$(date "+%Y-%m-%d-%H-%M-%S")" --volume ${volume} -- "aichallenge-2025-${target}" 2>&1 | tee "$LOG_FILE"
+rocker ${opts} --x11 --devices ${device_drivers} --user --pulse --net host --privileged --name "aichallenge-2025-$(date "+%Y-%m-%d-%H-%M-%S")" --volume ${volume} -- "aichallenge-2025-${target}" 2>&1 | tee "$LOG_FILE"

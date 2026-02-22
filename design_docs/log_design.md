@@ -69,7 +69,7 @@
       autoware.log
       awsim.log
       rosbag.log
-      run_evaluation.log    # ★追加: オーケストレータの stdout/stderr を保存
+      autoware.log          # run_evaluation.bash の stdout/stderr もこのファイルへ集約
       result-details.json
       capture/...
       rosbag2_autoware/...
@@ -92,8 +92,7 @@
 
 ### 3.2 Run 内のログ/成果物の「最低限の規約」
 
-- `run_evaluation.log`: `run_evaluation.bash` 自身の標準出力/標準エラーを常に保存
-- `autoware.log`: 既存通り（将来的には `logs/` 配下に整理し、互換 symlink を残す）
+- `autoware.log`: `run_evaluation.bash` 自身の標準出力/標準エラーを含めて保存（将来的には `logs/` 配下に整理し、互換 symlink を残す）
 - `ros/`: ROS2 の log 出力先（`ROS_HOME` 等で誘導）
 - `meta.json`: 実行条件を機械可読で保存（後述）
 
@@ -145,7 +144,7 @@ Run ディレクトリに以下の情報を保存する（例）。
 ### 6.2 既存 Run との整合
 
 - 既存の `output/<timestamp>/` はそのまま残す（破壊的移動はしない）
-- 新しい Run から `run_evaluation.log` / `meta.json` / `ros/` を追加していく
+- 新しい Run から `autoware.log` / `meta.json` / `ros/` を追加していく
 
 ## 7. 実装計画（段階的に）
 
@@ -157,7 +156,7 @@ Run ディレクトリに以下の情報を保存する（例）。
 
 ### Phase 2（Run 内に必須ログを確実に残す）
 
-- `run_evaluation.bash` の stdout/stderr を `run_evaluation.log` に tee（Run ディレクトリ確定後に `exec > >(tee ...) 2>&1`）
+- `run_evaluation.bash` の stdout/stderr を `autoware.log` に tee（Run ディレクトリ確定後に `exec > >(tee ...) 2>&1`）
 - `run_simulator.bash` の出力も Run 内に保存（現状 `/dev/null` のため）
 - ROS ログを `ROS_HOME=$OUTPUT_DIRECTORY/ros` 等で Run 配下に固定
 

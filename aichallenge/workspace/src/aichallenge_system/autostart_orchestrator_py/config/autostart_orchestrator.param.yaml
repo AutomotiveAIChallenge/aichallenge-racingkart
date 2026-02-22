@@ -18,6 +18,11 @@
       - /localization/kinematic_state
     rosbag_output: rosbag2_autoware
     rosbag_storage_id: mcap
-    rosbag_compression_format: zstd
-    rosbag_compression_mode: file
+    # Leave both empty to keep rosbag output as plain .mcap (no outer compression).
+    rosbag_compression_format: ""
+    rosbag_compression_mode: ""
+    enable_motion_analytics: true
+    motion_analytics_cmd: "ros2 run aichallenge_system_launch motion_analytics.py"
+    # Empty means <cwd>/<rosbag_output>.
+    motion_analytics_input_dir: ""
     exit_on_finish: true

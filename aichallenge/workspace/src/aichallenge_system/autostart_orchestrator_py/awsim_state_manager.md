@@ -37,11 +37,14 @@ AWSIM が起動したことを監視し、必要なら `/admin/awsim/start` を 
 ## プロセス監視
 
 - `awsim_kill_patterns` で列挙した文字列を `pgrep -f` で検索
-- 停止時シーケンス:
-  - `SIGINT`
-  - `SIGTERM`
-  - 最後に `SIGKILL`
+- 停止時シーケンス（上から順に実行）:
+  1. `shutdown_delay_sec` 待機（既定: 20.0秒）
+  2. `SIGINT` 送信 → `kill_wait_sec` 待機
+  3. `shutdown_grace_sec` 待機（必要時のみ）
+  4. `SIGTERM` 送信 → `kill_wait_sec` 待機
+  5. まだ生存していれば `SIGKILL`
 - `shutdown_grace_sec`（SIGINT と SIGTERM の間隔）と `kill_wait_sec`（各シグナル後の待機）を使用
+- `exit_on_finish=true` かつ `request_launch_shutdown=true` のとき、親の `ros2 launch` プロセスへ `SIGINT` を送って launch 全体 shutdown を要求
 
 ## ワークフロー状態
 
@@ -67,6 +70,8 @@ AWSIM が起動したことを監視し、必要なら `/admin/awsim/start` を 
   - `awsim_kill_patterns`
   - `shutdown_grace_sec`
   - `kill_wait_sec`
+  - `shutdown_delay_sec`（終了処理開始から kill 開始までの待機秒）
+  - `request_launch_shutdown`（`exit_on_finish=true` 時に親 launch へ shutdown 要求を送る）
   - `exit_on_finish`
   - `shutdown_on_exit`
   - `admin_state_topic`

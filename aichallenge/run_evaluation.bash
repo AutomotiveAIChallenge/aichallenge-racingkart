@@ -7,7 +7,7 @@ mkdir -p "${out_dir}"
 cd "${out_dir}" || exit
 mkdir -p "${out_dir}/ros/log"
 
-log_file="${out_dir}/run_evaluation.log"
+log_file="${out_dir}/autoware.log"
 export ROS_HOME="${out_dir}/ros"
 export ROS_LOG_DIR="${ROS_HOME}/log"
 # Keep launch output in-file while still streaming to container stdout.

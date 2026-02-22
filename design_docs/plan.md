@@ -128,7 +128,7 @@
 
 - initial pose / 制御要求 / トピックチェックが成立しない時点で評価を打ち切り、次の domain / submit に進む。
 - 「どこまで進んだか」がログだけで追えるようにする（状態変数の新設は最終手段、まずはログ整備で十分）。
-- 失敗時に「何を見ればよいか」を `output/_host/.../docker_build_run.log` と `output/<run_id>/.../run_evaluation.log` の先頭に明示する。
+- 失敗時に「何を見ればよいか」を `output/_host/.../docker_build_run.log` と `output/<run_id>/d<domain_id>/autoware.log` の先頭に明示する。
 
 #### 3.3.4 起動順序の補足（将来の最適化候補）
 
@@ -203,7 +203,6 @@
 output/
   <run_id>/                      # 例: 20260128-145007
     awsim.log
-    run_evaluation.log
     d1/
       autoware.log
       ros/...
