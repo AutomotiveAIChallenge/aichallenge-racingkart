@@ -30,19 +30,6 @@ while [ $# -gt 0 ]; do
     esac
 done
 
-migrate_legacy_output_latest() {
-    # `output/latest` was historically used as a directory for host logs.
-    # We now reserve `output/latest` as a symlink to the latest evaluation run.
-    if [ -e "output/latest" ] && [ ! -L "output/latest" ]; then
-        mkdir -p output/_host
-        local ts legacy
-        ts="$(date +%Y%m%d-%H%M%S)"
-        legacy="output/_host/legacy-output-latest-${ts}-$$"
-        echo "[INFO] Moving legacy 'output/latest' to '${legacy}'"
-        mv output/latest "${legacy}"
-    fi
-}
-
 case "${target}" in
 "eval")
     opts="--no-cache"
@@ -56,15 +43,10 @@ case "${target}" in
     ;;
 esac
 
-migrate_legacy_output_latest
-
-mkdir -p output/_host
-EVENT_ID="$(date +%Y%m%d-%H%M%S)-docker_build-${target}-$$"
-LOG_DIR="output/_host/${EVENT_ID}"
-mkdir -p "$LOG_DIR"
-ln -nfs "${EVENT_ID}" output/_host/latest
-LOG_FILE="${LOG_DIR}/docker_build.log"
-echo "A build log is stored at : ${LOG_FILE}"
+ts="$(date +%Y%m%d-%H%M%S)"
+LOG_FILE="output/docker/${ts}-docker_build-$$.log"
+mkdir -p output/docker output/latest
+ln -sfn "${PWD}/${LOG_FILE}" output/latest/docker_build.log
 
 BUILD_ARGS=()
 if [ "$target" = "eval" ] && [ -n "${SUBMIT_TAR}" ]; then
