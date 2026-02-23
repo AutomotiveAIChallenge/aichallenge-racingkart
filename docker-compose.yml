@@ -79,10 +79,6 @@ services:
     <<: *autoware-base
     command: ["bash", "-lc", "source /aichallenge/workspace/install/setup.bash && cd ${CMD_WORKDIR:-/aichallenge} && exec bash -lc \"${CMD:-}\""]
 
-  awsim-state-manager:
-    <<: *autoware-base
-    command: ["bash", "-lc", "source /aichallenge/workspace/install/setup.bash && exec ros2 launch aichallenge_system_launch awsim_state_manager.launch.xml >\"${OUTPUT_RUN_DIR:-/output}/awsim_state_manager.log\" 2>&1"]
-
   autoware-simulator-evaluation:
     <<: *autoware-base 
     command: ["bash", "-lc", "exec /aichallenge/run_evaluation.bash"]

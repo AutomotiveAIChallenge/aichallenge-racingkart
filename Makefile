@@ -2,7 +2,7 @@
 SHELL := /bin/bash
 
 .PHONY: autoware-build autoware-vehicle autoware-simulator autoware-request-initialpose autoware-request-control autoware-driver-zenoh \
-	simulator simulator-reset awsim-state-manager awsim-state-manager-stop dev driver zenoh download rviz2 down ps print-dc print-gpu-env
+	simulator simulator-reset dev driver zenoh download rviz2 down ps print-dc print-gpu-env
 
 # GPU selection:
 # - DEVICE=auto (default): enable GPU override if NVIDIA is detected
@@ -49,13 +49,13 @@ export HOST_UID HOST_GID
 ROSBAG ?= false
 CAPTURE ?= false
 DOMAIN_ID ?= 1
-DOMAIN_IDS ?= $(DOMAIN_ID)
 OUTPUT_ROOT ?= /output
 # Output layout overrides (optional)
 # - RUN_ID: run directory name under /output/ (default: timestamp)
 # - RUN_GROUP: optional subdirectory under RUN_ID (e.g., submit name)
 RUN_ID ?=
 RUN_GROUP ?=
+OUTPUT_RUN_DIR ?= $(OUTPUT_ROOT)/$(shell date +%Y%m%d-%H%M%S)/d$(DOMAIN_ID)
 
 # autowareのbuildのみ
 autoware-build:
@@ -69,7 +69,7 @@ autoware-vehicle:
 # run autoware for simulator
 autoware-simulator:
 	@echo "Start Autoware for AWSIM"
-	RUN_MODE=awsim DOMAIN_ID=$(DOMAIN_ID) $(DC) up -d autoware
+	OUTPUT_RUN_DIR=$(OUTPUT_RUN_DIR) RUN_MODE=awsim DOMAIN_ID=$(DOMAIN_ID) $(DC) up -d autoware
 
 # autoware command service
 autoware-request-initialpose:
@@ -84,18 +84,11 @@ autoware-request-control:
 # run simulator (docker compose up -d simulator)
 simulator:
 	@echo "Start AWSIM"
-	SIM_MODE=$(SIM_MODE) $(DC) up -d simulator
-
-awsim-state-manager:
-	@echo "Start AWSIM state manager"
-	$(DC) up -d awsim-state-manager
-
-awsim-state-manager-stop:
-	$(DC) stop awsim-state-manager
+	OUTPUT_RUN_DIR=$(OUTPUT_RUN_DIR) SIM_MODE=dev $(DC) up -d simulator
 
 simulator-reset:
 	@echo "Reset simulation"
-	CMD="bash /aichallenge/utils/simulator_reset.bash $(DOMAIN_ID)" \
+	CMD="bash /aichallenge/utils/simulator_reset.bash 0" \
 	$(DC) run --rm --no-deps autoware-command
 
 # racing kart (docker compose up -d driver)
@@ -106,10 +99,8 @@ driver:
 zenoh:
 	$(DC) up -d zenoh
 
-dev:
+dev: simulator autoware-simulator
 	@echo "Start dev simulation (AWSIM + Autoware, DOMAIN_ID=$(DOMAIN_ID))"
-	@$(MAKE) simulator SIM_MODE=dev
-	@$(MAKE) autoware-simulator DOMAIN_ID=$(DOMAIN_ID)
 	@echo "To stop: make down  (docker compose down --remove-orphans)"
 
 eval:
