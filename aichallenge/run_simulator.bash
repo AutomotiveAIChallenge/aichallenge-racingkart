@@ -1,7 +1,7 @@
 #!/bin/bash
 AWSIM_DIRECTORY=/aichallenge/simulator/AWSIM
 mode="${1:-${SIM_MODE:-eval}}"
-[[ "${mode}" == "eval" ]] && mode="1p"
+[[ ${mode} == "eval" ]] && mode="1p"
 
 case "${mode}" in
 "dev")
@@ -29,8 +29,8 @@ case "${mode}" in
     ;;
 esac
 
-awsim_extra_args="${AWSIM_EXTRA_ARGS:-}"
-if [[ -z "${awsim_extra_args}" && ! -e /dev/nvidia0 && "${mode}" =~ ^(dev|test|[1-4]p)$ ]]; then
+awsim_extra_args="${AWSIM_EXTRA_ARGS-}"
+if [[ -z ${awsim_extra_args} && ! -e /dev/nvidia0 && ${mode} =~ ^(dev|test|[1-4]p)$ ]]; then
     awsim_extra_args="--camera false --lidar false"
 fi
 
@@ -38,7 +38,7 @@ echo "[INFO] Starting AWSIM in '${mode}' mode"
 
 declare -a opts=("--start-mode" "${start_mode}" "--vehicles" "${vehicles}" "--laps" "${laps}" "--timeout" "${timeout}")
 declare -a extra_args
-read -r -a extra_args <<< "${awsim_extra_args}"
+read -r -a extra_args <<<"${awsim_extra_args}"
 opts+=("${extra_args[@]}")
 
 # shellcheck disable=SC1091
