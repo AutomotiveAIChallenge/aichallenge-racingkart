@@ -90,7 +90,7 @@ make down                   # コンテナ停止
 1. 変更を加える (`aichallenge/workspace/src/` など)
 2. `make autoware-build`
 3. `make dev` で動作確認
-4. 問題があればログ確認 (`output/latest`)
+4. 問題があればログ確認 (`/output/latest/d1`)
 5. 停止は `make down`
 
 ポイント:
@@ -103,7 +103,7 @@ make down                   # コンテナ停止
 1. `./run_evaluation.bash` を実行
 2. 自動で準備・実行・収集・片付けが進む
 3. `output/<timestamp>/` に結果が残る
-4. `output/latest` で最新結果へアクセス
+4. `/output/latest/d1` で最新結果へアクセス
 
 テストだけしたいとき:
 ```bash
@@ -114,9 +114,9 @@ make down                   # コンテナ停止
 
 ## ログと提出物の見方
 
-- `output/latest`:
-  - 最新ランへのシンボリックリンク
-  - まずここを見れば状態把握できる
+- `/output/latest/`:
+  - 最新ランを格納する固定ディレクトリ
+  - `d1`/`d2`... 配下の固定名シンボリックリンクで成果物を見る
 - `submit/aichallenge_submit.tar.gz`:
   - `./create_submit_file.bash` で生成
   - 提出用アーカイブ
@@ -151,5 +151,5 @@ make down                   # コンテナ停止
 
 - 最初は「構造理解」より「実行して結果を見る」を優先
 - 基本コマンドは `build -> dev -> evaluation -> down`
-- ログは `output/latest`、提出は `submit/`
+- ログは `/output/latest/d1`、提出は `submit/`
 - 慣れたら `vehicle/` と `remote/` に進む

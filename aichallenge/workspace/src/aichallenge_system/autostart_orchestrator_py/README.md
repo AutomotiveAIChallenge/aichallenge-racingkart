@@ -34,5 +34,5 @@ Autostart Orchestrator (aichallenge_system)
 - Auto startノードは Autoware ドメイン側のワークフローを担当します。
 - state managerノードは AWSIM 側（通常 `ROS_DOMAIN_ID=0`）の管理状態監視と終了処理を担当します。
 - `autostart_orchestrator_node.py` の debug 可視化では `vehicle`（`ROS_DOMAIN_ID` 由来）と `vehicle_topic` を表示します。
-- Auto startノードは終了時に `<output_root>/latest` ディレクトリを作成し、`<output_root>/latest/d<id>/` 配下の固定名シンボリックリンクを更新します。
+- Auto startノードは終了時に `/output/latest` ディレクトリ配下の `d<id>/` に固定名シンボリックリンクを更新します。
 - `ros2 bag record -o <name>` の標準命名により、最初のmcapは `<name>_0.mcap` になります（例: `rosbag2_autoware_0.mcap`）。

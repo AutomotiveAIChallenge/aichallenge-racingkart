@@ -34,7 +34,7 @@ Host (you)
         ├─ simulator        (AWSIM)
         ├─ autoware         (Autoware)
         ├─ autoware-command (ros2 service/topic の単発操作)
-        └─ output/ にログ・結果を出力（output/latest は最新runへのsymlink）
+        └─ output/ にログ・結果を出力（最新結果は `/output/latest/d<domain>/`）
 ```
 
 ## まずは読んでほしいもの

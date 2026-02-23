@@ -13,7 +13,8 @@
 `docker-compose.yml` に固定定義された `autoware-d1..autoware-d4` を使って並列起動します。
 
 - `--submit` 件数に応じて 1〜4 台（`autoware-d1..autoware-dN`）を起動
-- simulator は `simulator.launch.xml`（AWSIM + awsim_state_manager）を 1 つ起動
+- simulator は `simulator.launch.xml` を 1 つ起動（AWSIM + awsim_state_manager を含む）
+- autoware は `autoware-d1..autoware-dN` を同時に起動
 - `output/<run_id>/dN/autoware.log` に各ドメインのログを出力
   - `run_id` は timestamp（`YYYYMMDD-HHMMSS`）を自動採番して使用する
 
@@ -21,11 +22,11 @@
 
 - `run_id` はスクリプト内部で timestamp から自動生成する
 - `RUN_ID` / `RUN_GROUP` / `OUTPUT_ROOT` の外部指定は使わない
-- `output/latest` シンボリックリンクは作らない
+- `/output/latest` は固定参照ディレクトリとして使う（参照先の更新は Autoware/評価側処理に依存）
 - compose 呼び出しはスクリプト内で固定
   - `docker compose -f docker-compose.yml -f docker-compose.gpu.yml`
 - `wait-admin-ready` / `wait-admin-finish` は `run_parallel_submissions.bash` では行わない
-  - 開始同期は `awsim_state_manager`（`/admin/awsim/start` publish）に委譲する
+  - `down` 実行まで、起動中状態を手動で管理する運用。
 
 ## 前提
 
@@ -40,9 +41,10 @@
 3. submit ごとに eval イメージをビルド
    - `docker build --target eval --build-arg SUBMIT_TAR=<repo相対path> -t autoware-dN`
 4. `autoware-command` サービスで `simulator.launch.xml` を起動
-   - launch 内で AWSIM + awsim_state_manager を Domain 0 で起動
+   - Domain 0 で AWSIM を起動し、同時に `awsim_state_manager` を起動
 5. `autoware-d1..autoware-dN` を起動
    - `OUTPUT_RUN_DIR=/output/<run_id>/d1|d2` を渡してログ出力先を分離
+   - 起動後は即時復帰（`run_parallel_submissions.bash` は admin 状態待機や自動停止を行わない）
 
 ## サービス対応
 

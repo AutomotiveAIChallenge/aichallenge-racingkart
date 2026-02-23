@@ -27,18 +27,15 @@
 
 - `aichallenge/run_evaluation.bash`
   - `/output/<timestamp>/d<domain_id>/` を作成し、そこで実行を継続（`autoware.log`、`capture/`、`result-details.json` 等が同階層に出る）
-  - **`/output/latest` を「最新実行ディレクトリへの symlink」にする意図**がある（`ln -nfs "$ts" latest`）
+  - `/output/latest/d<id>/` に固定名リンク（`autoware.log` など）を集約
 - `docker_build.sh` / `docker_run.sh`
   - ホスト側ログを `output/_host/<event_id>/` に出力し、`output/_host/latest` で最新を参照する
 - `aichallenge/utils/topic_check.sh`
-  - デフォルトでは `output/latest/`（= 最新Runを指す symlink）にログを出す
+  - デフォルトでは `output/latest/`（`output/latest/topic_check.txt`）にログを出す
 
-### 1.3 問題点（根本原因）
+### 1.3 問題点（見直し対象）
 
-- **`output/latest` が「ディレクトリ」として存在するため、`run_evaluation.bash` の `latest` symlink が成立していない**
-  - 結果として、`ln -nfs "$ts" latest` が **`output/latest/<timestamp> -> <timestamp>` の symlink を増殖**させ、`latest` が「最新1件」を指さない
-  - これにより、「最新結果を見る」という運用が破綻し、ログ/成果物が散らかる
-- `docker_run.sh` / `docker_build.sh` のログが **毎回同じファイルに上書き**され、過去追跡ができない
+- `docker_build.sh` / `docker_run.sh` のログは `output/_host` でイベントID分離しているため、履歴追跡しにくい点は解消済み
 
 ## 2. 要件（満たしたいこと）
 
@@ -46,7 +43,7 @@
 
 - 評価1回ごとに「実行単位ディレクトリ（Run）」を作り、**Run の中に成果物とログを集約**する
 - Run を一意に識別できる（最低限: timestamp、できれば + 追加情報）
-- いつでも **「最新 Run」へ安定パスでアクセス**できる（`/output/latest`）
+- いつでも **「最新 Run」へ安定パスでアクセス**できる（`/output/latest/d<id>/`）
 - 失敗時も解析に必要なログが残る（標準出力だけに依存しない）
 - host 側（build/run）ログも /output 配下に残す（Run と紐づけ可能にする）
 
@@ -75,7 +72,8 @@
       rosbag2_autoware/...
       ros/                  # ★追加: ROS の ~/.ros 相当（log を含む）
       meta.json             # ★追加: 実行条件/環境/終了コード
-  latest -> <run_id>        # ★復活: 最新 Run への symlink（これを不変の入口にする）
+  latest/                   # ★固定: 最新結果参照用ディレクトリ
+    d<domain_id>/           # run 内の固定名リンク（result-details.json / capture.mp4 / rosbag2_autoware.mcap / motion_analytics.html / autoware.log）
   _host/                    # ★追加: host 側ログ（build/run/compose）
     <host_event_id>/
       docker_build.log
@@ -87,8 +85,7 @@
 
 - **Run ディレクトリ**は現状の `YYYYMMDD-HHMMSS` を `run_id` として踏襲（移行コスト最小）
   - 将来的に衝突回避が必要なら `YYYYMMDD-HHMMSS-<pid>` 等に拡張
-- **`latest` は symlink のみ**にする（ディレクトリとしては使わない）
-- host 側ログは `output/_host` に隔離し、`latest` を衝突させない
+- host 側ログは `output/_host` に隔離し、`latest` は host 側のイベント追跡用として運用する
 
 ### 3.2 Run 内のログ/成果物の「最低限の規約」
 
@@ -133,13 +130,11 @@ Run ディレクトリに以下の情報を保存する（例）。
 ### 6.1 既存の `output/latest/` ディレクトリの扱い
 
 - 現状の `output/latest/` は
-  - `docker_build.log` / `docker_run.log` / `topic_check.txt` の保存先
-  - かつ `run_evaluation` の `latest` と衝突している
+  - 主に `topic_check.txt` の保存先として使われる
+- `run_evaluation` は `/output/latest/...` を使うため、直近の衝突は発生しない
 - **移行方針**
-  1. host 側の出力先を `output/_host/latest/` に変更（スクリプト修正）
-  2. `output/latest` を「symlink」に戻す（ディレクトリが残る場合はリネーム/退避）
-  3. `topic_check.sh` のデフォルト出力は `output/latest/topic_check.txt` のまま維持  
-     → `latest` が symlink になれば「最新 Run 配下」に自然に入る
+  1. `topic_check.sh` のデフォルトは `output/latest/topic_check.txt` のまま維持
+  2. host 側ログは引き続き `output/_host/...` 配下で管理する
 
 ### 6.2 既存 Run との整合
 
@@ -151,8 +146,7 @@ Run ディレクトリに以下の情報を保存する（例）。
 ### Phase 1（衝突解消 + Run の安定入口を復活）
 
 - `docker_build.sh` / `docker_run.sh` のログ出力先を `output/_host/...` に変更（上書き回避で event_id 付与）
-- `run_evaluation.bash` は `latest` を symlink として張れることを前提に整理
-  - もし `latest` がディレクトリなら「警告して別名 symlink を張る」等の保険も検討
+- `run_evaluation.bash` は `/output/latest` を更新する前提で整理
 
 ### Phase 2（Run 内に必須ログを確実に残す）
 

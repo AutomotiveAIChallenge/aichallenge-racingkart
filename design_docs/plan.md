@@ -53,19 +53,20 @@
 
 既に整備済み（Planの前提）:
 
-- 出力は `output/<run_id>/d<domain_id>/` に割り振り（`output/latest -> <run_id>`）。
+- 出力は `output/<run_id>/d<domain_id>/` に割り振り（`latest` は `/output/latest/...` で固定参照）。
   - 複数提出物のグルーピング: `output/<run_id>/<run_group>/d<domain_id>/`
 - host側ログは `output/_host/<event_id>/`（`output/_host/latest`）。
 - `make run-sim-eval` は `DOMAIN_IDS=...` で複数domain連続実行可能（`run-sim-eval-1-4` あり）。
 - rosbag compose サービスは `stop_signal: SIGINT` + `stop_grace_period` を確保。
 - `./docker_build.sh eval --submit <tar.gz>` で eval 用イメージに提出物を差し替え可能（`Dockerfile` に `ARG SUBMIT_TAR`）。
-- `./docker_build_run.bash` を用意（build/eval/all/down）。
-  - `all` は複数 `--submit` を受け取り、submit順に domain id `1..4` へ割当して連続実行する。
-  - 提出物はホストへ展開せず Docker volume に展開してマウントする（作業ツリーを汚さない）。
+- `run_parallel_submissions.bash` を用意（複数 submit の同時起動）。
+  - `--submit` 順に domain id `1..4` を固定割当して同時起動する。
+  - 提出物はリポジトリ配下の tar.gz をビルド引数として渡し、作業ツリーは直接展開しない。
 
 残課題（今回の主対象）:
 
-- `docker_build_run.bash`（build + run を束ねる統一CLI）の整備・安定化（multi-submit/ログ/停止/成果物整理）。
+- run_parallel運用の共通CLI未整備に伴う課題（`docker_build_run.bash` の未実装対応）：  
+  - multi-submit/ログ/停止/成果物整理を 1 つにまとめる前段計画。
 - fail-fast（初期姿勢/トピック/スタック等）と、その判定・打ち切り理由の成果物への記録。
 
 ---
@@ -216,7 +217,7 @@ output/
     d2/...
     d3/...
     d4/...
-  latest -> <run_id>
+  latest/...                    # 最新結果への固定参照（d1/d2... のリンク）
   _host/
     <event_id>/docker_build.log
     <event_id>/docker_run.log
@@ -231,6 +232,9 @@ output/
 ---
 
 ## 5. docker_build_run.bash の仕様（案）
+
+> 現時点では `docker_build_run.bash` は未作成。設計アイデアとして保持し、実装は
+> `run_parallel_submissions.bash` と既存の `run_evaluation.bash` 運用で代替している。
 
 ### 5.1 コマンド体系
 

@@ -36,7 +36,7 @@ Autostart オーケストレータは、車両状態を起点にデータ収集�
 
 - rosbag 録画子プロセス起動/停止（`subprocess`）
 - rosbag 停止後に `motion_analytics` 実行（`enable_motion_analytics=true` のとき）
-- 終了時に `<output_root>/latest/d<id>/` ディレクトリを作成し、固定名シンボリックリンクを更新
+- 終了時に `/output/latest/d<id>/` ディレクトリを作成し、固定名シンボリックリンクを更新
   - `result-details.json`, `capture.mp4`, `rosbag2_autoware.mcap`, `motion_analytics.html`, `autoware.log`
   - `result-details.json` は同一ドメイン (`d<id>-result-details.json`) のみを探索対象にする
   - rosbag は `.mcap` と `.mcap.zstd` の両方を探索対象にする
@@ -47,8 +47,8 @@ Autostart オーケストレータは、車両状態を起点にデータ収集�
 
 ## output 例
 
-`latest` はシンボリックリンクではなくディレクトリです。  
-`latest/d<id>/` 配下に固定名のシンボリックリンクを作成します。
+`/output/latest` は固定参照ディレクトリで、配下の `d<id>/` に固定名リンクを作成します。
+`/output/latest/d<id>/` 配下に固定名のシンボリックリンクを作成します。
 
 ```text
 output/
