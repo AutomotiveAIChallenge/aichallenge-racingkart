@@ -29,13 +29,13 @@
   - `/output/<timestamp>/d<domain_id>/` を作成し、そこで実行を継続（`autoware.log`、`capture/`、`result-details.json` 等が同階層に出る）
   - `/output/latest/d<id>/` に固定名リンク（`autoware.log` など）を集約
 - `docker_build.sh` / `docker_run.sh`
-  - ホスト側ログを `output/_host/<event_id>/` に出力し、`output/_host/latest` で最新を参照する
+  - ホスト側ログを `output/docker/<event_id>/` に出力し、`output/latest/docker_build.log` / `output/latest/docker_run.log` で最新を参照する
 - `aichallenge/utils/topic_check.sh`
   - デフォルトでは `output/latest/`（`output/latest/topic_check.txt`）にログを出す
 
 ### 1.3 問題点（見直し対象）
 
-- `docker_build.sh` / `docker_run.sh` のログは `output/_host` でイベントID分離しているため、履歴追跡しにくい点は解消済み
+- `docker_build.sh` / `docker_run.sh` のログは `output/docker` にイベントIDベース（タイムスタンプ+PID）で保存され、`output/latest/docker_*.log` へ固定参照を貼るため履歴追跡が容易になった
 
 ## 2. 要件（満たしたいこと）
 
@@ -74,18 +74,18 @@
       meta.json             # ★追加: 実行条件/環境/終了コード
   latest/                   # ★固定: 最新結果参照用ディレクトリ
     d<domain_id>/           # run 内の固定名リンク（result-details.json / capture.mp4 / rosbag2_autoware.mcap / motion_analytics.html / autoware.log）
-  _host/                    # ★追加: host 側ログ（build/run/compose）
+  docker/                   # host 側ログ（build/run）
     <host_event_id>/
       docker_build.log
       docker_run.log
-      compose.log
-      meta.json             # build/run 時の情報（イメージタグ、git hash 等）
-    latest -> <host_event_id>
+      meta.json            # build/run 時の情報（イメージタグ、git hash 等）
+    latest/docker_build.log -> <host_event_id>/docker_build-*.log
+    latest/docker_run.log -> <host_event_id>/docker_run-*.log
 ```
 
 - **Run ディレクトリ**は現状の `YYYYMMDD-HHMMSS` を `run_id` として踏襲（移行コスト最小）
   - 将来的に衝突回避が必要なら `YYYYMMDD-HHMMSS-<pid>` 等に拡張
-- host 側ログは `output/_host` に隔離し、`latest` は host 側のイベント追跡用として運用する
+- host 側ログは `output/docker` に集約し、`output/latest/docker_*.log` で共通の最新ログに接続する
 
 ### 3.2 Run 内のログ/成果物の「最低限の規約」
 
@@ -123,7 +123,7 @@ Run ディレクトリに以下の情報を保存する（例）。
 ### 5.2 compose（`./run_evaluation.bash`）の注意
 
 - `/aichallenge` はホストマウントされるため、スクリプト改修は反映されやすい
-- 一方で複数サービスを跨ぐため、host 側ログ（`compose.log` 等）を `output/_host` に残す価値が高い
+- 一方で複数サービスを跨ぐため、`make` / compose 実行結果の host 側ログは `output/latest/docker_build.log` や `output/latest/docker_run.log` へ集約する運用を想定する
 
 ## 6. 互換性・移行計画（安全第一）
 
@@ -134,7 +134,7 @@ Run ディレクトリに以下の情報を保存する（例）。
 - `run_evaluation` は `/output/latest/...` を使うため、直近の衝突は発生しない
 - **移行方針**
   1. `topic_check.sh` のデフォルトは `output/latest/topic_check.txt` のまま維持
-  2. host 側ログは引き続き `output/_host/...` 配下で管理する
+  2. host 側ログは `output/docker/<event_id>/` へ集約し、固定シンボリックリンクは `output/latest/docker_*.log` を更新する
 
 ### 6.2 既存 Run との整合
 
@@ -145,7 +145,7 @@ Run ディレクトリに以下の情報を保存する（例）。
 
 ### Phase 1（衝突解消 + Run の安定入口を復活）
 
-- `docker_build.sh` / `docker_run.sh` のログ出力先を `output/_host/...` に変更（上書き回避で event_id 付与）
+- `docker_build.sh` / `docker_run.sh` のログ出力先を `output/docker/...` に変更（上書き回避で event_id 付与）
 - `run_evaluation.bash` は `/output/latest` を更新する前提で整理
 
 ### Phase 2（Run 内に必須ログを確実に残す）

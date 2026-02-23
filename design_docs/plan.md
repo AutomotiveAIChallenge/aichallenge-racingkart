@@ -55,7 +55,7 @@
 
 - 出力は `output/<run_id>/d<domain_id>/` に割り振り（`latest` は `/output/latest/...` で固定参照）。
   - 複数提出物のグルーピング: `output/<run_id>/<run_group>/d<domain_id>/`
-- host側ログは `output/_host/<event_id>/`（`output/_host/latest`）。
+- host側ログは `output/docker/<event_id>/`（`output/latest/docker_build.log`, `output/latest/docker_run.log`）。
 - `make run-sim-eval` は `DOMAIN_IDS=...` で複数domain連続実行可能（`run-sim-eval-1-4` あり）。
 - rosbag compose サービスは `stop_signal: SIGINT` + `stop_grace_period` を確保。
 - `./docker_build.sh eval --submit <tar.gz>` で eval 用イメージに提出物を差し替え可能（`Dockerfile` に `ARG SUBMIT_TAR`）。
@@ -129,7 +129,7 @@
 
 - initial pose / 制御要求 / トピックチェックが成立しない時点で評価を打ち切り、次の domain / submit に進む。
 - 「どこまで進んだか」がログだけで追えるようにする（状態変数の新設は最終手段、まずはログ整備で十分）。
-- 失敗時に「何を見ればよいか」を `output/_host/.../docker_build_run.log` と `output/<run_id>/d<domain_id>/autoware.log` の先頭に明示する。
+- 失敗時に「何を見ればよいか」を `output/docker/.../docker_build.log` / `output/docker/.../docker_run.log` と `output/<run_id>/d<domain_id>/autoware.log` の先頭に明示する。
 
 #### 3.3.4 起動順序の補足（将来の最適化候補）
 
@@ -147,7 +147,7 @@
 運営が個別に調査するのではなく、参加者が自己診断できる形に寄せるために:
 
 - 実行時の標準出力・標準エラーは可能な限りファイルへ落とし、成果物として回収する
-- `output/_host/...`（ホスト側の統合ログ）と `output/<run_id>/...`（実行成果物）の両方が揃う前提で設計する
+- `output/docker/...`（ホスト側の統合ログ）と `output/<run_id>/...`（実行成果物）の両方が揃う前提で設計する
 
 #### 3.3.6 成果物アップロード方針（Web側の設計メモ）
 
@@ -218,10 +218,11 @@ output/
     d3/...
     d4/...
   latest/...                    # 最新結果への固定参照（d1/d2... のリンク）
-  _host/
+  docker/
     <event_id>/docker_build.log
     <event_id>/docker_run.log
-  _host/latest -> <event_id>
+  latest/docker_build.log -> <event_id>/docker_build-*.log
+  latest/docker_run.log -> <event_id>/docker_run-*.log
 ```
 
 ### 4.2 ログの基本方針
@@ -273,7 +274,7 @@ output/
 
 1) `docker_build_run.bash` 追加（CLI/usage、build/eval/all/down 実装）  
 2) `README.md` に利用例を追記（推奨手順を `docker_build_run.bash` に寄せる）  
-3) ログ整備（`output/_host/<event_id>/docker_build_run.log` など、最小でも1ファイルにまとめる）  
+3) ログ整備（`output/docker/<event_id>/docker_build.log` / `output/docker/<event_id>/docker_run.log` など、最小でも1ファイルにまとめる）  
 4) 動作確認（`--device cpu` で最低限起動、`--device gpu` は環境がある場合のみ）
 
 ---

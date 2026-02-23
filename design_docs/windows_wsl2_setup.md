@@ -119,7 +119,7 @@ make autoware-simulator
 
 ### (E) Windows 側のパス/シンボリックリンク
 
-`output/latest` のような symlink を使います。  
+`/output/latest` を固定参照ディレクトリとして使います（`output/latest` への symlink 依存は前提にしません）。  
 Windows ドライブ上だと symlink の扱いが厳しくなるため、やはり `~/...` 配下運用を推奨します。
 
 ---

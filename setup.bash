@@ -802,7 +802,7 @@ EOF
                     warn "${WARN} docker not usable as user yet; building with sudo docker (will chown logs back to you)"
                     (cd "${dest_dir}" && sudo bash ./docker_build.sh dev) || true
                     # Fix ownership if the script had to run under sudo.
-                    (cd "${dest_dir}" && sudo chown -R "${owner_user}:${owner_group}" output/_host output/docker 2>/dev/null) || true
+                    (cd "${dest_dir}" && sudo chown -R "${owner_user}:${owner_group}" output/docker 2>/dev/null) || true
                 fi
             fi
         else

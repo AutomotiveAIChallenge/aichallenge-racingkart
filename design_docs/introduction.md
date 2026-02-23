@@ -37,7 +37,7 @@ make down
 
 | コマンド | 何をする？（役割） | いつ使う？ | 主なログ/出力 |
 | --- | --- | --- | --- |
-| `./docker_build.sh dev` | **開発用Dockerイメージ**（`aichallenge-2025-dev`）を作る | 初回、またはDockerfile更新後 | `output/_host/latest/docker_build.log` |
+| `./docker_build.sh dev` | **開発用Dockerイメージ**（`aichallenge-2025-dev`）を作る | 初回、またはDockerfile更新後 | `output/docker/<timestamp>-docker_build-<pid>.log`（最新は `output/latest/docker_build.log`） |
 | `make autoware-build` | コンテナ内で **ROSワークスペースをビルド**（`aichallenge/workspace/install/` を作る） | 初回、または依存/ソース更新後 | （ビルド中は端末に表示。失敗したら直近の出力を確認） |
 | `make dev` | **開発起動**: AWSIM + Autoware を起動して “動かしっぱなし” にする | 手元でデバッグ/可視化したい時 | `output/<run_id>/d<id>/awsim.log` / `output/<run_id>/d<id>/autoware.log` |
 | `make ps` | 起動中コンテナを一覧表示 | 「動いてる？」確認 | （標準出力） |
