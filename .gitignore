@@ -8,6 +8,7 @@ rosbag2*/
 *.pyc
 *pem
 *.zstd
+.env
 vehicle/.env
 metadata.yaml
 output/

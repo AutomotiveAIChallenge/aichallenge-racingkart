@@ -470,28 +470,13 @@ bootstrap_repo_targets() {
         sudo_refresh
     fi
 
-    local dc_override=""
     if [ "$use_sudo" -eq 1 ]; then
-        local compose_file="${COMPOSE_FILE:-docker-compose.yml}"
-        local compose_gpu_file="${COMPOSE_GPU_FILE:-docker-compose.gpu.yml}"
-        local device="${DEVICE:-auto}"
-        local gpu_enabled=0
-        if [ "${device}" = "gpu" ]; then
-            gpu_enabled=1
-        elif [ "${device}" = "auto" ] && [ -e /dev/nvidia0 ]; then
-            gpu_enabled=1
-        fi
-
-        dc_override="sudo docker compose -f ${compose_file}"
-        if [ "$gpu_enabled" -eq 1 ]; then
-            dc_override="${dc_override} -f ${compose_gpu_file}"
-        fi
         warn "${WARN} docker daemon not reachable as user yet; using sudo docker for post-setup steps"
     fi
 
     if [ "${do_make_autoware_build}" = "1" ]; then
         if [ "$use_sudo" -eq 1 ]; then
-            (cd "${repo_dir}" && DC="${dc_override}" make autoware-build) || {
+            (cd "${repo_dir}" && make autoware-build) || {
                 warn "${FAIL} make autoware-build failed"
                 return 0
             }
@@ -525,7 +510,7 @@ bootstrap_repo_targets() {
 
     if [ "${do_make_dev}" = "1" ]; then
         if [ "$use_sudo" -eq 1 ]; then
-            (cd "${repo_dir}" && DC="${dc_override}" make dev DOMAIN_ID="${domain_id}") || warn "${WARN} make dev failed"
+            (cd "${repo_dir}" && make dev DOMAIN_ID="${domain_id}") || warn "${WARN} make dev failed"
         else
             (cd "${repo_dir}" && make dev DOMAIN_ID="${domain_id}") || warn "${WARN} make dev failed"
         fi

@@ -6,7 +6,6 @@ REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SCRIPT_BASENAME="$(basename "${BASH_SOURCE[0]}")"
 SCRIPT_NAME="${SCRIPT_BASENAME%.*}"
 MAX_VEHICLES=4
-dc_cmd=(docker compose -f "${REPO_ROOT}/docker-compose.yml" -f "${REPO_ROOT}/docker-compose.gpu.yml")
 
 log() { echo "[run_parallel_submissions] $*"; }
 die() {
@@ -71,7 +70,7 @@ build_eval_image() {
 
 main() {
     if [ "${1-}" = "down" ]; then
-        "${dc_cmd[@]}" down --remove-orphans
+        docker compose down --remove-orphans
         return 0
     fi
 
@@ -120,20 +119,20 @@ main() {
         build_eval_image "${submit_rel}" "${domain_id}"
     done
 
-    output_run_dir="/output/${run_id}"
+    log_dir="/output/${run_id}"
     log "Starting simulator.launch.xml (AWSIM + awsim_state_manager)"
-    CMD="env ROS_DOMAIN_ID=0 ros2 launch aichallenge_system_launch simulator.launch.xml output_run_dir:=${output_run_dir} vehicles:=${vehicles} laps:=6 timeout:=600 >\"${output_run_dir}/awsim.log\" 2>&1"
-    OUTPUT_RUN_DIR="${output_run_dir}" \
-        CMD_WORKDIR="${output_run_dir}" \
+    CMD="env ROS_DOMAIN_ID=0 ros2 launch aichallenge_system_launch simulator.launch.xml log_dir:=${log_dir} vehicles:=${vehicles} laps:=6 timeout:=600 >\"${log_dir}/awsim.log\" 2>&1"
+    LOG_DIR="${log_dir}" \
+        CMD_WORKDIR="${log_dir}" \
         CMD="${CMD}" \
-        "${dc_cmd[@]}" up -d --force-recreate autoware-command
+        docker compose up -d --force-recreate autoware-command
 
     for ((domain_id = 1; domain_id <= vehicles; domain_id++)); do
-        output_run_dir="/output/${run_id}/d${domain_id}"
+        log_dir="/output/${run_id}/d${domain_id}"
         log "Starting autoware-d${domain_id}"
-        OUTPUT_RUN_DIR="${output_run_dir}" \
+        LOG_DIR="${log_dir}" \
             RUN_MODE="awsim" \
-            "${dc_cmd[@]}" up -d --force-recreate "autoware-d${domain_id}"
+            docker compose up -d --force-recreate "autoware-d${domain_id}"
     done
 
     log "Started. Output: output/${run_id}/d1..d${vehicles}"
