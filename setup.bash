@@ -770,6 +770,8 @@ EOF
 
     if is_repo_root_dir "${dest_dir}"; then
         run_step_if "${do_repo_doctor}" "Run repo preflight: ./setup.bash doctor" bash "${dest_dir}/setup.bash" doctor || true
+        # Create .env with GPU/CPU selection
+        (cd "${dest_dir}" && bash ./setup.bash env) || true
     fi
 
     if [ "$skip_pull_image" -ne 1 ]; then
@@ -995,8 +997,13 @@ ensure_env() {
         return 1
     fi
     cp .env.example .env
-    log "${OK} Created .env from .env.example"
-    log "${INFO} Edit .env if needed (NTRIP_*, VEHICLE_ID, ...)"
+
+    if [ -e /dev/nvidia0 ]; then
+        sed -i 's/^#\s*COMPOSE_FILE=/COMPOSE_FILE=/' .env
+        log "${OK} .env created (GPU)"
+    else
+        log "${OK} .env created (CPU)"
+    fi
 }
 
 preflight() {
