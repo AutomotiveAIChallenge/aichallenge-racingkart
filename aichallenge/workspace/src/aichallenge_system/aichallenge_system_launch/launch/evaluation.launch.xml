@@ -2,7 +2,7 @@
 <launch>
     <arg name="domain_id" default="1"/>
     <arg name="sim_mode" default="eval"/>
-    <arg name="output_run_dir" default="/output"/>
+    <arg name="log_dir" default="/output"/>
     <arg name="capture" default="false"/>
     <arg name="rosbag" default="false"/>
     <arg name="simulation" default="true"/>
@@ -12,7 +12,7 @@
     <log message="Launching evaluation bundle (simulator + autoware)."/>
     <log message=" - domain_id: $(var domain_id)"/>
     <log message=" - sim_mode: $(var sim_mode)"/>
-    <log message=" - output_run_dir: $(var output_run_dir)"/>
+    <log message=" - log_dir: $(var log_dir)"/>
     <log message=" - capture: $(var capture)"/>
     <log message=" - rosbag: $(var rosbag)"/>
     <log message=" - simulation: $(var simulation)"/>
@@ -24,7 +24,7 @@
             <set_env name="ROS_DOMAIN_ID" value="0"/>
             <executable
                 name="aichallenge_awsim_eval"
-                cwd="$(var output_run_dir)"
+                cwd="$(var log_dir)"
                 output="both"
                 cmd="/aichallenge/simulator/AWSIM/AWSIM.x86_64 --start-mode sync --vehicles 1 --laps 6 --timeout 600"/>
             <include file="$(find-pkg-share aichallenge_system_launch)/launch/mode/awsim_state_manager.launch.xml"/>
