@@ -82,7 +82,7 @@
   - `dev` / `eval` イメージのビルド（`./docker_build.sh` のラップ）
   - 評価の起動（docker compose ベース）
 - `make run-sim-eval` は domain id を複数指定して連続実行できる（デフォルト `1,2,3,4`）。
-- 結果/ログは `./output` 配下に集約し、Run 追跡が簡単（`RUN_ID` / `RUN_GROUP` でグルーピング可能）。
+- 結果/ログは `./output` 配下に集約し、Run 追跡が簡単（`LOG_DIR` でグルーピング）。
 - fail-fast:
   - initial pose / 制御要求 / 必須トピックの成立がタイムアウトした時点で打ち切り、次の domain / submit へ進める。
   - スタック/衝突等の復帰不能状態は早期終了できる（打ち切り理由を結果JSONとログへ残す）。
@@ -94,8 +94,7 @@
 ### 3.2 非機能要件
 
 - 失敗時の原因が追える（標準出力だけでなくファイルに残す）。
-- GPU/CPU を切り替え可能（既存 `Makefile` と同等の `DEVICE` 仕様）。
-- compose 実装の差分で落ちない（`gpus: all` は使わず、現状の `runtime: nvidia` + env で統一）。
+- GPU/CPU を切り替え可能（`.env` の `COMPOSE_FILE` で制御）。
 - 成果物は「ディレクトリ丸ごと回収/アップロード」しやすい構成（`output/<run_id>/...` を基本単位）。
 - 運用性: 起動・停止・後片付けが簡単（`docker compose down` で確実に止まる）。
 - 可観測性: 失敗したステップ（build/起動/初期姿勢/トピック/結果生成等）がログから一目で分かる。
@@ -257,7 +256,7 @@ output/
 - build:
   - `./docker_build.sh <target> [--submit ...]` を呼ぶ（既存を再利用）
 - eval:
-  - `make run-sim-eval DEVICE=... DOMAIN_IDS=... RUN_ID=... RUN_GROUP=... ROSBAG=... CAPTURE=...` を呼ぶ（既存を再利用）
+  - `make eval` を呼ぶ（GPU/CPU は `.env` の `COMPOSE_FILE` で制御）
 - down:
   - `docker compose -f docker-compose.yml down --remove-orphans`
 

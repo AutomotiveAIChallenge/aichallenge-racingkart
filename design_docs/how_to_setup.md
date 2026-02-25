@@ -51,3 +51,21 @@ curl -fsSL "https://raw.githubusercontent.com/AutomotiveAIChallenge/aichallenge-
 - 代表コマンド:
   - `./setup.bash preflight`
 - 完了の目安: “Docker” や “Repository” の欄で、次に何をすべきかが分かる
+
+### (B) `.env` を作成する（GPU / CPU の選択）
+
+- やること: `.env.example` をコピーして `.env` を作り、自分の環境に合わせる
+- 代表コマンド:
+  ```bash
+  cp .env.example .env
+  ```
+- GPU / CPU の切り替え:
+  - **GPU あり（デフォルト）**: `.env` をそのまま使う
+    ```
+    COMPOSE_FILE=docker-compose.yml:docker-compose.gpu.yml
+    ```
+  - **CPU のみ**: `.env` から `COMPOSE_FILE` の行を削除またはコメントアウト
+    ```
+    #COMPOSE_FILE=docker-compose.yml:docker-compose.gpu.yml
+    ```
+- 完了の目安: `.env` が存在し、`COMPOSE_FILE` の設定が自分の環境に合っている

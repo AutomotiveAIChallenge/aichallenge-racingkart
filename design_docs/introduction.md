@@ -45,7 +45,7 @@ make down
 | `./run_evaluation.bash` | **単独走行の評価**を実行（AWSIM起動→準備待ち→Autoware起動→終了待ち→停止/片付け） | “評価を回したい” 時 | `output/<run_id>/d1/autoware.log`、`/output/latest/d1` 配下の固定リンク群（`result-details.json` / `capture.mp4` / `rosbag2_autoware.mcap` / `motion_analytics.html`）、`/output/<run_id>/d1/result-details*.json` |
 | `./run_evaluation.bash test` | **短いスモークテスト**（評価を短時間・単純条件で回す） | “まず動くか” だけ確認 | 上と同様（`output/<run_id>/...`） |
 
-> 補足: `./run_evaluation.bash` は内部で `make`（`print-dc` / `print-gpu-env`）を呼び、Makefileと同じGPU選択ロジックで `docker compose` を実行します。
+> 補足: `./run_evaluation.bash` は内部で `docker compose` を実行します。GPU/CPU の切り替えは `.env` の `COMPOSE_FILE` で行います。
 
 ---
 
@@ -60,16 +60,16 @@ make down
 
 環境変数は、コマンドの前に `NAME=value` を付けます（その1回だけ効きます）。
 
-### GPUを使う/使わない（詰まったらまず `cpu`）
+### GPUを使う/使わない（詰まったらまず CPU）
+
+`.env` の `COMPOSE_FILE` を編集します。
 
 ```bash
-DEVICE=cpu make dev
-DEVICE=gpu ./run_evaluation.bash
-```
+# GPU（デフォルト）
+COMPOSE_FILE=docker-compose.yml:docker-compose.gpu.yml
 
-- `DEVICE=auto`（デフォルト）: `/dev/nvidia0` があればGPU扱い
-- `DEVICE=gpu`: GPUを強制（Docker側のNVIDIA設定が必要）
-- `DEVICE=cpu`: GPU設定を使わない（まず動かしたい時の保険）
+# CPU（GPUなし環境、または動作確認したい時）: 上の行を削除またはコメントアウト
+```
 
 ### Domain ID（複数作業/衝突回避）
 
