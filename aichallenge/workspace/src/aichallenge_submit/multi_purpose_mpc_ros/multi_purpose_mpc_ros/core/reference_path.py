@@ -1195,6 +1195,3 @@ if __name__ == '__main__':
         reference_path.waypoints[wp_id].dynamic_border_cells = border_cells[wp_id]
     reference_path.show()
     plt.show()
-
-
-
