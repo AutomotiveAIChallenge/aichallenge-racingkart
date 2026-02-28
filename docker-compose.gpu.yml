@@ -2,8 +2,8 @@ x-gpu: &gpu
   # Ensure the NVIDIA runtime exposes devices+capabilities even when the
   # host environment variables are unset.
   environment:
-    - NVIDIA_VISIBLE_DEVICES=${NVIDIA_VISIBLE_DEVICES:-all}
-    - NVIDIA_DRIVER_CAPABILITIES=${NVIDIA_DRIVER_CAPABILITIES:-all}
+    - NVIDIA_VISIBLE_DEVICES=all
+    - NVIDIA_DRIVER_CAPABILITIES=all
   deploy:
     resources:
       reservations:
@@ -16,5 +16,23 @@ services:
   autoware:
     <<: *gpu
 
+  autoware-command:
+    <<: *gpu
+
+  autoware-simulator-evaluation:
+    <<: *gpu
+
   simulator:
+    <<: *gpu
+
+  autoware-d1:
+    <<: *gpu
+
+  autoware-d2:
+    <<: *gpu
+
+  autoware-d3:
+    <<: *gpu
+
+  autoware-d4:
     <<: *gpu

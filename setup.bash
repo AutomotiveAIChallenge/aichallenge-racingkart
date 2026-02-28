@@ -257,18 +257,10 @@ Usage:
   ./setup.bash preflight      # same as default
   ./setup.bash bootstrap      # install Docker if missing + clone repo + run setup (for fresh PCs)
   ./setup.bash test [BRANCH]  # bootstrap into /tmp (kept by default; default: origin/test)
-  ./setup.bash show workspace # print workspace/bootstrap steps (manual)
-  ./setup.bash show docker    # print Docker install steps (manual)
-  ./setup.bash show rocker    # print rocker install steps (manual, optional)
   ./setup.bash pull image     # docker pull Autoware base image (recommended)
-  ./setup.bash show image     # print Autoware base image pull steps (manual)
-  ./setup.bash show gpu       # print NVIDIA/GPU optional steps (manual)
-  ./setup.bash show awsim     # print AWSIM asset placement steps (manual)
   ./setup.bash download awsim # download & extract AWSIM.zip (repo-local)
   ./setup.bash env            # create .env from .env.example (safe, repo-local)
   ./setup.bash doctor         # run preflight + next steps summary
-  ./setup.bash bootstrap --enter-shell
-                            # after bootstrap, open an interactive shell in the repo dir
   ./setup.bash bootstrap --yes
                             # non-interactive bootstrap (auto-yes)
   ./setup.bash bootstrap --temp-dir [--keep-dir]
@@ -366,58 +358,9 @@ in_group() {
     id -nG "${USER-}" 2>/dev/null | tr ' ' '\n' | grep -qx "$group"
 }
 
-show_workspace_steps() {
-    local default_repo_url='https://github.com/AutomotiveAIChallenge/aichallenge-racingkart.git'
-    local repo_url="${AIC_REPO_URL:-$default_repo_url}"
-
-    cat <<EOF
-# Workspace bootstrap (Ubuntu)
-
-sudo apt update
-sudo apt install -y git
-
-cd ~
-git clone ${repo_url}
-
-# Then run:
-cd aichallenge-racingkart
-./setup.bash
-EOF
-}
-
-show_docker_install_steps() {
-    cat <<'EOF'
-# Docker install (Ubuntu) - based on Docker official docs
-# https://docs.docker.com/engine/install/ubuntu/
-
-sudo apt update
-sudo apt install -y python3-pip ca-certificates curl gnupg
-
-sudo install -m 0755 -d /etc/apt/keyrings
-curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo gpg --dearmor -o /etc/apt/keyrings/docker.gpg
-sudo chmod a+r /etc/apt/keyrings/docker.gpg
-
-echo \
-  "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/ubuntu \
-  $(. /etc/os-release && echo "$VERSION_CODENAME") stable" | \
-  sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
-
-sudo apt-get update
-sudo apt-get install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
-
-# Allow non-root docker usage (requires re-login or 'newgrp docker')
-sudo usermod -aG docker "$USER"
-newgrp docker
-
-# Sanity check
-sudo docker run hello-world
-
-# Optional: Install rocker (only if you want to use docker_run.sh)
-pip install rocker
-echo export PATH='$HOME/.local/bin:$PATH' >> ~/.bashrc
-source ~/.bashrc
-EOF
-}
+### NOTE:
+# The following used to include a `show` command that printed manual setup steps.
+# Keep the CLI surface minimal; prefer `bootstrap` / `doctor` / `download` / `pull`.
 
 install_base_packages() {
     sudo_refresh
@@ -527,28 +470,13 @@ bootstrap_repo_targets() {
         sudo_refresh
     fi
 
-    local dc_override=""
     if [ "$use_sudo" -eq 1 ]; then
-        local compose_file="${COMPOSE_FILE:-docker-compose.yml}"
-        local compose_gpu_file="${COMPOSE_GPU_FILE:-docker-compose.gpu.yml}"
-        local device="${DEVICE:-auto}"
-        local gpu_enabled=0
-        if [ "${device}" = "gpu" ]; then
-            gpu_enabled=1
-        elif [ "${device}" = "auto" ] && [ -e /dev/nvidia0 ]; then
-            gpu_enabled=1
-        fi
-
-        dc_override="sudo docker compose -f ${compose_file}"
-        if [ "$gpu_enabled" -eq 1 ]; then
-            dc_override="${dc_override} -f ${compose_gpu_file}"
-        fi
         warn "${WARN} docker daemon not reachable as user yet; using sudo docker for post-setup steps"
     fi
 
     if [ "${do_make_autoware_build}" = "1" ]; then
         if [ "$use_sudo" -eq 1 ]; then
-            (cd "${repo_dir}" && DC="${dc_override}" make autoware-build) || {
+            (cd "${repo_dir}" && make autoware-build) || {
                 warn "${FAIL} make autoware-build failed"
                 return 0
             }
@@ -582,7 +510,7 @@ bootstrap_repo_targets() {
 
     if [ "${do_make_dev}" = "1" ]; then
         if [ "$use_sudo" -eq 1 ]; then
-            (cd "${repo_dir}" && DC="${dc_override}" make dev DOMAIN_ID="${domain_id}") || warn "${WARN} make dev failed"
+            (cd "${repo_dir}" && make dev DOMAIN_ID="${domain_id}") || warn "${WARN} make dev failed"
         else
             (cd "${repo_dir}" && make dev DOMAIN_ID="${domain_id}") || warn "${WARN} make dev failed"
         fi
@@ -608,7 +536,6 @@ bootstrap() {
     local skip_make=0
     local use_temp_dir=0
     local keep_dir=0
-    local enter_shell=0
     SETUP_ASSUME_YES="${AIC_ASSUME_YES:-0}"
     local owner_user owner_group
     owner_user="$(id -un)"
@@ -658,10 +585,6 @@ bootstrap() {
             SETUP_ASSUME_YES=1
             shift
             ;;
-        --enter-shell)
-            enter_shell=1
-            shift
-            ;;
         -h | --help)
             cat <<'EOF'
 Usage:
@@ -678,7 +601,6 @@ Options:
   --skip-build          Skip ./docker_build.sh dev
   --skip-make           Skip make autoware-build/dev
   --yes, -y             Auto-yes for all steps (non-interactive)
-  --enter-shell         Open an interactive shell in the repo dir when finished
 
 Environment:
   AIC_REPO_URL, AIC_BRANCH, AIC_DIR  Same as options.
@@ -816,7 +738,6 @@ EOF
         skip_awsim=1
         skip_build=1
         skip_make=1
-        enter_shell=0
     fi
 
     log "${INFO} Starting execution..."
@@ -845,11 +766,12 @@ EOF
         skip_awsim=1
         skip_build=1
         skip_make=1
-        enter_shell=0
     fi
 
     if is_repo_root_dir "${dest_dir}"; then
         run_step_if "${do_repo_doctor}" "Run repo preflight: ./setup.bash doctor" bash "${dest_dir}/setup.bash" doctor || true
+        # Create .env with GPU/CPU selection
+        (cd "${dest_dir}" && bash ./setup.bash env) || true
     fi
 
     if [ "$skip_pull_image" -ne 1 ]; then
@@ -867,7 +789,7 @@ EOF
                     warn "${WARN} docker not usable as user yet; building with sudo docker (will chown logs back to you)"
                     (cd "${dest_dir}" && sudo bash ./docker_build.sh dev) || true
                     # Fix ownership if the script had to run under sudo.
-                    (cd "${dest_dir}" && sudo chown -R "${owner_user}:${owner_group}" output/_host 2>/dev/null) || true
+                    (cd "${dest_dir}" && sudo chown -R "${owner_user}:${owner_group}" output/docker 2>/dev/null) || true
                 fi
             fi
         else
@@ -890,37 +812,6 @@ Common commands:
   make autoware-build
   make dev DOMAIN_ID=1
   make down_all   # stop/remove all docker containers (sudo)
-EOF
-
-    if [ "${enter_shell}" -eq 1 ]; then
-        if [ -r /dev/tty ]; then
-            log "${INFO} Entering repo shell: ${dest_dir}"
-            cd "${dest_dir}"
-            exec "${SHELL:-bash}" -i </dev/tty
-        else
-            warn "${WARN} --enter-shell requested but no TTY detected; skipping"
-        fi
-    fi
-}
-
-show_rocker_steps() {
-    cat <<'EOF'
-# Rocker (optional)
-# https://github.com/osrf/rocker
-
-python3 -m pip install --user rocker
-echo export PATH='$HOME/.local/bin:$PATH' >> ~/.bashrc
-source ~/.bashrc
-
-rocker --help
-EOF
-}
-
-show_autoware_image_steps() {
-    cat <<'EOF'
-# Autoware base image (recommended pre-pull, ~10GB)
-docker pull ghcr.io/automotiveaichallenge/autoware-universe:humble-latest
-docker images | head
 EOF
 }
 
@@ -952,7 +843,7 @@ EOF
     done
 
     require_cmd docker || {
-        warn "${INFO} Docker not found. Run: ./setup.bash show docker"
+        warn "${INFO} Docker not found. Run: ./setup.bash bootstrap"
         return 1
     }
 
@@ -972,55 +863,8 @@ EOF
     return 1
 }
 
-show_gpu_optional_steps() {
-    cat <<'EOF'
-# GPU (optional): NVIDIA driver + NVIDIA Container Toolkit + Vulkan
-
-# 1) NVIDIA driver (example)
-sudo add-apt-repository ppa:graphics-drivers/ppa
-sudo apt update
-sudo ubuntu-drivers install
-reboot
-nvidia-smi
-
-# 2) NVIDIA Container Toolkit (for docker --gpus)
-# https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/install-guide.html
-distribution=$(. /etc/os-release;echo $ID$VERSION_ID) \
-  && curl -fsSL https://nvidia.github.io/libnvidia-container/gpgkey | sudo gpg --dearmor -o /usr/share/keyrings/nvidia-container-toolkit-keyring.gpg \
-  && curl -s -L https://nvidia.github.io/libnvidia-container/$distribution/libnvidia-container.list | \
-    sed 's#deb https://#deb [signed-by=/usr/share/keyrings/nvidia-container-toolkit-keyring.gpg] https://#g' | \
-    sudo tee /etc/apt/sources.list.d/nvidia-container-toolkit.list
-
-sudo apt-get update
-sudo apt-get install -y nvidia-container-toolkit
-sudo nvidia-ctk runtime configure --runtime=docker
-sudo systemctl restart docker
-
-sudo docker run --rm --gpus all nvidia/cuda:11.6.2-base-ubuntu20.04 nvidia-smi
-
-# 3) Vulkan (GUI AWSIM)
-sudo apt update
-sudo apt install -y libvulkan1
-EOF
-}
-
-show_awsim_steps() {
-    cat <<'EOF'
-# AWSIM asset placement (manual)
-#
-# Place AWSIM under:
-#   ./aichallenge/simulator/AWSIM/AWSIM.x86_64
-#
-# After extracting, ensure the binary is executable:
-chmod +x ./aichallenge/simulator/AWSIM/AWSIM.x86_64
-
-# Tip: This repo also provides an automated downloader:
-./setup.bash download awsim
-EOF
-}
-
 download_awsim() {
-    local default_url='https://tier4inc-my.sharepoint.com/:u:/g/personal/taiki_tanaka_tier4_jp/IQBPAz39bTOuSbAhNIhYi8SnAQ91zs1rEUq71hMITWWd3ew?e=Ra7Lw2'
+    local default_url='https://tier4inc-my.sharepoint.com/:u:/g/personal/taiki_tanaka_tier4_jp/IQAINoHHCdx9Sr3rYMutSlGtAdldeCbyishT1RmDGbW62tE?e=eg0tUi'
     local url="${AWSIM_ZIP_URL:-$default_url}"
 
     local force=0
@@ -1153,8 +997,13 @@ ensure_env() {
         return 1
     fi
     cp .env.example .env
-    log "${OK} Created .env from .env.example"
-    log "${INFO} Edit .env if needed (NTRIP_*, VEHICLE_ID, ...)"
+
+    if [ -e /dev/nvidia0 ]; then
+        sed -i 's/^#\s*COMPOSE_FILE=/COMPOSE_FILE=/' .env
+        log "${OK} .env created (GPU)"
+    else
+        log "${OK} .env created (CPU)"
+    fi
 }
 
 preflight() {
@@ -1235,7 +1084,7 @@ preflight() {
         fi
     else
         echo "${FAIL} docker not found"
-        echo "    Next: ./setup.bash show docker"
+        echo "    Next: ./setup.bash bootstrap"
         failed=1
     fi
 
@@ -1263,7 +1112,7 @@ preflight() {
         echo "${OK} git repository detected"
     else
         echo "${INFO} git repository not detected (optional)"
-        echo "    Tip: ./setup.bash show workspace"
+        echo "    Tip: clone repository first, then run ./setup.bash doctor"
     fi
     if cmd_exists docker; then
         if docker_run_no_prompt image inspect aichallenge-2025-dev >/dev/null 2>&1; then
@@ -1292,7 +1141,7 @@ preflight() {
         fi
     else
         echo "${WARN} AWSIM binary not found: ${awsim_bin}"
-        echo "    Next: ./setup.bash download awsim   (or: ./setup.bash show awsim)"
+        echo "    Next: ./setup.bash download awsim"
     fi
 
     echo ""
@@ -1300,7 +1149,7 @@ preflight() {
     if cmd_exists nvidia-smi; then
         echo "${INFO} nvidia-smi found (GPU may be available)"
         echo "    To enable GPU containers later, install NVIDIA Container Toolkit:"
-        echo "    ./setup.bash show gpu"
+        echo "    https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/install-guide.html"
     else
         echo "${INFO} nvidia-smi not found (CPU-only is OK)"
     fi
@@ -1316,15 +1165,14 @@ doctor() {
 
     echo ""
     echo "=== Next steps ==="
-    echo "${INFO} 1) If repo not cloned: ./setup.bash show workspace"
-    echo "${INFO} 2) If Docker missing:  ./setup.bash show docker"
-    echo "${INFO} 3) Pull base image:    ./setup.bash pull image (recommended)"
-    echo "${INFO} 4) Download AWSIM:     ./setup.bash download awsim"
-    echo "${INFO} 5) Build image:        ./docker_build.sh dev"
-    echo "${INFO} 6) Build Autoware:     make autoware-build && docker compose logs -f autoware-build"
-    echo "${INFO} 7) Run evaluation:     ./run_evaluation.bash  (optional: ROSBAG=true CAPTURE=true)"
-    echo "${INFO} 8) Start dev:          make dev DOMAIN_ID=1"
-    echo "${INFO} 9) Dev shell:          docker compose run --rm -it --entrypoint bash autoware"
+    echo "${INFO} 1) If Docker missing:  ./setup.bash bootstrap"
+    echo "${INFO} 2) Pull base image:    ./setup.bash pull image (recommended)"
+    echo "${INFO} 3) Download AWSIM:     ./setup.bash download awsim"
+    echo "${INFO} 4) Build image:        ./docker_build.sh dev"
+    echo "${INFO} 5) Build Autoware:     make autoware-build && docker compose logs -f autoware-build"
+    echo "${INFO} 6) Run evaluation:     ./run_evaluation.bash  (optional: ROSBAG=true CAPTURE=true)"
+    echo "${INFO} 7) Start dev:          make dev DOMAIN_ID=1"
+    echo "${INFO} 8) Dev shell:          docker compose run --rm -it --entrypoint bash autoware"
 
     return "$rc"
 }
@@ -1396,33 +1244,6 @@ main() {
             ;;
         *)
             warn "Unknown pull target: ${2-}"
-            usage
-            exit 2
-            ;;
-        esac
-        ;;
-    show)
-        case "${2-}" in
-        workspace)
-            show_workspace_steps
-            ;;
-        docker)
-            show_docker_install_steps
-            ;;
-        rocker)
-            show_rocker_steps
-            ;;
-        image)
-            show_autoware_image_steps
-            ;;
-        gpu)
-            show_gpu_optional_steps
-            ;;
-        awsim)
-            show_awsim_steps
-            ;;
-        *)
-            warn "Unknown show target: ${2-}"
             usage
             exit 2
             ;;

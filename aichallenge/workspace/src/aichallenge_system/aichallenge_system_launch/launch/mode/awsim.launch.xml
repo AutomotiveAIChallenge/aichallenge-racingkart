@@ -2,33 +2,25 @@
 <launch>
     <arg name="capture" default="false"/>
     <arg name="rosbag" default="false"/>
-    <!-- When capture/rosbag is enabled, start immediately by default (do not wait for a specific state). -->
-    <arg name="start_on_vehicle_state" default=""/>
+    <arg name="autostart_orchestrator_params" default="$(find-pkg-share autostart_orchestrator_py)/config/autostart_orchestrator.param.yaml"/>
+    <!-- Default start gating is based on vehicle state: READY/START. -->
+    <arg name="start_on_vehicle_state" default="Ready,Start"/>
     <arg name="stop_on_vehicle_state" default="Finish"/>
     <!-- Keep the orchestrator process alive on success (so it will not terminate the entire launch). -->
     <arg name="exit_on_finish" default="false"/>
-    <arg name="fail_on_timeout" default="true"/>
-
-    <!-- Control mode request: publish /awsim/control_mode_request_topic (std_msgs/Bool). -->
 
     <!-- Adaptors for AWSIM -->
     <group>
         <include file="$(find-pkg-share aichallenge_awsim_adapter)/launch/aichallenge_awsim_adapter.launch.xml"/>
     </group>
 
-	    <!-- AWSIM only: auto request initialpose/control (+ optional capture/rosbag) -->
-	    <node pkg="autostart_orchestrator_py" exec="autostart_orchestrator_node.py" name="autostart_orchestrator" output="screen">
-	      <param name="start_on_vehicle_state" value="$(var start_on_vehicle_state)"/>
-	      <param name="stop_on_vehicle_state" value="$(var stop_on_vehicle_state)"/>
-	      <param name="enable_capture" value="$(var capture)"/>
-	      <param name="enable_rosbag" value="$(var rosbag)"/>
-	      <param name="exit_on_finish" value="$(var exit_on_finish)"/>
-	      <param name="fail_on_timeout" value="$(var fail_on_timeout)"/>
-	      <param name="call_timeout_sec" value="70"/>
-	    </node>
-
-    <node pkg="topic_tools" exec="relay" name="relay_velocity">
-        <param name="input_topic" value="/awsim/velocity_status"/>
-        <param name="output_topic" value="/vehicle/status/velocity_status"/>
-    </node>
+	<!-- AWSIM only: auto request initialpose/control (+ optional capture/rosbag) -->
+	  <node pkg="autostart_orchestrator_py" exec="autostart_orchestrator_node.py" name="autostart_orchestrator" output="both">
+	  <param from="$(var autostart_orchestrator_params)"/>
+	  <param name="start_on_vehicle_state" value="$(var start_on_vehicle_state)"/>
+	  <param name="stop_on_vehicle_state" value="$(var stop_on_vehicle_state)"/>
+	  <param name="enable_capture" value="$(var capture)"/>
+	  <param name="enable_rosbag" value="$(var rosbag)"/>
+	  <param name="exit_on_finish" value="$(var exit_on_finish)"/>
+	</node>
 </launch>

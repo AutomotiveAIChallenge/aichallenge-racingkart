@@ -37,6 +37,7 @@ endforeach()
 install(PROGRAMS
   script/control_mode_adapter.py
   script/object_marker.py
+  script/motion_analytics.py
   DESTINATION lib/${PROJECT_NAME}
 )
 

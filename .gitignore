@@ -8,10 +8,12 @@ rosbag2*/
 *.pyc
 *pem
 *.zstd
+.env
 vehicle/.env
 metadata.yaml
 output/
 outputs/
+aichallenge/capture/
 
 # local notes (do not commit)
 /memo.md

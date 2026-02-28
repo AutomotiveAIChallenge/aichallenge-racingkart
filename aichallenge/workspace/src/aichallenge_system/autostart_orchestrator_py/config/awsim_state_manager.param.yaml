@@ -1,0 +1,19 @@
+/**:
+  ros__parameters:
+    shutdown_grace_sec: 2
+    kill_wait_sec: 10
+    shutdown_delay_sec: 20.0
+    request_launch_shutdown: true
+    awsim_kill_patterns: AWSIM.x86_64
+    exit_on_finish: true
+    shutdown_on_exit: false
+    enable_debug_visualization: true
+    admin_state_topic: /admin/awsim/state
+    # AWSIM Sync mode start trigger bridge.
+    admin_start_topic: /admin/awsim/start
+    # Trigger publish when /admin/awsim/state transitions to one of these states.
+    admin_start_trigger_state: waitstart,ready
+    # Publish start message at most once.
+    admin_start_enabled: true
+    # If false, publish every time the trigger state is observed.
+    admin_start_once: true

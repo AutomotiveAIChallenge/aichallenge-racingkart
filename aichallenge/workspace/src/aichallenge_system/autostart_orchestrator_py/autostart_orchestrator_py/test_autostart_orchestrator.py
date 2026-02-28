@@ -145,26 +145,8 @@ def main() -> int:
     output_lock = threading.Lock()
     try:
         out_dir.mkdir(parents=True, exist_ok=True)
-        fake_rosbag_code = "\n".join(
-            [
-                "import signal",
-                "import time",
-                "import sys",
-                "",
-                "def _handler(_sig, _frm):",
-                "    print('FAKE_ROSBAG: exiting', flush=True)",
-                "    raise SystemExit(0)",
-                "",
-                "signal.signal(signal.SIGINT, _handler)",
-                "signal.signal(signal.SIGTERM, _handler)",
-                "print('FAKE_ROSBAG: started', flush=True)",
-                "while True:",
-                "    time.sleep(1.0)",
-            ]
-        )
 
         params_file = out_dir / "autostart_orchestrator_test_params.yaml"
-        wait_s = min(5, max(1, timeout_sec))
         params_file.write_text(
             "\n".join(
                 [
@@ -177,17 +159,7 @@ def main() -> int:
                     "    enable_rosbag: true",
                     "    call_initial_pose: true",
                     "    request_control_mode: true",
-                    f"    wait_service_timeout_sec: {wait_s}",
-                    "    call_timeout_sec: 3",
-                    f"    finish_wait_timeout_sec: {timeout_sec}",
-                    f"    output_dir: \"{str(out_dir)}\"",
-                    "    rosbag_log_file: \"rosbag_test.log\"",
                     "    exit_on_finish: true",
-                    "    rosbag_argv_override:",
-                    "      - python3",
-                    "      - -c",
-                    "      - |",
-                    *[f"          {line}" for line in fake_rosbag_code.splitlines()],
                     "",
                 ]
             ),
@@ -211,6 +183,10 @@ def main() -> int:
         reader_thread = threading.Thread(target=read_output, daemon=True)
         reader_thread.start()
 
+        while not harness._evt_initial_pose_called.is_set() and proc.poll() is None and not timed_out():
+            harness.publish_state(args.start_on)
+            time.sleep(0.2)
+
         if not harness._evt_initial_pose_called.wait(timeout=5.0):
             raise RuntimeError("initial pose service was not called")
 
@@ -218,7 +194,8 @@ def main() -> int:
             raise RuntimeError("control mode request topic was not observed")
 
         while not harness._evt_capture_called_once.is_set() and proc.poll() is None and not timed_out():
-            harness.publish_state(args.start_on)
+            if args.start_on:
+                harness.publish_state(args.start_on)
             time.sleep(0.2)
 
         if not harness._evt_capture_called_once.is_set():
@@ -241,10 +218,10 @@ def main() -> int:
         if rc != 0:
             raise RuntimeError(f"orchestrator exited with non-zero code: {rc}")
 
-        log_path = out_dir / "rosbag_test.log"
+        log_path = out_dir / "rosbag_autostart.log"
         if not log_path.exists():
             raise RuntimeError(f"rosbag log was not created: {log_path}")
-        if "FAKE_ROSBAG: started" not in log_path.read_text(errors="replace"):
+        if "start-rosbag:" not in log_path.read_text(errors="replace"):
             raise RuntimeError("rosbag did not appear to start (missing marker in log)")
 
         with harness._counts_lock:

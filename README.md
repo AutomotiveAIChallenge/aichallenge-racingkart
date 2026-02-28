@@ -14,6 +14,15 @@ Toward the competition, we will update the following pages to provide informatio
 - [English Page](https://automotiveaichallenge.github.io/aichallenge-documentation-racingkart/en/)
 - [スクリプト設計メモ（評価/ビルド/起動）](aichallenge/README.md)
 
+## リポジトリ構成（トップレベル）
+
+- `aichallenge/`: シミュレータ/Autoware/評価の起動・操作スクリプト群
+- `vehicle/`: 実車環境向け（セットアップ確認、Zenoh、rosbag など）
+- `remote/`: 実車/遠隔接続の補助（SSH/Zenoh/RViz/joy）
+- `design_docs/`: 開発・運用メモ
+- `submit/`: 提出物（tar.gz）置き場
+- `output/`: 実行結果・ログ出力先（生成物）
+
 ## Docker Compose（推奨）
 
 ### 全体像（開発: Makefile / 個別起動）
@@ -25,14 +34,16 @@ Host (you)
         ├─ simulator        (AWSIM)
         ├─ autoware         (Autoware)
         ├─ autoware-command (ros2 service/topic の単発操作)
-        └─ output/ にログ・結果を出力（output/latest は最新runへのsymlink）
+        └─ output/ にログ・結果を出力（最新結果は `/output/latest/d<domain>/`）
 ```
 
 ## まずは読んでほしいもの
 
-[初学者向けセットアップ資料](./design_docs/HowToSetup.md)
+[初学者向けセットアップ資料](./design_docs/how_to_setup.md)
 
-[初学者向け説明資料](./design_docs/Introduction.md)
+[初学者向け説明資料](./design_docs/introduction.md)
+
+[初学者向けリポジトリ入門スライド (Marp)](./design_docs/beginner_marp_deck.marp.md)
 
 ## OSS貢献にあたって
 

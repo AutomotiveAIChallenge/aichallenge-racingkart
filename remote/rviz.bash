@@ -4,7 +4,7 @@ set -euo pipefail
 SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 REPO_ROOT=$(cd "${SCRIPT_DIR}/.." && pwd)
 MAKE_DIR="${REPO_ROOT}"
-COMPOSE_FILE="${REPO_ROOT}/docker-compose.yml"
+# COMPOSE_FILE is defined in .env (read automatically by docker compose)
 
 usage() {
     cat <<'USAGE'
@@ -25,8 +25,8 @@ if [ ! -f "${MAKE_DIR}/Makefile" ]; then
     exit 1
 fi
 
-if [ ! -f "${COMPOSE_FILE}" ]; then
-    echo "Error: docker-compose.yml not found at '${COMPOSE_FILE}'." >&2
+if [ ! -f "${REPO_ROOT}/docker-compose.yml" ]; then
+    echo "Error: docker-compose.yml not found at '${REPO_ROOT}/docker-compose.yml'." >&2
     exit 1
 fi
 
@@ -66,12 +66,14 @@ start)
     make rviz2
     ;;
 down)
-    echo "Stopping and removing 'rviz2' service using compose file '${COMPOSE_FILE}'."
-    docker compose -f "${COMPOSE_FILE}" rm -f -s rviz2
+    echo "Stopping and removing 'rviz2' service."
+    cd "${MAKE_DIR}"
+    docker compose rm -f -s rviz2
     ;;
 restart)
     echo "Restarting 'rviz2' service."
-    docker compose -f "${COMPOSE_FILE}" rm -f -s rviz2
+    cd "${MAKE_DIR}"
+    docker compose rm -f -s rviz2
     echo "Running 'make rviz2' inside '${MAKE_DIR}' after restart."
     cd "${MAKE_DIR}"
     make rviz2

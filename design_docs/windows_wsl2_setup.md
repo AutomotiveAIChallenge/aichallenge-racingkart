@@ -51,7 +51,7 @@ WSLg 環境なら通常 `:0` のような値が入ります（空なら GUI が�
 基本は Linux と同じです。まずはチェックから始めます。
 
 ```bash
-./setup.bash doctor
+./setup.bash preflight
 ```
 
 起動例:
@@ -119,7 +119,7 @@ make autoware-simulator
 
 ### (E) Windows 側のパス/シンボリックリンク
 
-`output/latest` のような symlink を使います。  
+`/output/latest` を固定参照ディレクトリとして使います（`output/latest` への symlink 依存は前提にしません）。  
 Windows ドライブ上だと symlink の扱いが厳しくなるため、やはり `~/...` 配下運用を推奨します。
 
 ---

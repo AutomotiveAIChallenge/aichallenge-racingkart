@@ -1,39 +1,33 @@
 #!/usr/bin/env bash
 
 domain_id="${ROS_DOMAIN_ID:-${DOMAIN_ID:-1}}"
-output_root="${OUTPUT_ROOT:-/output}"
 ts="$(date +%Y%m%d-%H%M%S)"
-out_dir="${output_root}/${ts}/d${domain_id}"
+out_dir="/output/${ts}/d${domain_id}"
 mkdir -p "${out_dir}"
-ln -nfs "${ts}" "${output_root}/latest" || true
 cd "${out_dir}" || exit
+mkdir -p "${out_dir}/ros/log"
+
+log_file="${out_dir}/autoware.log"
+export ROS_HOME="${out_dir}/ros"
+export ROS_LOG_DIR="${ROS_HOME}/log"
+# Keep launch output in-file while still streaming to container stdout.
+exec > >(tee -a "${log_file}") 2>&1
 
 # shellcheck disable=SC1091
 source /aichallenge/workspace/install/setup.bash
+sudo ip link set multicast on lo || true
+sudo sysctl -w net.core.rmem_max=2147483647 >/dev/null || true
 
-pid_sim=""
-pid_aw=""
-cleanup() {
-    local exit_code=$?
-    set +e
-    trap - EXIT INT TERM
-    if [ -n "${pid_aw-}" ]; then
-        kill -INT "${pid_aw}" >/dev/null 2>&1 || true
-        wait "${pid_aw}" >/dev/null 2>&1 || true
-    fi
-    if [ -n "${pid_sim-}" ]; then
-        kill -INT "${pid_sim}" >/dev/null 2>&1 || true
-        wait "${pid_sim}" >/dev/null 2>&1 || true
-    fi
-    return "${exit_code}"
-}
-trap cleanup EXIT
-trap 'cleanup;exit 130' INT
-trap 'cleanup;exit 143' TERM
+sim_mode="${SIM_MODE:-eval}"
+capture="${AIC_CAPTURE:-true}"
+rosbag="${AIC_ROSBAG:-true}"
 
-# AWSIM
-/aichallenge/run_simulator.bash eval >awsim.log 2>&1 &
-pid_sim=$!
-# Autoware
-env OUTPUT_RUN_DIR="${out_dir}" /aichallenge/run_autoware.bash awsim "${domain_id}" >autoware.log 2>&1
-pid_aw=$!
+exec ros2 launch aichallenge_system_launch evaluation.launch.xml \
+    "domain_id:=${domain_id}" \
+    "sim_mode:=${sim_mode}" \
+    "log_dir:=${out_dir}" \
+    "capture:=${capture}" \
+    "rosbag:=${rosbag}" \
+    "simulation:=true" \
+    "use_sim_time:=true" \
+    "run_rviz:=true"

@@ -13,8 +13,8 @@
 
 ## P1（見通し改善 / デバッグ性）
 
-- compose override の DRY 化（`docker-compose.yml` の `x-autoware-base` をテンプレ利用して drift を減らす）
-  - 対象: `run_parallel_submissions.bash`, `docker-compose.yml`
+- 固定サービス構成（`autoware-domain1..4`）と `docker-compose.yml` の drift 防止
+  - 対象: `docker-compose.yml`, `design_docs/run_parallel_submissions.md`
 - ROS2 ログの集約（`ROS_LOG_DIR` 等を `output/<run_id>/dN/ros/log` へ）
   - 対象: `run_parallel_submissions.bash`, `run_evaluation.bash`, `aichallenge/run_evaluation.bash`
 - “最初に見るログ3点セット” の徹底（スクリプト出力 / README / docs の整合）
@@ -53,19 +53,20 @@
 
 既に整備済み（Planの前提）:
 
-- 出力は `output/<run_id>/d<domain_id>/` に割り振り（`output/latest -> <run_id>`）。
+- 出力は `output/<run_id>/d<domain_id>/` に割り振り（`latest` は `/output/latest/...` で固定参照）。
   - 複数提出物のグルーピング: `output/<run_id>/<run_group>/d<domain_id>/`
-- host側ログは `output/_host/<event_id>/`（`output/_host/latest`）。
+- host側ログは `output/docker/<event_id>/`（`output/latest/docker_build.log`, `output/latest/docker_run.log`）。
 - `make run-sim-eval` は `DOMAIN_IDS=...` で複数domain連続実行可能（`run-sim-eval-1-4` あり）。
 - rosbag compose サービスは `stop_signal: SIGINT` + `stop_grace_period` を確保。
 - `./docker_build.sh eval --submit <tar.gz>` で eval 用イメージに提出物を差し替え可能（`Dockerfile` に `ARG SUBMIT_TAR`）。
-- `./docker_build_run.bash` を用意（build/eval/all/down）。
-  - `all` は複数 `--submit` を受け取り、submit順に domain id `1..4` へ割当して連続実行する。
-  - 提出物はホストへ展開せず Docker volume に展開してマウントする（作業ツリーを汚さない）。
+- `run_parallel_submissions.bash` を用意（複数 submit の同時起動）。
+  - `--submit` 順に domain id `1..4` を固定割当して同時起動する。
+  - 提出物はリポジトリ配下の tar.gz をビルド引数として渡し、作業ツリーは直接展開しない。
 
 残課題（今回の主対象）:
 
-- `docker_build_run.bash`（build + run を束ねる統一CLI）の整備・安定化（multi-submit/ログ/停止/成果物整理）。
+- run_parallel運用の共通CLI未整備に伴う課題（`docker_build_run.bash` の未実装対応）：  
+  - multi-submit/ログ/停止/成果物整理を 1 つにまとめる前段計画。
 - fail-fast（初期姿勢/トピック/スタック等）と、その判定・打ち切り理由の成果物への記録。
 
 ---
@@ -81,7 +82,7 @@
   - `dev` / `eval` イメージのビルド（`./docker_build.sh` のラップ）
   - 評価の起動（docker compose ベース）
 - `make run-sim-eval` は domain id を複数指定して連続実行できる（デフォルト `1,2,3,4`）。
-- 結果/ログは `./output` 配下に集約し、Run 追跡が簡単（`RUN_ID` / `RUN_GROUP` でグルーピング可能）。
+- 結果/ログは `./output` 配下に集約し、Run 追跡が簡単（`LOG_DIR` でグルーピング）。
 - fail-fast:
   - initial pose / 制御要求 / 必須トピックの成立がタイムアウトした時点で打ち切り、次の domain / submit へ進める。
   - スタック/衝突等の復帰不能状態は早期終了できる（打ち切り理由を結果JSONとログへ残す）。
@@ -93,8 +94,7 @@
 ### 3.2 非機能要件
 
 - 失敗時の原因が追える（標準出力だけでなくファイルに残す）。
-- GPU/CPU を切り替え可能（既存 `Makefile` と同等の `DEVICE` 仕様）。
-- compose 実装の差分で落ちない（`gpus: all` は使わず、現状の `runtime: nvidia` + env で統一）。
+- GPU/CPU を切り替え可能（`.env` の `COMPOSE_FILE` で制御）。
 - 成果物は「ディレクトリ丸ごと回収/アップロード」しやすい構成（`output/<run_id>/...` を基本単位）。
 - 運用性: 起動・停止・後片付けが簡単（`docker compose down` で確実に止まる）。
 - 可観測性: 失敗したステップ（build/起動/初期姿勢/トピック/結果生成等）がログから一目で分かる。
@@ -122,13 +122,13 @@
 #### 3.3.2 multi-submit 時の前提（複数車両の想定）
 
 - `./docker_build_run.bash all` の `--submit` 指定順に domain id を `1..4` へ固定割当（最大4件）。
-- 提出物はホストへ展開しない（作業ツリーを汚さない）。Docker volume に展開し、compose override で `/aichallenge/workspace/src/aichallenge_submit` にマウントして切替える。
+- 提出物はホストへ展開しない（作業ツリーを汚さない）。Docker 内で submit ごとの eval image をビルドして切替える。
 
 #### 3.3.3 改善したい点（fail-fast とログ）
 
 - initial pose / 制御要求 / トピックチェックが成立しない時点で評価を打ち切り、次の domain / submit に進む。
 - 「どこまで進んだか」がログだけで追えるようにする（状態変数の新設は最終手段、まずはログ整備で十分）。
-- 失敗時に「何を見ればよいか」を `output/_host/.../docker_build_run.log` と `output/<run_id>/.../run_evaluation.log` の先頭に明示する。
+- 失敗時に「何を見ればよいか」を `output/docker/.../docker_build.log` / `output/docker/.../docker_run.log` と `output/<run_id>/d<domain_id>/autoware.log` の先頭に明示する。
 
 #### 3.3.4 起動順序の補足（将来の最適化候補）
 
@@ -146,7 +146,7 @@
 運営が個別に調査するのではなく、参加者が自己診断できる形に寄せるために:
 
 - 実行時の標準出力・標準エラーは可能な限りファイルへ落とし、成果物として回収する
-- `output/_host/...`（ホスト側の統合ログ）と `output/<run_id>/...`（実行成果物）の両方が揃う前提で設計する
+- `output/docker/...`（ホスト側の統合ログ）と `output/<run_id>/...`（実行成果物）の両方が揃う前提で設計する
 
 #### 3.3.6 成果物アップロード方針（Web側の設計メモ）
 
@@ -203,7 +203,6 @@
 output/
   <run_id>/                      # 例: 20260128-145007
     awsim.log
-    run_evaluation.log
     d1/
       autoware.log
       ros/...
@@ -217,11 +216,12 @@ output/
     d2/...
     d3/...
     d4/...
-  latest -> <run_id>
-  _host/
+  latest/...                    # 最新結果への固定参照（d1/d2... のリンク）
+  docker/
     <event_id>/docker_build.log
     <event_id>/docker_run.log
-  _host/latest -> <event_id>
+  latest/docker_build.log -> <event_id>/docker_build-*.log
+  latest/docker_run.log -> <event_id>/docker_run-*.log
 ```
 
 ### 4.2 ログの基本方針
@@ -232,6 +232,9 @@ output/
 ---
 
 ## 5. docker_build_run.bash の仕様（案）
+
+> 現時点では `docker_build_run.bash` は未作成。設計アイデアとして保持し、実装は
+> `run_parallel_submissions.bash` と既存の `run_evaluation.bash` 運用で代替している。
 
 ### 5.1 コマンド体系
 
@@ -253,7 +256,7 @@ output/
 - build:
   - `./docker_build.sh <target> [--submit ...]` を呼ぶ（既存を再利用）
 - eval:
-  - `make run-sim-eval DEVICE=... DOMAIN_IDS=... RUN_ID=... RUN_GROUP=... ROSBAG=... CAPTURE=...` を呼ぶ（既存を再利用）
+  - `make eval` を呼ぶ（GPU/CPU は `.env` の `COMPOSE_FILE` で制御）
 - down:
   - `docker compose -f docker-compose.yml down --remove-orphans`
 
@@ -270,7 +273,7 @@ output/
 
 1) `docker_build_run.bash` 追加（CLI/usage、build/eval/all/down 実装）  
 2) `README.md` に利用例を追記（推奨手順を `docker_build_run.bash` に寄せる）  
-3) ログ整備（`output/_host/<event_id>/docker_build_run.log` など、最小でも1ファイルにまとめる）  
+3) ログ整備（`output/docker/<event_id>/docker_build.log` / `output/docker/<event_id>/docker_run.log` など、最小でも1ファイルにまとめる）  
 4) 動作確認（`--device cpu` で最低限起動、`--device gpu` は環境がある場合のみ）
 
 ---

@@ -1,39 +1,45 @@
 #!/bin/bash
 AWSIM_DIRECTORY=/aichallenge/simulator/AWSIM
-
-mode="${1}"
-echo "[INFO] Starting AWSIM in '${mode}' mode"
-
-if [[ -e /dev/nvidia0 ]]; then
-    echo "[INFO] NVIDIA GPU detected"
-    opts=()
-else
-    echo "[INFO] No NVIDIA GPU detected → running on headless mode"
-    # opts=("-headless")
-    opts=("--camera" "false" "--lidar" "false")
-fi
+mode="${1:-${SIM_MODE:-eval}}"
+[[ ${mode} == "eval" ]] && mode="1p"
 
 case "${mode}" in
 "dev")
-    opts+=("--vehicles" "1" "--laps" "600" "--timeout" "60000000")
-    ;;
-"eval")
-    opts+=("--vehicles" "1" "--laps" "6" "--timeout" "600")
+    start_mode="off"
+    vehicles=1
+    laps=600
+    timeout=60000000
     ;;
 "test")
-    opts+=("--vehicles" "1" "--laps" "1" "--timeout" "90")
+    start_mode="sync"
+    vehicles=1
+    laps=1
+    timeout=90
     ;;
-"2p")
-    opts+=("--vehicles" "2" "--laps" "6" "--timeout" "1200")
+"1p" | "2p" | "3p" | "4p")
+    start_mode="sync"
+    vehicles="${mode%p}"
+    laps=6
+    timeout=600
     ;;
-"3p")
-    opts+=("--vehicles" "3" "--laps" "6" "--timeout" "1200")
+*)
+    echo "invalid mode: ${mode}"
+    echo "supported: dev, test, eval, 1p, 2p, 3p, 4p"
+    exit 1
     ;;
-"4p")
-    opts+=("--vehicles" "4" "--laps" "6" "--timeout" "1200")
-    ;;
-*) ;;
 esac
+
+awsim_extra_args="${AWSIM_EXTRA_ARGS-}"
+if [[ -z ${awsim_extra_args} && ! -e /dev/nvidia0 && ${mode} =~ ^(dev|test|[1-4]p)$ ]]; then
+    awsim_extra_args="--camera false --lidar false"
+fi
+
+echo "[INFO] Starting AWSIM in '${mode}' mode"
+
+declare -a opts=("--start-mode" "${start_mode}" "--vehicles" "${vehicles}" "--laps" "${laps}" "--timeout" "${timeout}")
+declare -a extra_args
+read -r -a extra_args <<<"${awsim_extra_args}"
+opts+=("${extra_args[@]}")
 
 # shellcheck disable=SC1091
 source /aichallenge/workspace/install/setup.bash

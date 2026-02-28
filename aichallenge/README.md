@@ -11,25 +11,6 @@
 - ビルドはコンテナ内で完結: ホスト（src環境）でのビルドは前提にしない
 - cleanup はプロセス停止まで含める: `nohup` で起動したプロセスは PID/SID/PGID を使って停止し、残骸（例: `domain_bridge`）も可能な範囲で回収する
 
-## リポジトリ構成（トップレベル）
-
-- `aichallenge/`: シミュレータ/Autoware/評価の起動・操作スクリプト（本ドキュメントの対象）
-- `vehicle/`: 実車環境向け（セットアップ確認、Zenoh、rosbag等）。詳細は `vehicle/README.md`
-- `remote/`: 実車/遠隔接続の補助（SSH/Zenoh/RViz/joy）
-- `output/`: 実行結果・ログの出力先（タイムスタンプ + `latest`）。ソースではない
-- `submit/`: 提出物（tar.gz）置き場
-- `Dockerfile`: dev/eval 向けイメージ定義
-- `docker_build.sh` / `docker_run.sh` / `docker_exec.sh`: Docker/rocker のラッパ（ホスト側ログを `output/_host/latest/` に残す）
-- `run_parallel_submissions.bash`: 複数提出物を別 eval イメージとしてビルドし、`autoware-d1..dN` を並列起動する（設計メモ: `../design_docs/run_parallel_submissions.md`）
-- `create_submit_file.bash`: `aichallenge/workspace/src/aichallenge_submit` を tar 化して提出物を作成
-- `remote/gui_tools.py`: `remote/` 配下の操作をGUI化（最終的な実体はシェルスクリプトに寄せる）
-- `design_docs/`: 開発/運用メモ（例: `design_docs/run_parallel_submissions.md`）
-- `requirements.txt`: Python ツール類の依存
-- `packages.txt`: 環境構築で必要な apt パッケージ一覧（用途はリポジトリ運用側に寄せる）
-- `.pre-commit-config.yaml`: コード整形/静的解析の自動化（任意、開発体験の改善）
-- `.gitignore`: ビルド成果物や出力の混入防止
-- `LICENSE`: ライセンス
-
 ## `aichallenge/` 配下のディレクトリ（設計思想）
 
 - `aichallenge/workspace/`: ROS 2 overlay の colcon ワークスペース（`src/` をビルドして `install/` を生成）

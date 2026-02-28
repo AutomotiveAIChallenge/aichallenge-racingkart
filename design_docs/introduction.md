@@ -37,15 +37,15 @@ make down
 
 | コマンド | 何をする？（役割） | いつ使う？ | 主なログ/出力 |
 | --- | --- | --- | --- |
-| `./docker_build.sh dev` | **開発用Dockerイメージ**（`aichallenge-2025-dev`）を作る | 初回、またはDockerfile更新後 | `output/_host/latest/docker_build.log` |
+| `./docker_build.sh dev` | **開発用Dockerイメージ**（`aichallenge-2025-dev`）を作る | 初回、またはDockerfile更新後 | `output/docker/<timestamp>-docker_build-<pid>.log`（最新は `output/latest/docker_build.log`） |
 | `make autoware-build` | コンテナ内で **ROSワークスペースをビルド**（`aichallenge/workspace/install/` を作る） | 初回、または依存/ソース更新後 | （ビルド中は端末に表示。失敗したら直近の出力を確認） |
-| `make dev` | **開発起動**: AWSIM + Autoware を起動して “動かしっぱなし” にする | 手元でデバッグ/可視化したい時 | `output/awsim.log` / `output/autoware.log` |
+| `make dev` | **開発起動**: AWSIM + Autoware を起動して “動かしっぱなし” にする | 手元でデバッグ/可視化したい時 | `output/<run_id>/d<id>/awsim.log` / `output/<run_id>/d<id>/autoware.log` |
 | `make ps` | 起動中コンテナを一覧表示 | 「動いてる？」確認 | （標準出力） |
 | `make down` | 起動したコンテナをまとめて停止・片付け | 終了時、または詰まった時 | （標準出力） |
-| `./run_evaluation.bash` | **単独走行の評価**を実行（AWSIM起動→準備待ち→Autoware起動→終了待ち→停止/片付け） | “評価を回したい” 時 | `output/<run_id>/awsim.log` / `output/<run_id>/d1/autoware.log` など、`output/latest -> <run_id>` |
+| `./run_evaluation.bash` | **単独走行の評価**を実行（AWSIM起動→準備待ち→Autoware起動→終了待ち→停止/片付け） | “評価を回したい” 時 | `output/<run_id>/d1/autoware.log`、`/output/latest/d1` 配下の固定リンク群（`result-details.json` / `capture.mp4` / `rosbag2_autoware.mcap` / `motion_analytics.html`）、`/output/<run_id>/d1/result-details*.json` |
 | `./run_evaluation.bash test` | **短いスモークテスト**（評価を短時間・単純条件で回す） | “まず動くか” だけ確認 | 上と同様（`output/<run_id>/...`） |
 
-> 補足: `./run_evaluation.bash` は内部で `make`（`print-dc` / `print-gpu-env`）を呼び、Makefileと同じGPU選択ロジックで `docker compose` を実行します。
+> 補足: `./run_evaluation.bash` は内部で `docker compose` を実行します。GPU/CPU の切り替えは `.env` の `COMPOSE_FILE` で行います。
 
 ---
 
@@ -60,16 +60,16 @@ make down
 
 環境変数は、コマンドの前に `NAME=value` を付けます（その1回だけ効きます）。
 
-### GPUを使う/使わない（詰まったらまず `cpu`）
+### GPUを使う/使わない（詰まったらまず CPU）
+
+`.env` の `COMPOSE_FILE` を編集します。
 
 ```bash
-DEVICE=cpu make dev
-DEVICE=gpu ./run_evaluation.bash
-```
+# GPU（デフォルト）
+COMPOSE_FILE=docker-compose.yml:docker-compose.gpu.yml
 
-- `DEVICE=auto`（デフォルト）: `/dev/nvidia0` があればGPU扱い
-- `DEVICE=gpu`: GPUを強制（Docker側のNVIDIA設定が必要）
-- `DEVICE=cpu`: GPU設定を使わない（まず動かしたい時の保険）
+# CPU（GPUなし環境、または動作確認したい時）: 上の行を削除またはコメントアウト
+```
 
 ### Domain ID（複数作業/衝突回避）
 
@@ -80,13 +80,6 @@ DOMAIN_ID=2 make dev
 
 Domain ID は、同じマシンで複数セットを動かす時などに「衝突を避ける番号」です。
 迷ったら `1` のままでOKです。
-
-### 出力フォルダ名を固定したい（評価時）
-
-```bash
-RUN_ID=try-001 ./run_evaluation.bash
-RUN_GROUP=expA RUN_ID=try-001 ./run_evaluation.bash
-```
 
 ---
 

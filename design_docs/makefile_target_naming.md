@@ -34,8 +34,9 @@
 GPU の扱い:
 
 - `docker-compose.yml` は CPU 前提のベース、`docker-compose.gpu.yml` で GPU 設定を上書きする
-- Makefile 側で `DEVICE=auto|gpu|cpu` に応じて compose file を選択する（`-f docker-compose.yml -f docker-compose.gpu.yml`）
-- 例: `make simulator DEVICE=gpu` → `docker compose -f docker-compose.yml -f docker-compose.gpu.yml up -d simulator`
+- `.env` の `COMPOSE_FILE` で GPU/CPU を切り替える
+- GPU: `COMPOSE_FILE=docker-compose.yml:docker-compose.gpu.yml`
+- CPU: `COMPOSE_FILE` 行を削除またはコメントアウト
 
 ## 3. service の命名
 
