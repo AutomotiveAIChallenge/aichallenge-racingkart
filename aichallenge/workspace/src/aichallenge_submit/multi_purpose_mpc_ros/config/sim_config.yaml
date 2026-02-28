@@ -20,7 +20,6 @@ obstacles:
 reference_path:
   update_by_topic: false # When true, 'circle' must be false
   # path from pkg share dir
-  csv_path: ""
   csv_path: "maps/optimized_traj_mincurv.csv"
   resolution: 0.6
   smoothing_distance: 3
@@ -48,4 +47,3 @@ mpc:
   control_rate: 50.0 # Hz
   steering_tire_angle_gain_var: 1.0
   wp_id_offset: 0
-

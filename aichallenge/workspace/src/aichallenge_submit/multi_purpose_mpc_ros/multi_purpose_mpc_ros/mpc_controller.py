@@ -461,7 +461,7 @@ class MPCController(Node):
             self._last_obstacles_msgs_raw = None
 
         # Laps
-        self._current_laps = None if self.use_sim_time else 1
+        self._current_laps = 1
         self._last_lap_time = 0.0
         self._lap_times = [None] * (self.MAX_LAPS + 1) # +1 means include lap 0
 
@@ -519,7 +519,7 @@ class MPCController(Node):
 
         if self.use_sim_time:
             self._awsim_status_sub = self.create_subscription(
-                Float32MultiArray, "/aichallenge/awsim/status", self._awsim_status_callback, 1)
+                Float32MultiArray, "/awsim/status", self._awsim_status_callback, 1)
             self._condition_sub = self.create_subscription(
                 Int32, "/aichallenge/pitstop/condition", self._condition_callback, 1)
 
@@ -649,10 +649,6 @@ class MPCController(Node):
             rate.sleep()
 
         self.get_logger().info(f">> OK!")
-
-    def _wait_until_awsim_status_received(self, timeout: float = 30.) -> None:
-        if self.use_sim_time:
-            self._wait_until_message_received(lambda: self._current_laps, 'AWSIM status', timeout)
 
     def _wait_until_odom_received(self, timeout: float = 30.) -> None:
         self._wait_until_message_received(lambda: self._odom, 'odometry', timeout)
@@ -865,7 +861,6 @@ class MPCController(Node):
 
     def run(self) -> None:
         self._wait_until_clock_received()
-        self._wait_until_awsim_status_received()
         self._wait_until_odom_received()
         self._wait_until_trajectory_received()
         self._wait_until_path_constraints_received()
@@ -899,7 +894,7 @@ class MPCController(Node):
         self.get_logger().info("START!")
         self.get_logger().info("----------------------")
 
-        while rclpy.ok() and (not self._sim_logger.stop_requested()) and self._current_laps <= self.MAX_LAPS:
+        while rclpy.ok() and (not self._sim_logger.stop_requested()):
             self._control()
 
     def stop(self):
