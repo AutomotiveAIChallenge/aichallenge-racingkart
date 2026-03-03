@@ -1097,6 +1097,21 @@ doctor() {
     fi
 
     echo ""
+    echo "=== X11 Display ==="
+    if [ -z "${DISPLAY:-}" ]; then
+        _chk WARN "DISPLAY not set"
+    else
+        _chk OK "DISPLAY=${DISPLAY}"
+    fi
+    if [ -n "${XAUTHORITY:-}" ] && [ -f "${XAUTHORITY}" ]; then
+        _chk OK "XAUTHORITY=${XAUTHORITY}"
+    else
+        _chk WARN "XAUTHORITY not set or file not found (${XAUTHORITY:-<unset>})"
+        echo "    Fix: export XAUTHORITY=~/.Xauthority"
+        echo "         If that does not work, find the actual path: ps aux | grep Xorg"
+    fi
+
+    echo ""
     echo "=== Next steps ==="
     echo "${INFO} 1) If Docker missing:  ./setup.bash bootstrap"
     echo "${INFO} 2) Pull base image:    ./setup.bash pull image (recommended)"
