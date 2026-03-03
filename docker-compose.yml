@@ -63,7 +63,7 @@ services:
   # Autoware service
   autoware:
     <<: *autoware-base
-    command: ["bash", "-lc", "exec /aichallenge/run_autoware.bash ${RUN_MODE:-awsim} ${DOMAIN_ID:-1} >\"${LOG_DIR:-/output}/autoware.log\" 2>&1"]
+    command: ["bash", "-lc", "exec /aichallenge/run_autoware.bash ${RUN_MODE:-awsim} ${DOMAIN_ID:-1} ${LOG_DIR:-} >\"${LOG_DIR:-/output}/autoware.log\" 2>&1"]
 
   # Autoware service
   autoware-build:

@@ -10,7 +10,8 @@ HOST_GID ?= $(shell id -g)
 export HOST_UID HOST_GID
 
 DOMAIN_ID ?= 1
-LOG_DIR ?=  /output/$(shell date +%Y%m%d-%H%M%S)/d$(DOMAIN_ID)
+TIMESTAMP := $(shell date +%Y%m%d-%H%M%S)
+LOG_DIR ?= /output/$(TIMESTAMP)/d$(DOMAIN_ID)
 
 # autowareのbuildのみ
 autoware-build:

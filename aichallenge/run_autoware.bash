@@ -2,6 +2,7 @@
 
 mode="${1}"
 id="${2:-0}" # デフォルト値0を設定
+out_dir="${3}"
 
 case "${mode}" in
 "awsim")
@@ -36,7 +37,7 @@ if [ "${nounset_was_set}" = "1" ]; then
 fi
 
 ts="$(date +%Y%m%d-%H%M%S)"
-out_dir="/output/${ts}/d${id}"
+out_dir="${out_dir:-/output/${ts}/d${id}}"
 mkdir -p "${out_dir}"
 cd "${out_dir}" || exit
 mkdir -p "${out_dir}/ros/log"
