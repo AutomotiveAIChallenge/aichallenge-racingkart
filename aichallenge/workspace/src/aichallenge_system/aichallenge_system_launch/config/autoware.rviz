@@ -298,6 +298,7 @@ Visualization Manager:
           Value: false
           Visibility:
             Control:
+              MPC: true
               PointStamped: true
               Value: false
             Localization:
@@ -453,6 +454,18 @@ Visualization Manager:
             History Policy: Keep Last
             Reliability Policy: Best Effort
             Value: /control/debug/lookahead_point
+          Value: true
+        - Class: rviz_default_plugins/MarkerArray
+          Enabled: true
+          Name: MPC
+          Namespaces:
+            mpc_pred: true
+          Topic:
+            Depth: 5
+            Durability Policy: Volatile
+            History Policy: Keep Last
+            Reliability Policy: Reliable
+            Value: /mpc/prediction
           Value: true
       Enabled: true
       Name: Control
