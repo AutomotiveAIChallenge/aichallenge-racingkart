@@ -17,7 +17,7 @@
   <log message="echo launch param use_sim_time: $(var use_sim_time) launch_vehicle_interface: $(var launch_vehicle_interface) sensor_model: $(var sensor_model)"/>
 
   <!-- E2E -->
-  <arg name="control_mode" default="mpc"
+  <arg name="control_method" default="mpc"
        description="Select operation mode: mpc (MPC Controller), pure_pursuit (Pure Pursuit), e2e (E2E Controller), or joycon (Manual Teleop)"/>
   <!-- vscan -->
   <arg name="vscan_mode" default="false" description="use scan generator (recommended in simulation)"/>
@@ -136,7 +136,7 @@
   </group>
 
   <!-- Control -->
-  <group if="$(eval &quot;'$(var control_mode)' == 'pure_pursuit'&quot;)">
+  <group if="$(eval &quot;'$(var control_method)' == 'pure_pursuit'&quot;)">
     <!-- Pure Pursuit -->
     <let name="steering_tire_angle_gain_var" value="1.50" if="$(var simulation)"/>
     <let name="steering_tire_angle_gain_var" value="1.639" unless="$(var simulation)"/>
@@ -155,7 +155,7 @@
     </node>
   </group>
 
-  <group if="$(eval &quot;'$(var control_mode)' == 'mpc'&quot;)">
+  <group if="$(eval &quot;'$(var control_method)' == 'mpc'&quot;)">
     <!-- MPC Controller -->
     <node pkg="multi_purpose_mpc_ros" exec="run_mpc_controller.bash"
           name="mpc_controller" output="screen"
@@ -168,7 +168,7 @@
     </node>
   </group>
 
-  <group if="$(eval &quot;'$(var control_mode)' == 'e2e'&quot;)">
+  <group if="$(eval &quot;'$(var control_method)' == 'e2e'&quot;)">
     <!-- TinyLiDARNet -->
     <group if="$(var vscan_mode)">
       <include file="$(find-pkg-share laserscan_generator)/launch/laserscan_generator.launch.xml" >
