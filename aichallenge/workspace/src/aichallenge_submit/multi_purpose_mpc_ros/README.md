@@ -31,3 +31,12 @@ ros2 run multi_purpose_mpc_ros simulation.bash
 ```
 ros2 launch multi_purpose_mpc_ros test.launch.xml
 ```
+
+### Attribution
+This repository includes code derived from:
+
+Multi-Purpose-MPC  
+Author: Mats Steinweg
+Original repository: https://github.com/matssteinweg/Multi-Purpose-MPC
+
+Used with permission from the author.
