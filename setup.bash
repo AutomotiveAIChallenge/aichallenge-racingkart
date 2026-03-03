@@ -1098,12 +1098,12 @@ doctor() {
 
     echo ""
     echo "=== X11 Display ==="
-    if [ -z "${DISPLAY:-}" ]; then
+    if [ -z "${DISPLAY-}" ]; then
         _chk WARN "DISPLAY not set"
     else
         _chk OK "DISPLAY=${DISPLAY}"
     fi
-    if [ -n "${XAUTHORITY:-}" ] && [ -f "${XAUTHORITY}" ]; then
+    if [ -n "${XAUTHORITY-}" ] && [ -f "${XAUTHORITY}" ]; then
         _chk OK "XAUTHORITY=${XAUTHORITY}"
     else
         _chk WARN "XAUTHORITY not set or file not found (${XAUTHORITY:-<unset>})"
