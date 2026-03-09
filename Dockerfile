@@ -39,11 +39,16 @@ ENV CYCLONEDDS_URI=file:///opt/autoware/cyclonedds.xml
 
 COPY vehicle/cyclonedds.xml /opt/autoware/cyclonedds.xml
 
+COPY docker-entrypoint.sh /docker-entrypoint.sh
+RUN chmod +x /docker-entrypoint.sh
+ENTRYPOINT ["/docker-entrypoint.sh"]
+
 FROM common AS dev
 
 RUN echo 'export PS1="\[\e]0;(AIC_DEV) ${debian_chroot:+($debian_chroot)}\u@\h: \w\a\](AIC_DEV) ${debian_chroot:+($debian_chroot)}\[\033[01;32m\]\u@\h\[\033[00m\]:\[\033[01;34m\]\w\[\033[00m\]\$ "' >> /etc/skel/.bashrc
 RUN echo 'cd /aichallenge' >> /etc/skel/.bashrc
 RUN echo 'eval $(resize)' >> /etc/skel/.bashrc
+RUN echo 'source /docker-entrypoint.sh' >> /etc/skel/.bashrc
 ENV RCUTILS_COLORIZED_OUTPUT=1
 
 FROM common AS eval
@@ -68,5 +73,4 @@ RUN bash -c ' \
     rosdep install -y -r -i --from-paths src --ignore-src --rosdistro $ROS_DISTRO; \
     python3 -c "from colcon_core.command import main; import sys; sys.exit(main())" build --symlink-install --allow-overriding gyro_odometer --cmake-args -DCMAKE_BUILD_TYPE=Release'
 
-ENTRYPOINT []
 CMD ["bash", "/aichallenge/run_evaluation.bash"]

@@ -41,9 +41,5 @@ declare -a extra_args
 read -r -a extra_args <<<"${awsim_extra_args}"
 opts+=("${extra_args[@]}")
 
-# shellcheck disable=SC1091
-source /aichallenge/workspace/install/setup.bash
-sudo ip link set multicast on lo
-sudo sysctl -w net.core.rmem_max=2147483647 >/dev/null
 export ROS_DOMAIN_ID=0
 $AWSIM_DIRECTORY/AWSIM.x86_64 "${opts[@]}"
