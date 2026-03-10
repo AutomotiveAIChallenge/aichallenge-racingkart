@@ -42,4 +42,5 @@ read -r -a extra_args <<<"${awsim_extra_args}"
 opts+=("${extra_args[@]}")
 
 export ROS_DOMAIN_ID=0
+export PULSE_SERVER=unix:/run/user/${HOST_UID:-1000}/pulse/native
 $AWSIM_DIRECTORY/AWSIM.x86_64 "${opts[@]}"
