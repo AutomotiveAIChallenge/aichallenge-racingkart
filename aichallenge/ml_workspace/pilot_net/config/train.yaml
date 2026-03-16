@@ -1,0 +1,25 @@
+data:
+  train_dir: "/aichallenge/ml_workspace/pilot_net/dataset/train"
+  val_dir: "/aichallenge/ml_workspace/pilot_net/dataset/val"
+
+model:
+  image_height: 256
+  image_width: 384
+  output_dim: 2
+
+train:
+  batch_size: 32
+  num_workers: 4
+  epochs: 100
+  lr: 0.001
+
+  early_stop_patience: 15
+
+  pretrained_path: null
+
+  save_dir: "/aichallenge/ml_workspace/pilot_net/checkpoints"
+  log_dir: "/aichallenge/ml_workspace/pilot_net/logs"
+
+  loss:
+    steer_weight: 1.0
+    accel_weight: 1.0
