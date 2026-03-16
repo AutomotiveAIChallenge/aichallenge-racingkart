@@ -30,7 +30,7 @@ class ImageControlSequenceDataset(Dataset):
         self.image_width = image_width
 
         try:
-            self.images = np.load(self.seq_dir / "images.npy")  # (N, H, W, 3) uint8
+            self.images = np.load(self.seq_dir / "images.npy", mmap_mode='r')  # (N, H, W, 3) uint8
             self.steers = np.load(self.seq_dir / "steers.npy")
             self.accels = np.load(self.seq_dir / "accelerations.npy")
         except FileNotFoundError as e:

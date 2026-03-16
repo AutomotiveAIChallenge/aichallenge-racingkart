@@ -1,0 +1,14 @@
+/**:
+  ros__parameters:
+    log_interval_sec: 5.0
+
+    model:
+      image_height: 256
+      image_width: 384
+      output_dim: 2
+      ckpt_path: "/path/to/pilotnet_weights.npy"
+
+    control_mode: "fixed"
+    acceleration: 0.3
+
+    debug: false

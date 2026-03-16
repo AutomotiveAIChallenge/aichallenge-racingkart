@@ -1,0 +1,22 @@
+<launch>
+
+  <arg name="pilot_net_node_param" default="$(find-pkg-share pilot_net_controller)/config/pilot_net_node.param.yaml"/>
+  <arg name="use_sim_time" default="true"/>
+  <arg name="image_topic" default="/sensing/camera/image_raw"/>
+  <arg name="control_cmd_topic" default="/awsim/control_cmd"/>
+  <arg name="ckpt_path" default="$(find-pkg-share pilot_net_controller)/ckpt/pilotnet_weights.npy"/>
+
+  <!-- pilot_net_node -->
+  <node pkg="pilot_net_controller"
+        exec="pilot_net_controller_node.py"
+        name="pilot_net_controller_node"
+        output="screen">
+
+    <param from="$(var pilot_net_node_param)"/>
+    <param name="model.ckpt_path" value="$(var ckpt_path)"/>
+    <param name="use_sim_time" value="$(var use_sim_time)"/>
+    <remap from="/image_raw" to="$(var image_topic)"/>
+    <remap from="/awsim/control_cmd" to="$(var control_cmd_topic)"/>
+  </node>
+
+</launch>
