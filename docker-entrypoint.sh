@@ -8,10 +8,8 @@ sysctl -w net.core.rmem_max=2147483647 >/dev/null 2>&1 || true
 
 # --- Source ROS workspace (skip when not yet built, e.g. first dev session) ---
 if [ -f /aichallenge/workspace/install/setup.bash ]; then
-    set +u # setup.bash references unbound variables
     # shellcheck disable=SC1091
-    source /aichallenge/workspace/install/setup.bash
-    set -u
+    set +u && source /aichallenge/workspace/install/setup.bash
 fi
 
 # When used as ENTRYPOINT, hand off to the CMD / command.
