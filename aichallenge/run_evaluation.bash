@@ -14,15 +14,13 @@ export ROS_LOG_DIR="${ROS_HOME}/log"
 exec > >(tee -a "${log_file}") 2>&1
 
 sim_mode="${SIM_MODE:-eval}"
-capture="${AIC_CAPTURE:-true}"
-rosbag="${AIC_ROSBAG:-true}"
 
 exec ros2 launch aichallenge_system_launch evaluation.launch.xml \
     "domain_id:=${domain_id}" \
     "sim_mode:=${sim_mode}" \
     "log_dir:=${out_dir}" \
-    "capture:=${capture}" \
-    "rosbag:=${rosbag}" \
+    "capture:=true" \
+    "rosbag:=true" \
     "simulation:=true" \
     "use_sim_time:=true" \
     "run_rviz:=true"

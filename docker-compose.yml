@@ -15,8 +15,6 @@ x-autoware-base: &autoware-base
     - SIM_MODE=${SIM_MODE:-}
     - CMD=${CMD:-}
     - COLCON_TRACE=${COLCON_TRACE:-}
-    - AIC_CAPTURE=${AIC_CAPTURE:-false}
-    - AIC_ROSBAG=${AIC_ROSBAG:-false}
     - ROS_HOME=${ROS_HOME:-}
     - ROS_LOG_DIR=${ROS_LOG_DIR:-}
   volumes:
@@ -68,7 +66,7 @@ services:
   # Autoware service
   autoware-build:
     <<: *autoware-base 
-    command: ["bash", "-lc", "exec bash /aichallenge/build_autoware.bash ${HOST_UID:-} ${HOST_GID:-}"]
+    command: ["bash", "-lc", "exec /aichallenge/build_autoware.bash ${HOST_UID:-} ${HOST_GID:-}"]
 
   simulator:
     <<: *autoware-base 
@@ -118,4 +116,4 @@ services:
 #### remote visualization services ####
   rviz2:
     <<: *autoware-base 
-    command: ["bash", "-c", "cd /aichallenge && exec bash utils/run_rviz.bash remote"]
+    command: ["bash", "-lc", "exec /aichallenge/utils/run_rviz.bash remote"]
