@@ -86,4 +86,3 @@ def flatten(x):
         np.ndarray: A flattened array of shape (batch_size, num_features).
     """
     return x.reshape(x.shape[0], -1)
-
