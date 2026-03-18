@@ -14,12 +14,15 @@ trap cleanup_rosbag EXIT SIGINT SIGTERM
 # shellcheck disable=SC1091
 source "/aichallenge/workspace/install/setup.bash"
 
+export ROS_DOMAIN_ID="${ROS_DOMAIN_ID:-1}"
+
 # Topics with data (excluding 0-message topics from original bag)
 TOPICS=(
     "/admin/awsim/state"
     "/awsim/control_cmd"
     "/control/command/actuation_cmd"
     "/control/command/control_cmd"
+    "/sensing/camera/image_raw"
     "/sensing/lidar/scan"
 )
 

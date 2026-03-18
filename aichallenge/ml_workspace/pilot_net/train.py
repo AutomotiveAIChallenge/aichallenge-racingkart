@@ -71,11 +71,18 @@ def main(cfg: DictConfig):
         print(f"[INFO] Loaded pretrained model from {cfg.train.pretrained_path}")
 
     # === Loss & Optimizer ===
-    criterion = WeightedSmoothL1Loss(
-        steer_weight=cfg.train.loss.steer_weight,
-        accel_weight=cfg.train.loss.accel_weight
-    )
+    loss_type = cfg.train.get("loss_type", "smooth_l1")
+    if loss_type == "mse":
+        criterion = torch.nn.MSELoss()
+        print(f"[INFO] Using MSELoss")
+    else:
+        criterion = WeightedSmoothL1Loss(
+            steer_weight=cfg.train.loss.steer_weight,
+            accel_weight=cfg.train.loss.accel_weight
+        )
+        print(f"[INFO] Using WeightedSmoothL1Loss")
     optimizer = optim.Adam(model.parameters(), lr=cfg.train.lr)
+    scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='min', factor=0.5, patience=5, verbose=True)
 
     # === Logging & Save dirs ===
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -118,6 +125,8 @@ def main(cfg: DictConfig):
             print(f"Epoch {epoch+1:03d}: Train={avg_train_loss:.4f} | Val={avg_val_loss:.4f}")
             writer.add_scalar("Loss/train", avg_train_loss, epoch + 1)
             writer.add_scalar("Loss/val", avg_val_loss, epoch + 1)
+
+            scheduler.step(avg_val_loss)
 
             if avg_val_loss < best_val_loss:
                 best_val_loss = avg_val_loss

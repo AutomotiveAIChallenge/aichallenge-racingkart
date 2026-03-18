@@ -16,14 +16,9 @@
   <arg name="launch_vehicle_interface" default="false"/>
   <log message="echo launch param use_sim_time: $(var use_sim_time) launch_vehicle_interface: $(var launch_vehicle_interface) sensor_model: $(var sensor_model)"/>
 
-  <!-- E2E -->
-  <arg name="control_method" default="mpc"
-       description="Select operation mode: mpc (MPC Controller), pure_pursuit (Pure Pursuit), e2e (E2E Controller), or joycon (Manual Teleop)"/>
-  <!-- vscan -->
-  <arg name="vscan_mode" default="false" description="use scan generator (recommended in simulation)"/>
-  <arg name="ckpt_path" default="$(find-pkg-share tiny_lidar_net_controller)/ckpt/tinylidarnet_weights.npy"/>
-  <arg name="model_type" default="tiny_lidar_net"/>
-  <arg name="csv_path" default="$(find-pkg-share laserscan_generator)/map/lane.csv"/>
+  <!-- Control method -->
+  <arg name="control_method" default="pilot_net"
+       description="Select control: mpc, pure_pursuit, tiny_lidar_net, pilot_net"/>
 
 
   <!-- Global parameters -->
@@ -137,49 +132,27 @@
 
   <!-- Control -->
   <group if="$(eval &quot;'$(var control_method)' == 'pure_pursuit'&quot;)">
-    <!-- Pure Pursuit -->
-    <let name="steering_tire_angle_gain_var" value="1.50" if="$(var simulation)"/>
-    <let name="steering_tire_angle_gain_var" value="1.639" unless="$(var simulation)"/>
-
-    <node pkg="simple_pure_pursuit" exec="simple_pure_pursuit" name="simple_pure_pursuit_node" output="screen">
-      <param name="use_external_target_vel" value="false"/>
-      <param name="external_target_vel" value="10.0"/>
-      <param name="lookahead_gain" value="0.5"/>
-      <param name="lookahead_min_distance" value="3.5"/>
-      <param name="speed_proportional_gain" value="1.0"/>
-      <param name="steering_tire_angle_gain" value="$(var steering_tire_angle_gain_var)"/>
-
-      <remap from="input/kinematics" to="/localization/kinematic_state"/>
-      <remap from="input/trajectory" to="/planning/scenario_planning/trajectory"/>
-      <remap from="output/control_cmd" to="/control/command/control_cmd"/>
-    </node>
+    <include file="$(find-pkg-share aichallenge_submit_launch)/launch/control/pure_pursuit.launch.xml">
+      <arg name="simulation" value="$(var simulation)"/>
+      <arg name="use_sim_time" value="$(var use_sim_time)"/>
+    </include>
   </group>
 
   <group if="$(eval &quot;'$(var control_method)' == 'mpc'&quot;)">
-    <!-- MPC Controller -->
-    <node pkg="multi_purpose_mpc_ros" exec="run_mpc_controller.bash"
-          name="mpc_controller" output="screen"
-          args="--config_path $(find-pkg-share multi_purpose_mpc_ros)/config/config.yaml
-                --ref_vel_path $(find-pkg-share multi_purpose_mpc_ros)/config/ref_vel.yaml">
-      <param name="use_sim_time" value="$(var use_sim_time)"/>
-      <param name="use_boost_acceleration" value="false"/>
-      <param name="use_obstacle_avoidance" value="false"/>
-      <param name="use_stats" value="false"/>
-    </node>
+    <include file="$(find-pkg-share aichallenge_submit_launch)/launch/control/mpc.launch.xml">
+      <arg name="use_sim_time" value="$(var use_sim_time)"/>
+    </include>
   </group>
 
-  <group if="$(eval &quot;'$(var control_method)' == 'e2e'&quot;)">
-    <!-- TinyLiDARNet -->
-    <group if="$(var vscan_mode)">
-      <include file="$(find-pkg-share laserscan_generator)/launch/laserscan_generator.launch.xml" >
-          <arg name="use_sim_time" value="$(var use_sim_time)"/>
-          <arg name="csv_path" value="$(var csv_path)"/>
-      </include>
-    </group>
-    <include file="$(find-pkg-share tiny_lidar_net_controller)/launch/tiny_lidar_net.launch.xml">
-        <arg name="ckpt_path" value="$(var ckpt_path)"/>
-        <arg name="model_type" value="$(var model_type)"/>
-        <arg name="control_cmd_topic" value="/control/command/control_cmd"/>
+  <group if="$(eval &quot;'$(var control_method)' == 'tiny_lidar_net'&quot;)">
+    <include file="$(find-pkg-share aichallenge_submit_launch)/launch/control/tiny_lidar_net.launch.xml">
+      <arg name="use_sim_time" value="$(var use_sim_time)"/>
+    </include>
+  </group>
+
+  <group if="$(eval &quot;'$(var control_method)' == 'pilot_net'&quot;)">
+    <include file="$(find-pkg-share aichallenge_submit_launch)/launch/control/pilot_net.launch.xml">
+      <arg name="use_sim_time" value="$(var use_sim_time)"/>
     </include>
   </group>
 

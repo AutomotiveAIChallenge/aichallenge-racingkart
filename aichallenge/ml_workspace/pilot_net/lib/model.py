@@ -34,6 +34,9 @@ class PilotNet(nn.Module):
                 nn.init.kaiming_normal_(m.weight, mode='fan_out', nonlinearity='relu')
                 if m.bias is not None:
                     nn.init.constant_(m.bias, 0)
+        # Last layer uses tanh: use small init to avoid saturation
+        nn.init.xavier_normal_(self.fc4.weight, gain=0.1)
+        nn.init.constant_(self.fc4.bias, 0)
 
     def forward(self, x):
         x = F.relu(self.conv1(x))

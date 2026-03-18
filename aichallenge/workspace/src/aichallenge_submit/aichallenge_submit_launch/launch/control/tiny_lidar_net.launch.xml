@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<launch>
+  <arg name="use_sim_time" default="true"/>
+  <arg name="vscan_mode" default="false"/>
+  <arg name="ckpt_path" default="$(find-pkg-share tiny_lidar_net_controller)/ckpt/tinylidarnet_weights.npy"/>
+  <arg name="model_type" default="tiny_lidar_net"/>
+  <arg name="csv_path" default="$(find-pkg-share laserscan_generator)/map/lane.csv"/>
+
+  <group if="$(var vscan_mode)">
+    <include file="$(find-pkg-share laserscan_generator)/launch/laserscan_generator.launch.xml">
+      <arg name="use_sim_time" value="$(var use_sim_time)"/>
+      <arg name="csv_path" value="$(var csv_path)"/>
+    </include>
+  </group>
+
+  <include file="$(find-pkg-share tiny_lidar_net_controller)/launch/tiny_lidar_net.launch.xml">
+    <arg name="ckpt_path" value="$(var ckpt_path)"/>
+    <arg name="model_type" value="$(var model_type)"/>
+    <arg name="control_cmd_topic" value="/control/command/control_cmd"/>
+  </include>
+</launch>

@@ -3,7 +3,7 @@ x-autoware-base: &autoware-base
   privileged: true
   pull_policy: never
   network_mode: host
-  stop_grace_period: 0.1s
+  stop_grace_period: 10s
   environment:
     - DISPLAY=${DISPLAY}
     - USER=${USER}
@@ -40,7 +40,7 @@ x-racing_kart_interface-base: &racing_kart_interface-base
   privileged: true
   pull_policy: never
   network_mode: host
-  stop_grace_period: 0.1s
+  stop_grace_period: 10s
   environment:
     - DISPLAY=${DISPLAY}
     - USER=${USER}

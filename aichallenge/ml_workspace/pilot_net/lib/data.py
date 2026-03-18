@@ -24,10 +24,11 @@ class ImageControlSequenceDataset(Dataset):
         accels: Accelerations.
     """
 
-    def __init__(self, seq_dir: Union[str, Path], image_height: int = 256, image_width: int = 384):
+    def __init__(self, seq_dir: Union[str, Path], image_height: int = 256, image_width: int = 384, training: bool = False):
         self.seq_dir = Path(seq_dir)
         self.image_height = image_height
         self.image_width = image_width
+        self.training = training
 
         try:
             self.images = np.load(self.seq_dir / "images.npy", mmap_mode='r')  # (N, H, W, 3) uint8
@@ -58,8 +59,14 @@ class ImageControlSequenceDataset(Dataset):
         if img.shape[0] != self.image_height or img.shape[1] != self.image_width:
             img = cv2.resize(img, (self.image_width, self.image_height), interpolation=cv2.INTER_LINEAR)
 
-        # Normalize and transpose: HWC -> CHW
+        # Normalize to [0, 1]
         img = img.astype(np.float32) / 255.0
+
+        # Online augmentation (training only, photometric only)
+        if self.training:
+            img = self._augment(img)
+
+        # Transpose: HWC -> CHW
         img = img.transpose(2, 0, 1)  # (3, H, W)
 
         accel = np.float32(self.accels[idx])
@@ -67,6 +74,30 @@ class ImageControlSequenceDataset(Dataset):
         target = np.array([accel, steer], dtype=np.float32)
 
         return img, target
+
+    @staticmethod
+    def _augment(img: np.ndarray) -> np.ndarray:
+        """Apply random photometric augmentations to a [0,1] float32 image."""
+        # Brightness: +/- 20%
+        if np.random.random() < 0.5:
+            delta = np.random.uniform(-0.2, 0.2)
+            img = img + delta
+
+        # Contrast: 0.8 - 1.2x
+        if np.random.random() < 0.5:
+            factor = np.random.uniform(0.8, 1.2)
+            img = (img - 0.5) * factor + 0.5
+
+        # Gaussian noise
+        if np.random.random() < 0.3:
+            noise = np.random.normal(0, 0.02, img.shape).astype(np.float32)
+            img = img + noise
+
+        # Gaussian blur
+        if np.random.random() < 0.2:
+            img = cv2.GaussianBlur(img, (3, 3), 0)
+
+        return np.clip(img, 0.0, 1.0)
 
 
 class MultiSeqConcatDataset(ConcatDataset):
@@ -80,7 +111,8 @@ class MultiSeqConcatDataset(ConcatDataset):
         image_height: int = 256,
         image_width: int = 384,
         include: Optional[List[str]] = None,
-        exclude: Optional[List[str]] = None
+        exclude: Optional[List[str]] = None,
+        training: bool = False
     ):
         dataset_root = Path(dataset_root)
         all_seq_dirs = sorted([p for p in dataset_root.iterdir() if p.is_dir()])
@@ -99,7 +131,7 @@ class MultiSeqConcatDataset(ConcatDataset):
             required_files = ["images.npy", "steers.npy", "accelerations.npy"]
             if all((seq_dir / f).exists() for f in required_files):
                 try:
-                    ds = ImageControlSequenceDataset(seq_dir, image_height=image_height, image_width=image_width)
+                    ds = ImageControlSequenceDataset(seq_dir, image_height=image_height, image_width=image_width, training=training)
                     datasets.append(ds)
                 except Exception as e:
                     logger.warning(f"Failed to load sequence {seq_dir}: {e}")
