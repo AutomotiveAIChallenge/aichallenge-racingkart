@@ -110,6 +110,9 @@ def main(cfg: DictConfig):
                 optimizer.step()
                 train_loss += loss.item()
 
+            if len(train_loader) == 0:
+                print(f"[WARN] Empty train_loader (batch_size > dataset size?). Skipping epoch.")
+                continue
             avg_train_loss = train_loss / len(train_loader)
             avg_val_loss = validate(model, val_loader, device, criterion)
 

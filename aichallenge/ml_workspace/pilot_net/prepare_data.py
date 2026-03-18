@@ -7,27 +7,57 @@ all_dir = Path("dataset/all")
 seq_dirs = sorted([p for p in all_dir.iterdir() if p.is_dir()])
 if not seq_dirs:
     raise RuntimeError(f"No sequence directories found in {all_dir}")
-src = seq_dirs[0]
-print(f"Using source: {src}")
-train_dir = Path("dataset/train") / src.name
-val_dir = Path("dataset/val") / src.name
 
-# Clean previous
+print(f"Found {len(seq_dirs)} sequences: {[p.name for p in seq_dirs]}")
+
+# --- Aggregate all sequences ---
+all_imgs = []
+all_steers = []
+all_accels = []
+
+for src in seq_dirs:
+    required = ["images.npy", "steers.npy", "accelerations.npy"]
+    if not all((src / f).exists() for f in required):
+        print(f"Skipping {src.name}: missing .npy files")
+        continue
+
+    steers = np.clip(np.load(src / "steers.npy"), -1.0, 1.0)
+    accels = np.clip(np.load(src / "accelerations.npy"), -1.0, 1.0)
+    imgs = np.load(src / "images.npy", mmap_mode="r")
+
+    n = len(steers)
+    if n != len(imgs) or n != len(accels):
+        print(f"Skipping {src.name}: length mismatch (imgs={len(imgs)}, steers={len(steers)}, accels={len(accels)})")
+        continue
+
+    all_imgs.append(np.array(imgs))
+    all_steers.append(steers)
+    all_accels.append(accels)
+    print(f"  Loaded {src.name}: {n} samples")
+
+if not all_imgs:
+    raise RuntimeError(f"No valid sequences found in {all_dir}")
+
+imgs = np.concatenate(all_imgs, axis=0)
+steers = np.concatenate(all_steers, axis=0)
+accels = np.concatenate(all_accels, axis=0)
+del all_imgs, all_steers, all_accels
+
+n = len(steers)
+split = int(n * 0.8)
+print(f"Total: {n} samples, split: train={split}, val={n - split}")
+
+# --- Output dirs ---
+train_dir = Path("dataset/train/merged")
+val_dir = Path("dataset/val/merged")
+
 for d in [train_dir, val_dir]:
     if d.exists():
         shutil.rmtree(d)
     d.mkdir(parents=True)
 
-# Load and clip labels to [-1, 1] (model output is tanh)
-steers = np.clip(np.load(src / "steers.npy"), -1.0, 1.0)
-accels = np.clip(np.load(src / "accelerations.npy"), -1.0, 1.0)
-imgs = np.load(src / "images.npy", mmap_mode="r")
-
-n = len(steers)
-split = int(n * 0.8)
-
 # --- Train: original + horizontal flip augmentation ---
-train_imgs_orig = np.array(imgs[:split])
+train_imgs_orig = imgs[:split]
 train_steers_orig = steers[:split]
 train_accels_orig = accels[:split]
 
@@ -46,7 +76,7 @@ np.save(train_dir / "accelerations.npy", train_accels)
 del train_imgs, train_imgs_orig, train_imgs_flip
 
 # --- Val: no augmentation ---
-np.save(val_dir / "images.npy", np.array(imgs[split:]))
+np.save(val_dir / "images.npy", imgs[split:])
 np.save(val_dir / "steers.npy", steers[split:])
 np.save(val_dir / "accelerations.npy", accels[split:])
 del imgs
