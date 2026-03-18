@@ -1,7 +1,3 @@
-import torch
-import torch.nn as nn
-import torch.nn.functional as F
-
 from . import (
     conv2d,
     linear,
@@ -12,76 +8,6 @@ from . import (
     zeros_init,
 )
 
-# ============================================================
-# PyTorch Models
-# ============================================================
-
-class PilotNet(nn.Module):
-    """NVIDIA PilotNet-style CNN model for camera image data (Conv5 + FC4).
-
-    Processes RGB images through 5 convolutional layers followed by
-    4 fully connected layers. Based on the NVIDIA End-to-End Learning paper.
-
-    Attributes:
-        conv1-conv5: Convolutional layers.
-        fc1-fc4: Fully connected layers.
-    """
-
-    def __init__(self, image_height=256, image_width=384, output_dim=2):
-        super().__init__()
-        self.image_height = image_height
-        self.image_width = image_width
-
-        # --- Convolutional Layers ---
-        self.conv1 = nn.Conv2d(3, 24, kernel_size=5, stride=2)
-        self.conv2 = nn.Conv2d(24, 36, kernel_size=5, stride=2)
-        self.conv3 = nn.Conv2d(36, 48, kernel_size=5, stride=2)
-        self.conv4 = nn.Conv2d(48, 64, kernel_size=3)
-        self.conv5 = nn.Conv2d(64, 64, kernel_size=3)
-
-        # --- Calculate Flatten Dimension ---
-        with torch.no_grad():
-            dummy_input = torch.zeros(1, 3, image_height, image_width)
-            x = self.conv5(self.conv4(self.conv3(self.conv2(self.conv1(dummy_input)))))
-            flatten_dim = x.view(1, -1).shape[1]
-
-        # --- Fully Connected Layers ---
-        self.fc1 = nn.Linear(flatten_dim, 100)
-        self.fc2 = nn.Linear(100, 50)
-        self.fc3 = nn.Linear(50, 10)
-        self.fc4 = nn.Linear(10, output_dim)
-
-        self._initialize_weights()
-
-    def _initialize_weights(self):
-        for m in self.modules():
-            if isinstance(m, (nn.Conv2d, nn.Linear)):
-                nn.init.kaiming_normal_(m.weight, mode='fan_out', nonlinearity='relu')
-                if m.bias is not None:
-                    nn.init.constant_(m.bias, 0)
-
-    def forward(self, x):
-        """Forward pass.
-        Args:
-            x (torch.Tensor): Input tensor of shape (batch_size, 3, image_height, image_width).
-        Returns:
-            torch.Tensor: Output tensor of shape (batch_size, output_dim) with Tanh activation.
-        """
-        x = F.relu(self.conv1(x))
-        x = F.relu(self.conv2(x))
-        x = F.relu(self.conv3(x))
-        x = F.relu(self.conv4(x))
-        x = F.relu(self.conv5(x))
-        x = x.view(x.size(0), -1)
-        x = F.relu(self.fc1(x))
-        x = F.relu(self.fc2(x))
-        x = F.relu(self.fc3(x))
-        return torch.tanh(self.fc4(x))
-
-
-# ============================================================
-# NumPy Inference Models (Exact Naming Match with PyTorch)
-# ============================================================
 
 class PilotNetNp:
     """NumPy implementation of PilotNet (Conv5 + FC4).

@@ -97,7 +97,8 @@ class ImageControlSequenceDataset(Dataset):
         if np.random.random() < 0.2:
             img = cv2.GaussianBlur(img, (3, 3), 0)
 
-        return np.clip(img, 0.0, 1.0)
+        np.clip(img, 0.0, 1.0, out=img)
+        return img
 
 
 class MultiSeqConcatDataset(ConcatDataset):

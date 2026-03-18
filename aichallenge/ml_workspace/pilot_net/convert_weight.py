@@ -59,9 +59,6 @@ def load_model(
     Raises:
         FileNotFoundError: If the checkpoint file does not exist at ckpt_path.
     """
-    if not ckpt_path.exists():
-        raise FileNotFoundError(f"Checkpoint not found: {ckpt_path}")
-
     model = PilotNet(image_height=image_height, image_width=image_width, output_dim=output_dim)
     state_dict = torch.load(ckpt_path, map_location="cpu", weights_only=True)
     model.load_state_dict(state_dict)

@@ -13,13 +13,6 @@ from lib.data import MultiSeqConcatDataset
 from lib.loss import WeightedSmoothL1Loss
 
 
-def clean_numerical_tensor(x: torch.Tensor) -> torch.Tensor:
-    """NaN, infを安全に除去"""
-    if torch.isnan(x).any() or torch.isinf(x).any():
-        x = torch.nan_to_num(x, nan=0.0, posinf=0.0, neginf=0.0)
-    return x
-
-
 @hydra.main(config_path="./config", config_name="train", version_base="1.2")
 def main(cfg: DictConfig):
     print("------ Configuration ------")
@@ -33,7 +26,8 @@ def main(cfg: DictConfig):
     train_dataset = MultiSeqConcatDataset(
         cfg.data.train_dir,
         image_height=cfg.model.image_height,
-        image_width=cfg.model.image_width
+        image_width=cfg.model.image_width,
+        training=True
     )
     val_dataset = MultiSeqConcatDataset(
         cfg.data.val_dir,
@@ -81,7 +75,7 @@ def main(cfg: DictConfig):
             accel_weight=cfg.train.loss.accel_weight
         )
         print(f"[INFO] Using WeightedSmoothL1Loss")
-    optimizer = optim.Adam(model.parameters(), lr=cfg.train.lr)
+    optimizer = optim.Adam(model.parameters(), lr=cfg.train.lr, weight_decay=cfg.train.weight_decay)
     scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='min', factor=0.5, patience=5, verbose=True)
 
     # === Logging & Save dirs ===
@@ -108,13 +102,10 @@ def main(cfg: DictConfig):
                 images = images.to(device)
                 targets = targets.to(device)
 
-                images = clean_numerical_tensor(images)
-                targets = clean_numerical_tensor(targets)
-
                 outputs = model(images)
                 loss = criterion(outputs, targets)
 
-                optimizer.zero_grad()
+                optimizer.zero_grad(set_to_none=True)
                 loss.backward()
                 optimizer.step()
                 train_loss += loss.item()
@@ -151,8 +142,6 @@ def validate(model, loader, device, criterion):
         for images, targets in tqdm(loader, desc="[Val]", leave=False):
             images = images.to(device)
             targets = targets.to(device)
-            images = clean_numerical_tensor(images)
-            targets = clean_numerical_tensor(targets)
             outputs = model(images)
             loss = criterion(outputs, targets)
             total_loss += loss.item()

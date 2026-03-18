@@ -18,7 +18,7 @@ python3 prepare_data.py
 
 echo "=== 3. Train ==="
 rm -rf checkpoints logs
-python3 train.py train.epochs=100 train.num_workers=0 train.lr=0.001 +train.loss_type=mse
+python3 train.py train.num_workers=0 +train.loss_type=mse
 
 echo "=== 4. Convert weights ==="
 python3 convert_weight.py \
