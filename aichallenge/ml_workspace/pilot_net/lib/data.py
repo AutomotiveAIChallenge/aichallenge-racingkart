@@ -101,9 +101,10 @@ class ImageControlSequenceDataset(Dataset):
         return img
 
 
-class MultiSeqConcatDataset(ConcatDataset):
+class MultiSeqConcatDataset(Dataset):
     """Aggregates multiple ImageControlSequenceDatasets.
     Same pattern as tiny_lidar_net's MultiSeqConcatDataset.
+    Wraps ConcatDataset but supports the empty-dataset case.
     """
 
     def __init__(
@@ -140,7 +141,19 @@ class MultiSeqConcatDataset(ConcatDataset):
                 logger.warning(f"Skipping {seq_dir.name}: Missing .npy files.")
 
         if not datasets:
-            raise RuntimeError(f"No valid sequences found in {dataset_root}")
+            logger.warning(f"No valid sequences found in {dataset_root}.")
+            self._inner = None
+            self._length = 0
+            return
 
-        super().__init__(datasets)
-        logger.info(f"Loaded {len(datasets)} sequences from {dataset_root}. Total samples: {len(self)}")
+        self._inner = ConcatDataset(datasets)
+        self._length = len(self._inner)
+        logger.info(f"Loaded {len(datasets)} sequences from {dataset_root}. Total samples: {self._length}")
+
+    def __len__(self):
+        return self._length
+
+    def __getitem__(self, idx):
+        if self._inner is None:
+            raise IndexError("Dataset is empty")
+        return self._inner[idx]
