@@ -35,7 +35,6 @@ x-autoware-base: &autoware-base
 
 x-autoware-eval-base: &autoware-eval-base
   <<: *autoware-base
-  image: "aichallenge-2025-eval"
   volumes:
     - ./output:${OUTPUT_ROOT:-/output}
     # /aichallenge is baked into the eval image; intentionally not mounted here
@@ -93,6 +92,7 @@ services:
 
   autoware-simulator-evaluation:
     <<: *autoware-eval-base
+    image: "aichallenge-2025-eval"
     command: ["bash", "-lc", "exec /aichallenge/run_evaluation.bash"]
 
 ### Autoware Service For Parallel Execution ###
