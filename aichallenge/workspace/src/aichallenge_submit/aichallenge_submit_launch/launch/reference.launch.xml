@@ -17,9 +17,8 @@
   <log message="echo launch param use_sim_time: $(var use_sim_time) launch_vehicle_interface: $(var launch_vehicle_interface) sensor_model: $(var sensor_model)"/>
 
   <!-- Control method -->
-  <arg name="control_method" default="pilot_net"
-       description="Select control: mpc, pure_pursuit, tiny_lidar_net, pilot_net"/>
-
+  <arg name="control_method" default="mpc"
+       description="Select control: mpc, pure_pursuit, tiny_lidar_net, pilot_net, joycon"/>
 
   <!-- Global parameters -->
   <group scoped="false">
@@ -154,6 +153,10 @@
     <include file="$(find-pkg-share aichallenge_submit_launch)/launch/control/pilot_net.launch.xml">
       <arg name="use_sim_time" value="$(var use_sim_time)"/>
     </include>
+  </group>
+
+  <group if="$(eval &quot;'$(var control_method)' == 'joycon'&quot;)">
+    <include file="$(find-pkg-share aichallenge_submit_launch)/launch/control/joycon.launch.xml"/>
   </group>
 
   <!-- Map -->
