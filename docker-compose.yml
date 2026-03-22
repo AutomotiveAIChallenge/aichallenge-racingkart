@@ -33,6 +33,18 @@ x-autoware-base: &autoware-base
     - /dev/input
   working_dir: ${LOG_DIR:-/aichallenge}
 
+x-autoware-eval-base: &autoware-eval-base
+  <<: *autoware-base
+  volumes:
+    - ./output:${OUTPUT_ROOT:-/output}
+    # /aichallenge is baked into the eval image; intentionally not mounted here
+    # - ./aichallenge:/aichallenge
+    - /tmp/.X11-unix:/tmp/.X11-unix:rw
+    # Audio (PipeWire/Pulse) socket access on the host
+    - /run/user:/run/user:rw
+    - /dev/dri:/dev/dri
+    - ${XAUTHORITY}:${XAUTHORITY}:rw
+
 x-racing_kart_interface-base: &racing_kart_interface-base
   image: "ghcr.io/tier4/racing_kart_interface:latest-experiment"
   privileged: true
@@ -77,27 +89,28 @@ services:
     command: ["bash", "-lc", "cd ${CMD_WORKDIR:-/aichallenge} && exec bash -lc \"${CMD:-}\""]
 
   autoware-simulator-evaluation:
-    <<: *autoware-base 
+    <<: *autoware-eval-base
+    image: "aichallenge-2025-eval"
     command: ["bash", "-lc", "exec /aichallenge/run_evaluation.bash"]
 
 ### Autoware Service For Parallel Execution ###
   autoware-d1:
-    <<: *autoware-base 
+    <<: *autoware-eval-base
     image: "autoware-d1"
     command: ["bash", "-lc", "exec env ROS_DOMAIN_ID=1 ros2 launch aichallenge_system_launch aichallenge_system.launch.xml simulation:=true use_sim_time:=true run_rviz:=true domain_id:=1 > \"${LOG_DIR:-/output}/autoware.log\" 2>&1"]
 
   autoware-d2:
-    <<: *autoware-base 
+    <<: *autoware-eval-base
     image: "autoware-d2"
     command: ["bash", "-lc", "exec env ROS_DOMAIN_ID=2 ros2 launch aichallenge_system_launch aichallenge_system.launch.xml simulation:=true use_sim_time:=true run_rviz:=true domain_id:=2 > \"${LOG_DIR:-/output}/autoware.log\" 2>&1"]
 
   autoware-d3:
-    <<: *autoware-base
+    <<: *autoware-eval-base
     image: "autoware-d3"
     command: ["bash", "-lc", "exec env ROS_DOMAIN_ID=3 ros2 launch aichallenge_system_launch aichallenge_system.launch.xml simulation:=true use_sim_time:=true run_rviz:=true domain_id:=3 > \"${LOG_DIR:-/output}/autoware.log\" 2>&1"]
 
   autoware-d4:
-    <<: *autoware-base
+    <<: *autoware-eval-base
     image: "autoware-d4"
     command: ["bash", "-lc", "exec env ROS_DOMAIN_ID=4 ros2 launch aichallenge_system_launch aichallenge_system.launch.xml simulation:=true use_sim_time:=true run_rviz:=true domain_id:=4 > \"${LOG_DIR:-/output}/autoware.log\" 2>&1"]
 
