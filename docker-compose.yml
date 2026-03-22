@@ -39,8 +39,6 @@ x-autoware-eval-base: &autoware-eval-base
     - ./output:${OUTPUT_ROOT:-/output}
     # /aichallenge is baked into the eval image; intentionally not mounted here
     # - ./aichallenge:/aichallenge
-    - ./remote:/remote
-    - ./vehicle:/vehicle
     - /tmp/.X11-unix:/tmp/.X11-unix:rw
     # Audio (PipeWire/Pulse) socket access on the host
     - /run/user:/run/user:rw
