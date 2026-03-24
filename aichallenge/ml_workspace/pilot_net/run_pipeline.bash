@@ -18,7 +18,9 @@ python3 prepare_data.py
 
 echo "=== 3. Train ==="
 rm -rf checkpoints logs
-python3 train.py train.num_workers=0 +train.loss_type=mse
+trap 'echo "Training interrupted, continuing pipeline..."' INT
+python3 train.py train.num_workers=0 +train.loss_type=mse || true
+trap - INT
 
 echo "=== 4. Convert weights ==="
 python3 convert_weight.py \
