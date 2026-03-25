@@ -2,7 +2,7 @@
 SHELL := /bin/bash
 
 .PHONY: autoware-build autoware-vehicle autoware-simulator autoware-request-initialpose autoware-request-control autoware-driver-zenoh \
-	simulator simulator-reset dev driver zenoh download rviz2 down ps
+	simulator simulator-reset dev driver zenoh download rviz2 down ps parallel
 
 # Used by docker-compose.yml for build/eval artifact ownership.
 HOST_UID ?= $(shell id -u)
@@ -10,6 +10,7 @@ HOST_GID ?= $(shell id -g)
 export HOST_UID HOST_GID
 
 DOMAIN_ID ?= 1
+VEHICLES ?= 4
 TIMESTAMP := $(shell date +%Y%m%d-%H%M%S)
 LOG_DIR ?= /output/$(TIMESTAMP)/d$(DOMAIN_ID)
 
@@ -62,6 +63,11 @@ dev: simulator autoware-simulator
 eval:
 	@echo "Start evaluation simulation (AWSIM + Autoware, DOMAIN_ID=$(DOMAIN_ID))"
 	docker compose up -d autoware-simulator-evaluation
+	@echo "To stop: make down  (docker compose down --remove-orphans)"
+
+parallel:
+	@echo "Start parallel evaluation ($(VEHICLES) vehicles)"
+	VEHICLES=$(VEHICLES) docker compose up -d autoware-parallel
 	@echo "To stop: make down  (docker compose down --remove-orphans)"
 
 # remote operation (docker compose up -d rviz2)

@@ -74,3 +74,37 @@ RUN bash -c ' \
     python3 -c "from colcon_core.command import main; import sys; sys.exit(main())" build --symlink-install --allow-overriding gyro_odometer --cmake-args -DCMAKE_BUILD_TYPE=Release'
 
 CMD ["bash", "/aichallenge/run_evaluation.bash"]
+
+FROM eval AS parallel
+
+# D2, D3, D4 submission tarballs (D1 is already built by eval stage)
+ARG SUBMIT_TAR_D2=submit/aichallenge_submit2.tar.gz
+ARG SUBMIT_TAR_D3=submit/aichallenge_submit3.tar.gz
+ARG SUBMIT_TAR_D4=submit/aichallenge_submit4.tar.gz
+
+# Create D2-D4 workspaces (D1 = /aichallenge/workspace already exists from eval)
+RUN mkdir -p /aichallenge/d2/workspace/src /aichallenge/d3/workspace/src /aichallenge/d4/workspace/src
+
+COPY ${SUBMIT_TAR_D2} /tmp/s2.tgz
+RUN tar zxf /tmp/s2.tgz -C /aichallenge/d2/workspace/src && rm /tmp/s2.tgz
+
+COPY ${SUBMIT_TAR_D3} /tmp/s3.tgz
+RUN tar zxf /tmp/s3.tgz -C /aichallenge/d3/workspace/src && rm /tmp/s3.tgz
+
+COPY ${SUBMIT_TAR_D4} /tmp/s4.tgz
+RUN tar zxf /tmp/s4.tgz -C /aichallenge/d4/workspace/src && rm /tmp/s4.tgz
+
+# Build D2-D4 workspaces (D1 already built by eval stage)
+RUN bash -c ' \
+    source /autoware/install/setup.bash; \
+    for d in 2 3 4; do \
+        echo "=== Building workspace D${d} ==="; \
+        cd /aichallenge/d${d}/workspace; \
+        rosdep install -y -r -i --from-paths src --ignore-src --rosdistro $ROS_DISTRO || true; \
+        python3 -c "from colcon_core.command import main; import sys; sys.exit(main())" build --symlink-install --allow-overriding gyro_odometer --cmake-args -DCMAKE_BUILD_TYPE=Release || true; \
+    done'
+
+COPY aichallenge/run_parallel.bash /aichallenge/run_parallel.bash
+RUN chmod +x /aichallenge/run_parallel.bash
+
+CMD ["bash", "/aichallenge/run_parallel.bash"]
