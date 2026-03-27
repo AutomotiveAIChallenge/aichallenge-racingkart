@@ -1,6 +1,7 @@
 #ifndef AICHALLENGE_CONTROL_RVIZ_PLUGIN__CONTROL_MODE_PANEL_HPP
 #define AICHALLENGE_CONTROL_RVIZ_PLUGIN__CONTROL_MODE_PANEL_HPP
 
+#include <atomic>
 #include <chrono>
 #include <condition_variable>
 #include <memory>
@@ -81,6 +82,10 @@ private:
   geometry_msgs::msg::PoseWithCovarianceStamped::SharedPtr last_gnss_pose_;
   std::vector<geometry_msgs::msg::Point> last_trajectory_points_;
   std::string last_trajectory_frame_id_;
+
+  std::thread service_call_thread_;
+  std::atomic<bool> service_in_flight_{false};
+  std::atomic<bool> shutting_down_{false};
 };
 
 }  // namespace aichallenge_control_rviz_plugin

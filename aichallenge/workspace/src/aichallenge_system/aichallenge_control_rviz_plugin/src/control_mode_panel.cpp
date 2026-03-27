@@ -121,6 +121,10 @@ ControlModePanel::ControlModePanel(QWidget * parent)
 
 ControlModePanel::~ControlModePanel()
 {
+  shutting_down_.store(true);
+  if (service_call_thread_.joinable()) {
+    service_call_thread_.join();
+  }
   if (initial_pose_executor_) {
     initial_pose_executor_->cancel();
   }
@@ -273,13 +277,23 @@ void ControlModePanel::sendControlModeStop()
 
 void ControlModePanel::sendInitialPoseSet()
 {
+  // Reclaim completed thread or block re-entrant clicks
+  if (service_call_thread_.joinable()) {
+    if (service_in_flight_.load()) {
+      status_label_->setText(tr("Initial Pose: service call already in progress"));
+      return;
+    }
+    service_call_thread_.join();
+  }
+
   ensureInitialPoseServiceClient();
   if (!initial_pose_service_client_) {
     status_label_->setText(tr("Initial Pose: service client not available"));
     return;
   }
 
-  if (!initial_pose_service_client_->wait_for_service(std::chrono::seconds(5))) {
+  // Non-blocking check (0s) to avoid freezing the GUI thread
+  if (!initial_pose_service_client_->wait_for_service(std::chrono::seconds(0))) {
     RCLCPP_WARN(
       initial_pose_node_->get_logger(),
       "heading_pose_initializer service not available; falling back to local GNSS+trajectory publish");
@@ -294,25 +308,38 @@ void ControlModePanel::sendInitialPoseSet()
 
   status_label_->setText(tr("Initial Pose: calling service..."));
 
-  // Use a detached callback to avoid blocking the GUI thread
-  std::thread([this, future = std::move(future)]() mutable {
+  service_in_flight_.store(true);
+
+  // Owned thread — joined in destructor; polls shutting_down_ so it exits promptly on panel close
+  service_call_thread_ = std::thread([this, future = std::move(future)]() mutable {
     try {
+      while (future.wait_for(std::chrono::milliseconds(500)) != std::future_status::ready) {
+        if (shutting_down_.load()) {
+          service_in_flight_.store(false);
+          return;
+        }
+      }
+      if (shutting_down_.load()) {
+        service_in_flight_.store(false);
+        return;
+      }
       auto response = future.get();
+      service_in_flight_.store(false);
       const QString status = QString::fromStdString(
         response->success ? std::string("Initial Pose: ") + response->message
                           : std::string("Initial Pose: FAILED - ") + response->message);
-      if (status_label_) {
-        QMetaObject::invokeMethod(
-          status_label_, "setText", Qt::QueuedConnection, Q_ARG(QString, status));
-      }
+      QMetaObject::invokeMethod(
+        status_label_, "setText", Qt::QueuedConnection, Q_ARG(QString, status));
     } catch (const std::exception & e) {
-      const QString status = tr("Initial Pose: service call failed - %1").arg(e.what());
-      if (status_label_) {
-        QMetaObject::invokeMethod(
-          status_label_, "setText", Qt::QueuedConnection, Q_ARG(QString, status));
+      service_in_flight_.store(false);
+      if (shutting_down_.load()) {
+        return;
       }
+      const QString status = tr("Initial Pose: service call failed - %1").arg(e.what());
+      QMetaObject::invokeMethod(
+        status_label_, "setText", Qt::QueuedConnection, Q_ARG(QString, status));
     }
-  }).detach();
+  });
 }
 
 bool ControlModePanel::tryPublishInitialPose(QString & status_text, bool warn_if_not_ready)
