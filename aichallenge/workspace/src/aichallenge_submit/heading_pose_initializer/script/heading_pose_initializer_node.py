@@ -3,7 +3,7 @@
 
 Logic:
   1. Load a heading-reference CSV at startup as the reference path.
-  2. Publish the raceline as RViz markers (LineStrip + heading arrows).
+  2. Publish heading arrows as RViz markers.
   3. Subscribe to GNSS pose.
   4. On /set_initial_pose service call, find the closest raceline point
      to the current GNSS position, compute yaw, and publish /initialpose.
@@ -20,6 +20,7 @@ import rclpy
 from rclpy.node import Node
 from rclpy.qos import DurabilityPolicy, QoSProfile, ReliabilityPolicy
 
+from geometry_msgs.msg import Point as GPoint
 from geometry_msgs.msg import PoseWithCovarianceStamped
 from std_srvs.srv import Trigger
 from visualization_msgs.msg import Marker, MarkerArray
@@ -62,8 +63,7 @@ class HeadingPoseInitializerNode(Node):
             f"Loaded {len(self._raceline_points)} heading-reference points from {csv_path}"
         )
 
-        self._lock = threading.Lock()
-        self._cv = threading.Condition(self._lock)
+        self._cv = threading.Condition()
         self._last_gnss: Optional[PoseWithCovarianceStamped] = None
 
         reliable_volatile = QoSProfile(
@@ -79,7 +79,7 @@ class HeadingPoseInitializerNode(Node):
             PoseWithCovarianceStamped, pose_topic, reliable_volatile
         )
         self._marker_pub = self.create_publisher(
-            MarkerArray, marker_topic, QoSProfile(depth=1, durability=DurabilityPolicy.TRANSIENT_LOCAL)
+            MarkerArray, marker_topic, reliable_volatile
         )
         self._service = self.create_service(Trigger, service_name, self._on_service)
 
@@ -91,8 +91,6 @@ class HeadingPoseInitializerNode(Node):
             f"heading_pose_initializer ready: gnss={gnss_topic} "
             f"pub={pose_topic} srv={service_name} markers={marker_topic}"
         )
-
-    # ── CSV loading ──────────────────────────────────────────────
 
     def _load_raceline(self, csv_path: str) -> list[_Point]:
         points: list[_Point] = []
@@ -108,8 +106,6 @@ class HeadingPoseInitializerNode(Node):
             self.get_logger().error(f"Failed to load heading CSV: {e}")
         return points
 
-    # ── Marker building ──────────────────────────────────────────
-
     def _build_markers(self) -> MarkerArray:
         ma = MarkerArray()
         pts = self._raceline_points
@@ -117,8 +113,6 @@ class HeadingPoseInitializerNode(Node):
             return ma
 
         now = self.get_clock().now().to_msg()
-
-        # ARROWs: heading direction at intervals
         arrow_id = 0
         for i in range(0, len(pts) - 1, self._arrow_interval):
             yaw = self._compute_yaw(pts, i)
@@ -134,21 +128,18 @@ class HeadingPoseInitializerNode(Node):
             arrow.type = Marker.ARROW
             arrow.action = Marker.ADD
 
-            from geometry_msgs.msg import Point as GPoint
-            start = GPoint()
-            start.x = pts[i].x
-            start.y = pts[i].y
-            start.z = 0.5
-            end = GPoint()
-            end.x = pts[i].x + self._arrow_length * math.cos(yaw)
-            end.y = pts[i].y + self._arrow_length * math.sin(yaw)
-            end.z = 0.5
+            start = GPoint(x=pts[i].x, y=pts[i].y, z=0.5)
+            end = GPoint(
+                x=pts[i].x + self._arrow_length * math.cos(yaw),
+                y=pts[i].y + self._arrow_length * math.sin(yaw),
+                z=0.5,
+            )
             arrow.points.append(start)
             arrow.points.append(end)
 
             arrow.scale.x = 0.25  # shaft diameter
-            arrow.scale.y = 0.3  # head diameter
-            arrow.scale.z = 0.2  # head length
+            arrow.scale.y = 0.3   # head diameter
+            arrow.scale.z = 0.2   # head length
             arrow.color.r = 1.0
             arrow.color.g = 1.0
             arrow.color.b = 1.0
@@ -160,14 +151,10 @@ class HeadingPoseInitializerNode(Node):
     def _publish_markers(self) -> None:
         self._marker_pub.publish(self._marker_array)
 
-    # ── GNSS callback ────────────────────────────────────────────
-
     def _on_gnss(self, msg: PoseWithCovarianceStamped) -> None:
         with self._cv:
             self._last_gnss = msg
             self._cv.notify_all()
-
-    # ── Service handler ──────────────────────────────────────────
 
     def _on_service(
         self,
@@ -222,8 +209,6 @@ class HeadingPoseInitializerNode(Node):
         pose_msg.header.stamp = self.get_clock().now().to_msg()
         pose_msg.header.frame_id = gnss.header.frame_id
         pose_msg.pose.pose.position = gnss.pose.pose.position
-        pose_msg.pose.pose.orientation.x = 0.0
-        pose_msg.pose.pose.orientation.y = 0.0
         pose_msg.pose.pose.orientation.z = math.sin(yaw * 0.5)
         pose_msg.pose.pose.orientation.w = math.cos(yaw * 0.5)
         pose_msg.pose.covariance[35] = 0.5
@@ -235,8 +220,6 @@ class HeadingPoseInitializerNode(Node):
         response.message = f"published initial pose (yaw {yaw_deg:.1f} deg)"
         self.get_logger().info(response.message)
         return response
-
-    # ── Yaw computation ──────────────────────────────────────────
 
     @staticmethod
     def _compute_yaw(points: list[_Point], closest_idx: int) -> Optional[float]:

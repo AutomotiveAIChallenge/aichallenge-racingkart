@@ -146,7 +146,7 @@ void ControlModePanel::onInitialize()
   ensurePublisher();
   ensureInitialPoseWorker();
   ensureInitialPosePublisher();
-  // /set_initial_pose service is now provided by initial_pose_service_py (headless node).
+  // /set_initial_pose service is now provided by heading_pose_initializer (headless node).
   // The RViz panel button calls the service instead of hosting it.
   ensureInitialPoseServiceClient();
   ensureSubscriptions();
@@ -280,7 +280,9 @@ void ControlModePanel::sendInitialPoseSet()
   }
 
   if (!initial_pose_service_client_->wait_for_service(std::chrono::seconds(5))) {
-    // Fallback: try local publish if the headless service is not running
+    RCLCPP_WARN(
+      initial_pose_node_->get_logger(),
+      "heading_pose_initializer service not available; falling back to local GNSS+trajectory publish");
     QString status;
     (void)tryPublishInitialPose(status);
     status_label_->setText(status);
