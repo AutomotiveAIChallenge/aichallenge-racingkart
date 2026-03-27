@@ -146,7 +146,9 @@ void ControlModePanel::onInitialize()
   ensurePublisher();
   ensureInitialPoseWorker();
   ensureInitialPosePublisher();
-  ensureInitialPoseService();
+  // /set_initial_pose service is now provided by initial_pose_service_py (headless node).
+  // The RViz panel button calls the service instead of hosting it.
+  ensureInitialPoseServiceClient();
   ensureSubscriptions();
 }
 
@@ -168,80 +170,15 @@ void ControlModePanel::ensureInitialPosePublisher()
   }
 }
 
-void ControlModePanel::ensureInitialPoseService()
+void ControlModePanel::ensureInitialPoseServiceClient()
 {
   ensureInitialPoseWorker();
-  if (!initial_pose_service_ && initial_pose_node_) {
-    initial_pose_service_ = initial_pose_node_->create_service<std_srvs::srv::Trigger>(
-      initial_pose_service_name_,
-      [this](
-        const std::shared_ptr<std_srvs::srv::Trigger::Request> /*request*/,
-        std::shared_ptr<std_srvs::srv::Trigger::Response> response)
-      {
-        // Make sure subscriptions/publisher are ready before waiting.
-        ensureSubscriptions();
-        ensureInitialPosePublisher();
-
-        // Wait until GNSS and trajectory are ready, then publish /initialpose.
-        // This service is executed on a dedicated MultiThreadedExecutor thread (not the RViz executor),
-        // so waiting here won't stall RViz callbacks.
-        constexpr int kWaitTimeoutSec = 60;
-        const auto deadline =
-          std::chrono::steady_clock::now() + std::chrono::seconds(kWaitTimeoutSec);
-
-        while (std::chrono::steady_clock::now() < deadline) {
-          {
-            std::unique_lock<std::mutex> lock(data_mutex_);
-            const bool ready =
-              static_cast<bool>(last_gnss_pose_) && last_trajectory_points_.size() >= 2;
-            if (ready) {
-              break;
-            }
-            data_cv_.wait_for(lock, std::chrono::milliseconds(200));
-          }
-
-          // Trajectory type may not be known at service call time; keep trying to attach the subscription.
-          ensureSubscriptions();
-        }
-
-        const bool have_gnss = [&]() -> bool {
-          std::lock_guard<std::mutex> lock(data_mutex_);
-          return static_cast<bool>(last_gnss_pose_);
-        }();
-        const bool have_traj = [&]() -> bool {
-          std::lock_guard<std::mutex> lock(data_mutex_);
-          return last_trajectory_points_.size() >= 2;
-        }();
-
-        if (!(have_gnss && have_traj)) {
-
-          response->success = false;
-          response->message = have_gnss ? "timeout waiting for trajectory" : "timeout waiting for GNSS";
-          if (initial_pose_node_) {
-            RCLCPP_ERROR(
-              initial_pose_node_->get_logger(),
-              "Initial pose service timed out (%ds): gnss=%s traj=%s",
-              kWaitTimeoutSec, have_gnss ? "ready" : "missing", have_traj ? "ready" : "missing");
-          }
-          if (status_label_) {
-            const QString text = have_gnss ? tr("Initial Pose: timeout waiting for trajectory")
-                                           : tr("Initial Pose: timeout waiting for GNSS");
-            QMetaObject::invokeMethod(status_label_, "setText", Qt::QueuedConnection, Q_ARG(QString, text));
-          }
-          return;
-        }
-
-        QString status;
-        const bool ok = tryPublishInitialPose(status, /*warn_if_not_ready=*/false);
-        response->success = ok;
-        response->message = status.toStdString();
-
-        if (status_label_) {
-          QMetaObject::invokeMethod(status_label_, "setText", Qt::QueuedConnection, Q_ARG(QString, status));
-        }
-      },
-      rmw_qos_profile_services_default,
-      initial_pose_service_group_);
+  if (!initial_pose_service_client_ && initial_pose_node_) {
+    initial_pose_service_client_ = initial_pose_node_->create_client<std_srvs::srv::Trigger>(
+      initial_pose_service_name_);
+    RCLCPP_INFO(
+      initial_pose_node_->get_logger(),
+      "Initial pose service client created for %s", initial_pose_service_name_.c_str());
   }
 }
 
@@ -336,9 +273,44 @@ void ControlModePanel::sendControlModeStop()
 
 void ControlModePanel::sendInitialPoseSet()
 {
-  QString status;
-  (void)tryPublishInitialPose(status);
-  status_label_->setText(status);
+  ensureInitialPoseServiceClient();
+  if (!initial_pose_service_client_) {
+    status_label_->setText(tr("Initial Pose: service client not available"));
+    return;
+  }
+
+  if (!initial_pose_service_client_->wait_for_service(std::chrono::seconds(5))) {
+    // Fallback: try local publish if the headless service is not running
+    QString status;
+    (void)tryPublishInitialPose(status);
+    status_label_->setText(status);
+    return;
+  }
+
+  auto request = std::make_shared<std_srvs::srv::Trigger::Request>();
+  auto future = initial_pose_service_client_->async_send_request(request);
+
+  status_label_->setText(tr("Initial Pose: calling service..."));
+
+  // Use a detached callback to avoid blocking the GUI thread
+  std::thread([this, future = std::move(future)]() mutable {
+    try {
+      auto response = future.get();
+      const QString status = QString::fromStdString(
+        response->success ? std::string("Initial Pose: ") + response->message
+                          : std::string("Initial Pose: FAILED - ") + response->message);
+      if (status_label_) {
+        QMetaObject::invokeMethod(
+          status_label_, "setText", Qt::QueuedConnection, Q_ARG(QString, status));
+      }
+    } catch (const std::exception & e) {
+      const QString status = tr("Initial Pose: service call failed - %1").arg(e.what());
+      if (status_label_) {
+        QMetaObject::invokeMethod(
+          status_label_, "setText", Qt::QueuedConnection, Q_ARG(QString, status));
+      }
+    }
+  }).detach();
 }
 
 bool ControlModePanel::tryPublishInitialPose(QString & status_text, bool warn_if_not_ready)

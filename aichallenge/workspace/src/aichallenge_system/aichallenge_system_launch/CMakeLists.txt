@@ -38,6 +38,7 @@ install(PROGRAMS
   script/control_mode_adapter.py
   script/object_marker.py
   script/motion_analytics.py
+  script/initial_pose_service_node.py
   DESTINATION lib/${PROJECT_NAME}
 )
 

@@ -45,6 +45,9 @@
       <param name="output_topic" value="/localization/initial_pose3d"/>
     </node>
 
+    <!-- Headless initial pose service (works without RViz / GUI) -->
+    <node pkg="aichallenge_system_launch" exec="initial_pose_service_node.py" name="initial_pose_service" output="both"/>
+
     <!-- Adapters for simulation. -->
     <group if="$(var simulation)">
         <include file="$(find-pkg-share aichallenge_system_launch)/launch/mode/awsim.launch.xml">

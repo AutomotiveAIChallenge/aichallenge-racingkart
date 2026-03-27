@@ -46,7 +46,7 @@ private:
   void ensureInitialPoseWorker();
   void ensurePublisher();
   void ensureInitialPosePublisher();
-  void ensureInitialPoseService();
+  void ensureInitialPoseServiceClient();
   void ensureSubscriptions();
   bool tryPublishInitialPose(QString & status_text, bool warn_if_not_ready = true);
 
@@ -55,7 +55,7 @@ private:
 
   rclcpp::Publisher<geometry_msgs::msg::PoseWithCovarianceStamped>::SharedPtr
     initial_pose_publisher_;
-  rclcpp::Service<std_srvs::srv::Trigger>::SharedPtr initial_pose_service_;
+  rclcpp::Client<std_srvs::srv::Trigger>::SharedPtr initial_pose_service_client_;
   rclcpp::Subscription<geometry_msgs::msg::PoseWithCovarianceStamped>::SharedPtr gnss_pose_sub_;
   rclcpp::Subscription<autoware_auto_planning_msgs::msg::Trajectory>::SharedPtr trajectory_typed_sub_;
 
