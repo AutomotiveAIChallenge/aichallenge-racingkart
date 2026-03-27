@@ -45,8 +45,10 @@
       <param name="output_topic" value="/localization/initial_pose3d"/>
     </node>
 
-    <!-- Headless initial pose service (works without RViz / GUI) -->
-    <node pkg="aichallenge_system_launch" exec="initial_pose_service_node.py" name="initial_pose_service" output="both"/>
+    <!-- Headless heading pose initializer (works without RViz / GUI) -->
+    <node pkg="heading_pose_initializer" exec="heading_pose_initializer_node.py" name="heading_pose_initializer" output="both">
+        <param name="heading_csv_path" value="$(find-pkg-share heading_pose_initializer)/data/heading_reference.csv"/>
+    </node>
 
     <!-- Adapters for simulation. -->
     <group if="$(var simulation)">
