@@ -48,12 +48,18 @@ ControlModePanel::ControlModePanel(QWidget * parent)
 
 ControlModePanel::~ControlModePanel()
 {
+  // Safety: cancel() signals the executor to stop, join() blocks until the
+  // executor thread exits (completing any in-flight callback). After join(),
+  // no more callbacks can run. Any Qt::QueuedConnection events already posted
+  // are cleaned up by QObject::~QObject() (removePostedEvents) when the child
+  // widgets are destroyed, so no use-after-free can occur.
   if (initial_pose_executor_) {
     initial_pose_executor_->cancel();
   }
   if (initial_pose_spin_thread_.joinable()) {
     initial_pose_spin_thread_.join();
   }
+  initial_pose_service_client_.reset();
 }
 
 void ControlModePanel::onInitialize()

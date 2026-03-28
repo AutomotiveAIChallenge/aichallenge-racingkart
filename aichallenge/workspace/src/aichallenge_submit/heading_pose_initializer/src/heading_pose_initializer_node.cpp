@@ -326,7 +326,12 @@ private:
 int main(int argc, char ** argv)
 {
   rclcpp::init(argc, argv);
-  rclcpp::spin(std::make_shared<HeadingPoseInitializerNode>());
+  auto node = std::make_shared<HeadingPoseInitializerNode>();
+  // MultiThreadedExecutor is required: on_service blocks on gnss_cv_.wait_for(),
+  // so the GNSS subscription callback must run on a separate thread.
+  rclcpp::executors::MultiThreadedExecutor executor;
+  executor.add_node(node);
+  executor.spin();
   rclcpp::shutdown();
   return 0;
 }
