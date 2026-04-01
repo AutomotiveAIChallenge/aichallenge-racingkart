@@ -219,14 +219,9 @@ private:
   void gnss_callback(const geometry_msgs::msg::PoseWithCovarianceStamped::SharedPtr msg)
   {
     adjust_covariance(*msg);
+    apply_imu_orientation_fallback(*msg);
 
-    const bool yaw_applied = try_apply_raceline_yaw(*msg);
-
-    if (!yaw_applied) {
-      apply_imu_orientation_fallback(*msg);
-    }
-
-    // Always publish fused pose for EKF measurement input
+    // Publish fused pose for EKF measurement input (GNSS/IMU yaw, not raceline)
     pub_pose_->publish(*msg);
 
     // Store latest for /set_initial_pose service
@@ -235,9 +230,10 @@ private:
       last_gnss_ = msg;
     }
 
-    // One-shot: publish initial_pose3d with dedicated covariance and trigger EKF
+    // One-shot: publish initial_pose3d with raceline yaw and trigger EKF
     if (!initial_pose_published_) {
       auto init_msg = *msg;
+      const bool yaw_applied = try_apply_raceline_yaw(init_msg);
       init_msg.pose.covariance = {};
       init_msg.pose.covariance[7 * 0] = init_cov_x_;
       init_msg.pose.covariance[7 * 1] = init_cov_y_;
