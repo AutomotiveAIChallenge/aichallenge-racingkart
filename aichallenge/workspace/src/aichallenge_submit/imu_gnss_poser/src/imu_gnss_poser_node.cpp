@@ -375,8 +375,14 @@ private:
     pose_msg.pose.covariance[7 * 5] = init_cov_yaw_;
 
     pub_initial_pose_3d_->publish(pose_msg);
-    ekf_triggered_ = false;
-    try_trigger_ekf();
+
+    // Call trigger directly without resetting ekf_triggered_,
+    // so gnss_callback won't re-publish initial_pose3d continuously.
+    if (ekf_trigger_client_->service_is_ready()) {
+      auto req = std::make_shared<std_srvs::srv::SetBool::Request>();
+      req->data = true;
+      ekf_trigger_client_->async_send_request(req);
+    }
 
     const double yaw_deg = *yaw * 180.0 / M_PI;
     char buf[128];
