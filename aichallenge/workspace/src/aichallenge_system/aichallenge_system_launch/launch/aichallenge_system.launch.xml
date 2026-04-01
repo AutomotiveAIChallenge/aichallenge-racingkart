@@ -39,15 +39,10 @@
         <node pkg="rviz2" exec="rviz2" name="rviz2" output="screen" args="-d $(var rviz_config) -s $(find-pkg-share aichallenge_system_launch)/rviz/image/autoware.png"/>
     </group>
 
-    <!-- Initial Pose -->
+    <!-- Initial Pose: relay /initialpose (from RViz) to EKF input -->
     <node pkg="topic_tools" exec="relay" name="initial_pose_relay">
       <param name="input_topic" value="/initialpose"/>
       <param name="output_topic" value="/localization/initial_pose3d"/>
-    </node>
-
-    <!-- Headless heading pose initializer (works without RViz / GUI) -->
-    <node pkg="heading_pose_initializer" exec="heading_pose_initializer_node" name="heading_pose_initializer" output="both">
-      <param name="heading_csv_path" value="$(find-pkg-share heading_pose_initializer)/data/heading_reference.csv"/>
     </node>
 
     <!-- Adapters for simulation. -->

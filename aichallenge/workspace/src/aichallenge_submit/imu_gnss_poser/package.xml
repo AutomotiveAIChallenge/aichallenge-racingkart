@@ -3,15 +3,18 @@
 <package format="3">
   <name>imu_gnss_poser</name>
   <version>0.0.0</version>
-  <description>TODO: Package description</description>
+  <description>GNSS/IMU pose fusion with raceline-based heading and EKF trigger</description>
   <maintainer email="yu.asabe@tier4.jp">Yu Asabe</maintainer>
-  <license>TODO: License declaration</license>
+  <maintainer email="taiki.tanaka@tier4.jp">Taiki Tanaka</maintainer>
+  <license>Apache-2.0</license>
 
   <buildtool_depend>ament_cmake_auto</buildtool_depend>
 
   <depend>rclcpp</depend>
   <depend>geometry_msgs</depend>
   <depend>sensor_msgs</depend>
+  <depend>std_srvs</depend>
+  <depend>visualization_msgs</depend>
 
   <export>
     <build_type>ament_cmake</build_type>
