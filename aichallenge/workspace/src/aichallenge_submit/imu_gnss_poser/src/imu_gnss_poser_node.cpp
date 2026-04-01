@@ -230,18 +230,11 @@ private:
       last_gnss_ = msg;
     }
 
-    // Publish initial_pose3d with raceline yaw until EKF is triggered
+    // Publish initial_pose3d until EKF is triggered (same msg as pub_pose_)
     if (!ekf_triggered_) {
-      auto init_msg = *msg;
-      const bool yaw_applied = try_apply_raceline_yaw(init_msg);
-      init_msg.pose.covariance[7 * 0] = init_cov_x_;
-      init_msg.pose.covariance[7 * 1] = init_cov_y_;
-      init_msg.pose.covariance[7 * 5] = init_cov_yaw_;
-      pub_initial_pose_3d_->publish(init_msg);
+      pub_initial_pose_3d_->publish(*msg);
       if (!initial_pose_published_) {
-        RCLCPP_INFO(
-          get_logger(), "Published initial_pose3d (yaw source: %s)",
-          yaw_applied ? "raceline" : "IMU/GNSS");
+        RCLCPP_INFO(get_logger(), "Publishing initial_pose3d");
         initial_pose_published_ = true;
       }
       try_trigger_ekf();
