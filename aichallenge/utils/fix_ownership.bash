@@ -30,6 +30,15 @@ if [ -z "${TARGET}" ]; then
     exit 0
 fi
 
+case "${TARGET}" in
+    "${OUTPUT_ROOT}"/*)
+        ;;
+    *)
+        warn "TARGET '${TARGET}' is not under OUTPUT_ROOT '${OUTPUT_ROOT}'. Skipping."
+        exit 1
+        ;;
+esac
+
 if [ "$(id -u)" -ne 0 ]; then
     log "Running as non-root user ($(id -u)). Skipping chown."
     exit 0
