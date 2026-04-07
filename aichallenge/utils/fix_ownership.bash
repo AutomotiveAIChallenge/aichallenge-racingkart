@@ -31,12 +31,11 @@ if [ -z "${TARGET}" ]; then
 fi
 
 case "${TARGET}" in
-    "${OUTPUT_ROOT}"/*)
-        ;;
-    *)
-        warn "TARGET '${TARGET}' is not under OUTPUT_ROOT '${OUTPUT_ROOT}'. Skipping."
-        exit 1
-        ;;
+"${OUTPUT_ROOT}"/*) ;;
+*)
+    warn "TARGET '${TARGET}' is not under OUTPUT_ROOT '${OUTPUT_ROOT}'. Skipping."
+    exit 1
+    ;;
 esac
 
 if [ "$(id -u)" -ne 0 ]; then
