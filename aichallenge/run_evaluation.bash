@@ -26,7 +26,4 @@ ros2 launch aichallenge_system_launch evaluation.launch.xml \
     "rosbag:=true" \
     "simulation:=true" \
     "use_sim_time:=true" \
-    "run_rviz:=true" &
-launch_pid=$!
-trap 'kill -TERM "${launch_pid}" 2>/dev/null || true' TERM INT
-wait "${launch_pid}"
+    "run_rviz:=true"
