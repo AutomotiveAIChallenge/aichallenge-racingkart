@@ -17,6 +17,8 @@ x-autoware-base: &autoware-base
     - COLCON_TRACE=${COLCON_TRACE:-}
     - ROS_HOME=${ROS_HOME:-}
     - ROS_LOG_DIR=${ROS_LOG_DIR:-}
+    - HOST_UID=${HOST_UID:-}
+    - HOST_GID=${HOST_GID:-}
   volumes:
     - ./output:${OUTPUT_ROOT:-/output}
     - ./aichallenge:/aichallenge
