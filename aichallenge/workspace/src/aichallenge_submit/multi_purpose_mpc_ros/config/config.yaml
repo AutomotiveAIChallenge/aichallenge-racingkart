@@ -1,5 +1,5 @@
 common:
-  save_config: true
+  save_config: false
 
 sim_logger:
   animation_enabled: false
