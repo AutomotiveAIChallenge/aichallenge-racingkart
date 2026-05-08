@@ -1,7 +1,7 @@
 /**:
   ros__parameters:
     vehicle_state_topic: /awsim/state
-    start_on_vehicle_state: "Ready,Start" # start initialization/recording when either Ready or Start is observed.
+    start_on_vehicle_state: "Grounded,Ready,Start" # start initialization/recording when either Ready or Start is observed.
     stop_on_vehicle_state: "Finish"
     enable_capture: false
     enable_rosbag: false

@@ -2,7 +2,7 @@
 
 mode="${1}"
 id="${2:-0}" # デフォルト値0を設定
-out_dir="${3}"
+out_dir="${3:-/output/$(date +%Y%m%d-%H%M%S)/d${id}}"
 
 case "${mode}" in
 "awsim")
@@ -25,11 +25,10 @@ esac
 
 export ROS_DOMAIN_ID=$id
 
-ts="$(date +%Y%m%d-%H%M%S)"
-out_dir="${out_dir:-/output/${ts}/d${id}}"
 mkdir -p "${out_dir}"
+trap 'bash /aichallenge/utils/fix_ownership.bash "${HOST_UID}" "${HOST_GID}" /output "$(dirname "${out_dir}")"' EXIT
+
 cd "${out_dir}" || exit
-mkdir -p "${out_dir}/ros/log"
 # Persist ROS node logs under the run output directory (so autostart_orchestrator logs are collectible).
 export ROS_HOME="${out_dir}/ros"
 export ROS_LOG_DIR="${ROS_HOME}/log"

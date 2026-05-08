@@ -117,6 +117,8 @@ class AutostartOrchestrator(Node):
         self._cond = threading.Condition()
         self._last_vehicle_state: Optional[str] = None
 
+        rclpy.get_default_context().on_shutdown(self._on_rclpy_shutdown)
+
         self._sub = self.create_subscription(String, vehicle_state_topic, self._on_vehicle_state, 10, callback_group=cbg)
 
         self._cli_initial_pose = self.create_client(
@@ -387,6 +389,10 @@ class AutostartOrchestrator(Node):
         if code and self._exit_code == 0:
             self._exit_code = code
 
+    def _on_rclpy_shutdown(self) -> None:
+        with self._cond:
+            self._cond.notify_all()
+
     def _shutdown(self) -> None:
         if rclpy.ok():
             rclpy.shutdown()
@@ -448,7 +454,7 @@ class AutostartOrchestrator(Node):
             while rclpy.ok():
                 if self._state_matches(self._last_vehicle_state, expected_states):
                     return True, self._last_vehicle_state
-                self._cond.wait()
+                self._cond.wait(timeout=1.0)
         return False, self._last_vehicle_state
 
     def _do_start_initialization(self, call_initial_pose: bool, request_control_mode: bool) -> None:
@@ -987,11 +993,15 @@ def main() -> int:
         node.get_logger().info("KeyboardInterrupt received, shutting down node gracefully.")
     finally:
         exit_code = int(getattr(node, "exit_code", 0))
+        worker = getattr(node, "_worker", None)
         try:
             node.destroy_node()
         finally:
             if rclpy.ok():
                 rclpy.shutdown()
+        if worker is not None and worker.is_alive():
+            worker.join(timeout=5.0)
+        exit_code = max(exit_code, int(getattr(node, "exit_code", 0)))
         return exit_code
 
 

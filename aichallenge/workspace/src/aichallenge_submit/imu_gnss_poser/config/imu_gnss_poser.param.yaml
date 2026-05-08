@@ -1,0 +1,18 @@
+/**:
+  ros__parameters:
+    # GNSS measurement covariance (adjust_covariance: maps GNSS accuracy to EKF input)
+    gnss_covariance:
+      good_threshold: 0.1
+      good_value: 0.1
+      moderate_threshold: 0.5
+      moderate_value: 0.25
+      poor_value: 100.0
+      roll: 100000.0
+      pitch: 100000.0
+      yaw: 100000.0
+
+    # Initial pose covariance (for /set_initial_pose and first initial_pose3d)
+    initial_pose_covariance:
+      x: 0.25
+      y: 0.25
+      yaw: 0.5

@@ -303,6 +303,7 @@ Visualization Manager:
               Value: false
             Localization:
               Fusion: true
+              HeadingPose: true
               KinematicState: true
               Value: false
             Map:
@@ -335,6 +336,18 @@ Visualization Manager:
       Name: Sensing
     - Class: rviz_common/Group
       Displays:
+        - Class: rviz_default_plugins/MarkerArray
+          Enabled: true
+          Name: HeadingPose
+          Namespaces:
+            heading_arrows: true
+          Topic:
+            Depth: 5
+            Durability Policy: Transient Local
+            History Policy: Keep Last
+            Reliability Policy: Reliable
+            Value: /heading_pose_initializer/raceline_markers
+          Value: true
         - Buffer Size: 1
           Class: rviz_plugins::PoseHistory
           Enabled: true
