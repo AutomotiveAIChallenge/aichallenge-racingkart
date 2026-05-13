@@ -65,14 +65,12 @@ dev4: SIM_MODE := 4p
 dev2 dev3 dev4: simulator
 	@N=$(@:dev%=%); \
 	echo "Start $$N-vehicle dev (autoware on ROS_DOMAIN_ID 1..$$N via docker compose -p)"; \
-	for p in $$(seq 1 $$N); do ROS_DOMAIN_ID=$$p docker compose -p $$p up -d autoware; done; \
+	for p in $$(seq 1 $$N); do LOG_DIR=/output/$(TIMESTAMP)/d$$p ROS_DOMAIN_ID=$$p docker compose -p $$p up -d autoware; done; \
 	$(MAKE) autoware-request-start; \
-	echo "To Stop make down$$N"
+	echo "To Stop: make down"
 
-down2 down3 down4:
-	@N=$(@:down%=%); \
-	for p in $$(seq 1 $$N); do docker compose -p $$p down --remove-orphans; done; \
-	docker compose down --remove-orphans
+# Kept for backward compatibility; `make down` already cleans all projects.
+down2 down3 down4: down
 
 eval:
 	@echo "Start evaluation simulation (AWSIM + Autoware, ROS_DOMAIN_ID=$(ROS_DOMAIN_ID))"
@@ -91,13 +89,21 @@ autoware-driver-zenoh:
 	docker compose up -d zenoh
 
 down:
-	docker compose down --remove-orphans
+	@for p in 1 2 3 4; do docker compose -p $$p down --remove-orphans; done
+	@docker compose down --remove-orphans
 
 down_all:
 	sudo docker ps -aq | xargs -r sudo docker rm -f
 
 ps:
-	docker compose ps
+	@docker compose ps
+	@for p in 1 2 3 4; do \
+		out=$$(docker compose -p $$p ps --format '{{.Name}}\t{{.Service}}\t{{.Status}}' 2>/dev/null); \
+		if [ -n "$$out" ]; then \
+			echo "--- project=$$p ---"; \
+			echo "$$out"; \
+		fi; \
+	done
 
 # Download submission data by asking for credentials interactively
 # Usage:
