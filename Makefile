@@ -2,7 +2,7 @@
 SHELL := /bin/bash
 
 .PHONY: autoware-build autoware-vehicle autoware-simulator autoware-request-initialpose autoware-request-control  autoware-request-start autoware-driver-zenoh \
-	simulator simulator-reset dev dev2 dev3 dev4 driver zenoh download rviz2 down down2 down3 down4 ps
+	simulator simulator-reset dev dev2 dev3 dev4 driver zenoh download rviz2 down down2 down3 down4 ps autoware-bash
 
 # Used by docker-compose.yml for build/eval artifact ownership.
 HOST_UID ?= $(shell id -u)
@@ -105,6 +105,13 @@ ps:
 			echo "$$out"; \
 		fi; \
 	done
+
+autoware-bash:
+	@if [ -z "$(VEHICLE_NUM)" ]; then \
+		docker compose exec autoware bash; \
+	else \
+		docker compose -p $(VEHICLE_NUM) exec autoware bash; \
+	fi
 
 # Download submission data by asking for credentials interactively
 # Usage:
