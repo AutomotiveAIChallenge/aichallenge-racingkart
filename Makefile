@@ -9,9 +9,9 @@ HOST_UID ?= $(shell id -u)
 HOST_GID ?= $(shell id -g)
 export HOST_UID HOST_GID
 
-ROS_DOMAIN_ID ?= 1
+ROS_DOMAIN_ID := 1
 TIMESTAMP := $(shell date +%Y%m%d-%H%M%S)
-LOG_DIR ?= /output/$(TIMESTAMP)/d$(ROS_DOMAIN_ID)
+LOG_DIR := /output/$(TIMESTAMP)/d$(ROS_DOMAIN_ID)
 
 # autowareのbuildのみ
 autoware-build:
@@ -40,7 +40,7 @@ autoware-request-start:
 # run simulator (docker compose up -d simulator)
 simulator:
 	@echo "Start AWSIM (SIM_MODE=$(SIM_MODE))"
-	LOG_DIR=$(LOG_DIR) SIM_MODE=$(SIM_MODE) docker compose up -d simulator
+	LOG_DIR=$(LOG_DIR) SIM_MODE=$(SIM_MODE) ROS_DOMAIN_ID=0 docker compose up -d simulator
 
 simulator-reset:
 	@echo "Reset simulation"
@@ -55,6 +55,7 @@ driver:
 zenoh:
 	docker compose up -d zenoh
 
+dev: SIM_MODE := dev
 dev: simulator autoware-simulator
 	@echo "Start dev simulation (AWSIM + Autoware, ROS_DOMAIN_ID=$(ROS_DOMAIN_ID))"
 	@echo "To stop: make down  (docker compose down --remove-orphans)"
