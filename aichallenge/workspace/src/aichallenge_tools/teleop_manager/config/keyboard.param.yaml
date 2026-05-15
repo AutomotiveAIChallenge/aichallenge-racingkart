@@ -1,0 +1,28 @@
+/**:
+  ros__parameters:
+    # --- 基本設定 ---
+    speed_scale:          1.0
+    steer_scale:          1.0
+    timer_hz:             40.0
+
+    # --- キー1回あたりのステップ ---
+    accel_step:           0.3   # w/s 押下ごとの加速度増減 [m/s^2]
+    steer_step:           0.1   # a/d 押下ごとのステア角増減 [rad]
+
+    # --- リミッタ ---
+    max_accel:            2.0   # [m/s^2]
+    max_steer:            0.6   # [rad] (≈34 deg)
+
+    # --- 自動減衰 ---
+    key_timeout_sec:      0.3   # 最後のキー入力からこの時間でゼロへ減衰開始
+    decay_per_sec:        4.0   # 減衰レート (accel/steer をゼロに戻す速度)
+
+    # --- リセット時の初期姿勢 (teleop.param.yaml と同じ既定値) ---
+    reset_frame_id: "map"
+    reset_pos_x: 89666.01577151686
+    reset_pos_y: 43124.3307874416
+    reset_pos_z: 0.0
+    reset_ori_x: 0.0
+    reset_ori_y: 0.0
+    reset_ori_z: -0.9683930510846941
+    reset_ori_w: 0.24942914547196962

@@ -1,0 +1,22 @@
+<launch>
+
+  <arg name="keyboard_param" default="$(find-pkg-share teleop_manager)/config/keyboard.param.yaml"/>
+  <arg name="vehicle_control_topic" default="/awsim/control_cmd"/>
+  <arg name="trigger_topic" default="/rosbag2_recorder/trigger"/>
+
+  <!-- keyboard teleop node -->
+  <!-- Note: this node reads from stdin; for interactive driving, prefer
+       launching via `ros2 run teleop_manager keyboard_teleop_node.py`
+       from a `docker exec -it` shell. When started via launch the node
+       falls back to a no-op mode (logs a warning) if no TTY is attached. -->
+  <node pkg="teleop_manager"
+        exec="keyboard_teleop_node.py"
+        name="keyboard_teleop_node"
+        output="screen"
+        emulate_tty="true">
+    <param from="$(var keyboard_param)"/>
+    <remap from="/awsim/control_cmd" to="$(var vehicle_control_topic)"/>
+    <remap from="/rosbag2_recorder/trigger" to="$(var trigger_topic)"/>
+  </node>
+
+</launch>
