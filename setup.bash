@@ -526,9 +526,9 @@ bootstrap_repo_targets() {
 
     if [ "${do_make_dev}" = "1" ]; then
         if [ "$use_sudo" -eq 1 ]; then
-            (cd "${repo_dir}" && make dev DOMAIN_ID="${domain_id}") || warn "${WARN} make dev failed"
+            (cd "${repo_dir}" && make dev ROS_DOMAIN_ID="${domain_id}") || warn "${WARN} make dev failed"
         else
-            (cd "${repo_dir}" && make dev DOMAIN_ID="${domain_id}") || warn "${WARN} make dev failed"
+            (cd "${repo_dir}" && make dev ROS_DOMAIN_ID="${domain_id}") || warn "${WARN} make dev failed"
         fi
     fi
 }
@@ -694,7 +694,7 @@ EOF
     log_step "Download AWSIM.zip and extract $(_skip_note "$skip_awsim" "--skip-awsim")"
     log_step "Build dev image: ./docker_build.sh dev $(_skip_note "$skip_build" "--skip-build")"
     log_step "make autoware-build $(_skip_note "$skip_make" "--skip-make")"
-    log_step "make dev DOMAIN_ID=${DOMAIN_ID:-1} $(_skip_note "$skip_make" "--skip-make")"
+    log_step "make dev ROS_DOMAIN_ID=${ROS_DOMAIN_ID:-1} $(_skip_note "$skip_make" "--skip-make")"
 
     confirm_step "Install base packages (apt)" && do_install_base=1 || true
     confirm_step "Install Docker (if missing)" && do_install_docker=1 || true
@@ -712,7 +712,7 @@ EOF
         [ "$skip_build" -ne 1 ] && confirm_step "Build dev image: ./docker_build.sh dev" && do_build_dev_image=1 || true
         if [ "$skip_make" -ne 1 ]; then
             confirm_step "Run make autoware-build (this can take a while)" && do_make_autoware_build=1 || true
-            confirm_step "Run make dev DOMAIN_ID=${DOMAIN_ID:-1}" && do_make_dev=1 || true
+            confirm_step "Run make dev ROS_DOMAIN_ID=${ROS_DOMAIN_ID:-1}" && do_make_dev=1 || true
         fi
     else
         log "${INFO} Repo steps skipped (repo not selected / not present)"
@@ -781,7 +781,7 @@ EOF
     fi
 
     if [ "$skip_make" -ne 1 ]; then
-        bootstrap_repo_targets "${dest_dir}" "${DOMAIN_ID:-1}" "${do_make_autoware_build}" "${do_make_dev}" || true
+        bootstrap_repo_targets "${dest_dir}" "${ROS_DOMAIN_ID:-1}" "${do_make_autoware_build}" "${do_make_dev}" || true
     fi
 
     cat <<EOF
@@ -793,7 +793,7 @@ Repo dir:
 
 Common commands:
   make autoware-build
-  make dev DOMAIN_ID=1
+  make dev ROS_DOMAIN_ID=1
   make down_all   # stop/remove all docker containers (sudo)
 EOF
 }
@@ -847,7 +847,7 @@ EOF
 }
 
 download_awsim() {
-    local default_url='https://tier4inc-my.sharepoint.com/:u:/g/personal/taiki_tanaka_tier4_jp/IQAINoHHCdx9Sr3rYMutSlGtAdldeCbyishT1RmDGbW62tE?e=eg0tUi'
+    local default_url='https://tier4inc-my.sharepoint.com/:u:/g/personal/taiki_tanaka_tier4_jp/IQAnnhyB2tOzTL8AioXUmVtqAS3Js7Ep3cEKuACFESTMimc'
     local url="${AWSIM_ZIP_URL:-$default_url}"
 
     local force=0
@@ -1119,7 +1119,7 @@ doctor() {
     echo "${INFO} 4) Build image:        ./docker_build.sh dev"
     echo "${INFO} 5) Build Autoware:     make autoware-build && docker compose logs -f autoware-build"
     echo "${INFO} 6) Run evaluation:     ./run_evaluation.bash  (optional: ROSBAG=true CAPTURE=true)"
-    echo "${INFO} 7) Start dev:          make dev DOMAIN_ID=1"
+    echo "${INFO} 7) Start dev:          make dev ROS_DOMAIN_ID=1"
     echo "${INFO} 8) Dev shell:          docker compose run --rm -it --entrypoint bash autoware"
 
     return "$failed"

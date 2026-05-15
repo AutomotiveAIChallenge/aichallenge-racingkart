@@ -2,7 +2,7 @@
 
   <arg name="teleop_param"  default="$(find-pkg-share teleop_manager)/config/teleop.param.yaml"/>
   <arg name="self_control_topic" default="/ackermann_cmd"/>
-  <arg name="vehicle_control_topic" default="/awsim/control_cmd"/>
+  <arg name="vehicle_control_topic" default="/control/command/control_cmd"/>
   <arg name="trigger_topic" default="/rosbag2_recorder/trigger"/>
 
   
@@ -26,7 +26,7 @@
     <!-- 自律走行　コマンド -->
     <remap from="/ackermann_cmd" to="$(var self_control_topic)"/>
     <!-- AWSIMへの入力 -->
-    <remap from="/awsim/control_cmd" to="$(var vehicle_control_topic)"/> 
+    <remap from="/control/command/control_cmd" to="$(var vehicle_control_topic)"/>
     <!-- rosbag制御トリガ -->
     <remap from="/rosbag2_recorder/trigger" to="$(var trigger_topic)"/>
   </node>

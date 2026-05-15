@@ -8,8 +8,6 @@
     <arg name="capture" default="false"/>
     <arg name="rosbag" default="false"/>
     <arg name="domain_id" default="0"/>
-    <!-- Disable multi-vehicle features on the base domain (0). -->
-    <arg name="multiple_vehicle" default="$(eval $(var domain_id)!=0)"/>
 
     <let name="domain_id" value="$(var domain_id)"/>
     <let name="rviz_config" value="$(find-pkg-share aichallenge_system_launch)/config/autoware_vehicle.rviz"/>
@@ -58,11 +56,8 @@
         <include file="$(find-pkg-share aichallenge_system_launch)/launch/mode/real.launch.xml"/>
     </group>
 
-    <!-- Multiple vehicle. -->
-    <group if="$(var multiple_vehicle)">
-        <node pkg="domain_bridge" exec="domain_bridge" name="vehicle_domain_bridge" output="screen"
-            args="--from $(var domain_id) --to 0 $(find-pkg-share aichallenge_system_launch)/config/domain/d$(var domain_id)_bridge_config.yaml">
-        </node>
+    <!-- V2X visualization (per-vehicle, only on non-base domains). -->
+    <group if="$(eval $(var domain_id)!=0)">
         <include file="$(find-pkg-share aichallenge_system_launch)/launch/mode/v2x.launch.xml"/>
     </group>
 </launch>

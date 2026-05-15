@@ -4,7 +4,7 @@
     storage_id: mcap
     all_topics: false
     topics:
-      - /awsim/control_cmd
+      - /control/command/control_cmd
       # - /sensing/camera/image_raw
       # - /sensing/camera/camera_info
       # - /sensing/imu/imu_raw

@@ -9,7 +9,7 @@
 - Ctrl+C で確実に止まる: `EXIT` の cleanup と `SIGINT/SIGTERM` のハンドラを分けて扱う
 - Domain ID の副作用を局所化: できるだけ `env ROS_DOMAIN_ID=... <cmd>` で「そのコマンドだけ」切り替える
 - ビルドはコンテナ内で完結: ホスト（src環境）でのビルドは前提にしない
-- cleanup はプロセス停止まで含める: `nohup` で起動したプロセスは PID/SID/PGID を使って停止し、残骸（例: `domain_bridge`）も可能な範囲で回収する
+- cleanup はプロセス停止まで含める: `nohup` で起動したプロセスは PID/SID/PGID を使って停止し、残骸（ros2 launch 配下のサブプロセスなど）も可能な範囲で回収する
 
 ## `aichallenge/` 配下のディレクトリ（設計思想）
 

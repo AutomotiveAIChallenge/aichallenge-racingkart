@@ -1,0 +1,33 @@
+data:
+  train_dir: "/aichallenge/ml_workspace/pilot_net/dataset/train"
+  val_dir: "/aichallenge/ml_workspace/pilot_net/dataset/val"
+
+model:
+  image_height: 66
+  image_width: 200
+  output_dim: 2
+  color_space: yuv        # "rgb" or "yuv"
+  crop_top_ratio: 0.0     # crop is now applied at extract time
+  crop_bottom_ratio: 0.0  # fraction of image height to crop from bottom
+
+train:
+  batch_size: 32
+  num_workers: 4
+  epochs: 80
+  lr: 0.0005
+  weight_decay: 0.0001
+
+  early_stop_patience: 20
+
+  pretrained_path: null
+
+  save_dir: "/aichallenge/ml_workspace/pilot_net/checkpoints"
+  log_dir: "/aichallenge/ml_workspace/pilot_net/logs"
+
+  loss:
+    steer_weight: 1.0
+    accel_weight: 1.0
+
+  # Geometric augmentation (original paper uses shift + steering correction)
+  shift_range: 30.0                  # pixels, horizontal shift (paper: ~30)
+  steer_correction_per_pixel: 0.004 # steering adjustment per pixel of shift

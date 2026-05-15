@@ -51,32 +51,39 @@ def calculate_area(vertices):
     return area
 
 def calculate_angle(p1, p2, p3):
-    # 傾きの計算
-    m1 = (p2[1] - p1[1]) / (p2[0] - p1[0])
-    m2 = (p3[1] - p2[1]) / (p3[0] - p2[0])
+    dx12 = p2[0] - p1[0]
+    dx23 = p3[0] - p2[0]
+    # 垂直線 (Δx==0) では傾きが定義できない。スムージングをスキップさせるため
+    # 「ほぼ直線」を意味する 0.0 を返す (呼び出し元の |angle| < ANGLE_TH 分岐)。
+    if dx12 == 0.0 or dx23 == 0.0:
+        return 0.0
+    m1 = (p2[1] - p1[1]) / dx12
+    m2 = (p3[1] - p2[1]) / dx23
 
-    # なす角の計算
-    tan_theta = (m1 - m2) / (1 + m1 * m2)
+    denom = 1.0 + m1 * m2
+    if denom == 0.0:
+        return math.pi / 2.0
+    tan_theta = (m1 - m2) / denom
     theta = math.atan(tan_theta)
     return theta
 
 def calculate_intersection(p1, p2, p3, p4):
-    # 直線1の傾きと切片
-    m1 = (p2[1] - p1[1]) / (p2[0] - p1[0])
+    dx12 = p2[0] - p1[0]
+    dx34 = p4[0] - p3[0]
+    # 垂直線 (Δx==0) を含む場合は交点を一般式で求められない。
+    # 呼び出し元の None ガードで安全側にスムージングを諦める。
+    if dx12 == 0.0 or dx34 == 0.0:
+        return None
+    m1 = (p2[1] - p1[1]) / dx12
     b1 = p1[1] - m1 * p1[0]
 
-    # 直線2の傾きと切片
-    m2 = (p4[1] - p3[1]) / (p4[0] - p3[0])
+    m2 = (p4[1] - p3[1]) / dx34
     b2 = p3[1] - m2 * p3[0]
 
-    # 傾きが同じ場合、平行なため交点なし
     if m1 == m2:
         return None
 
-    # x座標の計算
     x_intersection = (b2 - b1) / (m1 - m2)
-
-    # y座標の計算
     y_intersection = m1 * x_intersection + b1
 
     return (x_intersection, y_intersection)
@@ -1029,6 +1036,11 @@ class ReferencePath:
             wp_mid = (waypoint_mid.x, waypoint_mid.y)
             new_border_cells_hor_sm_mid = [border_cells_hor_sm[mid_index][0], border_cells_hor_sm[mid_index][1]]
             new_bound_sm = [waypoint_mid.ub_sm, waypoint_mid.lb_sm]
+            # スムージングが ub<lb を作った場合に巻き戻すための原値スナップショット
+            orig_ub_hor_mid = ub_hor[mid_index]
+            orig_lb_hor_mid = lb_hor[mid_index]
+            orig_border_cells_mid = [border_cells_hor_sm[mid_index][0], border_cells_hor_sm[mid_index][1]]
+            orig_bound_sm = [waypoint_mid.ub_sm, waypoint_mid.lb_sm]
 
             before_indeices = []
             after_indices = []
@@ -1075,9 +1087,15 @@ class ReferencePath:
 
                     # 前後のborder_cellを結んだ直線と、間のwpとborder_cellを結んだ直線の交点を求める
                     new_border_cell_mid = calculate_intersection(wp_mid, border_cell_mid, border_cell_before, border_cell_after)
+                    if new_border_cell_mid is None:
+                        return False
+                    if not (np.isfinite(new_border_cell_mid[0]) and np.isfinite(new_border_cell_mid[1])):
+                        return False
 
                     # 前記直線の交点とwaypoint_midの距離を計算
                     new_bound_mid = compute_bound(waypoint_mid, new_border_cell_mid)
+                    if not np.isfinite(new_bound_mid):
+                        return False
 
                     # 交点が安全寄りで、干渉なしであれば更新する
                     if not validate_intersection(bound_mid, new_bound_mid, new_border_cell_mid, border_cell_after, bound_sign):
@@ -1095,6 +1113,15 @@ class ReferencePath:
                     is_nearest_pair = (i == 0)
                     if try_update_border_cell_for_safety(border_cells_hor_sm[before_index][index], border_cells_hor_sm[after_index][index], is_nearest_pair):
                         break
+
+            # 上下境界を独立に safer-side へ寄せた結果 ub<lb のクロスオーバが
+            # 生じた場合は OSQP が infeasible になり MPC ノードごと落ちる。
+            # スムージングは「あれば嬉しい最適化」なので、安全のため原値に巻き戻す。
+            if new_bound_sm[0] < new_bound_sm[1]:
+                ub_hor[mid_index] = orig_ub_hor_mid
+                lb_hor[mid_index] = orig_lb_hor_mid
+                new_border_cells_hor_sm_mid = orig_border_cells_mid
+                new_bound_sm = orig_bound_sm
 
             # update border cells (border_cells_horは以降使用しないので更新不要)
             border_cells_hor_sm[mid_index] = new_border_cells_hor_sm_mid

@@ -1,17 +1,17 @@
 # make file inspired by https://roborovsky-racers.github.io/RoborovskyNote/
 SHELL := /bin/bash
 
-.PHONY: autoware-build autoware-vehicle autoware-simulator autoware-request-initialpose autoware-request-control autoware-driver-zenoh \
-	simulator simulator-reset dev driver zenoh download rviz2 down ps
+.PHONY: autoware-build autoware-vehicle autoware-simulator autoware-request-initialpose autoware-request-control  autoware-request-start autoware-driver-zenoh \
+	simulator simulator-reset dev dev2 dev3 dev4 driver zenoh download rviz2 down down2 down3 down4 ps autoware-bash
 
 # Used by docker-compose.yml for build/eval artifact ownership.
 HOST_UID ?= $(shell id -u)
 HOST_GID ?= $(shell id -g)
 export HOST_UID HOST_GID
 
-DOMAIN_ID ?= 1
+ROS_DOMAIN_ID := 1
 TIMESTAMP := $(shell date +%Y%m%d-%H%M%S)
-LOG_DIR ?= /output/$(TIMESTAMP)/d$(DOMAIN_ID)
+LOG_DIR := /output/$(TIMESTAMP)/d$(ROS_DOMAIN_ID)
 
 # autowareのbuildのみ
 autoware-build:
@@ -25,22 +25,22 @@ autoware-vehicle:
 # run autoware for simulator
 autoware-simulator:
 	@echo "Start Autoware for AWSIM"
-	LOG_DIR=$(LOG_DIR) RUN_MODE=awsim DOMAIN_ID=$(DOMAIN_ID) docker compose up -d autoware
+	LOG_DIR=$(LOG_DIR) RUN_MODE=awsim ROS_DOMAIN_ID=$(ROS_DOMAIN_ID) docker compose up -d autoware
 
 # autoware command service
 autoware-request-initialpose:
-	CMD="env ROS_DOMAIN_ID=$(DOMAIN_ID) ros2 service call /set_initial_pose std_srvs/srv/Trigger '{}'" \
-	docker compose run --rm --no-deps autoware-command
+	CMD="env ROS_DOMAIN_ID=$(ROS_DOMAIN_ID) ros2 service call /set_initial_pose std_srvs/srv/Trigger '{}'" docker compose run --rm --no-deps autoware-command
 
 autoware-request-control:
-	@echo "Start control"
-	CMD="env ROS_DOMAIN_ID=$(DOMAIN_ID) ros2 topic pub -1 /awsim/control_mode_request_topic std_msgs/msg/Bool '{data: true}'" \
-	docker compose run --rm --no-deps autoware-command
+	CMD="env ROS_DOMAIN_ID=$(ROS_DOMAIN_ID) ros2 topic pub -1 /awsim/control_mode_request_topic std_msgs/msg/Bool '{data: true}'" docker compose run --rm --no-deps autoware-command
+
+autoware-request-start:
+	CMD="env ROS_DOMAIN_ID=0 ros2 topic pub -1 /admin/awsim/start std_msgs/msg/Bool '{data: true}'" docker compose run --rm --no-deps autoware-command
 
 # run simulator (docker compose up -d simulator)
 simulator:
-	@echo "Start AWSIM"
-	LOG_DIR=$(LOG_DIR) SIM_MODE=dev docker compose up -d simulator
+	@echo "Start AWSIM (SIM_MODE=$(SIM_MODE))"
+	LOG_DIR=$(LOG_DIR) SIM_MODE=$(SIM_MODE) ROS_DOMAIN_ID=0 docker compose up -d simulator
 
 simulator-reset:
 	@echo "Reset simulation"
@@ -55,12 +55,26 @@ driver:
 zenoh:
 	docker compose up -d zenoh
 
+dev: SIM_MODE := dev
 dev: simulator autoware-simulator
-	@echo "Start dev simulation (AWSIM + Autoware, DOMAIN_ID=$(DOMAIN_ID))"
+	@echo "Start dev simulation (AWSIM + Autoware, ROS_DOMAIN_ID=$(ROS_DOMAIN_ID))"
 	@echo "To stop: make down  (docker compose down --remove-orphans)"
 
+dev2: SIM_MODE := 2p
+dev3: SIM_MODE := 3p
+dev4: SIM_MODE := 4p
+dev2 dev3 dev4: simulator
+	@N=$(@:dev%=%); \
+	echo "Start $$N-vehicle dev (autoware on ROS_DOMAIN_ID 1..$$N via docker compose -p)"; \
+	for p in $$(seq 1 $$N); do LOG_DIR=/output/$(TIMESTAMP)/d$$p ROS_DOMAIN_ID=$$p docker compose -p $$p up -d autoware; done; \
+	$(MAKE) autoware-request-start; \
+	echo "To Stop: make down"
+
+# Kept for backward compatibility; `make down` already cleans all projects.
+down2 down3 down4: down
+
 eval:
-	@echo "Start evaluation simulation (AWSIM + Autoware, DOMAIN_ID=$(DOMAIN_ID))"
+	@echo "Start evaluation simulation (AWSIM + Autoware, ROS_DOMAIN_ID=$(ROS_DOMAIN_ID))"
 	docker compose up -d autoware-simulator-evaluation
 	@echo "To stop: make down  (docker compose down --remove-orphans)"
 
@@ -76,13 +90,28 @@ autoware-driver-zenoh:
 	docker compose up -d zenoh
 
 down:
-	docker compose down --remove-orphans
+	@for p in 1 2 3 4; do docker compose -p $$p down --remove-orphans; done
+	@docker compose down --remove-orphans
 
 down_all:
 	sudo docker ps -aq | xargs -r sudo docker rm -f
 
 ps:
-	docker compose ps
+	@docker compose ps
+	@for p in 1 2 3 4; do \
+		out=$$(docker compose -p $$p ps --format '{{.Name}}\t{{.Service}}\t{{.Status}}' 2>/dev/null); \
+		if [ -n "$$out" ]; then \
+			echo "--- project=$$p ---"; \
+			echo "$$out"; \
+		fi; \
+	done
+
+autoware-bash:
+	@if [ -z "$(VEHICLE_NUM)" ]; then \
+		docker compose exec autoware bash; \
+	else \
+		docker compose -p $(VEHICLE_NUM) exec autoware bash; \
+	fi
 
 # Download submission data by asking for credentials interactively
 # Usage:

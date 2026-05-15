@@ -254,7 +254,7 @@ def main():
     parser.add_argument('--outdir', type=Path, required=True, help='Root directory for output files.')
     
     # Topic configuration
-    parser.add_argument('--control-topic', type=str, default='/awsim/control_cmd', help='Topic name for control commands.')
+    parser.add_argument('--control-topic', type=str, default='/control/command/control_cmd', help='Topic name for control commands.')
     parser.add_argument('--scan-topic', type=str, default='/sensing/lidar/scan', help='Topic name for LiDAR scans.')
     
     # Performance arguments

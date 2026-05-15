@@ -17,9 +17,9 @@ from rclpy.node import Node
 from ament_index_python.packages import get_package_share_directory
 from rclpy.parameter import Parameter
 from visualization_msgs.msg import Marker, MarkerArray
-from rclpy.qos import QoSProfile, QoSDurabilityPolicy
+from rclpy.qos import QoSProfile, QoSDurabilityPolicy, QoSReliabilityPolicy, QoSHistoryPolicy
 
-from std_msgs.msg import Empty, Bool, Float32MultiArray, Float64MultiArray, Int32
+from std_msgs.msg import Empty, Bool, Float32MultiArray, Int32
 from nav_msgs.msg import Odometry
 from geometry_msgs.msg import Quaternion, Pose2D, Point, Vector3
 from std_msgs.msg import ColorRGBA
@@ -30,6 +30,11 @@ from rclpy.parameter import Parameter
 # autoware
 from autoware_auto_control_msgs.msg import AckermannControlCommand
 from autoware_auto_planning_msgs.msg import Trajectory
+from v2x_msgs.msg import V2XVehiclePositionArray
+from multi_purpose_mpc_ros.v2x_vehicle_tracker import (
+    V2XVehicleTracker,
+    predictions_to_obstacles,
+)
 
 # Multi_Purpose_MPC
 from multi_purpose_mpc_ros.core.map import Map, Obstacle
@@ -157,20 +162,6 @@ class MPCController(Node):
             self.get_logger().warn("------------------------------------")
             self.get_logger().warn("USE_OBSTACLE_AVOIDANCE is enabled!")
             self.get_logger().warn("------------------------------------")
-
-    def destroy(self) -> None:
-        self._timer.destroy() # type: ignore
-        self._command_pub.shutdown() # type: ignore
-        self._mpc_pred_pub.shutdown() # type: ignore
-        self._mpc_pred_pub_dummy.shutdown() # type: ignore
-        self._ref_path_pub.shutdown() # type: ignore
-        self._ref_path_pub_dummy.shutdown() # type: ignore
-        self._odom_sub.shutdown() # type: ignore
-        if self.USE_OBSTACLE_AVOIDANCE:
-            self._obstacles_sub.shutdown() # type: ignore
-
-        self._group.destroy() # type: ignore
-        super().destroy_node()
 
     def _load_config(self) -> NamedTuple:
 
@@ -455,10 +446,30 @@ class MPCController(Node):
 
         # Obstacles
         if self.USE_OBSTACLE_AVOIDANCE:
-            self._obstacles = create_obstacles()
-            self._use_obstacles_topic = self._obstacles == []
-            self._obstacles_updated = False
-            self._last_obstacles_msgs_raw = None
+            self._static_obstacles: List[Obstacle] = create_obstacles()
+            self._dynamic_obstacles: List[Obstacle] = []
+            self._obstacles_updated = bool(self._static_obstacles)
+            v2x_cfg = self._cfg.v2x_obstacle_avoidance  # type: ignore
+            self._v2x_tracker = V2XVehicleTracker(
+                v_max_safety=float(v2x_cfg.v_max_safety),
+                position_jump_threshold=float(v2x_cfg.position_jump_threshold),
+                warn_callback=self.get_logger().warn,
+            )
+            self._v2x_vehicle_radius = float(v2x_cfg.vehicle_radius)
+            mpc_N = int(self._cfg.mpc.N)  # type: ignore
+            t_horizon = mpc_N / float(self._cfg.mpc.control_rate)  # type: ignore
+            self._v2x_t_samples = [
+                k * t_horizon / max(mpc_N - 1, 1) for k in range(mpc_N)
+            ]
+            # コリドー外の V2X 障害物で MPC のコリドー狭窄/反転が起きないよう、
+            # ref-path 近傍のみに絞り込む。閾値 = max_width/2 + vehicle_radius + 余白。
+            ref_max_width = float(self._cfg.reference_path.max_width)  # type: ignore
+            self._v2x_corridor_threshold_sq = (
+                ref_max_width / 2.0 + self._v2x_vehicle_radius + 0.5
+            ) ** 2
+            wps = self._reference_path.waypoints
+            self._waypoint_xy = np.asarray(
+                [(wp.x, wp.y) for wp in wps], dtype=np.float64)
 
         # Laps
         self._current_laps = 1
@@ -512,8 +523,15 @@ class MPCController(Node):
             Odometry, "/localization/kinematic_state", self._odom_callback, 1)
         self._control_mode_request_sub = self.create_subscription(
             Bool, "control/control_mode_request_topic", self._control_mode_request_callback, 1)
+        # simple_trajectory_generator publishes with BEST_EFFORT/KEEP_LAST(1) — match it
+        # so the subscription is QoS-compatible (rclpy default is RELIABLE).
+        trajectory_qos = QoSProfile(
+            reliability=QoSReliabilityPolicy.BEST_EFFORT,
+            history=QoSHistoryPolicy.KEEP_LAST,
+            depth=1,
+        )
         self._trajectory_sub = self.create_subscription(
-            Trajectory, "planning/scenario_planning/trajectory", self._trajectory_callback, 1)
+            Trajectory, "planning/scenario_planning/trajectory", self._trajectory_callback, trajectory_qos)
         self._stop_request_sub = self.create_subscription(
             Empty, "/control/mpc/stop_request", self._stop_request_callback, 1)
 
@@ -524,10 +542,6 @@ class MPCController(Node):
                 Int32, "/aichallenge/pitstop/condition", self._condition_callback, 1)
 
         if self.USE_OBSTACLE_AVOIDANCE:
-            self._obstacles_sub = self.create_subscription(
-                Float64MultiArray, "/aichallenge/objects", self._obstacles_callback, 1)
-                # Float64MultiArray, "/aichallenge/objects2", self._obstacles_callback, 1)
-
             if self._cfg.reference_path.use_path_constraints_topic: # type: ignore
                 self._path_constraints_sub = self.create_subscription(
                     PathConstraints, "/path_constraints_provider/path_constraints", self._path_constraints_callback, 1)
@@ -535,6 +549,12 @@ class MPCController(Node):
             if self._cfg.reference_path.use_border_cells_topic: # type: ignore
                 self._border_cells_sub = self.create_subscription(
                     BorderCells, "/path_constraints_provider/border_cells", self._border_cells_callback, 1)
+
+            self._v2x_sub = self.create_subscription(
+                V2XVehiclePositionArray,
+                "/v2x/vehicle_positions",
+                self._v2x_callback,
+                1)
 
     def _create_ackerman_control_command(self, stamp, u, acc, bug_acc_enabled):
         v_cmd = u[0]
@@ -566,21 +586,6 @@ class MPCController(Node):
     def _odom_callback(self, msg: Odometry) -> None:
         self._odom = msg
 
-    def _obstacles_callback(self, msg: Float64MultiArray) -> None:
-        if not self._use_obstacles_topic:
-            return
-
-        obstacles_updated = (self._last_obstacles_msgs_raw != msg.data) and (len(msg.data) > 0)
-        if obstacles_updated:
-            self._last_obstacles_msgs_raw = msg.data
-            self._obstacles = []
-            for i in range(0, len(msg.data), 4):
-                x = msg.data[i]
-                y = msg.data[i + 1]
-                self._obstacles.append(Obstacle(cx=x, cy=y, radius=self._cfg.obstacles.radius)) # type: ignore
-            # NOTE: This flag should be set to True only after the obstacles are updated
-            self._obstacles_updated = True
-
     def _control_mode_request_callback(self, msg):
         if msg.data and not self._enable_control:
             self.get_logger().info("Control mode request received")
@@ -589,6 +594,25 @@ class MPCController(Node):
     def _path_constraints_callback(self, msg: PathConstraints):
         self._reference_path.set_path_constraints(
             msg.upper_bounds, msg.lower_bounds, msg.rows, msg.cols)
+
+    def _v2x_callback(self, msg: V2XVehiclePositionArray) -> None:
+        self._v2x_tracker.update(msg)
+        predictions = self._v2x_tracker.predict_all(self._v2x_t_samples)
+        self._dynamic_obstacles = predictions_to_obstacles(
+            predictions, self._v2x_vehicle_radius)
+        self._obstacles_updated = True
+
+    def _filter_obstacles_to_corridor(self, obstacles: List[Obstacle]) -> List[Obstacle]:
+        if not obstacles or self._waypoint_xy.size == 0:
+            return obstacles
+        thr_sq = self._v2x_corridor_threshold_sq
+        wps = self._waypoint_xy
+        kept: List[Obstacle] = []
+        for ob in obstacles:
+            dxy = wps - np.array([ob.cx, ob.cy], dtype=np.float64)
+            if np.min(np.einsum('ij,ij->i', dxy, dxy)) <= thr_sq:
+                kept.append(ob)
+        return kept
 
     def _border_cells_callback(self, msg: BorderCells):
         self._reference_path.set_border_cells(
@@ -743,12 +767,6 @@ class MPCController(Node):
         self._control_rate.sleep()
 
         if self._loop % 100 == 0:
-            # update obstacles
-            if self.USE_OBSTACLE_AVOIDANCE and not self._use_obstacles_topic:
-                # self._obstacle_manager.push_next_obstacle()
-                self._obstacles = self._obstacle_manager.current_obstacles
-                self._obstacles_updated = True
-
             # update reference path
             if self._cfg.reference_path.update_by_topic: # type: ignore
                 new_referece_path = self._create_reference_path_from_autoware_trajectory(self._trajectory)
@@ -767,9 +785,9 @@ class MPCController(Node):
 
         if self.USE_OBSTACLE_AVOIDANCE and self._obstacles_updated:
             self._obstacles_updated = False
-            # self.get_logger().info("Obstacles updated")
             self._map.reset_map()
-            self._map.add_obstacles(self._obstacles)
+            filtered_dynamic = self._filter_obstacles_to_corridor(self._dynamic_obstacles)
+            self._map.add_obstacles(self._static_obstacles + filtered_dynamic)
             self._reference_path.reset_dynamic_constraints()
 
         is_colliding = False

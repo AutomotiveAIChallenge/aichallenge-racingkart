@@ -85,7 +85,7 @@ TeleopManagerNode::TeleopManagerNode()
   status_sub_ = create_subscription<std_msgs::msg::Float32MultiArray>(
     "/admin/awsim/status", 10, std::bind(&TeleopManagerNode::status_callback, this, _1));
 
-  drive_pub_   = create_publisher<autoware_auto_control_msgs::msg::AckermannControlCommand>("/awsim/control_cmd", 10);
+  drive_pub_   = create_publisher<autoware_auto_control_msgs::msg::AckermannControlCommand>("/control/command/control_cmd", 10);
   trigger_pub_ = create_publisher<std_msgs::msg::Bool>("/rosbag2_recorder/trigger", 10);
 
   awsim_trigger_pub_ = create_publisher<std_msgs::msg::Bool>("/awsim/control_mode_request_topic", 10);

@@ -33,7 +33,7 @@ ActuationCmdConverter::ActuationCmdConverter(const rclcpp::NodeOptions & node_op
     "/vehicle/status/velocity_status", 1, std::bind(&ActuationCmdConverter::on_velocity_report, this, _1));
 
   // Publishers
-  pub_ackermann_ = create_publisher<AckermannControlCommand>("/awsim/control_cmd", 1);
+  pub_ackermann_ = create_publisher<AckermannControlCommand>("/control/command/control_cmd", 1);
 
   // Load accel/brake map
   if (!accel_map_.readAccelMapFromCSV(csv_path_accel_map)) {

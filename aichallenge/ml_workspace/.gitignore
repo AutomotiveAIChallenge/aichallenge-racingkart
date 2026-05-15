@@ -127,13 +127,15 @@ dmypy.json
 # Pyre type checker
 .pyre/
 
-# tiny_lidar_net
-tiny_lidar_net/logs/
-tiny_lidar_net/checkpoints/
-tiny_lidar_net/outputs/
+# Training artifacts
+logs/
+checkpoints/
+outputs/
 
 # ML dataset
 datasets/
+dataset/
 train/
 val/
 weights/
+rawdata/

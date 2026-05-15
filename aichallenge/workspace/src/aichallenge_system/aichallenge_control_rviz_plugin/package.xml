@@ -15,7 +15,6 @@
   <depend>rcpputils</depend>
   <depend>rviz_common</depend>
   <depend>geometry_msgs</depend>
-  <depend>autoware_auto_planning_msgs</depend>
   <depend>rosidl_typesupport_introspection_cpp</depend>
   <depend>std_msgs</depend>
   <depend>std_srvs</depend>

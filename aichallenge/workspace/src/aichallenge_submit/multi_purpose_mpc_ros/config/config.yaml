@@ -1,5 +1,5 @@
 common:
-  save_config: true
+  save_config: false
 
 sim_logger:
   animation_enabled: false
@@ -105,3 +105,8 @@ mpc:
   # ay_max: 5.5
   # Q: [5000000.0, 100000000.0, 200000.0] # 低速だとインを攻めがちなので、あえて外に膨らむパラメータ
   # QN: [1000000.0, 1000.0, 10000.0]
+
+v2x_obstacle_avoidance:
+  vehicle_radius: 0.5          # [m]
+  v_max_safety: 30.0           # [m/s]
+  position_jump_threshold: 5.0 # [m]

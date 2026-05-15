@@ -15,6 +15,7 @@
   <depend>rclcpp</depend>
   <depend>multi_purpose_mpc_ros_msgs</depend>
   <depend>autoware_auto_control_msgs</depend>
+  <depend>v2x_msgs</depend>
 
   <export>
     <build_type>ament_cmake</build_type>

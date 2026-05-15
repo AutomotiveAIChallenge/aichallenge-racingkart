@@ -47,3 +47,8 @@ mpc:
   control_rate: 50.0 # Hz
   steering_tire_angle_gain_var: 1.0
   wp_id_offset: 0
+
+v2x_obstacle_avoidance:
+  vehicle_radius: 0.5          # [m]
+  v_max_safety: 30.0           # [m/s]
+  position_jump_threshold: 5.0 # [m]

@@ -22,7 +22,7 @@ source "/aichallenge/workspace/install/setup.bash"
 
 # Topics with data (excluding 0-message topics from original bag)
 TOPICS=(
-    "/awsim/control_cmd"
+    "/control/command/control_cmd"
     "/clock"
     "/localization/acceleration"
     "/localization/kinematic_state"

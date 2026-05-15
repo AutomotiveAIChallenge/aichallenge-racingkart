@@ -1,11 +1,11 @@
 <?xml version="1.0"?>
 <launch>
-  <arg name="csv_path_accel_map" default="$(find-pkg-share aichallenge_awsim_adapter)/data/accel_map.csv"/>
+  <!-- <arg name="csv_path_accel_map" default="$(find-pkg-share aichallenge_awsim_adapter)/data/accel_map.csv"/>
   <arg name="csv_path_brake_map" default="$(find-pkg-share aichallenge_awsim_adapter)/data/brake_map.csv"/>
 
   <node pkg="aichallenge_awsim_adapter" exec="actuation_cmd_converter">
     <param name="steer_delay_sec" value="0.2"/>
     <param name="csv_path_accel_map" value="$(var csv_path_accel_map)"/>
     <param name="csv_path_brake_map" value="$(var csv_path_brake_map)"/>
-  </node>
+  </node> -->
 </launch>

@@ -16,9 +16,7 @@ Panels:
         - /Control1/PointStamped1/Topic1
         - /Vehicle1
         - /V2X1
-        - /V2X1/GNSS1/Topic1
-        - /V2X1/GNSS1/Covariance1
-        - /V2X1/GNSS1/Covariance1/Position1
+        - /V2X1/VehicleMarkers1/Topic1
       Splitter Ratio: 0.5737704634666443
     Tree Height: 470
   - Class: rviz_common/Views
@@ -303,6 +301,7 @@ Visualization Manager:
               Value: false
             Localization:
               Fusion: true
+              HeadingPose: true
               KinematicState: true
               Value: false
             Map:
@@ -323,7 +322,7 @@ Visualization Manager:
               Value: false
               VehicleModel: true
             V2X:
-              GNSS: true
+              VehicleMarkers: true
               Value: false
             Value: true
             Vehicle:
@@ -335,6 +334,18 @@ Visualization Manager:
       Name: Sensing
     - Class: rviz_common/Group
       Displays:
+        - Class: rviz_default_plugins/MarkerArray
+          Enabled: true
+          Name: HeadingPose
+          Namespaces:
+            heading_arrows: true
+          Topic:
+            Depth: 5
+            Durability Policy: Transient Local
+            History Policy: Keep Last
+            Reliability Policy: Reliable
+            Value: /heading_pose_initializer/raceline_markers
+          Value: true
         - Buffer Size: 1
           Class: rviz_plugins::PoseHistory
           Enabled: true
@@ -515,40 +526,17 @@ Visualization Manager:
       Name: Vehicle
     - Class: rviz_common/Group
       Displays:
-        - Alpha: 0
-          Axes Length: 0
-          Axes Radius: 0
-          Class: rviz_default_plugins/PoseWithCovariance
-          Color: 255; 25; 0
-          Covariance:
-            Orientation:
-              Alpha: 0.5
-              Color: 255; 255; 127
-              Color Style: Unique
-              Frame: Local
-              Offset: 1
-              Scale: 1
-              Value: false
-            Position:
-              Alpha: 0.30000001192092896
-              Color: 204; 51; 204
-              Scale: 0.4000000059604645
-              Value: true
-            Value: true
+        - Class: rviz_default_plugins/MarkerArray
           Enabled: true
-          Head Length: 0
-          Head Radius: 0
-          Name: GNSS
-          Shaft Length: 0
-          Shaft Radius: 0
-          Shape: Arrow
+          Name: VehicleMarkers
+          Namespaces:
+            v2x_vehicles: true
           Topic:
-            Depth: 10
+            Depth: 5
             Durability Policy: Volatile
-            Filter size: 10
             History Policy: Keep Last
             Reliability Policy: Reliable
-            Value: /v2x/gnss/pose_with_covariance
+            Value: /v2x/vehicle_positions/markers
           Value: true
       Enabled: true
       Name: V2X

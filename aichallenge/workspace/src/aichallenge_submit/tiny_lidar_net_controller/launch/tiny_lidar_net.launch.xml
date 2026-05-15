@@ -3,7 +3,7 @@
   <arg name="tiny_lidar_net_node_param"  default="$(find-pkg-share tiny_lidar_net_controller)/config/tiny_lidar_net_node.param.yaml"/>
   <arg name="use_sim_time" default="true"/>
   <arg name="scan_topic" default="/sensing/lidar/scan"/>
-  <arg name="control_cmd_topic" default="/awsim/control_cmd"/>
+  <arg name="control_cmd_topic" default="/control/command/control_cmd"/>
   <arg name="ckpt_path" default="$(find-pkg-share tiny_lidar_net_controller)/ckpt/tinylidarnet_weights.npy"/>
 
   <!-- tiny_lidar_net_node -->
@@ -16,7 +16,7 @@
     <param name="model.ckpt_path" value="$(var ckpt_path)"/>
     <param name="use_sim_time" value="$(var use_sim_time)"/>
     <remap from="/scan" to="$(var scan_topic)"/>
-    <remap from="/awsim/control_cmd" to="$(var control_cmd_topic)"/>
+    <remap from="/control/command/control_cmd" to="$(var control_cmd_topic)"/>
   </node>
 
 

@@ -4,8 +4,6 @@
     <arg name="rosbag" default="false"/>
     <arg name="autostart_orchestrator_params" default="$(find-pkg-share autostart_orchestrator_py)/config/autostart_orchestrator.param.yaml"/>
     <!-- Default start gating is based on vehicle state: READY/START. -->
-    <arg name="start_on_vehicle_state" default="Ready,Start"/>
-    <arg name="stop_on_vehicle_state" default="Finish"/>
     <!-- Keep the orchestrator process alive on success (so it will not terminate the entire launch). -->
     <arg name="exit_on_finish" default="false"/>
 
@@ -17,8 +15,6 @@
 	<!-- AWSIM only: auto request initialpose/control (+ optional capture/rosbag) -->
 	  <node pkg="autostart_orchestrator_py" exec="autostart_orchestrator_node.py" name="autostart_orchestrator" output="both">
 	  <param from="$(var autostart_orchestrator_params)"/>
-	  <param name="start_on_vehicle_state" value="$(var start_on_vehicle_state)"/>
-	  <param name="stop_on_vehicle_state" value="$(var stop_on_vehicle_state)"/>
 	  <param name="enable_capture" value="$(var capture)"/>
 	  <param name="enable_rosbag" value="$(var rosbag)"/>
 	  <param name="exit_on_finish" value="$(var exit_on_finish)"/>

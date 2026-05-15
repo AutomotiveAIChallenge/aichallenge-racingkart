@@ -75,7 +75,7 @@ class TinyLidarNetNode(Node):
             LaserScan, "/scan", self.scan_callback, qos
         )
         self.pub_control = self.create_publisher(
-            AckermannControlCommand, "/awsim/control_cmd", 1
+            AckermannControlCommand, "/control/command/control_cmd", 1
         )
 
         self.get_logger().info("TinyLidarNetNode is ready.")
