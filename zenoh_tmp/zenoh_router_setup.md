@@ -610,11 +610,6 @@ openssl verify -CAfile ~/zenoh_tls/client/minica.pem \
 OK
 ```
 
-#### OpenSSL 手順について
-
-OpenSSL で CA/server/client 証明書を作ることも可能だが、Zenoh 公式ドキュメントの手順は
-`minica` なので、まずは `minica` を使う。OpenSSL は `minica` が使えない場合の代替手段とする。
-
 作成する router config:
 
 | 車両 | config | listen endpoint |
@@ -679,9 +674,62 @@ A2 用 `/etc/zenoh/routers/router-a2.json5`:
 - 後日 DNS に移行する場合、client endpoint を `tls/<ZENOH_ROUTER_DNS_NAME>:<port>` に変更し、
   server 証明書も DNS 名 SAN 入りで作り直す。
 
+### 手順3-4. TLS router を手動起動して topic 疎通確認
+
+systemd に差し替える前に、EC2 上で A2 の TLS router を手動起動して topic 疎通を確認する。
+手順2で起動している TCP service は停止してから確認する。
+
+EC2 側で実行する。
+
+```bash
+sudo systemctl stop zenoh-router-a2
+sudo /usr/bin/zenohd -c /etc/zenoh/routers/router-a2.json5
+```
+
+PC 1 台で remote 側 bridge を起動する。
+
+```bash
+ROS_DOMAIN_ID=10 \
+zenoh-bridge-ros2dds client \
+  -e tls/13.231.141.103:7448 \
+  -c remote/zenoh-user.json5
+```
+
+同じ PC の別ターミナルで vehicle 側 bridge を起動する。
+
+```bash
+ROS_DOMAIN_ID=11 \
+zenoh-bridge-ros2dds client \
+  -e tls/13.231.141.103:7448 \
+  -c vehicle/zenoh.json5
+```
+
+remote 側 domain で `/racing_kart/joy` を publish する。
+
+```bash
+ROS_DOMAIN_ID=10 \
+ros2 topic pub /racing_kart/joy sensor_msgs/msg/Joy \
+  "{header: {frame_id: joy}, axes: [0.0, 0.0, 0.0, 0.0], buttons: [0, 0, 0, 0]}" -r 1
+```
+
+vehicle 側 domain で `/racing_kart/joy` を確認する。
+
+```bash
+ROS_DOMAIN_ID=11 ros2 topic echo /racing_kart/joy
+```
+
+期待:
+
+- TLS/mTLS の証明書エラーが出ない
+- vehicle 側 domain で `/racing_kart/joy` が echo できる
+
+確認後、手動起動した `zenohd` は `Ctrl+C` で停止する。
+手順4に進む場合、A2 は systemd の TLS config 起動に切り替える。
+
 ## 手順4. TLS + systemd 設定に差し替え
 
-車両ごとに systemd service を作成する。
+手順2で作成した A2 の TCP service を、TLS router config を使う設定に差し替える。
+A3/A6/A7/A1/A5/A8 は、同じ命名規則で新規作成する。
 今年は zenohd を apt でインストールしているため、実体は `/usr/bin/zenohd` にある。
 systemd の `ExecStart` も `/usr/bin/zenohd` をそのまま使う。
 
@@ -695,7 +743,20 @@ systemd の `ExecStart` も `/usr/bin/zenohd` をそのまま使う。
 | A5 | `zenoh-router-a5.service` | `/etc/zenoh/routers/router-a5.json5` |
 | A8 | `zenoh-router-a8.service` | `/etc/zenoh/routers/router-a8.json5` |
 
-A2 用 service:
+A2 用 service は、手順2で作成済みの `/etc/systemd/system/zenoh-router-a2.service` を以下の内容に置き換える。
+変更する箇所は `ExecStart` で、TCP listen 直指定から TLS router config 指定に変える。
+
+変更前:
+
+```ini
+ExecStart=/usr/bin/zenohd --listen tcp/0.0.0.0:7448
+```
+
+変更後:
+
+```ini
+ExecStart=/usr/bin/zenohd -c /etc/zenoh/routers/router-a2.json5
+```
 
 ```bash
 sudo tee /etc/systemd/system/zenoh-router-a2.service >/dev/null <<'EOF'
@@ -716,7 +777,7 @@ WantedBy=multi-user.target
 EOF
 ```
 
-A3/A6/A7/A1/A5/A8 も同じ形で service 名と config 名を対応表どおりに作成する。
+A3/A6/A7/A1/A5/A8 は、対応表どおりの service 名と config 名で新規作成する。
 
 全 router を有効化:
 
@@ -739,6 +800,55 @@ sudo systemctl status zenoh-router-a2
 ```bash
 journalctl -u zenoh-router-a2 -f
 ```
+
+### 手順4-1. TLS systemd 起動後の topic 疎通確認
+
+手順4で TLS systemd に差し替えた後、PC 1 台で再度 topic 疎通を確認する。
+手順3-4と同じ確認を、systemd 管理の `zenoh-router-a2` に対して実施する。
+`driver` と `autoware` は起動しない。
+
+remote 側 bridge を起動する。
+
+```bash
+ROS_DOMAIN_ID=10 \
+zenoh-bridge-ros2dds client \
+  -e tls/13.231.141.103:7448 \
+  -c remote/zenoh-user.json5
+```
+
+vehicle 側 bridge を起動する。
+
+```bash
+ROS_DOMAIN_ID=11 \
+zenoh-bridge-ros2dds client \
+  -e tls/13.231.141.103:7448 \
+  -c vehicle/zenoh.json5
+```
+
+remote 側 domain で `/racing_kart/joy` を publish する。
+
+```bash
+ROS_DOMAIN_ID=10 \
+ros2 topic pub /racing_kart/joy sensor_msgs/msg/Joy \
+  "{header: {frame_id: joy}, axes: [0.0, 0.0, 0.0, 0.0], buttons: [0, 0, 0, 0]}" -r 1
+```
+
+vehicle 側 domain で `/racing_kart/joy` を確認する。
+
+```bash
+ROS_DOMAIN_ID=11 ros2 topic echo /racing_kart/joy
+```
+
+EC2 側で `zenoh-router-a2` のログを確認する。
+
+```bash
+journalctl -u zenoh-router-a2 -f
+```
+
+期待:
+
+- TLS/mTLS の証明書エラーが出ない
+- vehicle 側 domain で `/racing_kart/joy` が echo できる
 
 ## 手順5. 車両側/遠隔側の接続先を正式反映
 
@@ -834,6 +944,71 @@ VEHICLE_ID=A1 docker compose up -d zenoh
 VEHICLE_ID=A5 docker compose up -d zenoh
 VEHICLE_ID=A8 docker compose up -d zenoh
 ```
+
+### 手順5-2. 正式反映後の実運用相当確認
+
+遠隔 PC 側と車両側 PC の 2 台構成で確認する。
+
+車両側 PC で起動する。
+
+```bash
+VEHICLE_ID=A2 make autoware-driver-zenoh
+```
+
+遠隔 PC 側で Zenoh bridge を起動する。
+
+```bash
+cd remote
+./connect_zenoh.bash A2
+```
+
+遠隔 PC 側で RViz を起動する。
+
+```bash
+make rviz2
+```
+
+遠隔 PC 側で joy node を起動する。
+
+```bash
+cd remote
+./joy.bash
+```
+
+joy コントローラが手元にない場合は、遠隔 PC 側でダミーの `/racing_kart/joy` を publish する。
+
+```bash
+ros2 topic pub /racing_kart/joy sensor_msgs/msg/Joy \
+  "{header: {frame_id: joy}, axes: [0.0, 0.0, 0.0, 0.0], buttons: [0, 0, 0, 0]}" -r 1
+```
+
+車両側 PC で `/racing_kart/joy` を確認する。
+
+```bash
+ROS_DOMAIN_ID=1 ros2 topic echo /racing_kart/joy
+ROS_DOMAIN_ID=1 ros2 topic info -v /racing_kart/joy
+```
+
+`topic info` で `racing_kart_driver` が subscriber として表示されることを確認する。
+
+車両側 PC で zenoh container のログを確認する。
+
+```bash
+docker compose logs --tail=100 zenoh
+```
+
+EC2 側で router のログを確認する。
+
+```bash
+journalctl -u zenoh-router-a2 -f
+```
+
+期待:
+
+- 遠隔 PC 側の Zenoh bridge が TLS endpoint `tls/13.231.141.103:7448` に接続できる
+- 車両側の Zenoh bridge が TLS endpoint `tls/13.231.141.103:7448` に接続できる
+- 車両側 PC で `/racing_kart/joy` が echo できる
+- `racing_kart_driver` が `/racing_kart/joy` の subscriber として表示される
 
 ## AWS Security Group
 
