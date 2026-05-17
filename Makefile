@@ -1,8 +1,8 @@
 # make file inspired by https://roborovsky-racers.github.io/RoborovskyNote/
 SHELL := /bin/bash
 
-.PHONY: autoware-build autoware-vehicle autoware-simulator autoware-request-initialpose autoware-request-control  autoware-request-start autoware-driver-zenoh \
-	simulator simulator-reset dev dev2 dev3 dev4 driver zenoh download rviz2 down down2 down3 down4 ps autoware-bash
+.PHONY: autoware-build autoware-vehicle autoware-simulator autoware-request-initialpose autoware-request-control  awsim-request-start awsim-request-reset autoware-driver-zenoh \
+	simulator dev dev2 dev3 dev4 driver zenoh download rviz2 down down2 down3 down4 ps autoware-bash
 
 # Used by docker-compose.yml for build/eval artifact ownership.
 HOST_UID ?= $(shell id -u)
@@ -34,18 +34,16 @@ autoware-request-initialpose:
 autoware-request-control:
 	CMD="env ROS_DOMAIN_ID=$(ROS_DOMAIN_ID) ros2 topic pub -1 /awsim/control_mode_request_topic std_msgs/msg/Bool '{data: true}'" docker compose run --rm --no-deps autoware-command
 
-autoware-request-start:
+awsim-request-start:
 	CMD="env ROS_DOMAIN_ID=0 ros2 topic pub -1 /admin/awsim/start std_msgs/msg/Bool '{data: true}'" docker compose run --rm --no-deps autoware-command
+
+awsim-request-reset:
+	CMD="env ROS_DOMAIN_ID=0 ros2 topic pub -1 /admin/awsim/reset std_msgs/msg/Empty '{}'" docker compose run --rm --no-deps autoware-command
 
 # run simulator (docker compose up -d simulator)
 simulator:
 	@echo "Start AWSIM (SIM_MODE=$(SIM_MODE))"
 	LOG_DIR=$(LOG_DIR) SIM_MODE=$(SIM_MODE) ROS_DOMAIN_ID=0 docker compose up -d simulator
-
-simulator-reset:
-	@echo "Reset simulation"
-	CMD="bash /aichallenge/utils/simulator_reset.bash 0" \
-	docker compose run --rm --no-deps autoware-command
 
 # racing kart (docker compose up -d driver)
 driver:
@@ -67,7 +65,7 @@ dev2 dev3 dev4: simulator
 	@N=$(@:dev%=%); \
 	echo "Start $$N-vehicle dev (autoware on ROS_DOMAIN_ID 1..$$N via docker compose -p)"; \
 	for p in $$(seq 1 $$N); do LOG_DIR=/output/$(TIMESTAMP)/d$$p ROS_DOMAIN_ID=$$p docker compose -p $$p up -d autoware; done; \
-	$(MAKE) autoware-request-start; \
+	$(MAKE) awsim-request-start; \
 	echo "To Stop: make down"
 
 # Kept for backward compatibility; `make down` already cleans all projects.
