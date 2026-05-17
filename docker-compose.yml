@@ -59,6 +59,7 @@ x-racing_kart_interface-base: &racing_kart_interface-base
     - USER=${USER}
     - TZ=Asia/Tokyo
     - ROS_DISTRO=humble
+    - ROS_DOMAIN_ID=${ROS_DOMAIN_ID:-1}
     - NTRIP_USERNAME=${NTRIP_USERNAME:-}
     - NTRIP_PASSWORD=${NTRIP_PASSWORD:-}
   volumes:
