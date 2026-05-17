@@ -8,10 +8,15 @@ SHELL := /bin/bash
 HOST_UID ?= $(shell id -u)
 HOST_GID ?= $(shell id -g)
 export HOST_UID HOST_GID
+# Stop host shell's ROS_DOMAIN_ID from overriding .env via compose interpolation,
+# but still honor an explicit `make foo ROS_DOMAIN_ID=N` command-line override.
+unexport ROS_DOMAIN_ID
+ifeq ($(origin ROS_DOMAIN_ID),command line)
+export ROS_DOMAIN_ID
+endif
 
-ROS_DOMAIN_ID := 1
 TIMESTAMP := $(shell date +%Y%m%d-%H%M%S)
-LOG_DIR := /output/$(TIMESTAMP)/d$(ROS_DOMAIN_ID)
+LOG_DIR := /output/$(TIMESTAMP)
 
 # autowareのbuildのみ
 autoware-build:
@@ -20,20 +25,21 @@ autoware-build:
 # run autoware for vehicle
 autoware-vehicle:
 	@echo "Start Autoware for Vehicle"
-	RUN_MODE=vehicle docker compose up -d autoware
+	LOG_DIR=$(LOG_DIR) RUN_MODE=vehicle docker compose up -d autoware
 
 # run autoware for simulator
 autoware-simulator:
 	@echo "Start Autoware for AWSIM"
-	LOG_DIR=$(LOG_DIR) RUN_MODE=awsim ROS_DOMAIN_ID=$(ROS_DOMAIN_ID) docker compose up -d autoware
+	LOG_DIR=$(LOG_DIR) RUN_MODE=awsim docker compose up -d autoware
 
-# autoware command service
+# autoware command service use ROS_DOMAIN_ID from .env
 autoware-request-initialpose:
-	CMD="env ROS_DOMAIN_ID=$(ROS_DOMAIN_ID) ros2 service call /set_initial_pose std_srvs/srv/Trigger '{}'" docker compose run --rm --no-deps autoware-command
+	CMD="ros2 service call /set_initial_pose std_srvs/srv/Trigger '{}'" docker compose run --rm --no-deps autoware-command
 
 autoware-request-control:
-	CMD="env ROS_DOMAIN_ID=$(ROS_DOMAIN_ID) ros2 topic pub -1 /awsim/control_mode_request_topic std_msgs/msg/Bool '{data: true}'" docker compose run --rm --no-deps autoware-command
+	CMD="ros2 topic pub -1 /awsim/control_mode_request_topic std_msgs/msg/Bool '{data: true}'" docker compose run --rm --no-deps autoware-command
 
+# awsim admin service use ROS_DOMAIN_ID 0
 awsim-request-start:
 	CMD="env ROS_DOMAIN_ID=0 ros2 topic pub -1 /admin/awsim/start std_msgs/msg/Bool '{data: true}'" docker compose run --rm --no-deps autoware-command
 
@@ -55,7 +61,7 @@ zenoh:
 
 dev: SIM_MODE := dev
 dev: simulator autoware-simulator
-	@echo "Start dev simulation (AWSIM + Autoware, ROS_DOMAIN_ID=$(ROS_DOMAIN_ID))"
+	@echo "Start dev simulation (AWSIM + Autoware)"
 	@echo "To stop: make down  (docker compose down --remove-orphans)"
 
 dev2: SIM_MODE := 2p
@@ -64,7 +70,7 @@ dev4: SIM_MODE := 4p
 dev2 dev3 dev4: simulator
 	@N=$(@:dev%=%); \
 	echo "Start $$N-vehicle dev (autoware on ROS_DOMAIN_ID 1..$$N via docker compose -p)"; \
-	for p in $$(seq 1 $$N); do LOG_DIR=/output/$(TIMESTAMP)/d$$p ROS_DOMAIN_ID=$$p docker compose -p $$p up -d autoware; done; \
+	for p in $$(seq 1 $$N); do LOG_DIR=$(LOG_DIR) ROS_DOMAIN_ID=$$p docker compose -p $$p up -d autoware; done; \
 	$(MAKE) awsim-request-start; \
 	echo "To Stop: make down"
 
@@ -72,7 +78,7 @@ dev2 dev3 dev4: simulator
 down2 down3 down4: down
 
 eval:
-	@echo "Start evaluation simulation (AWSIM + Autoware, ROS_DOMAIN_ID=$(ROS_DOMAIN_ID))"
+	@echo "Start evaluation simulation (AWSIM + Autoware)"
 	docker compose up -d autoware-simulator-evaluation
 	@echo "To stop: make down  (docker compose down --remove-orphans)"
 
