@@ -79,12 +79,6 @@ zenohd --listen tcp/0.0.0.0:7448
 別ターミナルから TCP の到達性を確認する。
 
 ```bash
-nc -vz <EC2_PUBLIC_IP> 7448
-```
-
-例:
-
-```bash
 nc -vz 13.231.141.103 7448
 ```
 
@@ -331,19 +325,19 @@ ROS_DOMAIN_ID=1 ros2 topic info -v /racing_kart/joy
 
 TCP で topic 疎通できたら、まず TLS なしのまま A2 用 router を systemd 化する。
 
-systemd の `ExecStart` は去年の運用に合わせて `/usr/local/bin/zenohd` を使う。
-EC2 上に存在しない場合は、`command -v zenohd` で実体の場所を確認してから対応する。
+今年は zenohd を apt でインストールしているため、実体は `/usr/bin/zenohd` にある。
+systemd の `ExecStart` も `/usr/bin/zenohd` をそのまま使う。
 
 ```bash
-sudo tee /etc/systemd/system/zenoh-routerA.service >/dev/null <<'EOF'
+sudo tee /etc/systemd/system/zenoh-router-a2.service >/dev/null <<'EOF'
 [Unit]
-Description=zenoh router A (kart A)
+Description=zenoh router A2
 After=network-online.target
 Wants=network-online.target
 
 [Service]
 User=root
-ExecStart=/usr/local/bin/zenohd --listen tcp/0.0.0.0:7448
+ExecStart=/usr/bin/zenohd --listen tcp/0.0.0.0:7448
 Restart=always
 RestartSec=2s
 LimitNOFILE=65535
@@ -357,21 +351,62 @@ EOF
 
 ```bash
 sudo systemctl daemon-reload
-sudo systemctl enable --now zenoh-routerA
-sudo systemctl status zenoh-routerA
+sudo systemctl enable --now zenoh-router-a2
+sudo systemctl status zenoh-router-a2
 ```
 
 ログ:
 
 ```bash
-journalctl -u zenoh-routerA -f
+journalctl -u zenoh-router-a2 -f
 ```
 
 ## 手順3. TLS/mTLS 設定
 
 Router 側には router 用 config を用意する。
 
-### 手順3-1. 暫定方針: IP アドレス直指定
+### 手順3-1. mTLS 用 minica を用意する
+
+mTLS では client 側証明書も TLS client authentication 用途を持つ必要がある。
+minica 標準の leaf 証明書は `ServerAuth` のみなので、証明書生成前に `ClientAuth` も入るように minica を修正してビルドする。
+
+minica を取得する。
+
+```bash
+mkdir -p ~/src
+cd ~/src
+git clone https://github.com/jsha/minica.git
+cd minica
+```
+
+`main.go` の `sign()` 内にある `ExtKeyUsage` を変更する。
+
+変更前:
+
+```go
+ExtKeyUsage: []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth},
+```
+
+変更後:
+
+```go
+ExtKeyUsage: []x509.ExtKeyUsage{
+    x509.ExtKeyUsageServerAuth,
+    x509.ExtKeyUsageClientAuth,
+},
+```
+
+修正版 minica をビルドする。
+
+```bash
+go build -o minica
+./minica --help
+```
+
+以降の証明書作成では、この修正版 minica を使う。
+既に作成済みの証明書には反映されないため、minica 修正後に証明書を作り直す。
+
+### 手順3-2. 暫定方針: IP アドレス直指定
 
 明日の検証では DNS を使わず、今回作成した EC2 の Public IP を直接使う。
 
@@ -421,10 +456,11 @@ client 側 endpoint は以下のようにする。
 /etc/zenohd/tls/client/minica.pem
 ```
 
-### 手順3-2. 証明書作成
+### 手順3-3. 証明書作成
 
 Zenoh 公式ドキュメントでは、TLS 証明書作成に `minica` を使う手順が案内されている。
 そのため、この検証でも `minica` を本線にする。
+ここでは手順3-1でビルドした修正版 minica を使う。
 
 参考:
 
@@ -446,7 +482,7 @@ cd ~/zenoh_tls/server
 server 証明書作成:
 
 ```bash
-minica --ip-addresses 13.231.141.103
+~/src/minica/minica --ip-addresses 13.231.141.103
 ```
 
 生成物:
@@ -491,7 +527,7 @@ cd ~/zenoh_tls/client
 client 証明書作成:
 
 ```bash
-minica --domains aichallenge-zenoh-client
+~/src/minica/minica --domains aichallenge-zenoh-client
 ```
 
 生成物:
@@ -583,17 +619,17 @@ OpenSSL で CA/server/client 証明書を作ることも可能だが、Zenoh 公
 
 | 車両 | config | listen endpoint |
 | --- | --- | --- |
-| A2 | `/etc/zenoh/routers/routerA.json5` | `tls/0.0.0.0:7448` |
-| A3 | `/etc/zenoh/routers/routerB.json5` | `tls/0.0.0.0:7449` |
-| A6 | `/etc/zenoh/routers/routerC.json5` | `tls/0.0.0.0:7450` |
-| A7 | `/etc/zenoh/routers/routerD.json5` | `tls/0.0.0.0:7451` |
-| A1 | `/etc/zenoh/routers/routerE.json5` | `tls/0.0.0.0:7452` |
-| A5 | `/etc/zenoh/routers/routerF.json5` | `tls/0.0.0.0:7453` |
-| A8 | `/etc/zenoh/routers/routerG.json5` | `tls/0.0.0.0:7454` |
+| A2 | `/etc/zenoh/routers/router-a2.json5` | `tls/0.0.0.0:7448` |
+| A3 | `/etc/zenoh/routers/router-a3.json5` | `tls/0.0.0.0:7449` |
+| A6 | `/etc/zenoh/routers/router-a6.json5` | `tls/0.0.0.0:7450` |
+| A7 | `/etc/zenoh/routers/router-a7.json5` | `tls/0.0.0.0:7451` |
+| A1 | `/etc/zenoh/routers/router-a1.json5` | `tls/0.0.0.0:7452` |
+| A5 | `/etc/zenoh/routers/router-a5.json5` | `tls/0.0.0.0:7453` |
+| A8 | `/etc/zenoh/routers/router-a8.json5` | `tls/0.0.0.0:7454` |
 
 各 config は listen endpoint のポートだけを車両ごとに変え、TLS 証明書設定は同じにする。
 
-A2 用 `/etc/zenoh/routers/routerA.json5`:
+A2 用 `/etc/zenoh/routers/router-a2.json5`:
 
 ```json5
 {
@@ -646,31 +682,31 @@ A2 用 `/etc/zenoh/routers/routerA.json5`:
 ## 手順4. TLS + systemd 設定に差し替え
 
 車両ごとに systemd service を作成する。
-systemd の `ExecStart` は去年の運用に合わせて `/usr/local/bin/zenohd` を使う。
-EC2 上に存在しない場合は、`command -v zenohd` で実体の場所を確認してから対応する。
+今年は zenohd を apt でインストールしているため、実体は `/usr/bin/zenohd` にある。
+systemd の `ExecStart` も `/usr/bin/zenohd` をそのまま使う。
 
 | 車両 | service | config |
 | --- | --- | --- |
-| A2 | `zenoh-routerA.service` | `/etc/zenoh/routers/routerA.json5` |
-| A3 | `zenoh-routerB.service` | `/etc/zenoh/routers/routerB.json5` |
-| A6 | `zenoh-routerC.service` | `/etc/zenoh/routers/routerC.json5` |
-| A7 | `zenoh-routerD.service` | `/etc/zenoh/routers/routerD.json5` |
-| A1 | `zenoh-routerE.service` | `/etc/zenoh/routers/routerE.json5` |
-| A5 | `zenoh-routerF.service` | `/etc/zenoh/routers/routerF.json5` |
-| A8 | `zenoh-routerG.service` | `/etc/zenoh/routers/routerG.json5` |
+| A2 | `zenoh-router-a2.service` | `/etc/zenoh/routers/router-a2.json5` |
+| A3 | `zenoh-router-a3.service` | `/etc/zenoh/routers/router-a3.json5` |
+| A6 | `zenoh-router-a6.service` | `/etc/zenoh/routers/router-a6.json5` |
+| A7 | `zenoh-router-a7.service` | `/etc/zenoh/routers/router-a7.json5` |
+| A1 | `zenoh-router-a1.service` | `/etc/zenoh/routers/router-a1.json5` |
+| A5 | `zenoh-router-a5.service` | `/etc/zenoh/routers/router-a5.json5` |
+| A8 | `zenoh-router-a8.service` | `/etc/zenoh/routers/router-a8.json5` |
 
 A2 用 service:
 
 ```bash
-sudo tee /etc/systemd/system/zenoh-routerA.service >/dev/null <<'EOF'
+sudo tee /etc/systemd/system/zenoh-router-a2.service >/dev/null <<'EOF'
 [Unit]
-Description=zenoh router A (kart A)
+Description=zenoh router A2
 After=network-online.target
 Wants=network-online.target
 
 [Service]
 User=root
-ExecStart=/usr/local/bin/zenohd -c /etc/zenoh/routers/routerA.json5
+ExecStart=/usr/bin/zenohd -c /etc/zenoh/routers/router-a2.json5
 Restart=always
 RestartSec=2s
 LimitNOFILE=65535
@@ -687,21 +723,21 @@ A3/A6/A7/A1/A5/A8 も同じ形で service 名と config 名を対応表どおり
 ```bash
 sudo systemctl daemon-reload
 sudo systemctl enable --now \
-  zenoh-routerA \
-  zenoh-routerB \
-  zenoh-routerC \
-  zenoh-routerD \
-  zenoh-routerE \
-  zenoh-routerF \
-  zenoh-routerG
+  zenoh-router-a2 \
+  zenoh-router-a3 \
+  zenoh-router-a6 \
+  zenoh-router-a7 \
+  zenoh-router-a1 \
+  zenoh-router-a5 \
+  zenoh-router-a8
 
-sudo systemctl status zenoh-routerA
+sudo systemctl status zenoh-router-a2
 ```
 
 ログ:
 
 ```bash
-journalctl -u zenoh-routerA -f
+journalctl -u zenoh-router-a2 -f
 ```
 
 ## 手順5. 車両側/遠隔側の接続先を正式反映
