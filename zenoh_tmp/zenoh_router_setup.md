@@ -273,10 +273,16 @@ zenoh-bridge-ros2dds client -e tls/zenoh.dev.aichallenge-board.jsae.or.jp:$$PORT
 zenoh-bridge-ros2dds client -e tcp/13.231.141.103:$$PORT -c /vehicle/zenoh.json5
 ```
 
-A2 車両側 PC で起動する。
+A2 車両側 PC で [`.env`](../.env) の `VEHICLE_ID` を対象車両に設定する。
+
+```env
+VEHICLE_ID=A2
+```
+
+車両側 PC で起動する。
 
 ```bash
-VEHICLE_ID=A2 make autoware-driver-zenoh
+make autoware-driver-zenoh
 ```
 
 遠隔 PC 側で RViz を起動する。
@@ -315,7 +321,7 @@ ROS_DOMAIN_ID=1 ros2 topic info -v /racing_kart/joy
 
 `topic info` で `racing_kart_driver` が subscriber として表示されることを確認する。
 
-別車両を確認する場合は、対象車両に合わせて `VEHICLE_ID` と port を変更する。
+別車両を確認する場合は、対象車両に合わせて [`.env`](../.env) の `VEHICLE_ID` と port を変更する。
 ただし [`docker-compose.yml`](../docker-compose.yml) の `zenoh` service に対象車両の `case` が追加済みであることを確認する。
 
 確認後は、手順1-5で一時的に変更した [`docker-compose.yml`](../docker-compose.yml) の endpoint を
@@ -938,10 +944,16 @@ esac
 
 遠隔 PC 側と車両側 PC の 2 台構成で確認する。
 
+車両側 PC で [`.env`](../.env) の `VEHICLE_ID` を対象車両に設定する。
+
+```env
+VEHICLE_ID=A2
+```
+
 車両側 PC で起動する。
 
 ```bash
-VEHICLE_ID=A2 make autoware-driver-zenoh
+make autoware-driver-zenoh
 ```
 
 遠隔 PC 側で Zenoh bridge を起動する。
