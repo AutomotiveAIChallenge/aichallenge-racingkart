@@ -1,0 +1,44 @@
+{
+  plugins: {
+    ros2dds: {
+      allow: {
+        publishers: [
+          "/racing_kart/joy",
+        ],
+        subscribers: [
+          "/racing_kart/joy",
+        ],
+        service_servers: [],
+        service_clients: [],
+        action_servers: [],
+        action_clients: [],
+      },
+      reliable_routes_blocking: false,
+      queries_timeout: {
+        default: 2.0,
+      },
+    },
+  },
+  mode: "client",
+  transport: {
+    unicast: {
+      compression: {
+        enabled: true,
+      },
+    },
+    multicast: {
+      compression: {
+        enabled: true,
+      },
+    },
+    link: {
+      tls: {
+        root_ca_certificate: "remote/tls/server/minica.pem",
+        connect_private_key: "remote/tls/client/key.pem",
+        connect_certificate: "remote/tls/client/cert.pem",
+        enable_mtls: true,
+        close_link_on_expiration: true,
+      },
+    },
+  },
+}

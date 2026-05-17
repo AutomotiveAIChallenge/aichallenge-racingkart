@@ -510,8 +510,9 @@ client 側へ配布する server CA:
 ~/zenoh_tls/server/minica.pem
 ```
 
-この `minica.pem` を `remote/zenoh-user.json5` と `vehicle/zenoh.json5` の
-`root_ca_certificate` から参照できる場所へ配置する。
+この `minica.pem` を client 側 config の `root_ca_certificate` から参照できる場所へ配置する。
+このリポジトリでは、遠隔 PC 側と車両側 Docker container の両方から参照できるように
+`remote/tls/server/minica.pem` に配置する。
 
 #### client 側証明書
 
@@ -687,12 +688,14 @@ sudo /usr/bin/zenohd -c /etc/zenoh/routers/router-a2.json5
 ```
 
 PC 1 台で remote 側 bridge を起動する。
+PC 1 台検証では、`vehicle/zenoh.json5` の `/remote/tls/...` パスをホスト上に作らない。
+代わりに、ホスト上の相対パスで証明書を参照する検証用 config `zenoh_tmp/zenoh-tls-test.json5` を使う。
 
 ```bash
 ROS_DOMAIN_ID=10 \
 zenoh-bridge-ros2dds client \
   -e tls/13.231.141.103:7448 \
-  -c remote/zenoh-user.json5
+  -c zenoh_tmp/zenoh-tls-test.json5
 ```
 
 同じ PC の別ターミナルで vehicle 側 bridge を起動する。
@@ -701,7 +704,7 @@ zenoh-bridge-ros2dds client \
 ROS_DOMAIN_ID=11 \
 zenoh-bridge-ros2dds client \
   -e tls/13.231.141.103:7448 \
-  -c vehicle/zenoh.json5
+  -c zenoh_tmp/zenoh-tls-test.json5
 ```
 
 remote 側 domain で `/racing_kart/joy` を publish する。
@@ -813,7 +816,7 @@ remote 側 bridge を起動する。
 ROS_DOMAIN_ID=10 \
 zenoh-bridge-ros2dds client \
   -e tls/13.231.141.103:7448 \
-  -c remote/zenoh-user.json5
+  -c zenoh_tmp/zenoh-tls-test.json5
 ```
 
 vehicle 側 bridge を起動する。
@@ -822,7 +825,7 @@ vehicle 側 bridge を起動する。
 ROS_DOMAIN_ID=11 \
 zenoh-bridge-ros2dds client \
   -e tls/13.231.141.103:7448 \
-  -c vehicle/zenoh.json5
+  -c zenoh_tmp/zenoh-tls-test.json5
 ```
 
 remote 側 domain で `/racing_kart/joy` を publish する。
@@ -852,47 +855,50 @@ journalctl -u zenoh-router-a2 -f
 
 ## 手順5. 車両側/遠隔側の接続先を正式反映
 
-遠隔 PC 側:
+遠隔 PC 側と車両側の接続先を、TLS/mTLS の EC2 router に正式反映する。
+今回の検証では DNS を使わず、接続先は `13.231.141.103` とする。
+
+### 手順5-1. 遠隔 PC 側の接続先を TLS にする
+
+[`remote/connect_zenoh.bash`](../remote/connect_zenoh.bash) の各車両 case の `-e` を、以下の TLS endpoint に設定する。
+
+| 車両 | endpoint |
+| --- | --- |
+| A2 | `tls/13.231.141.103:7448` |
+| A3 | `tls/13.231.141.103:7449` |
+| A6 | `tls/13.231.141.103:7450` |
+| A7 | `tls/13.231.141.103:7451` |
+| A1 | `tls/13.231.141.103:7452` |
+| A5 | `tls/13.231.141.103:7453` |
+| A8 | `tls/13.231.141.103:7454` |
+
+A2 の設定:
 
 ```bash
-remote/connect_zenoh.bash
+RUST_BACKTRACE=1 zenoh-bridge-ros2dds client \
+    -e tls/13.231.141.103:7448 \
+    -c zenoh-user.json5
 ```
 
-確認用 TCP:
-
-```bash
--e tcp/<EC2_PUBLIC_IP>:7448
-```
-
-TLS/mTLS:
-
-```bash
--e tls/<ZENOH_ROUTER_DNS_NAME>:7448
-```
-
-### 手順5-1. A1/A5/A8 の case 追加
-
-A1/A5/A8 を使う場合は、遠隔 PC 側と車両側の両方に車両 ID とポートの対応を追加する。
-
-遠隔 PC 側は `remote/connect_zenoh.bash` の `case "$NAMESPACE" in` に追加する。
+A1/A5/A8 は `remote/connect_zenoh.bash` の `case "$NAMESPACE" in` に追加する。
 
 ```bash
 A1)
     echo "Connecting Zenoh. Target Vehicle: '$NAMESPACE' - Port 7452"
     RUST_BACKTRACE=1 zenoh-bridge-ros2dds client \
-        -e tls/<ZENOH_ROUTER_DNS_NAME>:7452 \
+        -e tls/13.231.141.103:7452 \
         -c zenoh-user.json5
     ;;
 A5)
     echo "Connecting Zenoh. Target Vehicle: '$NAMESPACE' - Port 7453"
     RUST_BACKTRACE=1 zenoh-bridge-ros2dds client \
-        -e tls/<ZENOH_ROUTER_DNS_NAME>:7453 \
+        -e tls/13.231.141.103:7453 \
         -c zenoh-user.json5
     ;;
 A8)
     echo "Connecting Zenoh. Target Vehicle: '$NAMESPACE' - Port 7454"
     RUST_BACKTRACE=1 zenoh-bridge-ros2dds client \
-        -e tls/<ZENOH_ROUTER_DNS_NAME>:7454 \
+        -e tls/13.231.141.103:7454 \
         -c zenoh-user.json5
     ;;
 ```
@@ -904,25 +910,16 @@ echo "使用法: $0 {A1|A2|A3|A5|A6|A7|A8|test-*}" >&2
 echo "A1, A2, A3, A5, A6, A7, A8, test-* のいずれかを指定してください。" >&2
 ```
 
-車両側:
+### 手順5-2. 車両側の接続先を TLS にする
+
+[`docker-compose.yml`](../docker-compose.yml) の `zenoh` service で、`zenoh-bridge-ros2dds` の endpoint を TLS にする。
+接続先は `VEHICLE_ID` から決めた `PORT` を使う。
 
 ```bash
-docker-compose.yml
+zenoh-bridge-ros2dds client -e tls/13.231.141.103:$$PORT -c /vehicle/zenoh.json5
 ```
 
-確認用 TCP:
-
-```bash
--e tcp/<EC2_PUBLIC_IP>:$$PORT
-```
-
-TLS/mTLS:
-
-```bash
--e tls/<ZENOH_ROUTER_DNS_NAME>:$$PORT
-```
-
-車両側は `docker-compose.yml` の `zenoh` service 内で `VEHICLE_ID` から `PORT` を決めているため、以下のように `case ${VEHICLE_ID:-} in` に追加する。
+同じ `zenoh` service 内の `case ${VEHICLE_ID:-} in` に、全車両分の port 対応を入れる。
 
 ```bash
 case ${VEHICLE_ID:-} in
@@ -937,15 +934,7 @@ case ${VEHICLE_ID:-} in
 esac
 ```
 
-起動コマンド:
-
-```bash
-VEHICLE_ID=A1 docker compose up -d zenoh
-VEHICLE_ID=A5 docker compose up -d zenoh
-VEHICLE_ID=A8 docker compose up -d zenoh
-```
-
-### 手順5-2. 正式反映後の実運用相当確認
+### 手順5-3. 正式反映後の実運用相当確認
 
 遠隔 PC 側と車両側 PC の 2 台構成で確認する。
 
