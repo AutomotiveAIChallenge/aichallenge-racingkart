@@ -209,24 +209,6 @@ confirm_step() {
     done
 }
 
-run_step() {
-    local label="$1"
-    shift
-    if confirm_step "${label}"; then
-        local had_errexit=0
-        case $- in *e*) had_errexit=1 ;; esac
-        set +e
-        "$@"
-        local rc=$?
-        if [ "${had_errexit}" -eq 1 ]; then
-            set -e
-        fi
-        return "${rc}"
-    else
-        log "${INFO} Skipped: ${label}"
-    fi
-}
-
 run_step_if() {
     local enabled="${1:-0}"
     local label="${2-}"
@@ -474,62 +456,21 @@ clone_or_update_repo() {
 
 bootstrap_repo_targets() {
     local repo_dir="$1"
-    local domain_id="${2:-1}"
-    local do_make_autoware_build="${3:-0}"
-    local do_make_dev="${4:-0}"
+    local do_make_autoware_build="${2:-0}"
+    local do_make_dev="${3:-0}"
 
     require_cmd make || return 1
 
-    local use_sudo=0
-    if ! docker_as_user_ok && cmd_exists sudo && cmd_exists docker; then
-        use_sudo=1
-        sudo_refresh
-    fi
-
-    if [ "$use_sudo" -eq 1 ]; then
-        warn "${WARN} docker daemon not reachable as user yet; using sudo docker for post-setup steps"
+    if ! docker_as_user_ok; then
+        warn "${WARN} docker not reachable as user (not installed, daemon down, or docker group not applied yet — re-login may help); make targets will likely fail."
     fi
 
     if [ "${do_make_autoware_build}" = "1" ]; then
-        if [ "$use_sudo" -eq 1 ]; then
-            (cd "${repo_dir}" && make autoware-build) || {
-                warn "${FAIL} make autoware-build failed"
-                return 0
-            }
-        else
-            (cd "${repo_dir}" && make autoware-build) || {
-                warn "${FAIL} make autoware-build failed"
-                return 0
-            }
-        fi
-
-        {
-            local build_cid=""
-            build_cid="$(
-                cd "${repo_dir}" 2>/dev/null || exit 0
-                docker_compose_run ps -q --all autoware-build 2>/dev/null || true
-            )"
-            if [ -n "${build_cid}" ]; then
-                docker_run logs -f "${build_cid}" || true
-                local build_rc=""
-                build_rc="$(docker_run wait "${build_cid}" 2>/dev/null || true)"
-                if [ -n "${build_rc}" ] && [ "${build_rc}" -ne 0 ]; then
-                    warn "${FAIL} autoware-build failed (exit=${build_rc})"
-                else
-                    log "${OK} autoware-build finished"
-                fi
-            else
-                warn "${WARN} Could not resolve autoware-build container id (skip wait/log follow)"
-            fi
-        }
+        (cd "${repo_dir}" && make autoware-build) || warn "${FAIL} make autoware-build failed"
     fi
 
     if [ "${do_make_dev}" = "1" ]; then
-        if [ "$use_sudo" -eq 1 ]; then
-            (cd "${repo_dir}" && make dev ROS_DOMAIN_ID="${domain_id}") || warn "${WARN} make dev failed"
-        else
-            (cd "${repo_dir}" && make dev ROS_DOMAIN_ID="${domain_id}") || warn "${WARN} make dev failed"
-        fi
+        (cd "${repo_dir}" && make dev) || warn "${WARN} make dev failed"
     fi
 }
 
@@ -631,9 +572,9 @@ EOF
         esac
     done
 
-    if [ "${repo_url_explicit}" -ne 1 ] && cmd_exists git && git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+    if [ "${repo_url_explicit}" -ne 1 ] && [ -n "${REPO_ROOT}" ] && cmd_exists git; then
         local origin_url=""
-        origin_url="$(git remote get-url origin 2>/dev/null || true)"
+        origin_url="$(git -C "${REPO_ROOT}" remote get-url origin 2>/dev/null || true)"
         if [ -n "${origin_url}" ]; then
             repo_url="${origin_url}"
         fi
@@ -694,7 +635,7 @@ EOF
     log_step "Download AWSIM.zip and extract $(_skip_note "$skip_awsim" "--skip-awsim")"
     log_step "Build dev image: ./docker_build.sh dev $(_skip_note "$skip_build" "--skip-build")"
     log_step "make autoware-build $(_skip_note "$skip_make" "--skip-make")"
-    log_step "make dev ROS_DOMAIN_ID=${ROS_DOMAIN_ID:-1} $(_skip_note "$skip_make" "--skip-make")"
+    log_step "make dev (ROS_DOMAIN_ID from .env) $(_skip_note "$skip_make" "--skip-make")"
 
     confirm_step "Install base packages (apt)" && do_install_base=1 || true
     confirm_step "Install Docker (if missing)" && do_install_docker=1 || true
@@ -712,7 +653,7 @@ EOF
         [ "$skip_build" -ne 1 ] && confirm_step "Build dev image: ./docker_build.sh dev" && do_build_dev_image=1 || true
         if [ "$skip_make" -ne 1 ]; then
             confirm_step "Run make autoware-build (this can take a while)" && do_make_autoware_build=1 || true
-            confirm_step "Run make dev ROS_DOMAIN_ID=${ROS_DOMAIN_ID:-1}" && do_make_dev=1 || true
+            confirm_step "Run make dev (ROS_DOMAIN_ID from .env)" && do_make_dev=1 || true
         fi
     else
         log "${INFO} Repo steps skipped (repo not selected / not present)"
@@ -781,7 +722,7 @@ EOF
     fi
 
     if [ "$skip_make" -ne 1 ]; then
-        bootstrap_repo_targets "${dest_dir}" "${ROS_DOMAIN_ID:-1}" "${do_make_autoware_build}" "${do_make_dev}" || true
+        bootstrap_repo_targets "${dest_dir}" "${do_make_autoware_build}" "${do_make_dev}" || true
     fi
 
     cat <<EOF
@@ -793,7 +734,7 @@ Repo dir:
 
 Common commands:
   make autoware-build
-  make dev ROS_DOMAIN_ID=1
+  make dev        # ROS_DOMAIN_ID is read from .env
   make down_all   # stop/remove all docker containers (sudo)
 EOF
 }
@@ -1121,7 +1062,7 @@ doctor() {
     echo "${INFO} 4) Build image:        ./docker_build.sh dev"
     echo "${INFO} 5) Build Autoware:     make autoware-build && docker compose logs -f autoware-build"
     echo "${INFO} 6) Run evaluation:     ./run_evaluation.bash  (optional: ROSBAG=true CAPTURE=true)"
-    echo "${INFO} 7) Start dev:          make dev ROS_DOMAIN_ID=1"
+    echo "${INFO} 7) Start dev:          make dev   (ROS_DOMAIN_ID is read from .env)"
     echo "${INFO} 8) Dev shell:          docker compose run --rm -it --entrypoint bash autoware"
 
     return "$failed"
