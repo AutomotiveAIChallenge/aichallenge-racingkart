@@ -970,6 +970,15 @@ PY
     fi
 }
 
+is_wsl() {
+    grep -qiE 'microsoft|wsl' /proc/sys/kernel/osrelease 2>/dev/null
+}
+
+has_nvidia_gpu() {
+    # Native Linux exposes /dev/nvidia0; WSL2 exposes /dev/dxg.
+    [ -e /dev/nvidia0 ] || [ -e /dev/dxg ]
+}
+
 ensure_env() {
     if [ -f .env ]; then
         if ! confirm_step ".env already exists. Replace with fresh .env.example?"; then
@@ -984,12 +993,28 @@ ensure_env() {
     fi
     cp .env.example .env
 
-    if [ -e /dev/nvidia0 ]; then
-        sed -i 's/^#\s*COMPOSE_FILE=/COMPOSE_FILE=/' .env
-        log "${OK} .env created (GPU)"
-    else
-        log "${OK} .env created (CPU)"
+    local gpu=0 wsl=0
+    has_nvidia_gpu && gpu=1
+    is_wsl && wsl=1
+
+    local compose_files="docker-compose.yml"
+    [ "$gpu" = "1" ] && compose_files="${compose_files}:docker-compose.gpu.yml"
+    [ "$wsl" = "1" ] && compose_files="${compose_files}:docker-compose.wsl.yml"
+
+    if [ "$gpu" = "1" ] || [ "$wsl" = "1" ]; then
+        # Replace any commented or uncommented COMPOSE_FILE line.
+        if grep -qE '^\s*#?\s*COMPOSE_FILE=' .env; then
+            sed -i "s|^\s*#\?\s*COMPOSE_FILE=.*|COMPOSE_FILE=${compose_files}|" .env
+        else
+            printf 'COMPOSE_FILE=%s\n' "${compose_files}" >>.env
+        fi
     fi
+
+    local tag=""
+    [ "$gpu" = "1" ] && tag+="GPU "
+    [ "$gpu" = "0" ] && tag+="CPU "
+    [ "$wsl" = "1" ] && tag+="WSL"
+    log "${OK} .env created (${tag% })"
 }
 
 doctor() {
@@ -1095,6 +1120,41 @@ doctor() {
     else
         echo "${INFO} nvidia-smi not found (CPU-only is OK)"
     fi
+    if [ -e /dev/dxg ]; then
+        _chk OK "WSL GPU device /dev/dxg present"
+    fi
+
+    echo ""
+    echo "=== WSL (Windows Subsystem for Linux) ==="
+    if is_wsl; then
+        _chk OK "WSL2 detected (kernel: $(uname -r))"
+        if [ -d /mnt/wslg ]; then
+            _chk OK "WSLg available (/mnt/wslg present) — GUI/Audio should work"
+        else
+            _chk WARN "WSLg not detected (no /mnt/wslg)" "Tip: update to Windows 11 / latest WSL: 'wsl --update'"
+        fi
+        case "$PWD" in
+        /mnt/*)
+            _chk WARN "Repo is on a Windows drive (${PWD})" \
+                "Move to Linux FS, e.g. ~/aichallenge-racingkart — Windows FS breaks exec bits and is slow"
+            ;;
+        *)
+            _chk OK "Repo on Linux filesystem (${PWD})"
+            ;;
+        esac
+        # CRLF check on a representative shell script.
+        if [ -f Makefile ] && file Makefile 2>/dev/null | grep -q 'CRLF'; then
+            _chk WARN "Makefile has CRLF line endings — bash/Make will choke" \
+                "Fix: git config --global core.autocrlf false && (clone again) OR run: dos2unix Makefile *.bash"
+        fi
+        if [ -f docker-compose.wsl.yml ]; then
+            _chk OK "docker-compose.wsl.yml present (used automatically by Makefile)"
+        else
+            _chk WARN "docker-compose.wsl.yml missing — base compose will try /dev/video0 etc."
+        fi
+    else
+        echo "${INFO} Not running inside WSL — skipping WSL checks."
+    fi
 
     echo ""
     echo "=== X11 Display ==="
@@ -1105,6 +1165,10 @@ doctor() {
     fi
     if [ -n "${XAUTHORITY-}" ] && [ -f "${XAUTHORITY}" ]; then
         _chk OK "XAUTHORITY=${XAUTHORITY}"
+    elif is_wsl; then
+        # WSLg generally leaves XAUTHORITY unset — that is fine, the override
+        # compose file falls back to /mnt/wslg/.Xauthority.
+        _chk OK "XAUTHORITY unset (OK on WSLg — handled by docker-compose.wsl.yml)"
     else
         _chk WARN "XAUTHORITY not set or file not found (${XAUTHORITY:-<unset>})"
         echo "    Fix: export XAUTHORITY=~/.Xauthority"
@@ -1121,6 +1185,12 @@ doctor() {
     echo "${INFO} 6) Run evaluation:     ./run_evaluation.bash  (optional: ROSBAG=true CAPTURE=true)"
     echo "${INFO} 7) Start dev:          make dev ROS_DOMAIN_ID=1"
     echo "${INFO} 8) Dev shell:          docker compose run --rm -it --entrypoint bash autoware"
+    if is_wsl; then
+        echo ""
+        echo "${INFO} WSL note: 'make' auto-loads docker-compose.wsl.yml when /proc kernel"
+        echo "${INFO}           is detected as Microsoft/WSL. For raw 'docker compose ...'"
+        echo "${INFO}           runs, set COMPOSE_FILE in .env (see .env.example)."
+    fi
 
     return "$failed"
 }

@@ -28,9 +28,11 @@ if [ "${device}" = "cpu" ]; then
 elif [ "${device}" = "gpu" ]; then
     opts="--nvidia"
     echo "[INFO] Running in GPU mode (forced by argument)"
-elif [[ -e /dev/nvidia0 ]]; then
+elif [[ -e /dev/nvidia0 ]] || [[ -e /dev/dxg ]]; then
+    # /dev/nvidia0 = native Linux with NVIDIA driver.
+    # /dev/dxg    = WSL2 with Windows-side NVIDIA driver + WSL GPU support.
     opts="--nvidia"
-    echo "[INFO] NVIDIA device node detected (/dev/nvidia0) → enabling --nvidia"
+    echo "[INFO] NVIDIA GPU detected → enabling --nvidia"
 else
     opts=""
     echo "[INFO] No NVIDIA GPU detected → running on CPU"

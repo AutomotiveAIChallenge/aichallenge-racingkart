@@ -1,0 +1,40 @@
+# Normalize line endings: prevents CRLF leaking from Windows clones
+# (causes "bad interpreter: ^M" failures on bash/Makefile in WSL/containers).
+* text=auto eol=lf
+
+# Shell / Makefile / config files must stay LF on every platform.
+*.bash       text eol=lf
+*.sh         text eol=lf
+*.py         text eol=lf
+*.yml        text eol=lf
+*.yaml       text eol=lf
+*.xml        text eol=lf
+*.json       text eol=lf
+*.toml       text eol=lf
+*.md         text eol=lf
+*.txt        text eol=lf
+*.cfg        text eol=lf
+*.ini        text eol=lf
+*.conf       text eol=lf
+Dockerfile   text eol=lf
+Makefile     text eol=lf
+
+# Binary assets — do not touch.
+*.zip        binary
+*.tar        binary
+*.gz         binary
+*.tgz        binary
+*.deb        binary
+*.png        binary
+*.jpg        binary
+*.jpeg       binary
+*.gif        binary
+*.svg        binary
+*.pdf        binary
+*.so         binary
+*.a          binary
+*.bin        binary
+*.x86_64     binary
+*.onnx       binary
+*.pt         binary
+*.pcd        binary

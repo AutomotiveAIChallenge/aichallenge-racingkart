@@ -1,0 +1,54 @@
+# WSL2 (Ubuntu + WSLg) overrides for docker-compose.yml.
+#
+# Applied automatically by the Makefile when WSL is detected.
+# Or explicitly:
+#   docker compose -f docker-compose.yml -f docker-compose.wsl.yml up ...
+#   COMPOSE_FILE=docker-compose.yml:docker-compose.wsl.yml docker compose up ...
+#
+# Why this file exists:
+#   - /dev/video0 and /dev/input rarely exist inside WSL2. Listing them as
+#     hard-required devices makes `docker compose up` fail with
+#     "error gathering device information ... no such file or directory".
+#   - WSLg exposes X11, Wayland and PulseAudio through /mnt/wslg and the
+#     loader at /usr/lib/wsl, which the base compose file does not mount.
+#
+# Requires Docker Compose v2.24+ (for the !override list tag).
+
+x-wsl-base: &wsl-base
+  # !override replaces the device list entirely so /dev/video0 and /dev/input
+  # (absent on WSL) are dropped, while keeping GPU rendering via /dev/dri.
+  devices: !override
+    - /dev/dri
+  environment:
+    # WSLg-provided sockets — let Qt/GTK/RViz find audio and Wayland.
+    - PULSE_SERVER=/mnt/wslg/PulseServer
+    - WAYLAND_DISPLAY=${WAYLAND_DISPLAY:-wayland-0}
+    - XDG_RUNTIME_DIR=/mnt/wslg/runtime-dir
+    # WSLg generally leaves XAUTHORITY unset and uses the system socket.
+    # Map an explicit one so the base compose's ${XAUTHORITY} bind has a value.
+    - XAUTHORITY=${XAUTHORITY:-/mnt/wslg/.Xauthority}
+  volumes:
+    - /mnt/wslg:/mnt/wslg
+    - /usr/lib/wsl:/usr/lib/wsl:ro
+
+services:
+  autoware:
+    <<: *wsl-base
+  autoware-build:
+    <<: *wsl-base
+  simulator:
+    <<: *wsl-base
+  autoware-command:
+    <<: *wsl-base
+  autoware-simulator-evaluation:
+    <<: *wsl-base
+  autoware-d1:
+    <<: *wsl-base
+  autoware-d2:
+    <<: *wsl-base
+  autoware-d3:
+    <<: *wsl-base
+  autoware-d4:
+    <<: *wsl-base
+  rviz2:
+    <<: *wsl-base

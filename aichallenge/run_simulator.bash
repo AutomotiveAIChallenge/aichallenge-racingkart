@@ -30,7 +30,13 @@ case "${mode}" in
 esac
 
 awsim_extra_args="${AWSIM_EXTRA_ARGS-}"
-if [[ -z ${awsim_extra_args} && ! -e /dev/nvidia0 && ${mode} =~ ^(dev|test|[1-4]p)$ ]]; then
+# WSL2 surfaces NVIDIA as /dev/dxg (not /dev/nvidia0). Treat either as "GPU present".
+if [[ -e /dev/nvidia0 || -e /dev/dxg ]]; then
+    gpu_available=1
+else
+    gpu_available=0
+fi
+if [[ -z ${awsim_extra_args} && ${gpu_available} -eq 0 && ${mode} =~ ^(dev|test|[1-4]p)$ ]]; then
     awsim_extra_args="--camera false --lidar false"
 fi
 

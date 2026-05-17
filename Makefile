@@ -9,7 +9,26 @@ HOST_UID ?= $(shell id -u)
 HOST_GID ?= $(shell id -g)
 export HOST_UID HOST_GID
 
-ROS_DOMAIN_ID := 1
+# Read .env if present so we can see whether the user already configured
+# COMPOSE_FILE (e.g. for the GPU overlay). docker compose reads .env on its
+# own; this `-include` only lets make inspect it.
+-include .env
+
+# WSL2 auto-detection — when running inside WSL we layer docker-compose.wsl.yml
+# on top so missing devices (/dev/video0, /dev/input) and WSLg sockets don't
+# trip `docker compose up`. If the user already set COMPOSE_FILE we append
+# to it rather than replace it (preserves e.g. GPU overlay).
+IS_WSL := $(shell grep -qiE 'microsoft|wsl' /proc/sys/kernel/osrelease 2>/dev/null && echo 1 || echo 0)
+ifeq ($(IS_WSL),1)
+    ifeq ($(strip $(COMPOSE_FILE)),)
+        COMPOSE_FILE := docker-compose.yml:docker-compose.wsl.yml
+    else ifeq ($(findstring docker-compose.wsl.yml,$(COMPOSE_FILE)),)
+        COMPOSE_FILE := $(COMPOSE_FILE):docker-compose.wsl.yml
+    endif
+    export COMPOSE_FILE
+endif
+
+ROS_DOMAIN_ID ?= 1
 TIMESTAMP := $(shell date +%Y%m%d-%H%M%S)
 LOG_DIR := /output/$(TIMESTAMP)/d$(ROS_DOMAIN_ID)
 

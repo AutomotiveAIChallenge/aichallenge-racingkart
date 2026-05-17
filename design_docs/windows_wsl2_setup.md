@@ -1,135 +1,130 @@
-# Windows（WSL2）で動かすためのセットアップメモ
+# Windows（WSL2）で動かすためのセットアップ
 
-このリポジトリは **Linux（Ubuntu）** を主ターゲットとして設計されています。  
-Windows で使う場合は、**Windows ネイティブ移植**ではなく **WSL2 上で Linux として動かす**のが最短です。
+このリポジトリは **Linux（Ubuntu）** を主ターゲットとして設計されていますが、
+**WSL2 上の Ubuntu** でも `make` / `docker compose` がそのまま使えるようになっています。
 
-> スコープ: WSL2（Ubuntu）上で `make` / `docker compose` を実行する手順と、ハマりどころのメモ。  
-> スコープ外（別途対応が必要）: PowerShell だけで完結する Windows ネイティブ実行、Docker Desktop 直下での完全サポート。
-
----
-
-## 推奨構成（最短で動かす）
-
-- Windows 11 + WSL2 + Ubuntu 22.04 など
-- リポジトリは **WSL の Linux ファイルシステム（例: `~/aichallenge-racingkart`）に配置**
-  - `/mnt/c/...` 配下（Windows 側のドライブ）に置くと、**改行コード/実行権限/性能**でハマりやすいです
-- Docker は **WSL 内で Docker Engine を動かす**（推奨）
-  - Docker Desktop でも動く場合はありますが、`network_mode: host` などで差分が出やすいです
+> スコープ: WSL2（Ubuntu）上で AWSIM + Autoware（評価/開発フロー）を動かす手順。
+> スコープ外: PowerShell から直接動かす Windows ネイティブ実行、Docker Desktop だけで完結する構成。
 
 ---
 
-## まず確認すること（WSL 側で実行）
+## 1. 推奨構成
 
-### 1) どこに clone したか
-
-```bash
-pwd
-```
-
-- OK: `/home/<user>/...`
-- 非推奨: `/mnt/c/...`（Windows ドライブ直下）
-
-### 2) Docker が動くか
-
-```bash
-docker version
-docker compose version
-```
-
-### 3) GUI（WSLg）が使えるか
-
-```bash
-echo "${DISPLAY:-}"
-```
-
-WSLg 環境なら通常 `:0` のような値が入ります（空なら GUI が出ません）。
+- Windows 11 + WSL2 + Ubuntu 22.04
+- リポジトリは **WSL の Linux FS 配下**（例: `~/aichallenge-racingkart`）に置く
+  - `/mnt/c/...` 配下に置くと、**改行コード/実行権限/I-O 性能**でハマる
+- Docker は **WSL 内の Docker Engine**（推奨）
+  - Docker Desktop でも動くが `network_mode: host` 周りで挙動が変わる
+- GPU を使う場合は **Windows 側に NVIDIA ドライバ**を入れて、WSL 内で
+  [NVIDIA Container Toolkit](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/install-guide.html) を入れる
 
 ---
 
-## 実行（WSL 側で）
+## 2. 自動で行われること
 
-基本は Linux と同じです。まずはチェックから始めます。
+以下はコードベース側で **自動的に**やってくれます（手で何かする必要はありません）。
+
+### 2.1 `Makefile` が WSL を検出して compose を切り替える
+
+`make` ターゲットを呼ぶと、`Makefile` が `/proc/sys/kernel/osrelease` を見て WSL を判定し、
+`docker-compose.wsl.yml` を `COMPOSE_FILE` に自動追加します。
+
+- `.env` で `COMPOSE_FILE` が未設定 → `docker-compose.yml:docker-compose.wsl.yml`
+- 既に GPU 等を設定済み → 末尾に `:docker-compose.wsl.yml` を追記
+- 既に WSL ファイルが含まれている → そのまま
+
+### 2.2 `docker-compose.wsl.yml` の役割
+
+- `/dev/video0` `/dev/input` を `devices:` から外す（WSL に存在しないため）
+- WSLg 用の環境変数 `PULSE_SERVER` / `WAYLAND_DISPLAY` / `XDG_RUNTIME_DIR` をセット
+- WSLg のソケットを `/mnt/wslg` / `/usr/lib/wsl` でマウント
+- `XAUTHORITY` 未設定時のフォールバックを `/mnt/wslg/.Xauthority` にする
+
+Docker Compose は **v2.24 以上**が必要です（`!override` タグを使うため）。
+`docker compose version` で確認してください。
+
+### 2.3 `.gitattributes` で改行コードを LF に固定
+
+Windows 側で `git clone` した場合でも、`*.bash` / `Makefile` / `*.yml` 等が
+CRLF に変換されないようリポジトリ側で固定済み。
+
+### 2.4 GPU 判定が WSL2 でも通る
+
+`/dev/nvidia0` だけでなく WSL2 が出す `/dev/dxg` も見て NVIDIA GPU を検出します。
+影響範囲: `setup.bash` / `docker_run.sh` / `aichallenge/run_simulator.bash` /
+`aichallenge/utils/move_window.bash`
+
+---
+
+## 3. 手順（クイック）
+
+WSL2 の Ubuntu を立ち上げて、Linux ホームに clone してから:
 
 ```bash
+# 0) 環境チェック（WSL/WSLg/GPU/CRLF などを一括診断）
 ./setup.bash doctor
-```
 
-起動例:
+# 1) Docker + 依存物のインストール（必要なら）
+./setup.bash bootstrap   # 対話で必要ステップを y/N 選択
 
-```bash
+# 2) .env を作る（CPU/GPU/WSL を自動検出して COMPOSE_FILE を設定）
+./setup.bash env
+
+# 3) ベースイメージ取得 + AWSIM ダウンロード
+./setup.bash pull image
+./setup.bash download awsim
+
+# 4) dev イメージビルド + Autoware ワークスペースビルド
+./docker_build.sh dev
 make autoware-build
-make simulator
-make autoware-simulator
+
+# 5) 起動
+make dev ROS_DOMAIN_ID=1
+# 停止
+make down
 ```
 
 ---
 
-## よくあるハマりどころ（Windows/WSL 特有）
+## 4. よくあるハマりどころ
 
 ### (A) `^M`（CRLF）で bash が壊れる
 
-症状:
-- `#!/bin/bash^M: bad interpreter: No such file or directory`
-
-原因:
-- Windows 側のエディタ設定や Git 設定で、改行が CRLF になっている
-
-対策（推奨）:
-- リポジトリを WSL の Linux FS に置く
-- Git を LF 固定にする（例）
-  - `git config --global core.autocrlf false`
-
-暫定復旧:
-- `dos2unix <file>`（入っていない場合は `sudo apt-get install dos2unix`）
-
-### (B) 実行ビット（`chmod +x`）が保持されない
-
-症状:
-- `Permission denied`（shebang があるのに実行できない）
-
-原因:
-- `/mnt/c` 配下など、Windows 側の FS 上で権限が期待通りにならない
+症状: `#!/bin/bash^M: bad interpreter: No such file or directory`
 
 対策:
-- WSL 側の `~/...` に置く
-- 暫定的に `bash aichallenge/run_evaluation.bash` のように `bash` 経由で実行する
+- リポジトリを **WSL の Linux FS** 配下に置く
+- Git を LF 固定にする: `git config --global core.autocrlf false`
+- 暫定: `sudo apt install dos2unix && dos2unix <file>`
 
-### (C) `docker compose` が `/dev/*` の bind mount で落ちる
+リポジトリ側の `.gitattributes` でも防いでいますが、既存 clone には反映されません。
+その場合 `git rm --cached -r . && git reset --hard` で再展開してください。
 
-症状（例）:
-- `bind source path does not exist: /dev/dri`
-- `/dev/video0` や `/dev/input` が存在せずに compose が起動できない
+### (B) GUI が出ない（DISPLAY 関連）
 
-背景:
-- `docker-compose.yml` は Linux ホストのデバイスを前提にしている箇所があります
+- `echo $DISPLAY` が空 → WSLg が動いていない（Windows を再起動 or `wsl --update`）
+- それでも出ない場合: `wsl --shutdown` 後に再起動
 
-現状:
-- WSL 環境によってはそのままだと起動できない可能性があります
+`./setup.bash doctor` で `WSL` セクションを確認してください。
 
-> ここは将来的に `docker-compose.wsl.yml` を追加してオーバーライドするのが本筋（下の TODO 参照）。
+### (C) `bind source path does not exist: /dev/video0`
 
-### (D) `XAUTHORITY` が空で compose の volume 定義が壊れる
+→ `docker-compose.wsl.yml` がロードされていません。次のどれかで直ります:
+- `make` 経由で起動する（自動的にロードされる）
+- `.env` に `COMPOSE_FILE=docker-compose.yml:docker-compose.wsl.yml` を書く
+- `docker compose -f docker-compose.yml -f docker-compose.wsl.yml ...` を直接渡す
 
-症状:
-- `invalid spec` や空パスの bind mount エラー
+### (D) GPU が認識されない
 
-対策（暫定）:
-- WSL 側で `XAUTHORITY` を明示
-  - `export XAUTHORITY="$HOME/.Xauthority"`
+WSL2 では `/dev/nvidia0` は存在せず、代わりに `/dev/dxg` が出ます。
+判定はコード側で対応済みですが、コンテナから NVIDIA を使うには以下が前提:
 
-### (E) Windows 側のパス/シンボリックリンク
+1. Windows 側に **NVIDIA Game Ready/Studio ドライバ**（GeForce）または **データセンタードライバ**
+2. WSL 内に [NVIDIA Container Toolkit](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/install-guide.html)
+3. `nvidia-smi` を WSL シェルで叩いて GPU が見えること
+4. `.env` に GPU 付きの `COMPOSE_FILE` を設定（例: `docker-compose.yml:docker-compose.gpu.yml:docker-compose.wsl.yml`）
 
-`/output/latest` を固定参照ディレクトリとして使います（`output/latest` への symlink 依存は前提にしません）。  
-Windows ドライブ上だと symlink の扱いが厳しくなるため、やはり `~/...` 配下運用を推奨します。
+### (E) `XAUTHORITY` が空でも動く（WSLg）
 
----
-
-## TODO（未実装 / 将来の改善）
-
-以下は「Windows（WSL2）でもストレスなく動かす」ために将来入れたい変更です（現時点では未対応）。
-
-- `.gitattributes` を追加し、`*.bash` / `Makefile` / `*.yml` を `eol=lf` で固定（CRLF 混入防止）
-- `docker-compose.wsl.yml` を追加し、WSL で存在しない `devices:` / `volumes:` を安全にオーバーライド
-  - 併せて WSLg（`/mnt/wslg` 等）向けの環境変数/マウントを整理
-- `Makefile` 側で WSL を自動検出し、`-f docker-compose.wsl.yml` を自動付与
-- `make doctor`（または既存 doctor の拡張）で、CRLF/GUI/Docker の前提を起動前にチェック
+WSLg では `XAUTHORITY` 未設定が通常で、コンテナ側はソケット越しに描画します。
+`docker-compose.wsl.yml` がフォールバックを設定しているのでそのままで動きます。

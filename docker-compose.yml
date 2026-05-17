@@ -29,7 +29,9 @@ x-autoware-base: &autoware-base
     # Audio (PipeWire/Pulse) socket access on the host
     - /run/user:/run/user:rw
     - /dev/dri:/dev/dri
-    - ${XAUTHORITY}:${XAUTHORITY}:rw
+    # XAUTHORITY may be unset (e.g. WSLg) — fall back to /tmp/.X11-unix so the
+    # bind spec never becomes "::rw" and breaks compose parsing.
+    - ${XAUTHORITY:-/tmp/.X11-unix}:${XAUTHORITY:-/tmp/.X11-unix}:rw
   devices:
     - /dev/dri
     - /dev/video0
@@ -46,7 +48,7 @@ x-autoware-eval-base: &autoware-eval-base
     # Audio (PipeWire/Pulse) socket access on the host
     - /run/user:/run/user:rw
     - /dev/dri:/dev/dri
-    - ${XAUTHORITY}:${XAUTHORITY}:rw
+    - ${XAUTHORITY:-/tmp/.X11-unix}:${XAUTHORITY:-/tmp/.X11-unix}:rw
 
 x-racing_kart_interface-base: &racing_kart_interface-base
   image: "ghcr.io/tier4/racing_kart_interface:latest-experiment"

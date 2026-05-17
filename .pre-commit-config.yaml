@@ -5,6 +5,9 @@ repos:
       - id: check-merge-conflict
       - id: check-xml
       - id: check-yaml
+        # docker-compose.wsl.yml uses the Compose-only !override tag (v2.24+)
+        # which the standard YAML loader cannot parse.
+        exclude: ^docker-compose\.wsl\.yml$
       - id: detect-private-key
       - id: end-of-file-fixer
       - id: mixed-line-ending
