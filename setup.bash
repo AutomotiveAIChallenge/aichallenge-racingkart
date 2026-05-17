@@ -850,7 +850,6 @@ download_awsim() {
     local default_url='https://tier4inc-my.sharepoint.com/:u:/g/personal/taiki_tanaka_tier4_jp/IQAnnhyB2tOzTL8AioXUmVtqAS3Js7Ep3cEKuACFESTMimc'
     local url="${AWSIM_ZIP_URL:-$default_url}"
 
-    local force=0
     local keep_zip=0
 
     while [ $# -gt 0 ]; do
@@ -860,7 +859,6 @@ download_awsim() {
             shift 2
             ;;
         --force)
-            force=1
             shift
             ;;
         --keep-zip)
@@ -870,7 +868,7 @@ download_awsim() {
         -h | --help)
             cat <<'EOF'
 Usage:
-  ./setup.bash download awsim [--url URL] [--force] [--keep-zip]
+  ./setup.bash download awsim [--url URL] [--keep-zip]
 
 Environment:
   AWSIM_ZIP_URL  Override the default AWSIM.zip share link.
@@ -891,16 +889,11 @@ EOF
     }
 
     local dest_dir="./aichallenge/simulator"
-    local awsim_bin="${dest_dir}/AWSIM/AWSIM.x86_64"
+    local awsim_dir="${dest_dir}/AWSIM"
+    local awsim_bin="${awsim_dir}/AWSIM.x86_64"
     local zip_path="${dest_dir}/AWSIM.zip"
 
     mkdir -p "$dest_dir"
-
-    if [ -x "$awsim_bin" ] && [ "$force" -ne 1 ]; then
-        log "${OK} AWSIM already present: ${awsim_bin}"
-        log "${INFO} Re-download: ./setup.bash download awsim --force"
-        return 0
-    fi
 
     log "${INFO} Downloading AWSIM.zip..."
     log "${INFO} URL: ${url}"
@@ -944,6 +937,15 @@ if not zipfile.is_zipfile(p):
     print(f"[setup][WARN] Downloaded file is not a zip: {p}", file=sys.stderr)
     sys.exit(2)
 PY
+
+    if [ -e "$awsim_dir" ]; then
+        local backup_n=1
+        while [ -e "${awsim_dir}_${backup_n}" ]; do
+            backup_n=$((backup_n + 1))
+        done
+        log "${INFO} Backing up existing AWSIM to ${awsim_dir}_${backup_n}"
+        mv "$awsim_dir" "${awsim_dir}_${backup_n}"
+    fi
 
     log "${INFO} Extracting AWSIM.zip to ${dest_dir}..."
     ZIP_PATH="$zip_path" DEST_DIR="$dest_dir" python3 - <<'PY'
