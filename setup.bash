@@ -1118,12 +1118,12 @@ _network_if_edit_file() {
 }
 
 add_network_interface() {
-    local iface="${1:-}"
+    local iface="${1-}"
 
     local xml_vehicle="${REPO_ROOT:-.}/vehicle/cyclonedds.xml"
 
     local uri_file=""
-    if [ -n "${CYCLONEDDS_URI:-}" ]; then
+    if [ -n "${CYCLONEDDS_URI-}" ]; then
         case "${CYCLONEDDS_URI}" in
         file://*)
             uri_file="${CYCLONEDDS_URI#file://}"
