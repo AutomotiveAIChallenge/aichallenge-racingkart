@@ -37,7 +37,6 @@ ENV ROS_LOCALHOST_ONLY=0
 ENV RMW_IMPLEMENTATION=rmw_cyclonedds_cpp
 ENV CYCLONEDDS_URI=file:///opt/autoware/cyclonedds.xml
 
-COPY vehicle/cyclonedds.xml /opt/autoware/cyclonedds.xml
 
 COPY docker-entrypoint.sh /docker-entrypoint.sh
 RUN chmod +x /docker-entrypoint.sh

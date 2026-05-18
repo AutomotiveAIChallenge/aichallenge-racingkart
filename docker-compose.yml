@@ -25,6 +25,7 @@ x-autoware-base: &autoware-base
     - ./aichallenge:/aichallenge
     - ./remote:/remote
     - ./vehicle:/vehicle
+    - ./vehicle/cyclonedds.xml:/opt/autoware/cyclonedds.xml
     - /tmp/.X11-unix:/tmp/.X11-unix:rw
     # Audio (PipeWire/Pulse) socket access on the host
     - /run/user:/run/user:rw
