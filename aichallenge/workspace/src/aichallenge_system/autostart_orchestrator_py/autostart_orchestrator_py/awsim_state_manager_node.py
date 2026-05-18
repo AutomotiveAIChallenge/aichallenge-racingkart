@@ -337,37 +337,42 @@ class AwsimStateManager(Node):
 
             self._debug_panel_queue = queue.Queue(maxsize=128)
 
-            app = QtWidgets.QApplication.instance()
-            if app is None:
-                app = QtWidgets.QApplication(["awsim_state_manager"])
-            self._debug_panel_app = app
-            dashboard = _DashboardWindow(
-                self._DEBUG_AWSIM_STATES,
-            )
+            try:
+                app = QtWidgets.QApplication.instance()
+                if app is None:
+                    app = QtWidgets.QApplication(["awsim_state_manager"])
+                self._debug_panel_app = app
+                dashboard = _DashboardWindow(
+                    self._DEBUG_AWSIM_STATES,
+                )
 
-            def _on_timer() -> None:
-                if stop_event.is_set():
-                    app.quit()
-                    return
-                latest: Optional[_DashboardPayload] = None
-                while True:
-                    try:
-                        latest = self._debug_panel_queue.get_nowait()
-                    except queue.Empty:
-                        break
-                if latest is None:
-                    return
-                state, pids, now, admin_state = latest
-                dashboard.update_state(state, pids, now, admin_state)
+                def _on_timer() -> None:
+                    if stop_event.is_set():
+                        app.quit()
+                        return
+                    latest: Optional[_DashboardPayload] = None
+                    while True:
+                        try:
+                            latest = self._debug_panel_queue.get_nowait()
+                        except queue.Empty:
+                            break
+                    if latest is None:
+                        return
+                    state, pids, now, admin_state = latest
+                    dashboard.update_state(state, pids, now, admin_state)
 
-            timer = QtCore.QTimer()
-            timer.timeout.connect(_on_timer)
-            timer.start(250)
+                timer = QtCore.QTimer()
+                timer.timeout.connect(_on_timer)
+                timer.start(250)
 
-            dashboard.show()
-            app.exec()
-            self._debug_panel_queue = None
-            self._debug_panel_app = None
+                dashboard.show()
+                app.exec()
+            except Exception as exc:  # noqa: BLE001
+                self.get_logger().warn(f"debug visualization worker crashed: {exc}")
+            finally:
+                self._debug_panel_queue = None
+                self._debug_panel_app = None
+                self._debug_panel_qtcore = None
 
         self._debug_panel_thread = threading.Thread(
             target=_run, args=(self._debug_panel_stop_event,), daemon=True
