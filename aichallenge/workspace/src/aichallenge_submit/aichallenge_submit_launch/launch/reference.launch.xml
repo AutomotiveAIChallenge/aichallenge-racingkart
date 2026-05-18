@@ -18,7 +18,7 @@
 
   <!-- Control method -->
   <arg name="control_method" default="mpc"
-       description="Select control: mpc, pure_pursuit, tiny_lidar_net, joycon"/>
+       description="Select control: mpc, pure_pursuit, tiny_lidar_net, pilot_net, joycon"/>
 
 
   <!-- Global parameters -->
