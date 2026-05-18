@@ -18,7 +18,7 @@
 
   <!-- Control method -->
   <arg name="control_method" default="mpc"
-       description="Select control: mpc, pure_pursuit, tiny_lidar_net, joycon, keyboard"/>
+       description="Select control: mpc, pure_pursuit, tiny_lidar_net, joycon"/>
 
 
   <!-- Global parameters -->
@@ -161,10 +161,6 @@
 
   <group if="$(eval &quot;'$(var control_method)' == 'joycon'&quot;)">
     <include file="$(find-pkg-share aichallenge_submit_launch)/launch/control/joycon.launch.xml"/>
-  </group>
-
-  <group if="$(eval &quot;'$(var control_method)' == 'keyboard'&quot;)">
-    <include file="$(find-pkg-share aichallenge_submit_launch)/launch/control/keyboard.launch.xml"/>
   </group>
 
   <!-- Map -->

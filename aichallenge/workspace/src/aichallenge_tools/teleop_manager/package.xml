@@ -2,19 +2,16 @@
 <package format="3">
   <name>teleop_manager</name>
   <version>0.0.1</version>
-  <description>Joy/keyboard teleop and Ackermann control switch nodes</description>
+  <description>Joy and Ackermann control switch node</description>
 
   <maintainer email="tanaka.arata.y5@s.gifu-u.ac.jp">Arata Tanaka</maintainer>
   <license>Apache-2.0</license>
 
   <buildtool_depend>ament_cmake_auto</buildtool_depend>
-  <buildtool_depend>ament_cmake_python</buildtool_depend>
 
   <depend>rclcpp</depend>
-  <depend>rclpy</depend>
   <depend>std_msgs</depend>
   <depend>sensor_msgs</depend>
-  <depend>geometry_msgs</depend>
   <depend>autoware_auto_control_msgs</depend>
 
   <export>
