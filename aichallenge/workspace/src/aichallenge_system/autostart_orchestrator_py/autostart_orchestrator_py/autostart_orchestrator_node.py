@@ -57,6 +57,9 @@ class AutostartOrchestrator(Node):
     _ANSI_BOLD = "\033[1m"
     _ANSI_RESET = "\033[0m"
 
+    _SERVICE_WAIT_TIMEOUT_SEC = 5.0
+    _SERVICE_CALL_TIMEOUT_SEC = 10.0
+
     def _require_parameter(self, name: str) -> object:
         value = self.get_parameter(name).value
         if value is None:
@@ -491,10 +494,14 @@ class AutostartOrchestrator(Node):
 
         self._set_workflow_state(self._STATE_REQUEST_CONTROL_MODE, "initialization done")
 
-    def _wait_for_service(self, client) -> bool:
-        return client.wait_for_service()
+    def _wait_for_service(self, client, timeout_sec: float = _SERVICE_WAIT_TIMEOUT_SEC) -> bool:
+        try:
+            return bool(client.wait_for_service(timeout_sec=timeout_sec))
+        except Exception as exc:  # noqa: BLE001
+            self.get_logger().warn(f"wait_for_service failed: {exc}")
+            return False
 
-    def _call_trigger(self, client) -> tuple[bool, str]:
+    def _call_trigger(self, client, timeout_sec: float = _SERVICE_CALL_TIMEOUT_SEC) -> tuple[bool, str]:
         event = threading.Event()
         result: tuple[bool, str] = (False, "no_response")
 
@@ -511,7 +518,8 @@ class AutostartOrchestrator(Node):
                 event.set()
 
         future.add_done_callback(_done)
-        event.wait()
+        if not event.wait(timeout=timeout_sec):
+            return False, f"timeout after {timeout_sec}s"
         return result
 
     def _publish_control_mode(self) -> tuple[bool, str]:
@@ -520,7 +528,10 @@ class AutostartOrchestrator(Node):
 
         msg = Bool()
         msg.data = True
-        self._pub_control_mode.publish(msg)
+        try:
+            self._pub_control_mode.publish(msg)
+        except Exception as exc:  # noqa: BLE001
+            return False, f"publish failed: {exc}"
         return True, f"published to {topic} data={msg.data}"
 
     def _output_dir(self) -> Path:

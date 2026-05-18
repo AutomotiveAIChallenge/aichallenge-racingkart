@@ -78,6 +78,9 @@ class AwsimStateManager(Node):
         self._debug_panel_queue: Optional[queue.Queue[_DashboardPayload]] = None
         self._debug_panel_active = False
         self._debug_panel_error_logged = False
+        self._debug_panel_thread: Optional[threading.Thread] = None
+        self._debug_panel_stop_event: Optional[threading.Event] = None
+        self._debug_panel_app: Optional[object] = None
         self._admin_state_topic = str(self.get_parameter("admin_state_topic").value).strip() or "/admin/awsim/state"
         self._admin_start_topic = str(self.get_parameter("admin_start_topic").value).strip() or self._DEFAULT_ADMIN_START_TOPIC
         self._admin_start_trigger_states = self._normalize_admin_state_list(
@@ -223,7 +226,10 @@ class AwsimStateManager(Node):
             pass
 
     def _start_debug_visualization(self) -> None:
-        def _run() -> None:
+        self._debug_panel_stop_event = threading.Event()
+        self._debug_panel_app = None
+
+        def _run(stop_event: threading.Event) -> None:
             try:
                 try:
                     from PySide6 import QtCore, QtGui, QtWidgets
@@ -334,22 +340,24 @@ class AwsimStateManager(Node):
             app = QtWidgets.QApplication.instance()
             if app is None:
                 app = QtWidgets.QApplication(["awsim_state_manager"])
+            self._debug_panel_app = app
             dashboard = _DashboardWindow(
                 self._DEBUG_AWSIM_STATES,
             )
 
             def _on_timer() -> None:
-                if not self._debug_panel_active:
+                if stop_event.is_set():
+                    app.quit()
                     return
-                next_payload: Optional[_DashboardPayload] = None
+                latest: Optional[_DashboardPayload] = None
                 while True:
                     try:
-                        next_payload = self._debug_panel_queue.get_nowait()
+                        latest = self._debug_panel_queue.get_nowait()
                     except queue.Empty:
                         break
-                if next_payload is None:
+                if latest is None:
                     return
-                state, pids, now, admin_state = next_payload
+                state, pids, now, admin_state = latest
                 dashboard.update_state(state, pids, now, admin_state)
 
             timer = QtCore.QTimer()
@@ -360,8 +368,38 @@ class AwsimStateManager(Node):
             app.exec()
             self._debug_panel_active = False
             self._debug_panel_queue = None
+            self._debug_panel_app = None
 
-        threading.Thread(target=_run, daemon=True).start()
+        self._debug_panel_thread = threading.Thread(
+            target=_run, args=(self._debug_panel_stop_event,), daemon=True
+        )
+        self._debug_panel_thread.start()
+
+    def _stop_debug_visualization(self) -> None:
+        self._debug_panel_active = False
+        stop_event = self._debug_panel_stop_event
+        if stop_event is not None:
+            stop_event.set()
+        app = self._debug_panel_app
+        if app is not None:
+            try:
+                from PySide6 import QtCore
+            except Exception:  # noqa: BLE001
+                try:
+                    from PyQt5 import QtCore
+                except Exception:  # noqa: BLE001
+                    QtCore = None
+            if QtCore is not None:
+                QtCore.QMetaObject.invokeMethod(app, "quit", QtCore.Qt.QueuedConnection)
+        thread = self._debug_panel_thread
+        if thread is not None and thread.is_alive():
+            thread.join(timeout=1.0)
+            if thread.is_alive():
+                self.get_logger().warn("debug visualization thread did not exit within timeout")
+        self._debug_panel_stop_event = None
+        self._debug_panel_thread = None
+        self._debug_panel_queue = None
+        self._debug_panel_app = None
 
     @staticmethod
     def _is_alive(pid: int) -> bool:
@@ -641,6 +679,7 @@ class AwsimStateManager(Node):
             time.sleep(1.0)
 
     def destroy_node(self) -> bool:
+        self._stop_debug_visualization()
         if not self._shutdown_started and bool(self.get_parameter("shutdown_on_exit").value):
             self._shutdown_reason = "destroy_node"
             self._start_shutdown()
