@@ -8,10 +8,10 @@ from v2x_msgs.msg import V2XVehiclePositionArray
 
 
 VEHICLE_COLORS = {
-    "d1": (1.0, 0.2, 0.2),
-    "d2": (0.2, 1.0, 0.2),
-    "d3": (0.2, 0.4, 1.0),
-    "d4": (1.0, 0.9, 0.2),
+    "d1": (0.2, 0.4, 1.0),
+    "d2": (1.0, 0.9, 0.2),
+    "d3": (0.2, 1.0, 0.2),
+    "d4": (1.0, 0.2, 0.2),
 }
 DEFAULT_COLOR = (1.0, 1.0, 1.0)
 SPHERE_DIAMETER = 1.5
