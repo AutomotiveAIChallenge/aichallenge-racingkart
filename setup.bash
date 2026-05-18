@@ -243,6 +243,9 @@ Usage:
   ./setup.bash pull image     # docker pull Autoware base image (recommended)
   ./setup.bash download awsim # download & extract AWSIM.zip (repo-local)
   ./setup.bash env            # create .env from .env.example (safe, repo-local)
+  ./setup.bash network-if <name>
+                            # add network interface to cyclonedds.xml
+  ./setup.bash network-if   # remove all ai-challenge-added interfaces from cyclonedds.xml
   ./setup.bash bootstrap --yes
                             # non-interactive bootstrap (auto-yes)
   ./setup.bash bootstrap --temp-dir [--keep-dir]
@@ -1068,6 +1071,80 @@ doctor() {
     return "$failed"
 }
 
+_network_if_edit_file() {
+    local file="$1"
+    local iface="$2"
+
+    if [ ! -f "${file}" ]; then
+        log "${INFO} Skipped (not found): ${file}"
+        return 0
+    fi
+
+    local use_sudo=0
+    if [ ! -w "${file}" ]; then
+        if cmd_exists sudo; then
+            use_sudo=1
+        else
+            warn "${WARN} Write permission denied and sudo not available, skipping: ${file}"
+            return 0
+        fi
+    fi
+
+    if ! confirm_step "${file} を書き換えますか？"; then
+        log "${INFO} Skipped: ${file}"
+        return 0
+    fi
+
+    local sed_cmd="sed"
+    [ "${use_sudo}" -eq 1 ] && sed_cmd="sudo sed"
+
+    if [ -n "${iface}" ]; then
+        if grep -qF "name=\"${iface}\"" "${file}"; then
+            log "${INFO} '${iface}' は既に存在します: ${file}"
+            return 0
+        fi
+        if ! ${sed_cmd} -i "/<\/Interfaces>/i\\        <NetworkInterface autodetermine=\"false\" name=\"${iface}\" priority=\"default\" multicast=\"default\" /> <!-- added by ai-challenge -->" "${file}"; then
+            warn "${FAIL} Failed to edit (permission denied?): ${file}"
+            return 0
+        fi
+        log "${OK} Added '${iface}' to ${file}"
+    else
+        if ! ${sed_cmd} -i '/<!-- added by ai-challenge -->/d' "${file}"; then
+            warn "${FAIL} Failed to edit (permission denied?): ${file}"
+            return 0
+        fi
+        log "${OK} Removed ai-challenge entries from ${file}"
+    fi
+}
+
+add_network_interface() {
+    local iface="${1:-}"
+
+    local xml_vehicle="${REPO_ROOT:-.}/vehicle/cyclonedds.xml"
+
+    local uri_file=""
+    if [ -n "${CYCLONEDDS_URI:-}" ]; then
+        case "${CYCLONEDDS_URI}" in
+        file://*)
+            uri_file="${CYCLONEDDS_URI#file://}"
+            ;;
+        esac
+    fi
+
+    _network_if_edit_file "${xml_vehicle}" "${iface}"
+
+    if [ -n "${uri_file}" ]; then
+        local v_real u_real
+        v_real="$(realpath "${xml_vehicle}" 2>/dev/null || echo "${xml_vehicle}")"
+        u_real="$(realpath "${uri_file}" 2>/dev/null || echo "${uri_file}")"
+        if [ "${v_real}" = "${u_real}" ]; then
+            log "${INFO} Skipped (same file as vehicle/cyclonedds.xml): ${uri_file}"
+        else
+            _network_if_edit_file "${uri_file}" "${iface}"
+        fi
+    fi
+}
+
 main() {
     if [ $# -eq 0 ]; then
         if [ -n "$REPO_ROOT" ]; then
@@ -1110,6 +1187,10 @@ main() {
         ;;
     env)
         ensure_env
+        ;;
+    network-if)
+        shift
+        add_network_interface "$@"
         ;;
     download)
         case "${2-}" in
