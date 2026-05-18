@@ -243,7 +243,7 @@ Usage:
   ./setup.bash pull image     # docker pull Autoware base image (recommended)
   ./setup.bash download awsim # download & extract AWSIM.zip (repo-local)
   ./setup.bash env            # create .env from .env.example (safe, repo-local)
-  ./setup.bash network-if <name>
+  ./setup.bash network-if [name]
                             # add network interface to cyclonedds.xml
   ./setup.bash network-if   # remove all ai-challenge-added interfaces from cyclonedds.xml
   ./setup.bash bootstrap --yes
@@ -1090,7 +1090,7 @@ _network_if_edit_file() {
         fi
     fi
 
-    if ! confirm_step "${file} を書き換えますか？"; then
+    if ! confirm_step "Overwrite ${file}?"; then
         log "${INFO} Skipped: ${file}"
         return 0
     fi
@@ -1100,7 +1100,7 @@ _network_if_edit_file() {
 
     if [ -n "${iface}" ]; then
         if grep -qF "name=\"${iface}\"" "${file}"; then
-            log "${INFO} '${iface}' は既に存在します: ${file}"
+            log "${INFO} '${iface}' already exists in ${file}"
             return 0
         fi
         if ! ${sed_cmd} -i "/<\/Interfaces>/i\\        <NetworkInterface autodetermine=\"false\" name=\"${iface}\" priority=\"default\" multicast=\"default\" /> <!-- added by ai-challenge -->" "${file}"; then
@@ -1120,6 +1120,16 @@ _network_if_edit_file() {
 add_network_interface() {
     local iface="${1-}"
 
+    if [ -n "${iface}" ]; then
+        if ! [[ ${iface} =~ ^[A-Za-z0-9._-]+$ ]]; then
+            warn "${FAIL} Invalid interface name: ${iface}"
+            return 1
+        fi
+        if cmd_exists ip && ! ip link show "${iface}" >/dev/null 2>&1; then
+            warn "${WARN} Interface '${iface}' not found on this host (Autoware may fail to start)"
+        fi
+    fi
+
     local xml_vehicle="${REPO_ROOT:-.}/vehicle/cyclonedds.xml"
 
     local uri_file=""
@@ -1127,6 +1137,9 @@ add_network_interface() {
         case "${CYCLONEDDS_URI}" in
         file://*)
             uri_file="${CYCLONEDDS_URI#file://}"
+            ;;
+        *)
+            log "${INFO} CYCLONEDDS_URI is set but not a file:// URI, skipping: ${CYCLONEDDS_URI}"
             ;;
         esac
     fi
