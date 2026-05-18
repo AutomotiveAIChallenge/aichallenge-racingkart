@@ -3,7 +3,7 @@
   <Domain Id="any">
     <General>
       <Interfaces>
-	      <NetworkInterface autodetermine="false" name="lo" priority="default" multicast="default" />
+        <NetworkInterface autodetermine="false" name="lo" priority="default" multicast="default" />
       </Interfaces>
       <AllowMulticast>default</AllowMulticast>
       <MaxMessageSize>65500B</MaxMessageSize>
