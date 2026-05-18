@@ -494,14 +494,18 @@ class AutostartOrchestrator(Node):
 
         self._set_workflow_state(self._STATE_REQUEST_CONTROL_MODE, "initialization done")
 
-    def _wait_for_service(self, client, timeout_sec: float = _SERVICE_WAIT_TIMEOUT_SEC) -> bool:
+    def _wait_for_service(self, client, timeout_sec: Optional[float] = None) -> bool:
+        if timeout_sec is None:
+            timeout_sec = self._SERVICE_WAIT_TIMEOUT_SEC
         try:
             return bool(client.wait_for_service(timeout_sec=timeout_sec))
         except Exception as exc:  # noqa: BLE001
             self.get_logger().warn(f"wait_for_service failed: {exc}")
             return False
 
-    def _call_trigger(self, client, timeout_sec: float = _SERVICE_CALL_TIMEOUT_SEC) -> tuple[bool, str]:
+    def _call_trigger(self, client, timeout_sec: Optional[float] = None) -> tuple[bool, str]:
+        if timeout_sec is None:
+            timeout_sec = self._SERVICE_CALL_TIMEOUT_SEC
         event = threading.Event()
         result: tuple[bool, str] = (False, "no_response")
 
@@ -519,6 +523,7 @@ class AutostartOrchestrator(Node):
 
         future.add_done_callback(_done)
         if not event.wait(timeout=timeout_sec):
+            future.cancel()
             return False, f"timeout after {timeout_sec}s"
         return result
 

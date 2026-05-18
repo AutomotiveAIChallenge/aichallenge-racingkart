@@ -76,11 +76,11 @@ class AwsimStateManager(Node):
         self._awsim_kill_patterns = self._split_csv(str(self.get_parameter("awsim_kill_patterns").value))
         self._debug_visualization_enabled = bool(self.get_parameter("enable_debug_visualization").value)
         self._debug_panel_queue: Optional[queue.Queue[_DashboardPayload]] = None
-        self._debug_panel_active = False
         self._debug_panel_error_logged = False
         self._debug_panel_thread: Optional[threading.Thread] = None
         self._debug_panel_stop_event: Optional[threading.Event] = None
         self._debug_panel_app: Optional[object] = None
+        self._debug_panel_qtcore: Optional[object] = None
         self._admin_state_topic = str(self.get_parameter("admin_state_topic").value).strip() or "/admin/awsim/state"
         self._admin_start_topic = str(self.get_parameter("admin_start_topic").value).strip() or self._DEFAULT_ADMIN_START_TOPIC
         self._admin_start_trigger_states = self._normalize_admin_state_list(
@@ -239,9 +239,10 @@ class AwsimStateManager(Node):
                 if not self._debug_panel_error_logged:
                     self.get_logger().warn(f"failed to import Qt binding for visualization: {exc}")
                     self._debug_panel_error_logged = True
-                self._debug_panel_active = False
                 self._debug_panel_queue = None
                 return
+
+            self._debug_panel_qtcore = QtCore
 
             class _DashboardWindow(QtWidgets.QWidget):
                 def __init__(self, awsim_states: tuple[str, ...]) -> None:
@@ -335,7 +336,6 @@ class AwsimStateManager(Node):
                     self._meta.setText("monitoring target: AWSIM process by pattern")
 
             self._debug_panel_queue = queue.Queue(maxsize=128)
-            self._debug_panel_active = True
 
             app = QtWidgets.QApplication.instance()
             if app is None:
@@ -366,7 +366,6 @@ class AwsimStateManager(Node):
 
             dashboard.show()
             app.exec()
-            self._debug_panel_active = False
             self._debug_panel_queue = None
             self._debug_panel_app = None
 
@@ -376,21 +375,13 @@ class AwsimStateManager(Node):
         self._debug_panel_thread.start()
 
     def _stop_debug_visualization(self) -> None:
-        self._debug_panel_active = False
         stop_event = self._debug_panel_stop_event
         if stop_event is not None:
             stop_event.set()
         app = self._debug_panel_app
-        if app is not None:
-            try:
-                from PySide6 import QtCore
-            except Exception:  # noqa: BLE001
-                try:
-                    from PyQt5 import QtCore
-                except Exception:  # noqa: BLE001
-                    QtCore = None
-            if QtCore is not None:
-                QtCore.QMetaObject.invokeMethod(app, "quit", QtCore.Qt.QueuedConnection)
+        qtcore = self._debug_panel_qtcore
+        if app is not None and qtcore is not None:
+            qtcore.QMetaObject.invokeMethod(app, "quit", qtcore.Qt.QueuedConnection)
         thread = self._debug_panel_thread
         if thread is not None and thread.is_alive():
             thread.join(timeout=1.0)
@@ -400,6 +391,7 @@ class AwsimStateManager(Node):
         self._debug_panel_thread = None
         self._debug_panel_queue = None
         self._debug_panel_app = None
+        self._debug_panel_qtcore = None
 
     @staticmethod
     def _is_alive(pid: int) -> bool:
