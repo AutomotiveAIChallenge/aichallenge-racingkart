@@ -263,12 +263,10 @@ class SpatialBicycleModel(ABC):
         Get closest waypoint on reference path based on car's current location.
         """
 
-        # Compute cumulative path length
-        length_cum = np.cumsum(self.reference_path.segment_lengths)
-        # Get first index with distance larger than distance traveled by car
-        # so far
-        greater_than_threshold = length_cum > self.s
-        next_wp_id = greater_than_threshold.searchsorted(True)
+        # 累積長は ReferencePath 側でキャッシュ済み（構築後不変）。
+        length_cum = self.reference_path.segment_length_cum
+        # length_cum は単調増加なので searchsorted を直接使う（O(log n)）。
+        next_wp_id = np.searchsorted(length_cum, self.s, side='right')
 
         # check end of path
         if next_wp_id == len(length_cum):
@@ -313,11 +311,8 @@ class SpatialBicycleModel(ABC):
         :param wp_id: waypoint id
         :return: Distance s along the reference path
         """
-        # Compute cumulative path length
-        length_cum = np.cumsum(self.reference_path.segment_lengths)
-
-        # Distance s at the closest waypoint
-        s_at_closest_wp = length_cum[wp_id]
+        # 累積長は ReferencePath 側でキャッシュ済み。
+        s_at_closest_wp = self.reference_path.segment_length_cum[wp_id]
 
         return s_at_closest_wp
 

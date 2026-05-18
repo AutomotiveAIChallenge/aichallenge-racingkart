@@ -203,6 +203,10 @@ class ReferencePath:
 
         # Length of path
         self.length, self.segment_lengths = self._compute_length()
+        # 累積長は ReferencePath 構築後は不変なので一度だけキャッシュする。
+        # get_current_waypoint / get_s_at_waypoint は毎制御 tick で呼ばれるため、
+        # np.cumsum(segment_lengths) を都度実行するコストを除去する。
+        self.segment_length_cum = np.cumsum(self.segment_lengths)
 
         # Compute path width (attribute of each waypoint)
         self._compute_width(max_width=max_width)
