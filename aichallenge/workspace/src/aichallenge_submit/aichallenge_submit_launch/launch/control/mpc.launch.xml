@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <launch>
   <arg name="use_sim_time" default="true"/>
-  <arg name="use_obstacle_avoidance" default="true"/>
+  <arg name="use_obstacle_avoidance" default="false"/>
 
   <node pkg="multi_purpose_mpc_ros" exec="run_mpc_controller.bash"
         name="mpc_controller" output="screen"

@@ -28,7 +28,7 @@
 
 - `autoware-simulator` / `autoware-vehicle`（`RUN_MODE=...` を内部で切替）
 - `autoware-build`（compose service: `autoware-build`）
-- `simulator` / `simulator-reset`
+- `simulator` / `awsim-request-start`
 - `rviz2`
 
 GPU の扱い:
@@ -86,7 +86,7 @@ service は「操作対象のまとまり」を表します（docker compose の
 Good:
 - `autoware-simulator` / `autoware-vehicle`
 - `autoware-build`
-- `simulator` / `simulator-reset`
+- `simulator` / `awsim-request-start`
 - `eval-run`（`DOMAIN_ID` / `DOMAIN_IDS` などは変数で）
 - `eval`（`DOMAIN_ID` / `DOMAIN_IDS` などは変数で）
 - `compose-ps` / `compose-down`
@@ -94,7 +94,7 @@ Good:
 Bad（語順が逆/曖昧）:
 - `build-autoware`（→ `autoware-build`）
 - `simulator-eval`（旧名。現状は `eval` を使用）
-- `start` / `init` / `reset`（→ `simulator-start` / `simulator-init` / `simulator-reset` のように service を明示）
+- `start` / `init` / `reset`（→ `awsim-request-start` / `awsim-request-reset` のように service を明示）
 
 ## 7. 変更時の互換性
 
