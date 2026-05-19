@@ -6,10 +6,10 @@ device_drivers="/dev/dri"
 
 case "${target}" in
 "eval")
-    volume="output:/output /run/user:/run/user:rw"
+    volume="output:/output vehicle/cyclonedds.xml:/opt/autoware/cyclonedds.xml /run/user:/run/user:rw"
     ;;
 "dev")
-    volume="output:/output aichallenge:/aichallenge remote:/remote vehicle:/vehicle /dev/input:/dev/input /run/user:/run/user:rw"
+    volume="output:/output aichallenge:/aichallenge remote:/remote vehicle:/vehicle vehicle/cyclonedds.xml:/opt/autoware/cyclonedds.xml /dev/input:/dev/input /run/user:/run/user:rw"
     ;;
 "rm")
     # clean up old <none> images
