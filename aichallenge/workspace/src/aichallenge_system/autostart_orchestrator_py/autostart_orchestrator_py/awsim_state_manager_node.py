@@ -386,6 +386,7 @@ class AwsimStateManager(Node):
         app = self._debug_panel_app
         qtcore = self._debug_panel_qtcore
         if app is not None and qtcore is not None:
+            # _on_timer 経由の quit は最大 250ms 遅延するので、Qt スレッドへ即時 quit をキューする保険。
             qtcore.QMetaObject.invokeMethod(app, "quit", qtcore.Qt.QueuedConnection)
         thread = self._debug_panel_thread
         if thread is not None and thread.is_alive():
