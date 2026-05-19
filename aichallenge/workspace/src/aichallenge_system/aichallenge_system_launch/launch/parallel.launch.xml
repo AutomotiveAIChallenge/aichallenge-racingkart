@@ -19,7 +19,10 @@
             name="aichallenge_awsim_eval"
             cwd="$(var log_dir)"
             output="both"
-            cmd="/aichallenge/simulator/AWSIM/AWSIM.x86_64 --vehicles $(var vehicles) --npcs 0 --laps $(var laps) --timeout $(var timeout) --boosts 2 --start-mode sync --start-count-seconds 5 --collisions off --ranking on --sound off"/>
+            cmd="/aichallenge/simulator/AWSIM/AWSIM.x86_64 --vehicles $(var vehicles) --npcs 0 --laps $(var laps) --timeout $(var timeout) --boosts 2 --start-mode sync --start-count-seconds 5 --collisions off --ranking on --sound off -screen-fullscreen 1 -screen-width 1920 -screen-height 1043 -screen-quality low --window-mode borderless"/>
+
+        <executable name="awsim_raise" output="log"
+            cmd="bash -c 'for i in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15; do wmctrl -r AWSIM -b add,above 2&gt;/dev/null &amp;&amp; exit 0; sleep 3; done'"/>
 
         <include file="$(find-pkg-share aichallenge_system_launch)/launch/mode/awsim_state_manager.launch.xml"/>
     </group>
