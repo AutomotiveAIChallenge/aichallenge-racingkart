@@ -538,7 +538,7 @@ class AutostartOrchestrator(Node):
         try:
             self._pub_control_mode.publish(msg)
         except Exception as exc:  # noqa: BLE001
-            return False, f"publish failed: {exc}"
+            return False, f"publish to {topic} failed: {exc}"
         return True, f"published to {topic} data={msg.data}"
 
     def _output_dir(self) -> Path:
