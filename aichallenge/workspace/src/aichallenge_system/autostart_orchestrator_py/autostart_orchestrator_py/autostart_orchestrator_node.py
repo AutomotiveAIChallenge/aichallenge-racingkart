@@ -523,6 +523,8 @@ class AutostartOrchestrator(Node):
 
         future.add_done_callback(_done)
         if not event.wait(timeout=timeout_sec):
+            if event.is_set():
+                return result
             future.cancel()
             return False, f"timeout after {timeout_sec}s"
         return result
