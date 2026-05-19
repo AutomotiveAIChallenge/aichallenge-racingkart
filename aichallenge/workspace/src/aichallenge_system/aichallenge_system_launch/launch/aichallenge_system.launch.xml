@@ -4,7 +4,7 @@
     <arg name="use_sim_time"/>
     <arg name="run_rviz"/>
     <arg name="sensor_model" default="racing_kart_sensor_kit"/>
-    <arg name="launch_vehicle_interface" default="true"/>
+    <arg name="launch_vehicle_interface" default="$(eval &quot;'$(var simulation)' == 'false'&quot;)"/>
     <arg name="capture" default="false"/>
     <arg name="rosbag" default="false"/>
     <arg name="domain_id" default="0"/>
