@@ -57,8 +57,8 @@ class AutostartOrchestrator(Node):
     _ANSI_BOLD = "\033[1m"
     _ANSI_RESET = "\033[0m"
 
-    _SERVICE_WAIT_TIMEOUT_SEC = 5.0
-    _SERVICE_CALL_TIMEOUT_SEC = 10.0
+    _SERVICE_WAIT_TIMEOUT_SEC_DEFAULT = 5.0
+    _SERVICE_CALL_TIMEOUT_SEC_DEFAULT = 10.0
 
     def _require_parameter(self, name: str) -> object:
         value = self.get_parameter(name).value
