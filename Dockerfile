@@ -55,13 +55,11 @@ ENV RCUTILS_COLORIZED_OUTPUT=0
 ARG SUBMIT_TAR=submit/aichallenge_submit.tar.gz
 
 COPY ${SUBMIT_TAR} /tmp/s.tgz
-RUN git clone --depth 1 https://github.com/AutomotiveAIChallenge/aichallenge-racingkart /t \
- && mv /t/aichallenge /aichallenge \
- && rm -rf /aichallenge/simulator /aichallenge/workspace/src/aichallenge_submit /t \
+COPY ./aichallenge /aichallenge
+RUN rm -rf /aichallenge/simulator /aichallenge/workspace/src/aichallenge_submit \
  && chmod 757 /aichallenge \
  && tar zxf /tmp/s.tgz -C /aichallenge/workspace/src \
  && rm /tmp/s.tgz
-COPY aichallenge/simulator/ /aichallenge/simulator/
 
 
 RUN bash -c ' \
@@ -69,6 +67,7 @@ RUN bash -c ' \
     cd /aichallenge/workspace; \
     rosdep update; \
     rosdep install -y -r -i --from-paths src --ignore-src --rosdistro $ROS_DISTRO; \
-    python3 -c "from colcon_core.command import main; import sys; sys.exit(main())" build --symlink-install --allow-overriding gyro_odometer --cmake-args -DCMAKE_BUILD_TYPE=Release'
+    colcon build --symlink-install --allow-overriding gyro_odometer --cmake-args -DCMAKE_BUILD_TYPE=Release; \
+    chmod -R a+rwX /aichallenge/workspace/install'
 
 CMD ["bash", "/aichallenge/run_evaluation.bash"]
