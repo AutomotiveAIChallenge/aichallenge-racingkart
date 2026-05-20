@@ -9,7 +9,7 @@
     # If the submission does not advertise /set_initial_pose, or it never
     # responds, skip after this many seconds and proceed to capture/rosbag
     # so the run is still recorded for diagnostics.
-    initial_pose_service_timeout_sec: 60
+    initial_pose_service_timeout_sec: 60.0
     control_mode_request_topic: /awsim/control_mode_request_topic
     capture_service: /debug/service/capture_screen
     enable_debug_visualization: false
