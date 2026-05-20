@@ -17,7 +17,7 @@
   <log message="echo launch param use_sim_time: $(var use_sim_time) launch_vehicle_interface: $(var launch_vehicle_interface) sensor_model: $(var sensor_model)"/>
 
   <!-- Control method -->
-  <arg name="control_method" default="mpc"
+  <arg name="control_method" default="pure_pursuit"
        description="Select control: mpc, pure_pursuit, tiny_lidar_net, pilot_net, joycon"/>
 
   <!-- Global parameters -->
