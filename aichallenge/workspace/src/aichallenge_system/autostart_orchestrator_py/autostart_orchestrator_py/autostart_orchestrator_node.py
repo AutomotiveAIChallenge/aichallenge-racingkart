@@ -739,8 +739,14 @@ class AutostartOrchestrator(Node):
             return False
 
     def _ensure_latest_root(self, output_dir: Path) -> Optional[Path]:
-        run_dir = output_dir.parent
-        output_root = run_dir.parent
+        # Derive output_root relative to cwd so we stay portable across mount layouts.
+        # Single mode:   cwd == <run_dir>/d<N>  -> output_root = parent.parent
+        # Parallel mode: cwd == <run_dir>       -> output_root = parent
+        name = output_dir.name
+        if name.startswith("d") and name[1:].isdigit():
+            output_root = output_dir.parent.parent
+        else:
+            output_root = output_dir.parent
 
         latest_path = output_root / "latest"
         try:
@@ -809,8 +815,14 @@ class AutostartOrchestrator(Node):
             run_dir = output_dir.parent
             capture_target = self._latest_file_by_pattern(output_dir / "capture", "cap-*.mp4")
             rosbag_target = self._resolve_rosbag_target(output_dir)
+            # AWSIM writes result-summary.json (shared across vehicles) at its cwd.
+            # In parallel mode that is output_dir; in single mode it is run_dir.
+            result_summary_target = self._latest_existing(
+                [output_dir / "result-summary.json", run_dir / "result-summary.json"]
+            )
             targets: list[tuple[str, Optional[Path]]] = [
                 ("result-details.json", self._resolve_result_details_target(output_dir, run_dir, vehicle_dir_name)),
+                ("result-summary.json", result_summary_target),
                 ("capture.mp4", capture_target),
                 ("rosbag2_autoware.mcap", rosbag_target),
                 ("motion_analytics.html", self._latest_file_by_pattern(output_dir, "motion_analytics-*.html")),
