@@ -26,6 +26,7 @@
 
 #include <atomic>
 #include <condition_variable>
+#include <cstdio>
 #include <deque>
 #include <memory>
 #include <mutex>
@@ -35,7 +36,8 @@
 class EncoderWorker
 {
 public:
-  EncoderWorker(std::unique_ptr<cv::VideoWriter> writer, cv::Size size, std::size_t max_queue);
+  // Takes ownership of `pipe` (a FILE* returned by popen). pclose() is called in stop().
+  EncoderWorker(std::FILE * pipe, cv::Size size, std::size_t max_queue);
   ~EncoderWorker();
 
   void submit(cv::Mat frame);
@@ -44,7 +46,7 @@ public:
 private:
   void run();
 
-  std::unique_ptr<cv::VideoWriter> writer_;
+  std::FILE * pipe_{nullptr};
   cv::Size size_;
   std::size_t max_queue_;
   std::deque<cv::Mat> queue_;
@@ -60,7 +62,7 @@ class ScreenRecorder : public QObject
   Q_OBJECT
 
 public:
-  explicit ScreenRecorder(int hz, QObject * parent = nullptr);
+  ScreenRecorder(int hz, int crf, QString preset, QObject * parent = nullptr);
   ~ScreenRecorder() override = default;
 
   bool active() const { return active_; }
@@ -79,6 +81,8 @@ private:
   cv::Mat grabFrame();
 
   int hz_;
+  int crf_;
+  QString preset_;
   cv::Size size_{};
   bool active_{false};
   std::unique_ptr<EncoderWorker> encoder_;

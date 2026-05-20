@@ -11,3 +11,4 @@ ros-humble-domain-bridge
 zstd
 python3-tomli
 qt5ct
+ffmpeg

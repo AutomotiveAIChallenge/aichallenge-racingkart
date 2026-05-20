@@ -22,6 +22,8 @@
 #include <QScreen>
 
 #include <chrono>
+#include <csignal>
+#include <cstdio>
 #include <ctime>
 #include <filesystem>
 #include <iomanip>
@@ -43,11 +45,29 @@ std::string nowStamp()
   os << std::put_time(&tm, "%Y%m%d-%H%M%S");
   return os.str();
 }
+
+int envInt(const char * name, int dflt)
+{
+  if (const char * v = std::getenv(name)) {
+    try {
+      return std::stoi(v);
+    } catch (...) {
+    }
+  }
+  return dflt;
+}
+
+std::string envStr(const char * name, std::string dflt)
+{
+  if (const char * v = std::getenv(name); v && v[0] != '\0') {
+    dflt = v;
+  }
+  return dflt;
+}
 }  // namespace
 
-EncoderWorker::EncoderWorker(
-  std::unique_ptr<cv::VideoWriter> writer, cv::Size size, std::size_t max_queue)
-: writer_(std::move(writer)), size_(size), max_queue_(max_queue)
+EncoderWorker::EncoderWorker(std::FILE * pipe, cv::Size size, std::size_t max_queue)
+: pipe_(pipe), size_(size), max_queue_(max_queue)
 {
   thread_ = std::thread(&EncoderWorker::run, this);
 }
@@ -79,9 +99,9 @@ std::size_t EncoderWorker::stop()
   if (thread_.joinable()) {
     thread_.join();
   }
-  if (writer_) {
-    writer_->release();
-    writer_.reset();
+  if (pipe_) {
+    pclose(pipe_);
+    pipe_ = nullptr;
   }
   return dropped_;
 }
@@ -102,20 +122,24 @@ void EncoderWorker::run()
       frame = std::move(queue_.front());
       queue_.pop_front();
     }
-    if (frame.empty() || !writer_) {
+    if (frame.empty() || !pipe_) {
       continue;
     }
     if (frame.cols != size_.width || frame.rows != size_.height) {
       cv::Mat resized;
       cv::resize(frame, resized, size_);
-      writer_->write(resized);
-    } else {
-      writer_->write(frame);
+      frame = std::move(resized);
     }
+    if (!frame.isContinuous()) {
+      frame = frame.clone();
+    }
+    const std::size_t bytes = frame.total() * frame.elemSize();
+    std::fwrite(frame.data, 1, bytes, pipe_);
   }
 }
 
-ScreenRecorder::ScreenRecorder(int hz, QObject * parent) : QObject(parent), hz_(std::max(1, hz))
+ScreenRecorder::ScreenRecorder(int hz, int crf, QString preset, QObject * parent)
+: QObject(parent), hz_(std::max(1, hz)), crf_(crf), preset_(std::move(preset))
 {
   timer_.setTimerType(Qt::PreciseTimer);
   timer_.setInterval(static_cast<int>(1000.0 / hz_));
@@ -147,39 +171,55 @@ void ScreenRecorder::start(QString path)
     return;
   }
 
-  const std::string path_str = path.toStdString();
-  std::filesystem::create_directories(std::filesystem::path(path_str).parent_path());
-
   cv::Mat sample = grabFrame();
   if (sample.empty()) {
     emit statusChanged(false, QStringLiteral("no primary screen"));
     return;
   }
-  size_ = cv::Size(sample.cols, sample.rows);
 
-  std::unique_ptr<cv::VideoWriter> writer;
-  for (const char * tag : {"avc1", "mp4v"}) {
-    auto candidate = std::make_unique<cv::VideoWriter>(
-      path_str, cv::VideoWriter::fourcc(tag[0], tag[1], tag[2], tag[3]), hz_, size_);
-    if (candidate->isOpened()) {
-      writer = std::move(candidate);
-      break;
+  // libx264 + yuv420p requires even dimensions.
+  const int w = sample.cols & ~1;
+  const int h = sample.rows & ~1;
+  size_ = cv::Size(w, h);
+
+  const std::string path_str = path.toStdString();
+  std::filesystem::create_directories(std::filesystem::path(path_str).parent_path());
+
+  std::string quoted = "'";
+  for (char c : path_str) {
+    if (c == '\'') {
+      quoted += "'\\''";
+    } else {
+      quoted += c;
     }
   }
-  if (!writer) {
-    emit statusChanged(false, QStringLiteral("failed to open writer: %1").arg(path));
+  quoted += "'";
+
+  std::ostringstream cmd;
+  cmd << "ffmpeg -y -loglevel warning"
+      << " -f rawvideo -pixel_format bgr24"
+      << " -video_size " << w << "x" << h << " -framerate " << hz_ << " -i -"
+      << " -c:v libx264 -preset " << preset_.toStdString() << " -crf " << crf_
+      << " -pix_fmt yuv420p -movflags +faststart"
+      << " " << quoted;
+
+  std::FILE * pipe = popen(cmd.str().c_str(), "w");
+  if (!pipe) {
+    emit statusChanged(false, QStringLiteral("failed to spawn ffmpeg"));
     return;
   }
 
-  encoder_ = std::make_unique<EncoderWorker>(std::move(writer), size_, /*max_queue=*/30);
+  encoder_ = std::make_unique<EncoderWorker>(pipe, size_, /*max_queue=*/5);
   encoder_->submit(std::move(sample));
   active_ = true;
   timer_.start();
   emit statusChanged(
-    true, QStringLiteral("recording %1x%2 @ %3Hz -> %4")
-            .arg(size_.width)
-            .arg(size_.height)
+    true, QStringLiteral("recording %1x%2 @ %3Hz crf=%4 preset=%5 -> %6")
+            .arg(w)
+            .arg(h)
             .arg(hz_)
+            .arg(crf_)
+            .arg(preset_)
             .arg(path));
 }
 
@@ -249,18 +289,14 @@ void ScreenRecorderNode::onTrigger(
 int main(int argc, char * argv[])
 {
   rclcpp::init(argc, argv);
+  std::signal(SIGPIPE, SIG_IGN);
   QApplication app(argc, argv);
 
-  int hz = 10;
-  if (const char * env = std::getenv("AIC_SCREEN_RECORDER_HZ")) {
-    try {
-      hz = std::max(1, std::stoi(env));
-    } catch (...) {
-      hz = 10;
-    }
-  }
+  const int hz = std::max(1, envInt("AIC_SCREEN_RECORDER_HZ", 10));
+  const int crf = envInt("AIC_SCREEN_RECORDER_CRF", 28);
+  const std::string preset = envStr("AIC_SCREEN_RECORDER_PRESET", "veryfast");
 
-  ScreenRecorder recorder(hz);
+  ScreenRecorder recorder(hz, crf, QString::fromStdString(preset));
   QObject::connect(
     &recorder, &ScreenRecorder::statusChanged, [](bool active, const QString & msg) {
       std::fprintf(
@@ -280,7 +316,7 @@ int main(int argc, char * argv[])
 
   const int rc = app.exec();
 
-  // Back on the Qt main thread; call stop() directly to release the VideoWriter (writes mp4 moov atom).
+  // Back on the Qt main thread; call stop() directly to close the ffmpeg pipe (flushes mp4 moov atom).
   recorder.stop();
   rclcpp::shutdown();
   if (spin_thread.joinable()) {

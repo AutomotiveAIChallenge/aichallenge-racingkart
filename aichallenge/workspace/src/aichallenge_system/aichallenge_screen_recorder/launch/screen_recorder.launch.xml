@@ -4,11 +4,15 @@
     <arg name="output_dir" default="capture"/>
     <arg name="filename_prefix" default="cap"/>
     <arg name="hz" default="10"/>
+    <arg name="crf" default="28"/>
+    <arg name="preset" default="veryfast"/>
 
     <node pkg="aichallenge_screen_recorder" exec="screen_recorder_node" name="screen_recorder" output="screen">
         <param name="service_name" value="$(var service_name)"/>
         <param name="output_dir" value="$(var output_dir)"/>
         <param name="filename_prefix" value="$(var filename_prefix)"/>
         <env name="AIC_SCREEN_RECORDER_HZ" value="$(var hz)"/>
+        <env name="AIC_SCREEN_RECORDER_CRF" value="$(var crf)"/>
+        <env name="AIC_SCREEN_RECORDER_PRESET" value="$(var preset)"/>
     </node>
 </launch>
