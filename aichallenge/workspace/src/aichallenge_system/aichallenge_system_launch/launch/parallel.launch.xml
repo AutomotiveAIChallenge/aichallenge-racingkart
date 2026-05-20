@@ -8,7 +8,7 @@
     <arg name="rosbag" default="true"/>
     <arg name="simulation" default="true"/>
     <arg name="use_sim_time" default="true"/>
-    <arg name="run_rviz" default="true"/>
+    <arg name="run_rviz" default="false"/>
 
     <log message="Launching parallel evaluation ($(var vehicles) vehicles)."/>
 

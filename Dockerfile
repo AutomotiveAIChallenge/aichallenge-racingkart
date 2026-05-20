@@ -71,3 +71,32 @@ RUN bash -c ' \
     chmod -R a+rwX /aichallenge/workspace/install'
 
 CMD ["bash", "/aichallenge/run_evaluation.bash"]
+
+FROM eval AS parallel
+
+# eval の SUBMIT_TAR（D1）は継承
+# 追加の D2, D3 のみ定義
+ARG SUBMIT_TAR_D2=submit/aichallenge_submit2.tar.gz
+ARG SUBMIT_TAR_D3=submit/aichallenge_submit3.tar.gz
+
+# D2, D3 用の submission を展開
+COPY ${SUBMIT_TAR_D2} /tmp/s2.tgz
+COPY ${SUBMIT_TAR_D3} /tmp/s3.tgz
+RUN mkdir -p /aichallenge/d2/workspace/src /aichallenge/d3/workspace/src \
+ && tar zxf /tmp/s2.tgz -C /aichallenge/d2/workspace/src \
+ && tar zxf /tmp/s3.tgz -C /aichallenge/d3/workspace/src \
+ && rm /tmp/s2.tgz /tmp/s3.tgz
+
+# Build D2-D3 in parallel (independent workspaces)
+RUN bash -c ' \
+    source /aichallenge/workspace/install/setup.bash; \
+    for d in 2 3; do \
+        ( cd /aichallenge/d${d}/workspace; \
+          rosdep install -y -r -i --from-paths src --ignore-src --rosdistro $ROS_DISTRO || true; \
+          colcon build --symlink-install --allow-overriding gyro_odometer --cmake-args -DCMAKE_BUILD_TYPE=Release || true; \
+          chmod -R a+rwX /aichallenge/d${d}/workspace/install || true; \
+        ) & \
+    done; \
+    wait'
+
+CMD ["bash", "/aichallenge/run_parallel.bash"]

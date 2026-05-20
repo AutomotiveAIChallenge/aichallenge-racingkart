@@ -12,7 +12,7 @@
     <let name="domain_id" value="$(var domain_id)"/>
     <let name="rviz_config" value="$(find-pkg-share aichallenge_system_launch)/config/autoware_vehicle.rviz"/>
     <let name="rviz_config" value="$(find-pkg-share aichallenge_system_launch)/config/autoware.rviz" if="$(var simulation)"/>
-    <arg name="rviz_config" default="$(var rviz_config_file)" description="rviz config"/>
+    <arg name="rviz_config" default="$(var rviz_config)" description="rviz config"/>
 
     <log message="The arguments for aichallenge_system_launch."/>
     <log message=" - simulation: $(var simulation)"/>
@@ -32,9 +32,14 @@
         <arg name="launch_vehicle_interface" value="$(var launch_vehicle_interface)"/>
     </include>
 
-    <!-- Visualization. -->
+    <!-- Visualization (rviz). Kept off by default; capture pipeline no longer depends on it. -->
     <group if="$(var run_rviz)">
         <node pkg="rviz2" exec="rviz2" name="rviz2" output="screen" args="-d $(var rviz_config) -s $(find-pkg-share aichallenge_system_launch)/rviz/image/autoware.png"/>
+    </group>
+
+    <!-- Standalone Qt screen recorder (replaces rviz AutowareScreenCapturePanel). -->
+    <group if="$(var capture)">
+        <include file="$(find-pkg-share aichallenge_screen_recorder)/launch/screen_recorder.launch.xml"/>
     </group>
 
     <!-- Initial Pose -->
