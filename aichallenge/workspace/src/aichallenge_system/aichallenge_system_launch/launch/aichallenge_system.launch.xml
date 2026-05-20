@@ -37,11 +37,6 @@
         <node pkg="rviz2" exec="rviz2" name="rviz2" output="screen" args="-d $(var rviz_config) -s $(find-pkg-share aichallenge_system_launch)/rviz/image/autoware.png"/>
     </group>
 
-    <!-- Standalone Qt screen recorder (replaces rviz AutowareScreenCapturePanel). -->
-    <group if="$(var capture)">
-        <include file="$(find-pkg-share aichallenge_screen_recorder)/launch/screen_recorder.launch.xml"/>
-    </group>
-
     <!-- Initial Pose -->
     <node pkg="topic_tools" exec="relay" name="initial_pose_relay">
       <param name="input_topic" value="/initialpose"/>

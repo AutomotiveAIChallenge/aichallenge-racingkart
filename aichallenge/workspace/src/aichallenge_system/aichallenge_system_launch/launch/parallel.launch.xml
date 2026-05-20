@@ -23,6 +23,21 @@
         <include file="$(find-pkg-share aichallenge_system_launch)/launch/mode/awsim_state_manager.launch.xml"/>
     </group>
 
+    <!-- Standalone Qt screen recorder (replaces rviz AutowareScreenCapturePanel). -->
+    <group if="$(var capture)">
+        <set_env name="ROS_DOMAIN_ID" value="1"/>
+        <include file="$(find-pkg-share aichallenge_screen_recorder)/launch/screen_recorder.launch.xml">
+            <arg name="output_dir" value="$(var log_dir)"/>
+        </include>
+    </group>
+
+     <group>
+        <set_env name="ROS_DOMAIN_ID" value="1"/>
+        <set_env name="ROS_HOME" value="$(var log_dir)/d1/ros"/>
+        <set_env name="ROS_LOG_DIR" value="$(var log_dir)/d1/ros/log"/>
+        <executable name="autoware_d1" output="screen" cmd="bash -c 'source /aichallenge/workspace/install/setup.bash &amp;&amp; exec ros2 launch aichallenge_system_launch aichallenge_system.launch.xml simulation:=true use_sim_time:=true run_rviz:=false capture:=true rosbag:=true domain_id:=1'"/>
+    </group>
+
     <group>
         <set_env name="ROS_DOMAIN_ID" value="1"/>
         <set_env name="ROS_HOME" value="$(var log_dir)/d1/ros"/>
