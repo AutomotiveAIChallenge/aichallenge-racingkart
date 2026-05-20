@@ -544,10 +544,13 @@ class AwsimStateManager(Node):
 
     def _request_launch_shutdown(self) -> None:
         parent_pid = os.getppid()
-        if parent_pid <= 1:
+        if parent_pid <= 0:
             self.get_logger().warn("skip launch shutdown request (invalid parent pid)")
             return
 
+        # parent_pid == 1 is normal inside docker when entrypoint exec's into
+        # `ros2 launch` (PID 1 in the container). The cmdline check below is
+        # what actually protects us from signalling a non-launch init process.
         parent_cmdline = self._read_cmdline(parent_pid)
         if "ros2" not in parent_cmdline or "launch" not in parent_cmdline:
             self.get_logger().warn(
