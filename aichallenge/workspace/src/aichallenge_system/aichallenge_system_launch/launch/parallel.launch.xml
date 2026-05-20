@@ -3,7 +3,7 @@
     <arg name="vehicles" default="3"/>
     <arg name="log_dir" default="/output"/>
     <arg name="laps" default="6"/>
-    <arg name="timeout" default="600"/>
+    <arg name="timeout" default="480"/>
     <arg name="capture" default="true"/>
     <arg name="rosbag" default="true"/>
     <arg name="simulation" default="true"/>
@@ -19,10 +19,7 @@
             name="aichallenge_awsim_eval"
             cwd="$(var log_dir)"
             output="both"
-            cmd="/aichallenge/simulator/AWSIM/AWSIM.x86_64 --vehicles $(var vehicles) --npcs 0 --laps $(var laps) --timeout $(var timeout) --boosts 2 --start-mode sync --start-count-seconds 5 --collisions off --ranking on --sound off -screen-fullscreen 1 -screen-width 1920 -screen-height 1043 -screen-quality low --window-mode borderless"/>
-
-        <executable name="awsim_raise" output="log"
-            cmd="bash -c 'for i in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15; do wmctrl -r AWSIM -b add,above 2&gt;/dev/null &amp;&amp; exit 0; sleep 3; done'"/>
+            cmd="/aichallenge/simulator/AWSIM/AWSIM.x86_64 --vehicles $(var vehicles) --npcs 0 --laps $(var laps) --timeout $(var timeout) --boosts 2 --start-mode sync --start-count-seconds 5 --collisions off --ranking on --sound off -screen-fullscreen 1 -screen-width 1920 -screen-height 1080 -screen-quality low --window-mode borderless"/>
 
         <include file="$(find-pkg-share aichallenge_system_launch)/launch/mode/awsim_state_manager.launch.xml"/>
     </group>
@@ -31,28 +28,21 @@
         <set_env name="ROS_DOMAIN_ID" value="1"/>
         <set_env name="ROS_HOME" value="$(var log_dir)/d1/ros"/>
         <set_env name="ROS_LOG_DIR" value="$(var log_dir)/d1/ros/log"/>
-        <include file="$(find-pkg-share aichallenge_system_launch)/launch/aichallenge_system.launch.xml">
-            <arg name="simulation" value="$(var simulation)"/>
-            <arg name="use_sim_time" value="$(var use_sim_time)"/>
-            <arg name="run_rviz" value="$(var run_rviz)"/>
-            <arg name="capture" value="$(var capture)"/>
-            <arg name="rosbag" value="$(var rosbag)"/>
-            <arg name="domain_id" value="1"/>
-        </include>
+        <executable name="autoware_d1" output="screen" cmd="bash -c 'source /aichallenge/workspace/install/setup.bash &amp;&amp; exec ros2 launch aichallenge_system_launch aichallenge_system.launch.xml simulation:=true use_sim_time:=true run_rviz:=false capture:=true rosbag:=true domain_id:=2'"/>
     </group>
 
     <group>
         <set_env name="ROS_DOMAIN_ID" value="2"/>
         <set_env name="ROS_HOME" value="$(var log_dir)/d2/ros"/>
         <set_env name="ROS_LOG_DIR" value="$(var log_dir)/d2/ros/log"/>
-        <executable name="autoware_d2" output="screen" cmd="bash -c 'source /aichallenge/d2/workspace/install/setup.bash &amp;&amp; exec ros2 launch aichallenge_system_launch aichallenge_system.launch.xml simulation:=true use_sim_time:=true run_rviz:=false capture:=false rosbag:=true domain_id:=2'"/>
+        <executable name="autoware_d2" output="screen" cmd="bash -c 'source /aichallenge/d2/workspace/install/setup.bash &amp;&amp; exec ros2 launch aichallenge_system_launch aichallenge_system.launch.xml simulation:=true use_sim_time:=true run_rviz:=false capture:=false rosbag:=false domain_id:=2'"/>
     </group>
 
     <group>
         <set_env name="ROS_DOMAIN_ID" value="3"/>
         <set_env name="ROS_HOME" value="$(var log_dir)/d3/ros"/>
         <set_env name="ROS_LOG_DIR" value="$(var log_dir)/d3/ros/log"/>
-        <executable name="autoware_d3" output="screen" cmd="bash -c 'source /aichallenge/d3/workspace/install/setup.bash &amp;&amp; exec ros2 launch aichallenge_system_launch aichallenge_system.launch.xml simulation:=true use_sim_time:=true run_rviz:=false capture:=false rosbag:=true domain_id:=3'"/>
+        <executable name="autoware_d3" output="screen" cmd="bash -c 'source /aichallenge/d3/workspace/install/setup.bash &amp;&amp; exec ros2 launch aichallenge_system_launch aichallenge_system.launch.xml simulation:=true use_sim_time:=true run_rviz:=false capture:=false rosbag:=false domain_id:=3'"/>
     </group>
 
 </launch>

@@ -41,5 +41,9 @@ LOG_FILE="output/docker/${ts}-docker_run-$$.log"
 mkdir -p output/docker output/latest
 ln -sfn "${PWD}/${LOG_FILE}" output/latest/docker_run.log
 
+# dev: interactive bash, eval/parallel: run Dockerfile CMD
+run_args=("aichallenge-2025-${target}")
+[ "${target}" = "dev" ] && run_args+=("bash")
+
 # shellcheck disable=SC2086
 rocker ${opts} --x11 --devices ${device_drivers} --user --pulse --net host --privileged --name "aichallenge-2025-$(date "+%Y-%m-%d-%H-%M-%S")" --volume ${volume} -- "${run_args[@]}" 2>&1 | tee "$LOG_FILE"
