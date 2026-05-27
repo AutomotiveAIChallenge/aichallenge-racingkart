@@ -42,14 +42,14 @@
         <set_env name="ROS_DOMAIN_ID" value="2"/>
         <set_env name="ROS_HOME" value="$(var log_dir)/d2/ros"/>
         <set_env name="ROS_LOG_DIR" value="$(var log_dir)/d2/ros/log"/>
-        <executable name="autoware_d2" output="log" cmd="bash -c 'mkdir -p '$(var log_dir)'/d2 &amp;&amp; cd '$(var log_dir)'/d2 &amp;&amp; source /aichallenge/workspace/install/setup.bash &amp;&amp; source /aichallenge/d2/workspace/install/setup.bash &amp;&amp; exec ros2 launch aichallenge_system_launch aichallenge_system.launch.xml simulation:=true use_sim_time:=true run_rviz:=false capture:=false rosbag:=false domain_id:=2 &gt; '$(var log_dir)'/d2/autoware.log 2&gt;&amp;1'"/>
+        <executable name="autoware_d2" output="log" cmd="bash -c '[ -f /aichallenge/d2/workspace/install/setup.bash ] || exit 0; mkdir -p '$(var log_dir)'/d2 &amp;&amp; cd '$(var log_dir)'/d2 &amp;&amp; source /aichallenge/workspace/install/setup.bash &amp;&amp; source /aichallenge/d2/workspace/install/setup.bash &amp;&amp; exec ros2 launch aichallenge_system_launch aichallenge_system.launch.xml simulation:=true use_sim_time:=true run_rviz:=false capture:=false rosbag:=false domain_id:=2 &gt; '$(var log_dir)'/d2/autoware.log 2&gt;&amp;1'"/>
     </group>
 
     <group>
         <set_env name="ROS_DOMAIN_ID" value="3"/>
         <set_env name="ROS_HOME" value="$(var log_dir)/d3/ros"/>
         <set_env name="ROS_LOG_DIR" value="$(var log_dir)/d3/ros/log"/>
-        <executable name="autoware_d3" output="log" cmd="bash -c 'mkdir -p '$(var log_dir)'/d3 &amp;&amp; cd '$(var log_dir)'/d3 &amp;&amp; source /aichallenge/workspace/install/setup.bash &amp;&amp; source /aichallenge/d3/workspace/install/setup.bash &amp;&amp; exec ros2 launch aichallenge_system_launch aichallenge_system.launch.xml simulation:=true use_sim_time:=true run_rviz:=false capture:=false rosbag:=false domain_id:=3 &gt; '$(var log_dir)'/d3/autoware.log 2&gt;&amp;1'"/>
+        <executable name="autoware_d3" output="log" cmd="bash -c '[ -f /aichallenge/d3/workspace/install/setup.bash ] || exit 0; mkdir -p '$(var log_dir)'/d3 &amp;&amp; cd '$(var log_dir)'/d3 &amp;&amp; source /aichallenge/workspace/install/setup.bash &amp;&amp; source /aichallenge/d3/workspace/install/setup.bash &amp;&amp; exec ros2 launch aichallenge_system_launch aichallenge_system.launch.xml simulation:=true use_sim_time:=true run_rviz:=false capture:=false rosbag:=false domain_id:=3 &gt; '$(var log_dir)'/d3/autoware.log 2&gt;&amp;1'"/>
     </group>
 
 </launch>
