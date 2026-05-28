@@ -19,8 +19,9 @@
             name="aichallenge_awsim_eval"
             cwd="$(var log_dir)"
             output="both"
-            cmd="/aichallenge/simulator/AWSIM/AWSIM.x86_64 --vehicles $(var vehicles) --npcs 0 --laps $(var laps) --timeout $(var timeout) --boosts 2 --start-mode sync --start-count-seconds 5 --collisions off --ranking on --sound off -screen-fullscreen 1 -screen-width 1920 -screen-height 1080 -screen-quality low --window-mode borderless"/>
+            cmd="/aichallenge/simulator/AWSIM/AWSIM.x86_64 --vehicles $(var vehicles) --npcs 0 --laps $(var laps) --timeout $(var timeout) --boosts 2 --start-mode sync --start-count-seconds 5 --collisions off --ranking on --sound off --lidar false --camera false -screen-fullscreen 1 -screen-width 1920 -screen-height 1080 -screen-quality low --window-mode borderless"/>
         <include file="$(find-pkg-share aichallenge_system_launch)/launch/mode/awsim_state_manager.launch.xml"/>
+        <executable name="resource_monitor" output="log" cmd="$(find-pkg-prefix aichallenge_system_launch)/lib/aichallenge_system_launch/resource_monitor.sh $(var log_dir)/d1/autoware.log"/>
     </group>
 
     <!-- Standalone Qt screen recorder (replaces rviz AutowareScreenCapturePanel). -->
