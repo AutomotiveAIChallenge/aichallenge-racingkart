@@ -125,7 +125,7 @@ services:
   zenoh:
     <<: *autoware-base
     working_dir: /vehicle
-    command: ["bash", "-lc", "case ${VEHICLE_ID:-} in A2) PORT=7448;; A3) PORT=7449;; A6) PORT=7450;; A7) PORT=7451;; A1) PORT=7452;; A5) PORT=7453;; A8) PORT=7454;; *) echo 'Invalid VEHICLE_ID'; exit 1;; esac; while true; do zenoh-bridge-ros2dds client -e tls/zenoh.dev.aichallenge-board.jsae.or.jp:$$PORT -c /vehicle/zenoh.json5; status=$$?; echo \"zenoh-bridge-ros2dds exited with status $$status; retrying in $${ZENOH_RETRY_INTERVAL:-5}s...\"; sleep $${ZENOH_RETRY_INTERVAL:-5}; done"]
+    command: ["bash", "-lc", "case ${VEHICLE_ID:-} in A2) PORT=7448;; A3) PORT=7449;; A6) PORT=7450;; A7) PORT=7451;; A1) PORT=7452;; A5) PORT=7453;; A8) PORT=7454;; *) echo 'Invalid VEHICLE_ID'; exit 1;; esac; while true; do zenoh-bridge-ros2dds client -e tls/zenoh.dev.aichallenge-board.jsae.or.jp:$$PORT -c /vehicle/zenoh.json5; status=$$?; echo \"zenoh-bridge-ros2dds exited with status $$status; retrying in 5s...\"; sleep 5; done"]
 
   # Driver service
   driver:
