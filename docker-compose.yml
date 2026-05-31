@@ -62,9 +62,15 @@ x-racing_kart_interface-base: &racing_kart_interface-base
     - TZ=Asia/Tokyo
     - ROS_DISTRO=humble
     - ROS_DOMAIN_ID=${ROS_DOMAIN_ID:-1}
+    - LOG_DIR=${LOG_DIR:-}
+    - HOST_UID=${HOST_UID:-}
+    - HOST_GID=${HOST_GID:-}
     - NTRIP_USERNAME=${NTRIP_USERNAME:-}
     - NTRIP_PASSWORD=${NTRIP_PASSWORD:-}
   volumes:
+    - ./output:${OUTPUT_ROOT:-/output}
+    - ./vehicle:/vehicle:ro
+    - ./aichallenge/utils:/aichallenge/utils:ro
     - /dev/vcu:/dev/vcu
     - /dev/gnss:/dev/gnss
     - /tmp/.X11-unix:/tmp/.X11-unix:rw
@@ -125,12 +131,13 @@ services:
   zenoh:
     <<: *autoware-base
     working_dir: /vehicle
-    command: ["bash", "-c", "case ${VEHICLE_ID:-} in A2) PORT=7448;; A3) PORT=7449;; A6) PORT=7450;; A7) PORT=7451;; A1) PORT=7452;; A5) PORT=7453;; A8) PORT=7454;; *) echo 'Invalid VEHICLE_ID'; exit 1;; esac; while true; do zenoh-bridge-ros2dds client -e tls/zenoh.dev.aichallenge-board.jsae.or.jp:$$PORT -c /vehicle/zenoh.json5; status=$$?; echo \"zenoh-bridge-ros2dds exited with status $$status; retrying in 5s...\"; sleep 5; done"]
+    command: ["bash", "-lc", "exec /vehicle/run_zenoh.bash ${VEHICLE_ID:-} ${ROS_DOMAIN_ID:-1} ${LOG_DIR:-}"]
 
   # Driver service
   driver:
     <<: *racing_kart_interface-base
-    command: ['vehicle']
+    entrypoint: []
+    command: ["bash", "-lc", "exec /vehicle/run_driver.bash vehicle ${ROS_DOMAIN_ID:-1} ${LOG_DIR:-}"]
 
 #### remote visualization services ####
   rviz2:
