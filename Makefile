@@ -89,9 +89,9 @@ rviz2:
 
 # driver + autoware + zenoh
 autoware-driver-zenoh:
-	RUN_MODE=vehicle docker compose up -d driver autoware
+	LOG_DIR=$(LOG_DIR) RUN_MODE=vehicle docker compose up -d driver autoware
 	sleep 15
-	docker compose up -d zenoh
+	LOG_DIR=$(LOG_DIR) docker compose up -d zenoh
 
 down:
 	@for p in 1 2 3 4; do docker compose -p $$p down --remove-orphans; done
