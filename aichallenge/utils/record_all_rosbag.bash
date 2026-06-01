@@ -4,6 +4,7 @@ set -euo pipefail
 
 id="${1:-${ROS_DOMAIN_ID:-1}}"
 log_dir="${2:-${LOG_DIR-}}"
+racing_kart_interface_dir="${3:-${RACING_KART_INTERFACE_DIR:-/home/tier4/racing_kart_interface}}"
 out_dir="${log_dir:+${log_dir}/d${id}}"
 out_dir="${out_dir:-/output/$(date +%Y%m%d-%H%M%S)/d${id}}"
 bag_name="rosbag2_all"
@@ -187,10 +188,11 @@ echo "Starting all-topic rosbag recording"
 echo "out_dir: ${out_dir}"
 echo "bag_dir: ${bag_dir}"
 echo "ROS_DOMAIN_ID: ${ROS_DOMAIN_ID}"
+echo "racing_kart_interface_dir: ${racing_kart_interface_dir}"
 
 source_setup "/opt/ros/humble/setup.bash"
 source_setup "/aichallenge/workspace/install/setup.bash"
-source_setup "/racing_kart_interface/install/setup.bash"
+source_setup "${racing_kart_interface_dir}/install/setup.bash"
 
 ros2 interface show racing_kart_msgs/msg/VcuStatus \
     >"${out_dir}/racing_kart_msgs_check.txt" 2>&1

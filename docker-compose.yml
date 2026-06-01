@@ -59,7 +59,7 @@ x-autoware-rosbag-base: &autoware-rosbag-base
     - ./remote:/remote
     - ./vehicle:/vehicle
     - ./vehicle/cyclonedds.xml:/opt/autoware/cyclonedds.xml
-    - ${RACING_KART_INTERFACE_DIR:-../racing_kart_interface}:/racing_kart_interface:ro
+    - ${RACING_KART_INTERFACE_DIR:-/home/tier4/racing_kart_interface}:${RACING_KART_INTERFACE_DIR:-/home/tier4/racing_kart_interface}:ro
     - /tmp/.X11-unix:/tmp/.X11-unix:rw
     # Audio (PipeWire/Pulse) socket access on the host
     - /run/user:/run/user:rw
@@ -118,7 +118,7 @@ services:
 
   rosbag:
     <<: *autoware-rosbag-base
-    command: ["bash", "-lc", "exec /aichallenge/utils/record_all_rosbag.bash ${ROS_DOMAIN_ID:-1} ${LOG_DIR:-}"]
+    command: ["bash", "-lc", 'exec /aichallenge/utils/record_all_rosbag.bash "${ROS_DOMAIN_ID:-1}" "${LOG_DIR:-}" "${RACING_KART_INTERFACE_DIR:-/home/tier4/racing_kart_interface}"']
 
   autoware-simulator-evaluation:
     <<: *autoware-eval-base
