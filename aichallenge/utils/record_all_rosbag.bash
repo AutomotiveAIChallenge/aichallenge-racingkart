@@ -95,6 +95,7 @@ record_cmd=(
     --include-hidden-topics
     -s mcap
     --storage-preset-profile zstd_fast
+    --max-bag-duration 60
     -o "${bag_name}"
 )
 
