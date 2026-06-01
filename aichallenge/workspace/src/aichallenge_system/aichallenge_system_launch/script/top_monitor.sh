@@ -1,6 +1,6 @@
 #!/bin/bash
 log_file="${1:-/output/top_monitor.log}"
-interval="${2:-5}"
+interval="${2:-30}"
 
 mkdir -p "$(dirname "$log_file")"
 

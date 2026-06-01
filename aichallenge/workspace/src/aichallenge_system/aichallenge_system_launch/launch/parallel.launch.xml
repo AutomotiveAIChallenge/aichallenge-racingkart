@@ -9,7 +9,9 @@
     <arg name="simulation" default="true"/>
     <arg name="use_sim_time" default="true"/>
     <arg name="run_rviz" default="false"/>
-    <!-- CPU affinity and memory limits tuned for g4dn.4xlarge (16 vCPUs (コア間の性能差なし), 64 GB RAM). -->
+    <!-- CPU affinity and memory limits tuned for g4dn.4xlarge (16 vCPUs with uniform performance, 64 GB RAM).
+         mem_* args are passed to prlimit as, which limits virtual address space (VAS), not RSS.
+         CPU 0 is intentionally left unallocated for the OS and system daemons. -->
     <arg name="cpu_awsim" default="1-4"/>
     <arg name="mem_awsim" default="unlimited"/>
     <arg name="cpu_screen_recorder" default="5-6"/>

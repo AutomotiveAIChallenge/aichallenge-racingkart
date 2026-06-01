@@ -80,7 +80,7 @@ down2 down3 down4: down
 # Local parallel evaluation using a single workspace for all vehicle slots.
 dev-parallel:
 	@echo "Start parallel local evaluation"
-	@for n in 1 2 3 4; do \
+	@for n in 1 2 3; do \
 		mkdir -p aichallenge/d$$n; \
 		if [ ! -e aichallenge/d$$n/workspace ]; then \
 			ln -s ../workspace aichallenge/d$$n/workspace; \

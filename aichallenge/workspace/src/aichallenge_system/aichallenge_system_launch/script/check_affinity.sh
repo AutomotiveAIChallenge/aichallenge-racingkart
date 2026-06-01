@@ -1,7 +1,7 @@
 #!/bin/bash
 # Wait for nodes to start, then log CPU affinity of all ROS processes.
 log_file="${1:-/output/affinity_check.log}"
-sleep_sec="${2:-15}"
+sleep_sec="${2:-60}"
 
 sleep "${sleep_sec}"
 
