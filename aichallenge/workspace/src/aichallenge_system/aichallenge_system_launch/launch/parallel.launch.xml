@@ -14,11 +14,11 @@
     <arg name="mem_awsim" default="unlimited"/>
     <arg name="cpu_screen_recorder" default="5-6"/>
     <arg name="mem_screen_recorder" default="unlimited"/>
-    <arg name="cpu_d1" default="0-11"/>
+    <arg name="cpu_d1" default="7-9"/>
     <arg name="mem_d1" default="12884901888"/> <!-- 12 GiB in bytes; prlimit does not accept unit suffixes (e.g. 12G) here -->
-    <arg name="cpu_d2" default="0-11"/>
+    <arg name="cpu_d2" default="10-12"/>
     <arg name="mem_d2" default="12884901888"/> <!-- 12 GiB in bytes; prlimit does not accept unit suffixes (e.g. 12G) here -->
-    <arg name="cpu_d3" default="0-11"/>
+    <arg name="cpu_d3" default="13-15"/>
     <arg name="mem_d3" default="12884901888"/> <!-- 12 GiB in bytes; prlimit does not accept unit suffixes (e.g. 12G) here -->
 
     <log message="Launching parallel evaluation ($(var vehicles) vehicles)."/>
@@ -33,8 +33,9 @@
             cmd="prlimit --as=$(var mem_awsim) taskset -c $(var cpu_awsim) /aichallenge/simulator/AWSIM/AWSIM.x86_64 --vehicles $(var vehicles) --npcs 0 --laps $(var laps) --timeout $(var timeout) --boosts 2 --start-mode sync --start-count-seconds 5 --collisions off --ranking on --sound off --lidar false --camera false -screen-fullscreen 1 -screen-width 1920 -screen-height 1080 -screen-quality low --window-mode borderless"/>
         <include file="$(find-pkg-share aichallenge_system_launch)/launch/mode/awsim_state_manager.launch.xml"/>
         <executable name="resource_monitor" output="log" cmd="$(find-pkg-prefix aichallenge_system_launch)/lib/aichallenge_system_launch/resource_monitor.sh $(var log_dir)/d1/autoware.log"/>
-        <executable name="check_affinity" output="log" cmd="$(find-pkg-prefix aichallenge_system_launch)/lib/aichallenge_system_launch/check_affinity.sh $(var log_dir)/affinity_check.log"/>
-        <executable name="top_monitor" output="log" cmd="$(find-pkg-prefix aichallenge_system_launch)/lib/aichallenge_system_launch/top_monitor.sh $(var log_dir)/top_monitor.log"/>
+        <!-- TODO: remove the following two executables after tuning is complete. -->
+        <executable name="check_affinity" output="log" cmd="$(find-pkg-prefix aichallenge_system_launch)/lib/aichallenge_system_launch/check_affinity.sh $(var log_dir)/d1/autoware.log"/>
+        <executable name="top_monitor" output="log" cmd="$(find-pkg-prefix aichallenge_system_launch)/lib/aichallenge_system_launch/top_monitor.sh $(var log_dir)/d1/autoware.log"/>
     </group>
 
     <!-- Standalone Qt screen recorder (replaces rviz AutowareScreenCapturePanel). -->
