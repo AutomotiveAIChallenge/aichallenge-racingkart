@@ -27,17 +27,6 @@ source_setup() {
     set -u
 }
 
-run_snapshot() {
-    local suffix="$1"
-
-    timeout 10s ros2 topic list -t >"${out_dir}/rosbag_topics_${suffix}.txt" 2>&1 || true
-    timeout 10s ros2 node list >"${out_dir}/rosbag_nodes_${suffix}.txt" 2>&1 || true
-    timeout 10s ros2 topic info -v /racing_kart/joy \
-        >"${out_dir}/rosbag_topic_info_racing_kart_joy_${suffix}.txt" 2>&1 || true
-    timeout 10s ros2 topic info -v /initialpose \
-        >"${out_dir}/rosbag_topic_info_initialpose_${suffix}.txt" 2>&1 || true
-}
-
 bag_contains_topic() {
     local topic="$1"
     grep -Fq "Topic: ${topic} |" "${out_dir}/rosbag2_all_info.txt"
@@ -93,31 +82,11 @@ write_verify_report() {
         done
         echo
 
-        echo "[zenoh graph checks]"
+        echo "[zenoh checks]"
         if [ -s "${out_dir}/zenoh.log" ]; then
             echo "OK: zenoh.log exists"
         else
             echo "MISSING: zenoh.log"
-        fi
-
-        if grep -Eiq "zenoh.*bridge|bridge.*zenoh" "${out_dir}/rosbag_nodes_before.txt"; then
-            echo "OK: zenoh bridge node visible before recording"
-        else
-            echo "WARN: zenoh bridge node was not visible in rosbag_nodes_before.txt"
-        fi
-
-        if grep -Eq "Subscription count:[[:space:]]*[1-9][0-9]*" \
-            "${out_dir}/rosbag_topic_info_racing_kart_joy_before.txt"; then
-            echo "OK: /racing_kart/joy has subscriber(s), expected from zenoh bridge"
-        else
-            echo "WARN: /racing_kart/joy subscriber was not visible before recording"
-        fi
-
-        if grep -Eq "Subscription count:[[:space:]]*[1-9][0-9]*" \
-            "${out_dir}/rosbag_topic_info_initialpose_before.txt"; then
-            echo "OK: /initialpose has subscriber(s), expected from zenoh bridge"
-        else
-            echo "WARN: /initialpose subscriber was not visible before recording"
         fi
 
         if bag_contains_topic "/racing_kart/joy"; then
@@ -129,8 +98,6 @@ write_verify_report() {
 }
 
 write_post_record_outputs() {
-    run_snapshot "after"
-
     if [ -d "${bag_dir}" ]; then
         ros2 bag info "${bag_dir}" >"${out_dir}/rosbag2_all_info.txt" 2>&1 || true
     else
@@ -196,8 +163,6 @@ source_setup "${racing_kart_interface_dir}/install/setup.bash"
 
 ros2 interface show racing_kart_msgs/msg/VcuStatus \
     >"${out_dir}/racing_kart_msgs_check.txt" 2>&1
-
-run_snapshot "before"
 
 record_cmd=(
     ros2 bag record
