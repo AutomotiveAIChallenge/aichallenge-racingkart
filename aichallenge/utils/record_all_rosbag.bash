@@ -94,8 +94,7 @@ record_cmd=(
     -a
     --include-hidden-topics
     -s mcap
-    --compression-format zstd
-    --compression-mode file
+    --storage-preset-profile zstd_fast
     -o "${bag_name}"
 )
 
