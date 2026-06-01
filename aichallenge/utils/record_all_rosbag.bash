@@ -27,84 +27,12 @@ source_setup() {
     set -u
 }
 
-bag_contains_topic() {
-    local topic="$1"
-    grep -Fq "Topic: ${topic} |" "${out_dir}/rosbag2_all_info.txt"
-}
-
-write_verify_report() {
-    local autoware_topics=(
-        "/control/command/control_cmd"
-        "/localization/kinematic_state"
-        "/planning/scenario_planning/trajectory"
-        "/vehicle/status/velocity_status"
-    )
-    local driver_topics=(
-        "/racing_kart/vcu/status"
-        "/racing_kart/brake/status"
-        "/racing_kart/steer/status"
-        "/racing_kart/imu"
-        "/racing_kart/gnss"
-    )
-
-    {
-        echo "rosbag verification"
-        echo "generated_at: $(date --iso-8601=seconds)"
-        echo "ros_domain_id: ${ROS_DOMAIN_ID}"
-        echo "bag_dir: ${bag_dir}"
-        echo
-
-        echo "[bag files]"
-        if [ -d "${bag_dir}" ]; then
-            find "${bag_dir}" -maxdepth 1 -type f -printf "%f\n" | sort
-        else
-            echo "MISSING: ${bag_dir}"
-        fi
-        echo
-
-        echo "[autoware representative topics]"
-        for topic in "${autoware_topics[@]}"; do
-            if bag_contains_topic "${topic}"; then
-                echo "OK: ${topic}"
-            else
-                echo "MISSING: ${topic}"
-            fi
-        done
-        echo
-
-        echo "[driver representative topics]"
-        for topic in "${driver_topics[@]}"; do
-            if bag_contains_topic "${topic}"; then
-                echo "OK: ${topic}"
-            else
-                echo "MISSING: ${topic}"
-            fi
-        done
-        echo
-
-        echo "[zenoh checks]"
-        if [ -s "${out_dir}/zenoh.log" ]; then
-            echo "OK: zenoh.log exists"
-        else
-            echo "MISSING: zenoh.log"
-        fi
-
-        if bag_contains_topic "/racing_kart/joy"; then
-            echo "OK: /racing_kart/joy is present in bag"
-        else
-            echo "INFO: /racing_kart/joy is not present in bag; this is expected if remote joy did not publish while recording"
-        fi
-    } >"${out_dir}/rosbag_verify.txt"
-}
-
 write_post_record_outputs() {
     if [ -d "${bag_dir}" ]; then
         ros2 bag info "${bag_dir}" >"${out_dir}/rosbag2_all_info.txt" 2>&1 || true
     else
         echo "rosbag directory not found: ${bag_dir}" >"${out_dir}/rosbag2_all_info.txt"
     fi
-
-    write_verify_report
 }
 
 fix_ownership() {
@@ -160,9 +88,6 @@ echo "racing_kart_interface_dir: ${racing_kart_interface_dir}"
 source_setup "/opt/ros/humble/setup.bash"
 source_setup "/aichallenge/workspace/install/setup.bash"
 source_setup "${racing_kart_interface_dir}/install/setup.bash"
-
-ros2 interface show racing_kart_msgs/msg/VcuStatus \
-    >"${out_dir}/racing_kart_msgs_check.txt" 2>&1
 
 record_cmd=(
     ros2 bag record
