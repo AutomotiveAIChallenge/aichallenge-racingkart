@@ -27,14 +27,6 @@ source_setup() {
     set -u
 }
 
-write_post_record_outputs() {
-    if [ -d "${bag_dir}" ]; then
-        ros2 bag info "${bag_dir}" >"${out_dir}/rosbag2_all_info.txt" 2>&1 || true
-    else
-        echo "rosbag directory not found: ${bag_dir}" >"${out_dir}/rosbag2_all_info.txt"
-    fi
-}
-
 fix_ownership() {
     bash /aichallenge/utils/fix_ownership.bash \
         "${HOST_UID-}" \
@@ -56,7 +48,6 @@ finish_recording() {
     fi
     PID=""
 
-    write_post_record_outputs
     fix_ownership
 }
 
