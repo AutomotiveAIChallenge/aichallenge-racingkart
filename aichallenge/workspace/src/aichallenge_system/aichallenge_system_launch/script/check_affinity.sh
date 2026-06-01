@@ -7,7 +7,8 @@ sleep "${sleep_sec}"
 
 {
     echo "=== CPU affinity check ($(date)) ==="
-    ps aux | grep -E 'ros|component|AWSIM' | grep -v grep | awk '{print $2}' | \
+    # shellcheck disable=SC2016
+    pgrep -f 'ros|component|AWSIM' |
         xargs -I{} sh -c \
             'echo -n "PID {}: "; taskset -cp {} 2>/dev/null | sed "s/.*affinity list: /affinity: /"; echo "  cmd: $(ps -p {} -o args= 2>/dev/null)"'
-} >> "${log_file}" 2>&1
+} >>"${log_file}" 2>&1
