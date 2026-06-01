@@ -3,7 +3,7 @@
 set -euo pipefail
 
 id="${1:-${ROS_DOMAIN_ID:-1}}"
-log_dir="${2:-${LOG_DIR:-}}"
+log_dir="${2:-${LOG_DIR-}}"
 out_dir="${log_dir:+${log_dir}/d${id}}"
 out_dir="${out_dir:-/output/$(date +%Y%m%d-%H%M%S)/d${id}}"
 bag_name="rosbag2_all"
@@ -141,8 +141,8 @@ write_post_record_outputs() {
 
 fix_ownership() {
     bash /aichallenge/utils/fix_ownership.bash \
-        "${HOST_UID:-}" \
-        "${HOST_GID:-}" \
+        "${HOST_UID-}" \
+        "${HOST_GID-}" \
         /output \
         "$(dirname "${out_dir}")" || true
 }
