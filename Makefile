@@ -2,7 +2,7 @@
 SHELL := /bin/bash
 
 .PHONY: autoware-build autoware-vehicle autoware-simulator autoware-request-initialpose autoware-request-control  awsim-request-start awsim-request-reset autoware-driver-zenoh \
-	simulator dev dev2 dev3 dev4 driver zenoh download rviz2 down down2 down3 down4 ps autoware-bash
+	simulator dev dev2 dev3 dev4 dev-parallel driver zenoh download rviz2 down down2 down3 down4 ps autoware-bash
 
 # Used by docker-compose.yml for build/eval artifact ownership.
 HOST_UID ?= $(shell id -u)
@@ -76,6 +76,19 @@ dev2 dev3 dev4: simulator
 
 # Kept for backward compatibility; `make down` already cleans all projects.
 down2 down3 down4: down
+
+# Local parallel evaluation using a single workspace for all vehicle slots.
+dev-parallel:
+	@echo "Start parallel local evaluation"
+	@for n in 1 2 3 4; do \
+		mkdir -p aichallenge/d$$n; \
+		if [ ! -e aichallenge/d$$n/workspace ]; then \
+			ln -s ../workspace aichallenge/d$$n/workspace; \
+			echo "[eval_parallel] created symlink: aichallenge/d$$n/workspace -> ../workspace"; \
+		fi; \
+	done
+	CMD="exec /aichallenge/run_parallel.bash" \
+	docker compose run --rm -T --no-deps autoware-command
 
 eval:
 	@echo "Start evaluation simulation (AWSIM + Autoware)"
