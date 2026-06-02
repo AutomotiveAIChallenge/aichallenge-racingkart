@@ -16,37 +16,23 @@ from rclpy.serialization import deserialize_message
 from rosidl_runtime_py.utilities import get_message
 
 
-_THEME_POST_SCRIPT = """
-var gd = document.getElementById('{plot_id}');
-var THEMES = {
-    light: {paper_bgcolor: '#ffffff', plot_bgcolor: '#ffffff', 'font.color': '#111111',
-            'xaxis.gridcolor': '#dddddd', 'yaxis.gridcolor': '#dddddd',
-            'xaxis.zerolinecolor': '#bbbbbb', 'yaxis.zerolinecolor': '#bbbbbb'},
-    dark: {paper_bgcolor: '#111418', plot_bgcolor: '#111418', 'font.color': '#e8e8e8',
-           'xaxis.gridcolor': '#333333', 'yaxis.gridcolor': '#333333',
-           'xaxis.zerolinecolor': '#555555', 'yaxis.zerolinecolor': '#555555'}
-};
-function resolveTheme() {
-    var q = new URLSearchParams(window.location.search).get('theme');
-    if (q === 'dark' || q === 'light') { return q; }
-    if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) { return 'dark'; }
-    return 'light';
-}
-function applyTheme(t) {
-    document.body.style.background = THEMES[t].paper_bgcolor;
-    document.body.style.color = THEMES[t]['font.color'];
-    if (window.Plotly && gd) { Plotly.relayout(gd, THEMES[t]); }
-}
-applyTheme(resolveTheme());
-"""
-
-
 def save_and_show_plot(fig, folder_name, file_name):
     [name, suffix] = file_name.split(".")
     timestamp = datetime.now().strftime("%y-%m-%d-%H-%M-%S")
     output_path_html = f"{name}-{timestamp}.html"
-    fig.update_layout(template="plotly_white")
-    fig.write_html(output_path_html, post_script=_THEME_POST_SCRIPT)
+    # 文字・グリッドは焼き込みになるため、light/dark どちらでも読める中間グレーにする。
+    grid_color = "rgba(128,128,128,0.3)"
+    zero_color = "rgba(128,128,128,0.55)"
+    line_color = "rgba(128,128,128,0.6)"
+    fig.update_layout(
+        template="plotly_white",
+        paper_bgcolor="rgba(0,0,0,0)",
+        plot_bgcolor="rgba(0,0,0,0)",
+        font=dict(size=14, color="#808080"),
+    )
+    fig.update_xaxes(gridcolor=grid_color, zerolinecolor=zero_color, linecolor=line_color)
+    fig.update_yaxes(gridcolor=grid_color, zerolinecolor=zero_color, linecolor=line_color)
+    fig.write_html(output_path_html)
 
 
 def infer_configs(
