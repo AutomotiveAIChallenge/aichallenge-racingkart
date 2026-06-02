@@ -218,8 +218,9 @@ class Analyzer:
         fig.update_yaxes(title_text="y [m]", range=[y_min, y_max], scaleanchor="x", scaleratio=1)
         
         # シンプルで確実なレイアウト設定
-        # template はテーマ非依存にしておき、HTML 出力時に dark/light を
-        # OS 設定追従で動的切替する（save_and_show_plot を参照）。
+        # template / 文字色は dark/light どちらでも読めるテーマ中立色にする。
+        # サイト側の dark/light トグル実装後に、JS から prefers-color-scheme を
+        # 観測して動的切替する場合は save_and_show_plot 側に手を入れる想定。
         fig.update_layout(
             font=dict(size=14),
             showlegend=False,
