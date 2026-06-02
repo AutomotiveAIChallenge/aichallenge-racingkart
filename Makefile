@@ -93,13 +93,11 @@ autoware-driver-zenoh:
 	sleep 15
 	LOG_DIR=$(LOG_DIR) docker compose up -d zenoh
 
-# driver + autoware + zenoh + all-topic rosbag
+# driver + autoware + all-topic rosbag + zenoh
 autoware-driver-zenoh-rosbag:
-	LOG_DIR=$(LOG_DIR) RUN_MODE=vehicle docker compose up -d driver autoware
+	LOG_DIR=$(LOG_DIR) RUN_MODE=vehicle docker compose up -d driver autoware rosbag
 	sleep 15
 	LOG_DIR=$(LOG_DIR) docker compose up -d zenoh
-	sleep 5
-	LOG_DIR=$(LOG_DIR) docker compose up -d rosbag
 
 down:
 	@for p in 1 2 3 4; do docker compose -p $$p down --remove-orphans; done
