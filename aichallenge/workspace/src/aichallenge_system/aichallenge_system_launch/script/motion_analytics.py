@@ -16,13 +16,37 @@ from rclpy.serialization import deserialize_message
 from rosidl_runtime_py.utilities import get_message
 
 
-def save_and_show_plot(fig, folder_name, file_name):    
+_THEME_POST_SCRIPT = """
+var gd = document.getElementById('{plot_id}');
+var THEMES = {
+    light: {paper_bgcolor: '#ffffff', plot_bgcolor: '#ffffff', 'font.color': '#111111',
+            'xaxis.gridcolor': '#dddddd', 'yaxis.gridcolor': '#dddddd',
+            'xaxis.zerolinecolor': '#bbbbbb', 'yaxis.zerolinecolor': '#bbbbbb'},
+    dark: {paper_bgcolor: '#111418', plot_bgcolor: '#111418', 'font.color': '#e8e8e8',
+           'xaxis.gridcolor': '#333333', 'yaxis.gridcolor': '#333333',
+           'xaxis.zerolinecolor': '#555555', 'yaxis.zerolinecolor': '#555555'}
+};
+function resolveTheme() {
+    var q = new URLSearchParams(window.location.search).get('theme');
+    if (q === 'dark' || q === 'light') { return q; }
+    if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) { return 'dark'; }
+    return 'light';
+}
+function applyTheme(t) {
+    document.body.style.background = THEMES[t].paper_bgcolor;
+    document.body.style.color = THEMES[t]['font.color'];
+    if (window.Plotly && gd) { Plotly.relayout(gd, THEMES[t]); }
+}
+applyTheme(resolveTheme());
+"""
+
+
+def save_and_show_plot(fig, folder_name, file_name):
     [name, suffix] = file_name.split(".")
     timestamp = datetime.now().strftime("%y-%m-%d-%H-%M-%S")
-    output_path = (name + "-" + timestamp + "." + suffix)
     output_path_html = f"{name}-{timestamp}.html"
-    # fig.write_image(output_path, width=800, height=600)
-    fig.write_html(output_path_html)
+    fig.update_layout(template="plotly_white")
+    fig.write_html(output_path_html, post_script=_THEME_POST_SCRIPT)
 
 
 def infer_configs(
@@ -122,7 +146,7 @@ class Analyzer:
     
     def _create_plots(self, pose_time_stamp, pose_speed_filter, pose_acceleration_filter):
         # データを1/10に間引く
-        step = 5
+        step = 20
         pose_time_stamp_sampled = pose_time_stamp[::step]
         pose_speed_filter_sampled = pose_speed_filter[::step] if pose_speed_filter else []
         pose_acceleration_filter_sampled = pose_acceleration_filter[::step] if pose_acceleration_filter else []
@@ -208,8 +232,9 @@ class Analyzer:
         fig.update_yaxes(title_text="y [m]", range=[y_min, y_max], scaleanchor="x", scaleratio=1)
         
         # シンプルで確実なレイアウト設定
+        # template はテーマ非依存にしておき、HTML 出力時に dark/light を
+        # OS 設定追従で動的切替する（save_and_show_plot を参照）。
         fig.update_layout(
-            template='plotly_dark',
             font=dict(size=14),
             showlegend=False,
             margin=dict(t=120, b=60, l=60, r=120),  # 右マージンを大きく取りカラーバー用スペース確保
