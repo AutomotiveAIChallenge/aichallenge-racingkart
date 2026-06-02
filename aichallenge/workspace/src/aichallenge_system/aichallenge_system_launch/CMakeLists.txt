@@ -10,8 +10,6 @@ install(PROGRAMS
   script/motion_analytics.py
   script/v2x_marker_publisher.py
   script/resource_monitor.sh
-  script/check_affinity.sh
-  script/top_monitor.sh
   DESTINATION lib/${PROJECT_NAME}
 )
 
