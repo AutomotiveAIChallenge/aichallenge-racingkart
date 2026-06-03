@@ -8,6 +8,7 @@ import shlex
 import subprocess
 import queue
 import threading
+import time
 from pathlib import Path
 from typing import Optional
 
@@ -475,8 +476,12 @@ class AutostartOrchestrator(Node):
                 f"waiting service and calling {self.get_parameter('initial_pose_service').value}"
                 + (f" (timeout {timeout_sec:.0f}s)" if timeout_arg is not None else ""),
             )
+            # One deadline bounds the whole step: wait_for_service consumes part of it
+            # and the trigger call only gets the remainder.
+            deadline = None if timeout_arg is None else time.monotonic() + timeout_arg
             if self._wait_for_service(self._cli_initial_pose, timeout_sec=timeout_arg):
-                ok, msg = self._call_trigger(self._cli_initial_pose, timeout_sec=timeout_arg)
+                remaining = None if deadline is None else max(0.0, deadline - time.monotonic())
+                ok, msg = self._call_trigger(self._cli_initial_pose, timeout_sec=remaining)
                 if ok:
                     self.get_logger().info(f"initial pose: success={ok} msg={msg}")
                 else:
