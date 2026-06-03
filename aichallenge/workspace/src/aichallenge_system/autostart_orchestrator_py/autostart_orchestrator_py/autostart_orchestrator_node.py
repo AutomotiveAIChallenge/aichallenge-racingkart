@@ -94,6 +94,8 @@ class AutostartOrchestrator(Node):
         self.declare_parameter("enable_motion_analytics", True)
         self.declare_parameter("motion_analytics_cmd", "ros2 run aichallenge_system_launch motion_analytics.py")
         self.declare_parameter("motion_analytics_input_dir", "")
+        # 0 or negative => wait forever (legacy behavior).
+        self.declare_parameter("initial_pose_service_timeout_sec", 120.0)
 
         vehicle_state_topic = str(self.get_parameter("vehicle_state_topic").value).strip()
         if not vehicle_state_topic:
@@ -466,15 +468,25 @@ class AutostartOrchestrator(Node):
             return
 
         if call_initial_pose:
+            timeout_sec = float(self.get_parameter("initial_pose_service_timeout_sec").value)
+            timeout_arg: Optional[float] = timeout_sec if timeout_sec > 0.0 else None
             self._set_workflow_state(
                 self._STATE_WAIT_INITIAL_POSE,
-                f"waiting service and calling {self.get_parameter('initial_pose_service').value}",
+                f"waiting service and calling {self.get_parameter('initial_pose_service').value}"
+                + (f" (timeout {timeout_sec:.0f}s)" if timeout_arg is not None else ""),
             )
-            if self._wait_for_service(self._cli_initial_pose):
-                ok, msg = self._call_trigger(self._cli_initial_pose)
-                self.get_logger().info(f"initial pose: success={ok} msg={msg}")
+            if self._wait_for_service(self._cli_initial_pose, timeout_sec=timeout_arg):
+                ok, msg = self._call_trigger(self._cli_initial_pose, timeout_sec=timeout_arg)
+                if ok:
+                    self.get_logger().info(f"initial pose: success={ok} msg={msg}")
+                else:
+                    self.get_logger().warn(
+                        f"skip initial pose (call failed/timed out): {msg}; proceeding to capture/rosbag"
+                    )
             else:
-                self.get_logger().warn("skip initial pose (service not found)")
+                self.get_logger().warn(
+                    "skip initial pose (service not found within timeout); proceeding to capture/rosbag"
+                )
 
         self._set_workflow_state(self._STATE_REQUEST_CONTROL_MODE, "initial pose completed")
 
@@ -491,10 +503,12 @@ class AutostartOrchestrator(Node):
 
         self._set_workflow_state(self._STATE_REQUEST_CONTROL_MODE, "initialization done")
 
-    def _wait_for_service(self, client) -> bool:
-        return client.wait_for_service()
+    def _wait_for_service(self, client, timeout_sec: Optional[float] = None) -> bool:
+        if timeout_sec is None:
+            return client.wait_for_service()
+        return client.wait_for_service(timeout_sec=timeout_sec)
 
-    def _call_trigger(self, client) -> tuple[bool, str]:
+    def _call_trigger(self, client, timeout_sec: Optional[float] = None) -> tuple[bool, str]:
         event = threading.Event()
         result: tuple[bool, str] = (False, "no_response")
 
@@ -511,7 +525,14 @@ class AutostartOrchestrator(Node):
                 event.set()
 
         future.add_done_callback(_done)
-        event.wait()
+        if not event.wait(timeout=timeout_sec):
+            # Drop the unresolved future so we don't leak a pending request,
+            # and report timeout so callers can fall through to next step.
+            try:
+                client.remove_pending_request(future)
+            except Exception:  # noqa: BLE001
+                pass
+            return (False, f"timeout ({timeout_sec}s)")
         return result
 
     def _publish_control_mode(self) -> tuple[bool, str]:
