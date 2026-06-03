@@ -15,6 +15,8 @@
 #ifndef SCREEN_RECORDER_NODE_HPP_
 #define SCREEN_RECORDER_NODE_HPP_
 
+#include "encoder_worker.hpp"
+
 #include <QObject>
 #include <QString>
 #include <QTimer>
@@ -25,35 +27,9 @@
 #include <std_srvs/srv/trigger.hpp>
 
 #include <atomic>
-#include <condition_variable>
-#include <deque>
+#include <functional>
 #include <memory>
-#include <mutex>
 #include <string>
-#include <thread>
-
-class EncoderWorker
-{
-public:
-  EncoderWorker(std::unique_ptr<cv::VideoWriter> writer, cv::Size size, std::size_t max_queue);
-  ~EncoderWorker();
-
-  void submit(cv::Mat frame);
-  std::size_t stop();  // returns dropped frame count
-
-private:
-  void run();
-
-  std::unique_ptr<cv::VideoWriter> writer_;
-  cv::Size size_;
-  std::size_t max_queue_;
-  std::deque<cv::Mat> queue_;
-  std::mutex mtx_;
-  std::condition_variable cv_;
-  std::atomic<bool> stop_{false};
-  std::size_t dropped_{0};
-  std::thread thread_;
-};
 
 class ScreenRecorder : public QObject
 {
@@ -63,13 +39,14 @@ public:
   explicit ScreenRecorder(int hz, QObject * parent = nullptr);
   ~ScreenRecorder() override = default;
 
-  bool active() const { return active_; }
+  // Thread-safe: the single source of truth for the recording state.
+  bool active() const { return active_.load(); }
 
 signals:
   void statusChanged(bool active, QString message);
 
 public slots:
-  void start(QString path);
+  bool start(const QString & path);  // returns whether recording is active afterwards
   void stop();
 
 private slots:
@@ -80,7 +57,7 @@ private:
 
   int hz_;
   cv::Size size_{};
-  bool active_{false};
+  std::atomic<bool> active_{false};
   std::unique_ptr<EncoderWorker> encoder_;
   QTimer timer_;
 };
@@ -94,11 +71,11 @@ private:
   void onTrigger(
     const std::shared_ptr<std_srvs::srv::Trigger::Request> req,
     std::shared_ptr<std_srvs::srv::Trigger::Response> res);
+  bool callOnQtThread(std::function<bool()> fn);
 
   ScreenRecorder * recorder_;
   std::string output_dir_;
   std::string prefix_;
-  bool active_{false};
   rclcpp::Service<std_srvs::srv::Trigger>::SharedPtr service_;
 };
 

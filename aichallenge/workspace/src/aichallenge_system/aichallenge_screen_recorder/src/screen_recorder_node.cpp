@@ -14,8 +14,6 @@
 
 #include "screen_recorder_node.hpp"
 
-#include <QApplication>
-#include <QDir>
 #include <QGuiApplication>
 #include <QImage>
 #include <QPixmap>
@@ -24,6 +22,7 @@
 #include <chrono>
 #include <ctime>
 #include <filesystem>
+#include <future>
 #include <iomanip>
 #include <memory>
 #include <sstream>
@@ -45,76 +44,6 @@ std::string nowStamp()
 }
 }  // namespace
 
-EncoderWorker::EncoderWorker(
-  std::unique_ptr<cv::VideoWriter> writer, cv::Size size, std::size_t max_queue)
-: writer_(std::move(writer)), size_(size), max_queue_(max_queue)
-{
-  thread_ = std::thread(&EncoderWorker::run, this);
-}
-
-EncoderWorker::~EncoderWorker()
-{
-  if (!stop_.load()) {
-    stop();
-  }
-}
-
-void EncoderWorker::submit(cv::Mat frame)
-{
-  {
-    std::lock_guard<std::mutex> lk(mtx_);
-    if (queue_.size() >= max_queue_) {
-      ++dropped_;
-      return;
-    }
-    queue_.push_back(std::move(frame));
-  }
-  cv_.notify_one();
-}
-
-std::size_t EncoderWorker::stop()
-{
-  stop_.store(true);
-  cv_.notify_all();
-  if (thread_.joinable()) {
-    thread_.join();
-  }
-  if (writer_) {
-    writer_->release();
-    writer_.reset();
-  }
-  return dropped_;
-}
-
-void EncoderWorker::run()
-{
-  while (true) {
-    cv::Mat frame;
-    {
-      std::unique_lock<std::mutex> lk(mtx_);
-      cv_.wait(lk, [this] { return stop_.load() || !queue_.empty(); });
-      if (queue_.empty()) {
-        if (stop_.load()) {
-          break;
-        }
-        continue;
-      }
-      frame = std::move(queue_.front());
-      queue_.pop_front();
-    }
-    if (frame.empty() || !writer_) {
-      continue;
-    }
-    if (frame.cols != size_.width || frame.rows != size_.height) {
-      cv::Mat resized;
-      cv::resize(frame, resized, size_);
-      writer_->write(resized);
-    } else {
-      writer_->write(frame);
-    }
-  }
-}
-
 ScreenRecorder::ScreenRecorder(int hz, QObject * parent) : QObject(parent), hz_(std::max(1, hz))
 {
   timer_.setTimerType(Qt::PreciseTimer);
@@ -128,6 +57,7 @@ cv::Mat ScreenRecorder::grabFrame()
   if (!screen) {
     return {};
   }
+  // X11 only: on Wayland grabWindow() returns a null/empty pixmap.
   QPixmap pixmap = screen->grabWindow(0);
   if (pixmap.isNull()) {
     return {};
@@ -140,11 +70,11 @@ cv::Mat ScreenRecorder::grabFrame()
   return tmp.clone();
 }
 
-void ScreenRecorder::start(QString path)
+bool ScreenRecorder::start(const QString & path)
 {
   if (active_) {
     emit statusChanged(true, QStringLiteral("already recording"));
-    return;
+    return true;
   }
 
   const std::string path_str = path.toStdString();
@@ -153,10 +83,13 @@ void ScreenRecorder::start(QString path)
   cv::Mat sample = grabFrame();
   if (sample.empty()) {
     emit statusChanged(false, QStringLiteral("no primary screen"));
-    return;
+    return false;
   }
   size_ = cv::Size(sample.cols, sample.rows);
 
+  // Known limitations: the writer fps is the nominal capture rate, so dropped frames or timer
+  // jitter make playback run faster than wall clock. The mp4 index (moov atom) is only written
+  // on release(), so a SIGKILL before stop() leaves an unplayable file.
   std::unique_ptr<cv::VideoWriter> writer;
   for (const char * tag : {"avc1", "mp4v"}) {
     auto candidate = std::make_unique<cv::VideoWriter>(
@@ -168,7 +101,7 @@ void ScreenRecorder::start(QString path)
   }
   if (!writer) {
     emit statusChanged(false, QStringLiteral("failed to open writer: %1").arg(path));
-    return;
+    return false;
   }
 
   encoder_ = std::make_unique<EncoderWorker>(std::move(writer), size_, /*max_queue=*/30);
@@ -181,6 +114,7 @@ void ScreenRecorder::start(QString path)
             .arg(size_.height)
             .arg(hz_)
             .arg(path));
+  return true;
 }
 
 void ScreenRecorder::stop()
@@ -214,6 +148,8 @@ ScreenRecorderNode::ScreenRecorderNode(ScreenRecorder * recorder, rclcpp::NodeOp
 : rclcpp::Node("screen_recorder", options), recorder_(recorder)
 {
   output_dir_ = this->declare_parameter<std::string>("output_dir", "capture");
+  // Resolve relative paths against the CWD once so the log below shows where files actually go.
+  output_dir_ = std::filesystem::absolute(output_dir_).string();
   prefix_ = this->declare_parameter<std::string>("filename_prefix", "cap");
   const std::string service_name =
     this->declare_parameter<std::string>("service_name", "/debug/service/capture_screen");
@@ -230,27 +166,40 @@ void ScreenRecorderNode::onTrigger(
   const std::shared_ptr<std_srvs::srv::Trigger::Request> /*req*/,
   std::shared_ptr<std_srvs::srv::Trigger::Response> res)
 {
-  if (!active_) {
+  // Run start()/stop() on the Qt thread and wait for the result, so the response reflects the
+  // actual recorder state and the mp4 is fully finalized before the stop response is sent.
+  if (!recorder_->active()) {
     const std::string path = output_dir_ + "/" + prefix_ + "-" + nowStamp() + ".mp4";
-    QMetaObject::invokeMethod(
-      recorder_, "start", Qt::QueuedConnection, Q_ARG(QString, QString::fromStdString(path)));
-    active_ = true;
-    res->success = true;
-    res->message = "start: " + path;
+    const QString qpath = QString::fromStdString(path);
+    res->success = callOnQtThread([this, qpath] { return recorder_->start(qpath); });
+    res->message = (res->success ? "start: " : "failed to start: ") + path;
   } else {
-    QMetaObject::invokeMethod(recorder_, "stop", Qt::QueuedConnection);
-    active_ = false;
-    res->success = true;
-    res->message = "stop";
+    res->success = callOnQtThread([this] {
+      recorder_->stop();
+      return true;
+    });
+    res->message = res->success ? "stop" : "failed to stop (Qt event loop unavailable)";
   }
   RCLCPP_INFO(this->get_logger(), "%s", res->message.c_str());
+}
+
+bool ScreenRecorderNode::callOnQtThread(std::function<bool()> fn)
+{
+  auto promise = std::make_shared<std::promise<bool>>();
+  auto future = promise->get_future();
+  QMetaObject::invokeMethod(
+    recorder_, [promise, fn = std::move(fn)] { promise->set_value(fn()); }, Qt::QueuedConnection);
+  // Timeout guards against a stopped Qt event loop (e.g. during shutdown).
+  return future.wait_for(std::chrono::seconds(5)) == std::future_status::ready && future.get();
 }
 
 int main(int argc, char * argv[])
 {
   rclcpp::init(argc, argv);
-  QApplication app(argc, argv);
+  QGuiApplication app(argc, argv);
 
+  // hz comes from an env var rather than a ROS parameter because the recorder must be
+  // constructed on the Qt main thread before the ROS node (which owns the parameters) exists.
   int hz = 10;
   if (const char * env = std::getenv("AIC_SCREEN_RECORDER_HZ")) {
     try {
