@@ -18,13 +18,11 @@ endif
 TIMESTAMP := $(shell date +%Y%m%d-%H%M%S)
 LOG_DIR := /output/$(TIMESTAMP)
 
-# make simulator-<mode> / make dev-<mode>: <mode> は simulator_scripts/*.sh のファイル名
+# make simulator-<mode>: <mode> は simulator_scripts/*.sh のファイル名
 SIM_MODES := $(notdir $(basename $(wildcard aichallenge/simulator_scripts/*.sh)))
-.PHONY: $(addprefix simulator-,$(SIM_MODES)) $(addprefix dev-,$(SIM_MODES))
+.PHONY: $(addprefix simulator-,$(SIM_MODES))
 $(addprefix simulator-,$(SIM_MODES)): simulator-%:
 	@$(MAKE) simulator SIM_MODE=$*
-$(addprefix dev-,$(SIM_MODES)): dev-%:
-	@$(MAKE) dev SIM_MODE=$*
 
 # autowareのbuildのみ
 autoware-build:
