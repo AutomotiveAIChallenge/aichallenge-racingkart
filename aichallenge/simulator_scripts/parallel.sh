@@ -6,16 +6,19 @@ export ROS_DOMAIN_ID=0
 $AWSIM_DIRECTORY/AWSIM.x86_64 \
     --camera false \
     --lidar false \
-    --vehicles 3 \
-    --npcs 0 \
-    --laps 6 \
-    --timeout 600 \
-    --boosts 2 \
     --start-mode sync \
     --start-count-seconds 5 \
-    --collisions off \
-    --ranking on \
+    --vehicles 3 \
+    --npcs 0 \
+    --boosts 2 \
+    --laps 6 \
+    --timeout 600 \
+    --steer-source ackermann \
     --sound off \
+    --collisions off \
+    --handicap on \
+    --wall-recovery on \
+    --ranking on \
     -screen-fullscreen 1 \
     -screen-width 1920 \
     -screen-height 1080 \
