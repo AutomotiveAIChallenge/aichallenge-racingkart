@@ -28,7 +28,7 @@ make eval → run_evaluation.bash → evaluation.launch.xml
 
 | スクリプト | 用途 | 引数 | 主な設定 |
 |---|---|---|---|
-| `eval.sh` | 評価 | - | 1台 / 6 laps / 600s / sync開始 / handicap・wall-recovery・ranking off |
+| `eval.sh` | 評価 | - | 1台 / 6 laps / 600s / count開始 / handicap・wall-recovery・ranking off |
 | `dev.sh` | 開発 | 車両数 N（既定 1） | unlimited laps・timeout / count開始 / wall-recovery on / handicap・ranking off |
 | `parallel.sh` | 複数台レース | - | 3台 / 6 laps / 600s / sync開始 / handicap・wall-recovery・ranking on |
 | `gate.sh` | Safety Gate テスト | テスト番号 1/2/3/all（既定 all） | 1台。all は test1〜3 を順次実行 |
@@ -49,7 +49,6 @@ make eval → run_evaluation.bash → evaluation.launch.xml
 **あえてモード別 1 ファイルにしている**（config 集約しない）。
 1 ファイルで完結し、コピーしてモードを増やせ、`gate` のような差分も素直に書ける。
 そのため `dev.sh` と `eval.sh` のようなほぼ同一ファイルもあるが、意図した重複であり DRY 化しない。
-台数・テスト番号のような「同型で数だけ違う」ものはファイルを増やさず引数で取る（旧 `1p.sh`〜`4p.sh`、`safety-gate1〜3.sh` は廃止）。
 
 新モードは近いものを `cp` して引数を直すだけ（`simulator-<新mode>` が自動で使える）。
 末尾の GPU 切り替えコメントは編集対象行の隣に置くガイドなので、共通化せず各ファイルに残す。

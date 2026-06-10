@@ -94,6 +94,7 @@ down2 down3 down4: down
 eval:
 	@echo "Start evaluation simulation (AWSIM + Autoware)"
 	docker compose up -d autoware-simulator-evaluation
+	$(MAKE) awsim-request-start; \
 	@echo "To stop: make down  (docker compose down --remove-orphans)"
 
 # remote operation (docker compose up -d rviz2)
