@@ -99,27 +99,6 @@ services:
     image: "aichallenge-2025-eval"
     command: ["bash", "-lc", "exec /aichallenge/run_evaluation.bash"]
 
-### Autoware Service For Parallel Execution ###
-  autoware-d1:
-    <<: *autoware-eval-base
-    image: "autoware-d1"
-    command: ["bash", "-lc", "exec env ROS_DOMAIN_ID=1 ros2 launch aichallenge_system_launch aichallenge_system.launch.xml simulation:=true use_sim_time:=true run_rviz:=true domain_id:=1 > \"${LOG_DIR:-/output}/autoware.log\" 2>&1"]
-
-  autoware-d2:
-    <<: *autoware-eval-base
-    image: "autoware-d2"
-    command: ["bash", "-lc", "exec env ROS_DOMAIN_ID=2 ros2 launch aichallenge_system_launch aichallenge_system.launch.xml simulation:=true use_sim_time:=true run_rviz:=true domain_id:=2 > \"${LOG_DIR:-/output}/autoware.log\" 2>&1"]
-
-  autoware-d3:
-    <<: *autoware-eval-base
-    image: "autoware-d3"
-    command: ["bash", "-lc", "exec env ROS_DOMAIN_ID=3 ros2 launch aichallenge_system_launch aichallenge_system.launch.xml simulation:=true use_sim_time:=true run_rviz:=true domain_id:=3 > \"${LOG_DIR:-/output}/autoware.log\" 2>&1"]
-
-  autoware-d4:
-    <<: *autoware-eval-base
-    image: "autoware-d4"
-    command: ["bash", "-lc", "exec env ROS_DOMAIN_ID=4 ros2 launch aichallenge_system_launch aichallenge_system.launch.xml simulation:=true use_sim_time:=true run_rviz:=true domain_id:=4 > \"${LOG_DIR:-/output}/autoware.log\" 2>&1"]
-
 #### vehicle specific services can be added here ####
   # Zenoh service
   zenoh:
