@@ -26,7 +26,7 @@
                 name="aichallenge_awsim_eval"
                 cwd="$(var log_dir)"
                 output="both"
-                cmd="/aichallenge/simulator/AWSIM/AWSIM.x86_64 --start-mode sync --vehicles 1 --laps 6 --timeout 600"/>
+                cmd="bash /aichallenge/run_simulator.bash $(var sim_mode)"/>
             <include file="$(find-pkg-share aichallenge_system_launch)/launch/mode/awsim_state_manager.launch.xml"/>
         </group>
     </group>
