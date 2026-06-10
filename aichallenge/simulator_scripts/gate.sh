@@ -7,6 +7,7 @@ export ROS_DOMAIN_ID=0
 test="${1:-all}"
 
 $AWSIM_DIRECTORY/AWSIM.x86_64 \
+    --vehicles 1 \
     --safety-gate "${test}" \
     --steer-source ackermann \
     --sound off \

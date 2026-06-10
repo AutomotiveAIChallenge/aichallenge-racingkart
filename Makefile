@@ -20,6 +20,8 @@ LOG_DIR := /output/$(TIMESTAMP)
 
 # make simulator-<mode>: <mode> は simulator_scripts/*.sh のファイル名
 SIM_MODES := $(notdir $(basename $(wildcard aichallenge/simulator_scripts/*.sh)))
+# dev<N>（車両数）/ gate<N>（テスト番号）は run_simulator.bash が展開するエイリアス
+SIM_MODES += dev2 dev3 dev4 gate1 gate2 gate3
 .PHONY: $(addprefix simulator-,$(SIM_MODES))
 $(addprefix simulator-,$(SIM_MODES)): simulator-%:
 	@$(MAKE) simulator SIM_MODE=$*
@@ -78,6 +80,13 @@ dev2 dev3 dev4: simulator
 	echo "Start $$N-vehicle dev (autoware on ROS_DOMAIN_ID 1..$$N via docker compose -p)"; \
 	for p in $$(seq 1 $$N); do LOG_DIR=$(LOG_DIR) ROS_DOMAIN_ID=$$p docker compose -p $$p up -d autoware; done; \
 	echo "To Stop: make down"
+
+gate1: SIM_MODE := gate1
+gate2: SIM_MODE := gate2
+gate3: SIM_MODE := gate3
+gate1 gate2 gate3: simulator autoware-simulator
+	@echo "Start safety gate simulation (AWSIM + Autoware)"
+	@echo "To stop: make down  (docker compose down --remove-orphans)"
 
 # Kept for backward compatibility; `make down` already cleans all projects.
 down2 down3 down4: down
