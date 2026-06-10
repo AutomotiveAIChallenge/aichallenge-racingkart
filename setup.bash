@@ -791,7 +791,7 @@ EOF
 }
 
 download_awsim() {
-    local default_url='https://tier4inc-my.sharepoint.com/:u:/g/personal/taiki_tanaka_tier4_jp/IQAnnhyB2tOzTL8AioXUmVtqAS3Js7Ep3cEKuACFESTMimc'
+    local default_url='https://tier4inc-my.sharepoint.com/:u:/g/personal/taiki_tanaka_tier4_jp/IQCM7ZAclHjcSZ4JRITTU11wAU6nBE7RzYteUus_tSgLWbw?e=mRduDc'
     local url="${AWSIM_ZIP_URL:-$default_url}"
 
     local keep_zip=0
