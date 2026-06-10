@@ -3,12 +3,13 @@
 AWSIM_DIRECTORY=/aichallenge/simulator/AWSIM
 export ROS_DOMAIN_ID=0
 
+# 車両数: 第1引数（既定 1）
+vehicles="${1:-1}"
+
 $AWSIM_DIRECTORY/AWSIM.x86_64 \
-    --camera false \
-    --lidar false \
-    --start-mode off \
+    --start-mode count \
     --start-count-seconds 5 \
-    --vehicles 1 \
+    --vehicles "${vehicles}" \
     --npcs 0 \
     --boosts 2 \
     --laps unlimited \
@@ -16,11 +17,12 @@ $AWSIM_DIRECTORY/AWSIM.x86_64 \
     --steer-source ackermann \
     --sound off \
     --collisions on \
-    --handicap on \
+    --handicap off \
     --wall-recovery on \
-    --ranking on \
-    --ros2-base-domain 1
+    --ranking off \
+    --camera off \
+    --lidar off
 
-# GPU描画を使う場合の書き換え:
-#   カメラ: --camera false -> real（フル画像）または lite（軽量・GPU非搭載でも可）
-#   LiDAR : --lidar false -> on（CPU版は末尾に --lidar-backend unity、GPU版は rgl を追加）
+# Cameraを使う場合 : --camera cpu or gpu
+# LiDARを使う場合 : --lidar cpu or gpu
+# GPUがない場合 -headlessを末尾に追加

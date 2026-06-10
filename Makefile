@@ -55,7 +55,7 @@ awsim-request-reset:
 # run simulator (docker compose up -d simulator)
 simulator:
 	@echo "Start AWSIM (SIM_MODE=$(SIM_MODE))"
-	LOG_DIR=$(LOG_DIR) SIM_MODE=$(SIM_MODE) ROS_DOMAIN_ID=0 docker compose up -d simulator
+	LOG_DIR=$(LOG_DIR) SIM_MODE="$(SIM_MODE)" ROS_DOMAIN_ID=0 docker compose up -d simulator
 
 # racing kart (docker compose up -d driver)
 driver:
@@ -70,14 +70,13 @@ dev: simulator autoware-simulator
 	@echo "Start dev simulation (AWSIM + Autoware)"
 	@echo "To stop: make down  (docker compose down --remove-orphans)"
 
-dev2: SIM_MODE := 2p
-dev3: SIM_MODE := 3p
-dev4: SIM_MODE := 4p
+dev2: SIM_MODE := dev2
+dev3: SIM_MODE := dev3
+dev4: SIM_MODE := dev4
 dev2 dev3 dev4: simulator
 	@N=$(@:dev%=%); \
 	echo "Start $$N-vehicle dev (autoware on ROS_DOMAIN_ID 1..$$N via docker compose -p)"; \
 	for p in $$(seq 1 $$N); do LOG_DIR=$(LOG_DIR) ROS_DOMAIN_ID=$$p docker compose -p $$p up -d autoware; done; \
-	$(MAKE) awsim-request-start; \
 	echo "To Stop: make down"
 
 # Kept for backward compatibility; `make down` already cleans all projects.

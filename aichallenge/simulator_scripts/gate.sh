@@ -3,23 +3,18 @@
 AWSIM_DIRECTORY=/aichallenge/simulator/AWSIM
 export ROS_DOMAIN_ID=0
 
+# テスト指定: 第1引数（1/2/3 または all、既定 all = test1〜3 を順次実行）
+test="${1:-all}"
+
 $AWSIM_DIRECTORY/AWSIM.x86_64 \
-    --start-mode count \
-    --start-count-seconds 5 \
-    --vehicles 1 \
-    --npcs 0 \
-    --boosts 2 \
-    --laps 6 \
-    --timeout 600 \
+    --safety-gate "${test}" \
     --steer-source ackermann \
     --sound off \
     --collisions on \
     --handicap off \
-    --wall-recovery off \
     --ranking off \
     --camera off \
     --lidar off
-
 
 # Cameraを使う場合 : --camera cpu or gpu
 # LiDARを使う場合 : --lidar cpu or gpu
