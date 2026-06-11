@@ -21,8 +21,7 @@ $AWSIM_DIRECTORY/AWSIM.x86_64 \
     --wall-recovery on \
     --ranking off \
     --camera off \
-    --lidar off \
-    # -headless
+    --lidar off
 
 # Cameraを使う場合 : --camera cpu or gpu
 # LiDARを使う場合 : --lidar cpu or gpu
