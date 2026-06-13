@@ -103,19 +103,28 @@ make autoware-simulator
 背景:
 - `docker-compose.yml` は Linux ホストのデバイスを前提にしている箇所があります
 
-現状:
-- WSL 環境によってはそのままだと起動できない可能性があります
+対策:
+- `.env` の `COMPOSE_FILE` に `docker-compose.wsl.yml` を追加することで、WSL で存在しないデバイスを安全にオーバーライドできます
 
-> ここは将来的に `docker-compose.wsl.yml` を追加してオーバーライドするのが本筋（下の TODO 参照）。
+```bash
+# .env の COMPOSE_FILE をこの行に変更（コメントアウト解除）:
+COMPOSE_FILE=docker-compose.yml:docker-compose.eval.yml:docker-compose.wsl.yml
+```
+
+- このオーバーレイは `/dev/dri`・`/dev/video0`・`/dev/input` への参照を除去し、WSLg の X11 ソケット（`/tmp/.X11-unix`）と PulseAudio（`/mnt/wslg/PulseServer`）を自動で接続します
+- `docker-compose.sound.yml` とは併用しないでください（PulseAudio の設定が競合します）
+- Docker Compose 2.24 以上が必要です（`docker compose version` で確認）
+- 注: `driver` サービスは実車用のため、`docker-compose.wsl.yml` ではカバーされていません。WSL 上で `make driver` を実行すると `/dev/dri` バインドで失敗します（これは仕様です）。
 
 ### (D) `XAUTHORITY` が空で compose の volume 定義が壊れる
 
 症状:
 - `invalid spec` や空パスの bind mount エラー
 
-対策（暫定）:
-- WSL 側で `XAUTHORITY` を明示
-  - `export XAUTHORITY="$HOME/.Xauthority"`
+対応済み（v2 以降）:
+- `docker-compose.yml` および `docker-compose.eval.yml` のベース定義に `${XAUTHORITY:-/dev/null}` のデフォルト値を追加しました
+- `XAUTHORITY` が未設定の場合は `/dev/null` を `/dev/null` に bind（無害な no-op）します
+- `export XAUTHORITY=...` の暫定対策は不要になりました
 
 ### (E) Windows 側のパス/シンボリックリンク
 
@@ -129,7 +138,8 @@ Windows ドライブ上だと symlink の扱いが厳しくなるため、やは
 以下は「Windows（WSL2）でもストレスなく動かす」ために将来入れたい変更です（現時点では未対応）。
 
 - `.gitattributes` を追加し、`*.bash` / `Makefile` / `*.yml` を `eol=lf` で固定（CRLF 混入防止）
-- `docker-compose.wsl.yml` を追加し、WSL で存在しない `devices:` / `volumes:` を安全にオーバーライド
-  - 併せて WSLg（`/mnt/wslg` 等）向けの環境変数/マウントを整理
-- `Makefile` 側で WSL を自動検出し、`-f docker-compose.wsl.yml` を自動付与
-- `make doctor`（または既存 doctor の拡張）で、CRLF/GUI/Docker の前提を起動前にチェック
+- ~~`docker-compose.wsl.yml` を追加し、WSL で存在しない `devices:` / `volumes:` を安全にオーバーライド~~  
+  ~~- 併せて WSLg（`/mnt/wslg` 等）向けの環境変数/マウントを整理~~  
+  **実装済み**: `docker-compose.wsl.yml` を追加。`.env` の `COMPOSE_FILE` に追加するだけで有効。
+- `Makefile` 側で WSL を自動検出し、`-f docker-compose.wsl.yml` を自動付与（未実装）
+- `make doctor`（または既存 doctor の拡張）で、CRLF/GUI/Docker の前提を起動前にチェック（未実装）

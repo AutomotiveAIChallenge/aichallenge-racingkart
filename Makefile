@@ -2,12 +2,16 @@
 SHELL := /bin/bash
 
 .PHONY: autoware-build autoware-vehicle autoware-simulator autoware-request-initialpose autoware-request-control  awsim-request-start awsim-request-reset autoware-driver-zenoh autoware-driver-zenoh-rosbag \
-	simulator dev dev2 dev3 dev4 driver zenoh download rviz2 down down2 down3 down4 ps autoware-bash
+	simulator dev dev2 dev3 dev4 driver zenoh download rviz2 down ps autoware-bash eval
 
 # Used by docker-compose.yml for build/eval artifact ownership.
 HOST_UID ?= $(shell id -u)
 HOST_GID ?= $(shell id -g)
-export HOST_UID HOST_GID
+HOST_GID_RENDER  ?= $(shell getent group render  | cut -d: -f3)
+HOST_GID_VIDEO   ?= $(shell getent group video   | cut -d: -f3)
+HOST_GID_INPUT   ?= $(shell getent group input   | cut -d: -f3)
+HOST_GID_DIALOUT ?= $(shell getent group dialout | cut -d: -f3)
+export HOST_UID HOST_GID HOST_GID_RENDER HOST_GID_VIDEO HOST_GID_INPUT HOST_GID_DIALOUT
 # Stop host shell's ROS_DOMAIN_ID from overriding .env via compose interpolation,
 # but still honor an explicit `make foo ROS_DOMAIN_ID=N` command-line override.
 unexport ROS_DOMAIN_ID
@@ -88,10 +92,6 @@ gate1 gate2 gate3: simulator autoware-simulator
 	@echo "Start safety gate simulation (AWSIM + Autoware)"
 	@echo "To stop: make down  (docker compose down --remove-orphans)"
 
-# Kept for backward compatibility; `make down` already cleans all projects.
-down2 down3 down4: down
-
-eval:
 eval:
 	@echo "Start evaluation simulation (AWSIM + Autoware)"
 	docker compose up -d autoware-simulator-evaluation
@@ -117,9 +117,6 @@ autoware-driver-zenoh-rosbag:
 down:
 	@for p in 1 2 3 4; do docker compose -p $$p down --remove-orphans; done
 	@docker compose down --remove-orphans
-
-down_all:
-	sudo docker ps -aq | xargs -r sudo docker rm -f
 
 ps:
 	@docker compose ps

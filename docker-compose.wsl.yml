@@ -1,0 +1,49 @@
+# WSL2 overlay: drops host devices that may not exist on WSL and wires WSLg sockets.
+# Requires Docker Compose >= 2.24 (!override tags).
+# Do NOT combine with docker-compose.sound.yml (WSLg PulseAudio is wired here).
+# Usage (.env):
+#   COMPOSE_FILE=docker-compose.yml:docker-compose.eval.yml:docker-compose.wsl.yml
+x-wsl-base: &wsl-base
+  devices: !override []
+  volumes: !override
+    - ./output:${OUTPUT_ROOT:-/output}
+    - ./aichallenge:/aichallenge
+    - ./remote:/remote
+    - ./vehicle:/vehicle
+    - ./vehicle/cyclonedds.xml:/opt/autoware/cyclonedds.xml
+    # WSLg always provides /tmp/.X11-unix; kept here so rviz2 works and it is harmless for headless services
+    - /tmp/.X11-unix:/tmp/.X11-unix:rw
+
+# GUI + WSLg audio (AWSIM / Autoware)
+x-wsl-sound: &wsl-sound
+  devices: !override []
+  environment:
+    - PULSE_SERVER=unix:/tmp/pulse/native
+  volumes: !override
+    - ./output:${OUTPUT_ROOT:-/output}
+    - ./aichallenge:/aichallenge
+    - ./remote:/remote
+    - ./vehicle:/vehicle
+    - ./vehicle/cyclonedds.xml:/opt/autoware/cyclonedds.xml
+    - /tmp/.X11-unix:/tmp/.X11-unix:rw
+    - /mnt/wslg/PulseServer:/tmp/pulse/native
+
+services:
+  autoware:
+    <<: *wsl-sound
+  simulator:
+    <<: *wsl-sound
+  autoware-build:
+    <<: *wsl-base
+  autoware-command:
+    <<: *wsl-base
+  zenoh:
+    <<: *wsl-base
+  rviz2:
+    <<: *wsl-base
+  autoware-simulator-evaluation:
+    devices: !override []
+    volumes: !override
+      - ./output:${OUTPUT_ROOT:-/output}
+      - ./vehicle/cyclonedds.xml:/opt/autoware/cyclonedds.xml
+      - /tmp/.X11-unix:/tmp/.X11-unix:rw

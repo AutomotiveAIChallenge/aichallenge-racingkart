@@ -4,14 +4,19 @@ x-autoware-base: &autoware-base
   pull_policy: never
   network_mode: host
   stop_grace_period: 10s
+  user: "${HOST_UID:-1000}:${HOST_GID:-1000}"
+  group_add:
+    - "${HOST_GID_RENDER:-110}"
+    - "${HOST_GID_VIDEO:-44}"
+    - "${HOST_GID_INPUT:-107}"
   environment:
+    - HOME=/tmp
     - DISPLAY=${DISPLAY}
     - USER=${USER}
     - ROS_DISTRO=humble
-    - XAUTHORITY=${XAUTHORITY}
+    - XAUTHORITY=${XAUTHORITY:-}
     - QT_X11_NO_MITSHM=1
     - TZ=Asia/Tokyo
-    - RUN_MODE=${RUN_MODE:-}
     - SIM_MODE=${SIM_MODE:-}
     - CMD=${CMD:-}
     - COLCON_TRACE=${COLCON_TRACE:-}
@@ -20,6 +25,7 @@ x-autoware-base: &autoware-base
     - HOST_UID=${HOST_UID:-}
     - HOST_GID=${HOST_GID:-}
     - ROS_DOMAIN_ID=${ROS_DOMAIN_ID:-1}
+    - LOG_DIR=${LOG_DIR:-}
   volumes:
     - ./output:${OUTPUT_ROOT:-/output}
     - ./aichallenge:/aichallenge
@@ -27,28 +33,13 @@ x-autoware-base: &autoware-base
     - ./vehicle:/vehicle
     - ./vehicle/cyclonedds.xml:/opt/autoware/cyclonedds.xml
     - /tmp/.X11-unix:/tmp/.X11-unix:rw
-    # Audio (PipeWire/Pulse) socket access on the host
-    - /run/user:/run/user:rw
     - /dev/dri:/dev/dri
-    - ${XAUTHORITY}:${XAUTHORITY}:rw
+    - ${XAUTHORITY:-/dev/null}:${XAUTHORITY:-/dev/null}:rw
   devices:
     - /dev/dri
     - /dev/video0
     - /dev/input
-  working_dir: ${LOG_DIR:-/aichallenge}
-
-x-autoware-eval-base: &autoware-eval-base
-  <<: *autoware-base
-  volumes:
-    - ./output:${OUTPUT_ROOT:-/output}
-    # /aichallenge is baked into the eval image; intentionally not mounted here
-    # - ./aichallenge:/aichallenge
-    - ./vehicle/cyclonedds.xml:/opt/autoware/cyclonedds.xml
-    - /tmp/.X11-unix:/tmp/.X11-unix:rw
-    # Audio (PipeWire/Pulse) socket access on the host
-    - /run/user:/run/user:rw
-    - /dev/dri:/dev/dri
-    - ${XAUTHORITY}:${XAUTHORITY}:rw
+  working_dir: /aichallenge
 
 x-autoware-rosbag-base: &autoware-rosbag-base
   <<: *autoware-base
@@ -64,7 +55,7 @@ x-autoware-rosbag-base: &autoware-rosbag-base
     # Audio (PipeWire/Pulse) socket access on the host
     - /run/user:/run/user:rw
     - /dev/dri:/dev/dri
-    - ${XAUTHORITY}:${XAUTHORITY}:rw
+    - ${XAUTHORITY:-/dev/null}:${XAUTHORITY:-/dev/null}:rw
 
 x-racing_kart_interface-base: &racing_kart_interface-base
   image: "ghcr.io/tier4/racing_kart_interface:latest-experiment"
@@ -72,7 +63,9 @@ x-racing_kart_interface-base: &racing_kart_interface-base
   pull_policy: never
   network_mode: host
   stop_grace_period: 10s
+  user: "${HOST_UID:-1000}:${HOST_GID:-1000}"
   environment:
+    - HOME=/tmp
     - DISPLAY=${DISPLAY}
     - USER=${USER}
     - TZ=Asia/Tokyo
@@ -94,7 +87,9 @@ x-racing_kart_interface-base: &racing_kart_interface-base
   devices:
     - /dev/dri
   group_add:
-    - dialout
+    - "${HOST_GID_DIALOUT:-20}"
+    - "${HOST_GID_RENDER:-110}"
+    - "${HOST_GID_VIDEO:-44}"
   working_dir: /workspace
 
 services:
@@ -109,21 +104,17 @@ services:
     command: ["bash", "-lc", "exec /aichallenge/build_autoware.bash ${HOST_UID:-} ${HOST_GID:-}"]
 
   simulator:
-    <<: *autoware-base 
-    command: ["bash", "-lc", "exec env PULSE_SERVER=unix:/run/user/${HOST_UID:-1000}/pulse/native /aichallenge/run_simulator.bash ${SIM_MODE:-} >\"${LOG_DIR:-/output}/awsim.log\" 2>&1"]
+    <<: *autoware-base
+    working_dir: ${LOG_DIR:-/output}
+    command: ["bash", "-lc", "exec /aichallenge/run_simulator.bash"]
 
   autoware-command:
     <<: *autoware-base
-    command: ["bash", "-lc", "cd ${CMD_WORKDIR:-/aichallenge} && exec bash -lc \"${CMD:-}\""]
+    command: ["bash", "-lc", "cd ${CMD_WORKDIR:-/aichallenge} && exec bash -c \"$${CMD:?CMD is required}\""]
 
   rosbag:
     <<: *autoware-rosbag-base
     command: ["bash", "-lc", 'exec /aichallenge/utils/record_all_rosbag.bash "${ROS_DOMAIN_ID:-1}" "${LOG_DIR:-}" "${RACING_KART_INTERFACE_DIR:-/home/tier4/racing_kart_interface}"']
-
-  autoware-simulator-evaluation:
-    <<: *autoware-eval-base
-    image: "aichallenge-2025-eval"
-    command: ["bash", "-lc", "exec /aichallenge/run_evaluation.bash"]
 
 #### vehicle specific services can be added here ####
   # Zenoh service

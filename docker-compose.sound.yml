@@ -1,0 +1,14 @@
+x-sound: &sound
+  environment:
+    # UID matches the host user (compose `user:`), so PulseAudio/PipeWire
+    # authenticates via SO_PEERCRED without a cookie.
+    - PULSE_SERVER=unix:/tmp/pulse/native
+  volumes:
+    # Mount the whole pulse dir (not just the socket file) so a host audio
+    # daemon restart that re-creates the socket inode is picked up.
+    - /run/user/${HOST_UID:-1000}/pulse:/tmp/pulse
+
+services:
+
+  simulator:
+    <<: *sound
