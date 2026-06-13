@@ -1,0 +1,25 @@
+<?xml version="1.0"?>
+<osm version="0.6">
+  <node id="1" lat="0" lon="0"><tag k="local_x" v="0.0"/><tag k="local_y" v="10.0"/></node>
+  <node id="2" lat="0" lon="0"><tag k="local_x" v="20.0"/><tag k="local_y" v="10.0"/></node>
+  <node id="3" lat="0" lon="0"><tag k="local_x" v="0.0"/><tag k="local_y" v="6.0"/></node>
+  <node id="4" lat="0" lon="0"><tag k="local_x" v="20.0"/><tag k="local_y" v="6.0"/></node>
+  <node id="5" lat="0" lon="0"><tag k="local_x" v="20.0"/><tag k="local_y" v="4.0"/></node>
+  <node id="6" lat="0" lon="0"><tag k="local_x" v="0.0"/><tag k="local_y" v="4.0"/></node>
+  <node id="7" lat="0" lon="0"><tag k="local_x" v="20.0"/><tag k="local_y" v="0.0"/></node>
+  <node id="8" lat="0" lon="0"><tag k="local_x" v="0.0"/><tag k="local_y" v="0.0"/></node>
+  <way id="100"><nd ref="1"/><nd ref="2"/></way>
+  <way id="101"><nd ref="3"/><nd ref="4"/></way>
+  <way id="102"><nd ref="5"/><nd ref="6"/></way>
+  <way id="103"><nd ref="7"/><nd ref="8"/></way>
+  <relation id="200">
+    <tag k="type" v="lanelet"/>
+    <member type="way" role="left" ref="100"/>
+    <member type="way" role="right" ref="101"/>
+  </relation>
+  <relation id="201">
+    <tag k="type" v="lanelet"/>
+    <member type="way" role="left" ref="102"/>
+    <member type="way" role="right" ref="103"/>
+  </relation>
+</osm>
