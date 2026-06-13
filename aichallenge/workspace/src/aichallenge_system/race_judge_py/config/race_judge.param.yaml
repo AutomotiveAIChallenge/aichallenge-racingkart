@@ -19,3 +19,7 @@
     ready_pose_count: 20
     publish_awsim_compat: true
     judge_rate_hz: 20.0
+    # --- race_director_node 専用 ---
+    expected_vehicles: ["d1", "d2", "d3"]  # 参加カートID。4台レースは ["d1","d2","d3","d4"] に変更
+    start_countdown_sec: 10.0              # AWSIM StartSyncCoordinator 互換
+    rank_persistence_sec: 1.0              # 順位変動の確定に必要な持続秒(フリッカ抑止)
