@@ -31,3 +31,13 @@ def test_rank_tracker_flicker_rejected():
     assert rt.update(r1, 0.8) == r0   # 再変動はタイマー再スタート
     assert rt.update(r1, 1.7) == r0   # 0.9s しか経っていない
     assert rt.update(r1, 1.9) == r1   # 0.8からの1.1s持続で確定
+
+
+def test_returned_dict_is_isolated():
+    rt = RankTracker(persistence_sec=1.0)
+    r0 = {1: 1, 2: 2}
+    result = rt.update(r0, 0.0)   # 初回確定
+    result[99] = 99               # 返り値を破壊的に変更
+    # 内部状態が汚染されていなければ同一ranksはconfirmedと一致し続ける
+    result2 = rt.update(r0, 0.1)
+    assert result2 == r0          # 確定済みのまま — pendingに落ちていないはず

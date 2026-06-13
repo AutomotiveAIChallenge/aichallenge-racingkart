@@ -31,4 +31,4 @@ class RankTracker:
             self._confirmed = self._pending
             self._pending = None
             self._pending_since = None
-        return self._confirmed
+        return dict(self._confirmed)

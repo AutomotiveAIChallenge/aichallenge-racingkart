@@ -42,7 +42,7 @@ class PenaltyTracker:
     def trigger(self, kind: PenaltyKind, lap: int, race_time: float) -> None:
         cur = self._open.get(kind)
         if cur is not None and race_time <= cur[1]:
-            cur[1] = race_time + self.cooldown_sec
+            cur[1] = max(cur[1], race_time + self.cooldown_sec)
         else:
             if cur is not None:
                 self._finalize(kind)

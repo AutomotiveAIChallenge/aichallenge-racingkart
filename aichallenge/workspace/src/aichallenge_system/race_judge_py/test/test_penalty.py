@@ -63,3 +63,17 @@ def test_event_to_dict_schema():
     d = pt.events[0].to_dict()
     assert set(d.keys()) == {"kind", "lap", "race_time", "duration"}
     assert d["kind"] == "wall"
+
+
+def test_stay_refresh_never_shrinks_window():
+    pt = PenaltyTracker(cooldown_sec=2.0)
+    # First trigger opens window [10.0, 12.0]
+    pt.trigger(PenaltyKind.WALL, lap=1, race_time=10.0)
+    # Stay at 10.5 → window end should be max(12.0, 12.5) = 12.5
+    pt.trigger(PenaltyKind.WALL, lap=1, race_time=10.5)
+    # Stay at 9.9 (out-of-order / stale) → window end must NOT shrink below 12.5
+    pt.trigger(PenaltyKind.WALL, lap=1, race_time=9.9)
+    # Window end should be 12.5; time just before it must still be active
+    assert pt.is_active(12.4)
+    # Time at or after window end must be inactive
+    assert not pt.is_active(12.5)
