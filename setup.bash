@@ -243,9 +243,11 @@ Usage:
   ./setup.bash pull image     # docker pull Autoware base image (recommended)
   ./setup.bash download awsim # download & extract AWSIM.zip (repo-local)
   ./setup.bash env            # create .env from .env.example (safe, repo-local)
-  ./setup.bash network-if [name]
+  ./setup.bash network tune   # persist DDS host tuning (rmem_max + lo multicast, sudo)
+  ./setup.bash network if [name]
                             # add network interface to cyclonedds.xml
-  ./setup.bash network-if   # remove all ai-challenge-added interfaces from cyclonedds.xml
+  ./setup.bash network if     # remove all ai-challenge-added interfaces from cyclonedds.xml
+                            # (./setup.bash dds / network-if remain as deprecated aliases)
   ./setup.bash bootstrap --yes
                             # non-interactive bootstrap (auto-yes)
   ./setup.bash bootstrap --temp-dir [--keep-dir]
@@ -358,22 +360,6 @@ install_base_packages() {
         make \
         python3 \
         python3-pip
-}
-
-install_rocker() {
-    if cmd_exists rocker; then
-        log "${OK} rocker already installed"
-        return 0
-    fi
-    pip3 install --user rocker
-    # Ensure ~/.local/bin is on PATH
-    if ! echo "$PATH" | tr ':' '\n' | grep -qx "$HOME/.local/bin"; then
-        # shellcheck disable=SC2016
-        echo 'export PATH="$HOME/.local/bin:$PATH"' >>~/.bashrc
-        export PATH="$HOME/.local/bin:$PATH"
-        log "${INFO} Added ~/.local/bin to PATH in ~/.bashrc"
-    fi
-    log "${OK} Installed rocker"
 }
 
 install_docker_if_missing() {
@@ -609,8 +595,8 @@ EOF
 
     local do_install_base=0
     local do_install_docker=0
-    local do_install_rocker=0
     local do_docker_group=0
+    local do_dds_tuning=0
     local do_clone_repo=0
     local do_repo_doctor=0
     local do_pull_image=0
@@ -629,8 +615,8 @@ EOF
     log "${INFO} Planned steps (answer y/N for each, then execution starts):"
     log_step "Install base packages (apt)"
     log_step "Install Docker (if missing)"
-    log_step "Install rocker (pip)"
     log_step "Add user to docker group (recommended)"
+    log_step "Configure host DDS tuning (rmem_max + lo multicast) [always]"
     log_step "Clone/update repository (branch=${branch}) -> ${dest_dir}"
     log_step "Repo doctor: ./setup.bash doctor (requires repo)"
     log_step "Create .env (GPU/CPU auto-detect)"
@@ -642,8 +628,9 @@ EOF
 
     confirm_step "Install base packages (apt)" && do_install_base=1 || true
     confirm_step "Install Docker (if missing)" && do_install_docker=1 || true
-    confirm_step "Install rocker (pip)" && do_install_rocker=1 || true
     confirm_step "Add user to docker group (recommended)" && do_docker_group=1 || true
+    # DDS host tuning is mandatory for CycloneDDS on lo; always run (no prompt).
+    do_dds_tuning=1
 
     local repo_exists_now=0
     is_repo_root_dir "${dest_dir}" && repo_exists_now=1 || true
@@ -670,8 +657,8 @@ EOF
 
     run_step_if "${do_install_base}" "Install base packages (apt)" install_base_packages
     run_step_if "${do_install_docker}" "Install Docker (if missing)" install_docker_if_missing
-    run_step_if "${do_install_rocker}" "Install rocker (pip)" install_rocker
     run_step_if "${do_docker_group}" "Add user to docker group (recommended)" ensure_docker_group
+    run_step_if "${do_dds_tuning}" "Configure host DDS tuning (rmem_max + lo multicast)" setup_dds_tuning
 
     # Best-effort verification (avoid hard-fail on network issues)
     if cmd_exists docker; then
@@ -738,7 +725,6 @@ Repo dir:
 Common commands:
   make autoware-build
   make dev        # ROS_DOMAIN_ID is read from .env
-  make down_all   # stop/remove all docker containers (sudo)
 EOF
 }
 
@@ -931,10 +917,98 @@ ensure_env() {
     cp .env.example .env
 
     if [ -e /dev/nvidia0 ]; then
-        sed -i 's/^#\s*COMPOSE_FILE=/COMPOSE_FILE=/' .env
-        log "${OK} .env created (GPU)"
+        sed -i \
+            -e 's|^COMPOSE_FILE=docker-compose.yml:docker-compose.eval.yml:docker-compose.sound.yml$|# COMPOSE_FILE=docker-compose.yml:docker-compose.eval.yml:docker-compose.sound.yml|' \
+            -e 's|^# COMPOSE_FILE=docker-compose.yml:docker-compose.eval.yml:docker-compose.gpu.yml:docker-compose.sound.yml$|COMPOSE_FILE=docker-compose.yml:docker-compose.eval.yml:docker-compose.gpu.yml:docker-compose.sound.yml|' \
+            .env
+        log "${OK} .env created (GPU + sound)"
     else
-        log "${OK} .env created (CPU)"
+        log "${OK} .env created (CPU + sound)"
+    fi
+}
+
+# --- Host DDS tuning (CycloneDDS): persist rmem_max + multicast on lo ---
+# vehicle/cyclonedds.xml binds DDS to lo, which needs the MULTICAST flag, and
+# AWSIM's large messages need a big UDP receive buffer. Both are host-level
+# settings that reset on reboot, so persist them instead of relying on
+# docker-entrypoint.sh re-applying them (which only works as root).
+DDS_RMEM_MAX=2147483647
+DDS_SYSCTL_CONF="/etc/sysctl.d/10-cyclone-max-receive-buffer-size.conf"
+DDS_MULTICAST_UNIT="/etc/systemd/system/multicast-lo.service"
+
+dds_rmem_max_ok() {
+    local cur
+    cur="$(sysctl -n net.core.rmem_max 2>/dev/null || echo 0)"
+    [ "${cur}" -ge "${DDS_RMEM_MAX}" ]
+}
+
+dds_lo_multicast_ok() {
+    ip link show lo 2>/dev/null | grep -q MULTICAST
+}
+
+setup_dds_tuning() {
+    require_cmd sudo || return 1
+    sudo_refresh
+
+    # net.core.rmem_max: apply now, persist across reboots via sysctl.d.
+    if dds_rmem_max_ok && [ -f "${DDS_SYSCTL_CONF}" ]; then
+        log "${OK} net.core.rmem_max already >= ${DDS_RMEM_MAX} (persisted: ${DDS_SYSCTL_CONF})"
+    else
+        echo "net.core.rmem_max=${DDS_RMEM_MAX}" | sudo tee "${DDS_SYSCTL_CONF}" >/dev/null
+        sudo sysctl -p "${DDS_SYSCTL_CONF}" >/dev/null || true
+        if dds_rmem_max_ok; then
+            log "${OK} Set net.core.rmem_max=${DDS_RMEM_MAX} (persisted: ${DDS_SYSCTL_CONF})"
+        else
+            warn "${FAIL} Failed to set net.core.rmem_max (current: $(sysctl -n net.core.rmem_max 2>/dev/null || echo '?'))"
+            return 1
+        fi
+    fi
+
+    # multicast on lo: the flag resets on reboot; persist via a systemd oneshot.
+    if [ ! -d /run/systemd/system ]; then
+        warn "${WARN} systemd not running; enabling multicast on lo for this boot only"
+        sudo ip link set lo multicast on || true
+        if dds_lo_multicast_ok; then
+            log "${OK} multicast enabled on lo (not persisted)"
+            return 0
+        fi
+        warn "${FAIL} Failed to enable multicast on lo"
+        return 1
+    fi
+
+    local ip_path unit_content
+    ip_path="$(command -v ip || echo /usr/sbin/ip)"
+    unit_content="$(
+        cat <<EOF
+[Unit]
+Description=Enable multicast on loopback for CycloneDDS (AI Challenge)
+
+[Service]
+Type=oneshot
+ExecStart=${ip_path} link set lo multicast on
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target
+EOF
+    )"
+
+    if [ -f "${DDS_MULTICAST_UNIT}" ] && [ "$(cat "${DDS_MULTICAST_UNIT}" 2>/dev/null)" = "${unit_content}" ]; then
+        log "${OK} ${DDS_MULTICAST_UNIT} already installed"
+    else
+        printf '%s\n' "${unit_content}" | sudo tee "${DDS_MULTICAST_UNIT}" >/dev/null
+        sudo systemctl daemon-reload
+        log "${OK} Installed ${DDS_MULTICAST_UNIT}"
+    fi
+    sudo systemctl enable multicast-lo.service >/dev/null 2>&1 || true
+    if ! dds_lo_multicast_ok; then
+        sudo systemctl restart multicast-lo.service || true
+    fi
+    if dds_lo_multicast_ok; then
+        log "${OK} multicast enabled on lo (persists across reboots)"
+    else
+        warn "${FAIL} multicast still off on lo (check: systemctl status multicast-lo.service)"
+        return 1
     fi
 }
 
@@ -981,7 +1055,7 @@ doctor() {
         fi
     done
     if cmd_exists python3 && ! python3 -m pip --version >/dev/null 2>&1; then
-        _chk WARN "python3-pip not found (optional, needed for rocker)" "Fix: sudo apt update && sudo apt install -y python3-pip"
+        _chk WARN "python3-pip not found (optional)" "Fix: sudo apt update && sudo apt install -y python3-pip"
     fi
 
     echo ""
@@ -1003,6 +1077,19 @@ doctor() {
             _chk WARN "user is NOT in docker group (recommended)" "Fix: sudo usermod -aG docker \"$USER\" && newgrp docker"
     else
         _chk FAIL "docker not found" "Next: ./setup.bash bootstrap"
+    fi
+
+    echo ""
+    echo "=== DDS host tuning ==="
+    if dds_rmem_max_ok; then
+        _chk OK "net.core.rmem_max >= ${DDS_RMEM_MAX}"
+    else
+        _chk WARN "net.core.rmem_max is small ($(sysctl -n net.core.rmem_max 2>/dev/null || echo '?')); large DDS messages may drop" "Fix: ./setup.bash network tune"
+    fi
+    if dds_lo_multicast_ok; then
+        _chk OK "multicast enabled on lo"
+    else
+        _chk WARN "multicast disabled on lo (CycloneDDS uses lo)" "Fix: ./setup.bash network tune"
     fi
 
     echo ""
@@ -1201,7 +1288,32 @@ main() {
     env)
         ensure_env
         ;;
+    network)
+        # Unified host-network namespace.
+        #   network tune       persist DDS host tuning (rmem_max + lo multicast)
+        #   network if [name]  add/remove cyclonedds.xml interfaces
+        case "${2-}" in
+        tune | "")
+            setup_dds_tuning
+            ;;
+        if)
+            shift 2
+            add_network_interface "$@"
+            ;;
+        *)
+            warn "Unknown network subcommand: ${2-}"
+            usage
+            exit 2
+            ;;
+        esac
+        ;;
+    # Deprecated aliases (kept for backward compatibility).
+    dds)
+        warn "${INFO} './setup.bash dds' is deprecated; use './setup.bash network tune'"
+        setup_dds_tuning
+        ;;
     network-if)
+        warn "${INFO} './setup.bash network-if' is deprecated; use './setup.bash network if'"
         shift
         add_network_interface "$@"
         ;;
