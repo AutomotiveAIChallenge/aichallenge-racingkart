@@ -1,18 +1,20 @@
 # Windows（WSL2）で動かすためのセットアップメモ
 
+> 仕様ドキュメント（現仕様の正）。最終確認: 2026-06-14。文書運用方針は [docs/README.md](../../README.md) を参照。
+
 このリポジトリは **Linux（Ubuntu）** を主ターゲットとして設計されています。  
-Windows で使う場合は、**Windows ネイティブ移植**ではなく **WSL2 上で Linux として動かす**のが最短です。
+Windows で使う場合は、Windows ネイティブ移植ではなく **WSL2 上で Linux として動かす**のが最短です。
 
 > スコープ: WSL2（Ubuntu）上で `make` / `docker compose` を実行する手順と、ハマりどころのメモ。  
 > スコープ外（別途対応が必要）: PowerShell だけで完結する Windows ネイティブ実行、Docker Desktop 直下での完全サポート。
 
 ---
 
-## 推奨構成（最短で動かす）
+## 推奨構成
 
 - Windows 11 + WSL2 + Ubuntu 22.04 など
 - リポジトリは **WSL の Linux ファイルシステム（例: `~/aichallenge-racingkart`）に配置**
-  - `/mnt/c/...` 配下（Windows 側のドライブ）に置くと、**改行コード/実行権限/性能**でハマりやすいです
+  - `/mnt/c/...` 配下に置くと、改行コード・実行権限・性能でハマりやすいです
 - Docker は **WSL 内で Docker Engine を動かす**（推奨）
   - Docker Desktop でも動く場合はありますが、`network_mode: host` などで差分が出やすいです
 
@@ -20,7 +22,7 @@ Windows で使う場合は、**Windows ネイティブ移植**ではなく **WSL
 
 ## まず確認すること（WSL 側で実行）
 
-### 1) どこに clone したか
+### 1) clone 先の確認
 
 ```bash
 pwd
@@ -42,7 +44,7 @@ docker compose version
 echo "${DISPLAY:-}"
 ```
 
-WSLg 環境なら通常 `:0` のような値が入ります（空なら GUI が出ません）。
+WSLg 環境なら通常 `:0` のような値が入ります（空なら GUI は表示されません）。
 
 ---
 
@@ -53,6 +55,14 @@ WSLg 環境なら通常 `:0` のような値が入ります（空なら GUI が�
 ```bash
 ./setup.bash doctor
 ```
+
+DDS ホストチューニング（推奨）:
+
+```bash
+./setup.bash network tune
+```
+
+CycloneDDS の大きいメッセージに必要な UDP バッファ拡張と loopback マルチキャスト設定を永続化します（`sudo` を使います）。WSL2 でも同様に有効です。
 
 起動例:
 
@@ -72,7 +82,7 @@ make autoware-simulator
 - `#!/bin/bash^M: bad interpreter: No such file or directory`
 
 原因:
-- Windows 側のエディタ設定や Git 設定で、改行が CRLF になっている
+- Windows 側のエディタや Git 設定で改行が CRLF になっている
 
 対策（推奨）:
 - リポジトリを WSL の Linux FS に置く
@@ -80,7 +90,7 @@ make autoware-simulator
   - `git config --global core.autocrlf false`
 
 暫定復旧:
-- `dos2unix <file>`（入っていない場合は `sudo apt-get install dos2unix`）
+- `dos2unix <file>`（未インストールの場合は `sudo apt-get install dos2unix`）
 
 ### (B) 実行ビット（`chmod +x`）が保持されない
 
@@ -88,7 +98,7 @@ make autoware-simulator
 - `Permission denied`（shebang があるのに実行できない）
 
 原因:
-- `/mnt/c` 配下など、Windows 側の FS 上で権限が期待通りにならない
+- `/mnt/c` 配下など、Windows 側 FS では権限が期待通りにならない
 
 対策:
 - WSL 側の `~/...` に置く
@@ -104,7 +114,7 @@ make autoware-simulator
 - `docker-compose.yml` は Linux ホストのデバイスを前提にしている箇所があります
 
 対策:
-- `.env` の `COMPOSE_FILE` に `docker-compose.wsl.yml` を追加することで、WSL で存在しないデバイスを安全にオーバーライドできます
+- `.env` の `COMPOSE_FILE` に `docker-compose.wsl.yml` を追加すると、WSL に存在しないデバイスを安全にオーバーライドできます
 
 ```bash
 # .env の COMPOSE_FILE をこの行に変更（コメントアウト解除）:
@@ -112,7 +122,7 @@ COMPOSE_FILE=docker-compose.yml:docker-compose.eval.yml:docker-compose.wsl.yml
 ```
 
 - このオーバーレイは `/dev/dri`・`/dev/video0`・`/dev/input` への参照を除去し、WSLg の X11 ソケット（`/tmp/.X11-unix`）と PulseAudio（`/mnt/wslg/PulseServer`）を自動で接続します
-- `docker-compose.sound.yml` とは併用しないでください（PulseAudio の設定が競合します）
+- **`docker-compose.sound.yml` は追加しないでください**（`wsl.yml` が WSLg 向けのオーディオ設定を担っており、`sound.yml` と併用すると PulseAudio の設定が競合します）
 - Docker Compose 2.24 以上が必要です（`docker compose version` で確認）
 - 注: `driver` サービスは実車用のため、`docker-compose.wsl.yml` ではカバーされていません。WSL 上で `make driver` を実行すると `/dev/dri` バインドで失敗します（これは仕様です）。
 
@@ -128,14 +138,14 @@ COMPOSE_FILE=docker-compose.yml:docker-compose.eval.yml:docker-compose.wsl.yml
 
 ### (E) Windows 側のパス/シンボリックリンク
 
-`/output/latest` を固定参照ディレクトリとして使います（`output/latest` への symlink 依存は前提にしません）。  
-Windows ドライブ上だと symlink の扱いが厳しくなるため、やはり `~/...` 配下運用を推奨します。
+`/output/latest/` は実ディレクトリで、内部エントリだけが最新 run へのシンボリックリンクです（`latest/` 自体は symlink にしない。契約は [`../../interface/evaluation-interface.md`](../../interface/evaluation-interface.md) 約束 9）。  
+Windows ドライブ上では symlink の扱いが厳しくなるため、やはり `~/...` 配下での運用を推奨します。
 
 ---
 
 ## TODO（未実装 / 将来の改善）
 
-以下は「Windows（WSL2）でもストレスなく動かす」ために将来入れたい変更です（現時点では未対応）。
+WSL2 でのストレスを減らすために将来対応したい項目です（現時点では未対応）。
 
 - `.gitattributes` を追加し、`*.bash` / `Makefile` / `*.yml` を `eol=lf` で固定（CRLF 混入防止）
 - ~~`docker-compose.wsl.yml` を追加し、WSL で存在しない `devices:` / `volumes:` を安全にオーバーライド~~  

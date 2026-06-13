@@ -1,10 +1,12 @@
 # multi_purpose_mpc_ros インテグレーション設計
 
+> 仕様ドキュメント（現仕様の正）。最終確認: 2026-06-14。文書運用方針は [docs/README.md](../../README.md) を参照。
+
 作成日: 2026-02-10
 
 ## 概要
 
-`multi_purpose_mpc_ros` を `aichallenge_submit` に統合する。`control_mode` launch 引数で `simple_pure_pursuit` と `mpc_controller` を切り替え可能にし、デフォルトを MPC にする。
+`multi_purpose_mpc_ros` は `aichallenge_submit` に統合済み。`reference.launch.xml` の `control_method` 引数で `mpc` / `pure_pursuit` / `tiny_lidar_net` / `pilot_net` / `joycon` を切り替えられる。デフォルトは `mpc`。
 
 ## 現在のアーキテクチャ
 
@@ -22,7 +24,7 @@ reference.launch.xml (aichallenge_submit_launch)
   └───────────┬─────────────────────┘
               │ Trajectory
               ▼
-  [Control] (control_mode == "pure_pursuit" の場合)
+  [Control] (control_method == "pure_pursuit" の場合)
   ┌─────────────────────────────────┐
   │ simple_pure_pursuit (100Hz)     │
   │   入力:                         │
@@ -73,24 +75,23 @@ reference.launch.xml (aichallenge_submit_launch)
 
 ### 経路参照の方式
 
-MPC コントローラは2つの参照パス取得方法を持つ：
+MPC コントローラは参照パスの取得方法を2種類持つ。
 
-1. **CSVファイルから直接読み込み**（`reference_path.update_by_topic: false`、デフォルト）
+1. **CSV ファイルから直接読み込み**（`reference_path.update_by_topic: false`、デフォルト）
    - `config.yaml` の `reference_path.csv_path` で指定
-   - 独自の occupancy grid map + 最適化済み経路ファイルを使用
+   - 独自の occupancy grid map と最適化済み経路ファイルを使用
    - `simple_trajectory_generator` は不要
 
 2. **Trajectory トピック経由**（`reference_path.update_by_topic: true`）
-   - `simple_trajectory_generator` と同じ経路を動的に受け取る
-   - 参照パスを内部で再構成
+   - `simple_trajectory_generator` と同じ経路を動的に受け取り、内部で参照パスを再構成する
 
 ## 統合方針
 
-### アーキテクチャ: control_mode による切り替え
+### アーキテクチャ: control_method による切り替え
 
-`control_mode` launch 引数を拡張し、`mpc`（MPC）/ `pure_pursuit`（Pure Pursuit）/ `e2e`（TinyLiDARNet）を選択可能にする。既存の `rule_based` は `pure_pursuit` にリネームする。デフォルトを `mpc` にする。
+`control_method` launch 引数で `mpc` / `pure_pursuit` / `tiny_lidar_net` / `pilot_net` / `joycon` を選択できる。デフォルトは `mpc`。各コントローラは `<group if="...">` 内の `<include ... control/<name>.launch.xml>` で起動する（インライン `<node>` ではない）。
 
-MPC コントローラは独自の参照パスと occupancy grid map を持っており、これが MPC の制約計算（経路幅制限、速度プロファイル）に不可欠なため、MPC モードでは `simple_trajectory_generator` からの軌跡入力は使わない（`update_by_topic: false`）。
+MPC コントローラは独自の参照パスと occupancy grid map を持ち、これが経路幅制限・速度プロファイルの制約計算に不可欠なため、MPC モードでは `simple_trajectory_generator` の軌跡入力を使用しない（`update_by_topic: false`）。
 
 ```
 統合後:
@@ -98,13 +99,14 @@ MPC コントローラは独自の参照パスと occupancy grid map を持っ�
   [Planning]
   ┌──────────────────────────────────┐
   │ simple_trajectory_generator      │ ← そのまま残す
-  │   出力: /planning/scenario_      │    （pure_pursuit / e2e モードで使用）
+  │   出力: /planning/scenario_      │    （pure_pursuit モードで使用）
   │         planning/trajectory      │
   └──────────────────────────────────┘
 
-  [Control] (control_mode == "mpc" の場合) ← デフォルト
+  [Control] (control_method == "mpc" の場合) ← デフォルト
   ┌──────────────────────────────────┐
-  │ mpc_controller (40Hz)            │ ← NEW
+  │ <include control/mpc.launch.xml> │
+  │   mpc_controller (40Hz)          │
   │   独自CSV参照パス + occupancy map│
   │   入力:                          │
   │     /localization/kinematic_     │
@@ -115,7 +117,7 @@ MPC コントローラは独自の参照パスと occupancy grid map を持っ�
   │     /mpc/ref_path   (可視化)     │
   └──────────────────────────────────┘
 
-  [Control] (control_mode == "pure_pursuit" の場合)
+  [Control] (control_method == "pure_pursuit" の場合)
   ┌──────────────────────────────────┐
   │ simple_pure_pursuit (100Hz)      │ ← 従来どおり残す
   │   入力:                          │
@@ -126,122 +128,57 @@ MPC コントローラは独自の参照パスと occupancy grid map を持っ�
   │     /control/command/control_cmd │
   └──────────────────────────────────┘
 
-  [Control] (control_mode == "e2e" の場合)
+  [Control] (control_method == "tiny_lidar_net" / "pilot_net" の場合)
   ┌──────────────────────────────────┐
-  │ tiny_lidar_net_controller        │ ← 変更なし
+  │ tiny_lidar_net_controller /      │ ← LiDAR / カメラから直接制御
+  │ pilot_net_controller             │
   └──────────────────────────────────┘
 ```
 
-### control_mode 一覧
+### control_method 一覧
 
 | 値 | コントローラ | 経路ソース | 用途 |
 |----|------------|-----------|------|
 | `mpc` (デフォルト) | `mpc_controller` | MPC 独自 CSV | 本番走行・タイムアタック |
 | `pure_pursuit` | `simple_pure_pursuit` | `simple_trajectory_generator` | デバッグ・比較検証 |
-| `e2e` | `tiny_lidar_net_controller` | LiDAR 直接 | E2E 学習ベース走行 |
+| `tiny_lidar_net` | `tiny_lidar_net_controller` | LiDAR 直接 | E2E 学習ベース走行 |
+| `pilot_net` | `pilot_net_controller` | — | パイロットネット走行 |
+| `joycon` | joystick teleop | — | 手動操作 |
 
 ### 各ノードの扱い
 
 | ノード | 変更 |
 |--------|------|
-| `simple_pure_pursuit` | **残す**（`control_mode=pure_pursuit` で使用） |
-| `simple_trajectory_generator` | **残す**（`pure_pursuit` / `e2e` モードで使用） |
-| `mpc_controller` | **新規追加**（`control_mode=mpc` で使用、デフォルト） |
+| `simple_pure_pursuit` | **残す**（`control_method=pure_pursuit` で使用） |
+| `simple_trajectory_generator` | **残す**（`pure_pursuit` モードで使用） |
+| `mpc_controller` | **新規追加**（`control_method=mpc` で使用、デフォルト） |
 
-## 実装計画（Implementation Plan）
+## 実装済み状態の確認
 
-### 前提
+### パッケージ配置
 
-- プロジェクト直下の `multi_purpose_mpc_ros/` を `aichallenge_submit/` 配下に **移動** する
-- `create_submit_file.bash` は `aichallenge/workspace/src/aichallenge_submit/` 以下のみを tar.gz にするため、MPC パッケージがここにないと提出物に含まれない
-- `multi_purpose_mpc_ros/` は git submodule ではないため、単純な移動でよい
-
-### Step 1: パッケージの移動
-
-`multi_purpose_mpc_ros/` 配下の2パッケージを `aichallenge_submit/` に移動する。
-
-```bash
-# プロジェクトルートで実行
-mv multi_purpose_mpc_ros/multi_purpose_mpc_ros \
-   aichallenge/workspace/src/aichallenge_submit/multi_purpose_mpc_ros
-
-mv multi_purpose_mpc_ros/multi_purpose_mpc_ros_msgs \
-   aichallenge/workspace/src/aichallenge_submit/multi_purpose_mpc_ros_msgs
-```
-
-移動後の `aichallenge_submit/` ディレクトリ構造:
+`multi_purpose_mpc_ros` と `multi_purpose_mpc_ros_msgs` はすでに `aichallenge_submit/` 配下に存在する。手動でのクローンや移動は不要。
 
 ```
 aichallenge/workspace/src/aichallenge_submit/
-├── aichallenge_submit_launch/      # 既存
-├── simple_pure_pursuit/            # 既存
-├── simple_trajectory_generator/    # 既存
-├── tiny_lidar_net_controller/      # 既存
-├── multi_purpose_mpc_ros/          # ← NEW (移動)
-├── multi_purpose_mpc_ros_msgs/     # ← NEW (移動)
-├── ...（その他既存パッケージ）
+├── aichallenge_submit_launch/
+├── simple_pure_pursuit/
+├── simple_trajectory_generator/
+├── tiny_lidar_net_controller/
+├── multi_purpose_mpc_ros/          # ← 統合済み
+├── multi_purpose_mpc_ros_msgs/     # ← 統合済み
+└── ...（その他既存パッケージ）
 ```
 
-元の `multi_purpose_mpc_ros/` ディレクトリには `README.md` のみ残る。不要なら削除してよい。
+### reference.launch.xml の現状
 
-```bash
-# 不要であれば
-rm -rf multi_purpose_mpc_ros/
-```
+`aichallenge/workspace/src/aichallenge_submit/aichallenge_submit_launch/launch/reference.launch.xml`
 
-### Step 2: reference.launch.xml の変更
+- `control_method` arg（L20）: デフォルト `mpc`
+- MPC コントローラは `<include file="$(find-pkg-share aichallenge_submit_launch)/launch/control/mpc.launch.xml">` で起動（インライン `<node>` ではなく専用 launch ファイル経由）
+- `pure_pursuit` / `tiny_lidar_net` / `pilot_net` / `joycon` も同様に各 `control/<name>.launch.xml` を include する構造
 
-対象ファイル: `aichallenge/workspace/src/aichallenge_submit/aichallenge_submit_launch/launch/reference.launch.xml`
-
-**3つの変更を行う:**
-
-#### 2-1. `control_mode` arg のデフォルト値と説明を更新（L20-21）
-
-```diff
--  <arg name="control_mode" default="rule_based"
--       description="Select operation mode: rule_based (e.g. Pure Pursuit), e2e (E2E Controller, e.g. TinyLiDARNet), or joycon (Manual Teleop)"/>
-+  <arg name="control_mode" default="mpc"
-+       description="Select operation mode: mpc (MPC Controller), pure_pursuit (Pure Pursuit), e2e (E2E Controller), or joycon (Manual Teleop)"/>
-```
-
-#### 2-2. 既存の `rule_based` を `pure_pursuit` にリネーム（L139）
-
-```diff
-   <!-- Control -->
--  <group if="$(eval &quot;'$(var control_mode)' == 'rule_based'&quot;)">
-+  <group if="$(eval &quot;'$(var control_mode)' == 'pure_pursuit'&quot;)">
-     <!-- Pure Pursuit -->
-     ...（中身は変更なし）
-   </group>
-```
-
-#### 2-3. MPC Controller の group を追加（L156 の後、e2e group の前）
-
-```xml
-  <group if="$(eval &quot;'$(var control_mode)' == 'mpc'&quot;)">
-    <!-- MPC Controller -->
-    <node pkg="multi_purpose_mpc_ros" exec="run_mpc_controller.bash"
-          name="mpc_controller" output="screen"
-          args="--config_path $(find-pkg-share multi_purpose_mpc_ros)/config/config.yaml
-                --ref_vel_path $(find-pkg-share multi_purpose_mpc_ros)/config/ref_vel.yaml">
-      <param name="use_sim_time" value="$(var use_sim_time)"/>
-      <param name="use_boost_acceleration" value="false"/>
-      <param name="use_obstacle_avoidance" value="false"/>
-      <param name="use_stats" value="false"/>
-    </node>
-  </group>
-```
-
-**注意点:**
-- `exec="run_mpc_controller.bash"` — bash スクリプト経由で起動（venv のアクティベートが必要なため）
-- `run_mpc_controller.bash` の中身:
-  ```bash
-  source $(ros2 pkg prefix multi_purpose_mpc_ros)/.venv/bin/activate
-  python3 $(ros2 pkg prefix multi_purpose_mpc_ros)/lib/multi_purpose_mpc_ros/mpc_controller $@
-  ```
-- `args` で `--config_path` と `--ref_vel_path` を渡す（MPC ノードのエントリポイントが `argparse` でパース）
-
-### Step 3: ビルド確認
+### ビルド
 
 ```bash
 # Docker コンテナ内でビルド
@@ -265,11 +202,9 @@ autoware_auto_control_msgs（Autoware underlay に存在）
 
 colcon が自動解決するため、特別な指定は不要。
 
-### Step 4: config.yaml の確認・調整
+### config.yaml の確認・調整
 
 MPC の config ファイル: `multi_purpose_mpc_ros/config/config.yaml`
-
-確認ポイント:
 
 | 設定項目 | 現在の値 | 確認事項 |
 |---------|---------|---------|
@@ -280,11 +215,11 @@ MPC の config ファイル: `multi_purpose_mpc_ros/config/config.yaml`
 | `mpc.v_max` | `20.0` | 速度プリセット（中速）。環境に合わせて調整 |
 | `obstacles.csv_path` | `""` | 空 = トピック購読モード（障害物回避が off なので影響なし） |
 
-**コースが変更された場合**（例: 新しい lanelet2_map.osm が配布された場合）は、「事前準備」セクションの手順に従って OGM と経路を再生成する必要がある。
+**コースが変更された場合**（例: 新しい lanelet2_map.osm が配布された場合）は、「事前準備」セクションの手順に従って OGM と経路を再生成する。
 
-### Step 5: 動作確認
+### 動作確認
 
-#### 5-1. MPC モードでの起動（デフォルト）
+#### MPC モードでの起動（デフォルト）
 
 ```bash
 make dev
@@ -306,19 +241,17 @@ ros2 topic echo /mpc/prediction --once
 ros2 topic echo /mpc/ref_path --once
 ```
 
-#### 5-2. Pure Pursuit モードでの起動確認
-
-launch arg を変更して起動:
+#### Pure Pursuit モードでの起動確認
 
 ```bash
-# reference.launch.xml を呼んでいる箇所で control_mode を変更するか、
+# reference.launch.xml を呼んでいる箇所で control_method を変更するか、
 # 直接 launch コマンドで
-ros2 launch aichallenge_submit_launch reference.launch.xml control_mode:=pure_pursuit simulation:=true use_sim_time:=true
+ros2 launch aichallenge_submit_launch reference.launch.xml control_method:=pure_pursuit simulation:=true use_sim_time:=true
 ```
 
 Pure Pursuit が従来通り動作することを確認。
 
-#### 5-3. 走行品質の確認
+#### 走行品質の確認
 
 | チェック項目 | 確認方法 |
 |------------|---------|
@@ -327,7 +260,7 @@ Pure Pursuit が従来通り動作することを確認。
 | 制御指令値が妥当か | `ros2 topic echo /control/command/control_cmd` でステア角・加速度を確認 |
 | occupancy grid map が正しく読めているか | ノード起動ログでエラーがないか |
 
-### Step 6: 提出ファイルの確認
+### 提出ファイルの確認
 
 ```bash
 bash create_submit_file.bash
@@ -342,13 +275,11 @@ aichallenge_submit/multi_purpose_mpc_ros_msgs/
 
 ### 変更ファイルまとめ
 
-| ファイル | 変更内容 |
-|---------|---------|
-| `multi_purpose_mpc_ros/multi_purpose_mpc_ros/` | `aichallenge_submit/` へ移動 |
-| `multi_purpose_mpc_ros/multi_purpose_mpc_ros_msgs/` | `aichallenge_submit/` へ移動 |
-| `reference.launch.xml` L20-21 | `control_mode` のデフォルトを `mpc` に変更 |
-| `reference.launch.xml` L139 | `rule_based` → `pure_pursuit` にリネーム |
-| `reference.launch.xml` L156 の後 | MPC Controller の `<group>` を新規追加 |
+| ファイル | 内容 |
+|---------|------|
+| `aichallenge_submit/multi_purpose_mpc_ros/` | 統合済み（in-tree） |
+| `aichallenge_submit/multi_purpose_mpc_ros_msgs/` | 統合済み（in-tree） |
+| `reference.launch.xml` | `control_method` 引数（デフォルト `mpc`）、各コントローラを `<include control/<name>.launch.xml>` で起動 |
 
 ### 将来の改善項目（今回はスコープ外）
 
@@ -444,11 +375,11 @@ env/
 
 ### ウェイポイント作成補助ツール
 
-`env/create_waypoints.py` を使うと、occupancy grid map をGUIで表示しマウスクリックでウェイポイントを打てる。軌跡最適化ツールの入力用。
+`env/create_waypoints.py` を使うと、occupancy grid map を GUI で表示しマウスクリックでウェイポイントを打てる。軌跡最適化ツールの入力用。
 
 ```bash
-cd multi_purpose_mpc_ros/multi_purpose_mpc_ros/env/<バージョン名>
-bash ../create_waypoints.bash
+cd multi_purpose_mpc_ros/env/<バージョン名>   # 例: final_ver3（occupancy_grid_map.yaml を含む版を選ぶ）
+python3 ../create_waypoints.py               # 要: matplotlib, pyyaml
 ```
 
 ## 注意事項
@@ -469,7 +400,7 @@ bash ../create_waypoints.bash
 - simple_pure_pursuit: **100Hz**（`create_wall_timer(10ms)`）
 - mpc_controller: **40Hz**（`config.yaml` の `control_rate: 40.0`）
 
-MPC は計算負荷が高いため 40Hz は妥当。問題があれば `control_rate` を調整可能。
+MPC は計算負荷が高いため 40Hz は妥当。問題があれば `control_rate` を調整できる。
 
 ### Python venv
 
@@ -526,11 +457,11 @@ reference_path:
 
 | 項目 | 内容 |
 |------|------|
-| 統合方式 | `control_mode` launch 引数で切り替え |
+| 統合方式 | `control_method` launch 引数で切り替え |
 | デフォルト | `mpc`（MPC コントローラ） |
-| 切り替え | `pure_pursuit` で Pure Pursuit に戻せる |
+| 切り替え | `pure_pursuit` / `tiny_lidar_net` / `pilot_net` / `joycon` |
 | トピック互換 | 入出力ともに一致、リマップ不要 |
 | 経路参照 | MPC: 独自 CSV / Pure Pursuit: `simple_trajectory_generator` |
-| 主な変更箇所 | `reference.launch.xml`（3箇所）+ パッケージ移動 |
-| パッケージ配置 | `aichallenge_submit/` 配下に移動（提出に含めるため必須） |
+| MPC 起動方式 | `<include control/mpc.launch.xml>` 経由（インライン node ではない） |
+| パッケージ配置 | `aichallenge_submit/` 配下に統合済み（追加作業不要） |
 | ビルド注意 | Python venv 作成（pip install）によるビルド時間増加 |

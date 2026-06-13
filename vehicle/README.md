@@ -53,7 +53,7 @@ make rviz2
 
 # rosbag（手動。対象 domain を指定）
 CMD="env ROS_DOMAIN_ID=1 /aichallenge/utils/record_rosbag.bash" \
-docker compose -f docker-compose.yml run --rm --no-deps autoware-command
+docker compose run --rm --no-deps autoware-command
 ```
 
 ### 停止 / 状態確認
