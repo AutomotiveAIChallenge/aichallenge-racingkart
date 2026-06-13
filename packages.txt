@@ -7,7 +7,6 @@ ros-humble-rqt-graph
 terminator
 arp-scan
 ros-humble-rosbag2-storage-mcap
-ros-humble-domain-bridge
 ros-humble-can-msgs
 ros-humble-nmea-msgs
 ros-humble-rtcm-msgs

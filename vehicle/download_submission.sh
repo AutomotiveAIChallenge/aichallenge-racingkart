@@ -244,8 +244,6 @@ main() {
     print_info "Source: $TAR_FILE"
     print_info "Destination: $OUTPUT_DIR"
 
-    tar -xzf "$TAR_FILE" -C "$OUTPUT_DIR"
-
     if tar -xzf "$TAR_FILE" -C "$OUTPUT_DIR"; then
         print_success "Extraction completed successfully!"
 
