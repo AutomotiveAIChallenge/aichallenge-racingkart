@@ -17,6 +17,8 @@ class Track:
         seg = np.roll(pts, -1, axis=0) - pts
         keep = np.linalg.norm(seg, axis=1) > 1e-9
         self.points = pts[keep]
+        if len(self.points) < 3:
+            raise ValueError("track needs >=3 distinct points")
         self._seg_vec = np.roll(self.points, -1, axis=0) - self.points
         self._seg_len = np.linalg.norm(self._seg_vec, axis=1)
         self.cum = np.concatenate(([0.0], np.cumsum(self._seg_len)))

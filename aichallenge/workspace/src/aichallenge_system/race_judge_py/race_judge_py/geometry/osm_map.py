@@ -1,9 +1,12 @@
 from __future__ import annotations
 
+import logging
 import xml.etree.ElementTree as ET
 from dataclasses import dataclass
 
 import numpy as np
+
+_log = logging.getLogger(__name__)
 
 
 @dataclass
@@ -42,11 +45,11 @@ def _resample(line: np.ndarray, count: int) -> np.ndarray:
     return np.stack([np.interp(s, cum, line[:, 0]), np.interp(s, cum, line[:, 1])], axis=1)
 
 
-def _chain_midlines(midlines: list, tol: float = 10.0) -> np.ndarray:
-    """lanelet 毎の midline を端点最近傍で貪欲にチェーンして1本のループにする。
-    向きが逆の midline は反転して接続する。"""
-    remaining = list(range(1, len(midlines)))
-    chain = [midlines[0]]
+def _chain_from(start_idx, midlines, tol):
+    """Greedily chain midlines starting from start_idx; return (chain, used_count)."""
+    remaining = set(range(len(midlines)))
+    remaining.discard(start_idx)
+    chain = [midlines[start_idx]]
     while remaining:
         end = chain[-1][-1]
         best, best_d, best_rev = None, None, False
@@ -59,10 +62,51 @@ def _chain_midlines(midlines: list, tol: float = 10.0) -> np.ndarray:
                 best, best_d, best_rev = j, d, rev
         if best is None or best_d > tol:
             break
-        remaining.remove(best)
-        m = midlines[best]
-        chain.append(m[::-1] if best_rev else m)
-    pts = np.vstack(chain)
+        remaining.discard(best)
+        chain.append(midlines[best][::-1] if best_rev else midlines[best])
+    return chain, len(midlines) - len(remaining)
+
+
+def _chain_midlines(midlines: list, tol: float = 10.0) -> np.ndarray:
+    """lanelet 毎の midline を端点最近傍で貪欲にチェーンして1本のループにする。
+
+    最長連結成分を選択する: 全開始インデックスを試し、最も多くの midline を
+    使うチェーンを採用する。閉ループを形成するチェーン（始端・終端間距離 <= tol）
+    を非閉ループより優先し、同条件内では使用数・総点数で比較する。
+    未使用の midline がある場合は警告を出力する。
+    向きが逆の midline は反転して接続する。
+    """
+    best_chain, best_used, best_closes = None, 0, False
+    for start in range(len(midlines)):
+        chain, used = _chain_from(start, midlines, tol)
+        pts_start = chain[0][0]
+        pts_end = chain[-1][-1]
+        closes = float(np.linalg.norm(pts_end - pts_start)) <= tol
+        total_pts = sum(len(c) for c in chain)
+
+        better = best_chain is None
+        if not better:
+            best_total_pts = sum(len(c) for c in best_chain)
+            # Closed loop beats open chain; within same closure class: most used, then most pts
+            if closes and not best_closes:
+                better = True
+            elif closes == best_closes:
+                if used > best_used or (used == best_used and total_pts > best_total_pts):
+                    better = True
+
+        if better:
+            best_chain, best_used, best_closes = chain, used, closes
+
+    unused = len(midlines) - best_used
+    if unused > 0:
+        _log.warning(
+            "_chain_midlines: dropped %d unconnected midline(s) "
+            "(kept chain of %d midline(s))",
+            unused,
+            best_used,
+        )
+
+    pts = np.vstack(best_chain)
     keep = np.ones(len(pts), dtype=bool)
     keep[1:] = np.linalg.norm(np.diff(pts, axis=0), axis=1) > 1e-6
     return pts[keep]

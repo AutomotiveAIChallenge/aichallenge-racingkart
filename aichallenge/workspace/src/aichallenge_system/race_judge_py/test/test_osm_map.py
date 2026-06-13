@@ -6,6 +6,7 @@ import pytest
 from race_judge_py.geometry.osm_map import load_lanelet_map
 
 FIXTURE = Path(__file__).parent / "fixtures" / "mini_course.osm"
+DISJOINT_FIXTURE = Path(__file__).parent / "fixtures" / "disjoint_course.osm"
 REAL_MAP = (
     Path(__file__).resolve().parents[3]
     / "aichallenge_submit"
@@ -42,3 +43,13 @@ def test_real_map_loads_and_closes():
     assert len(c) > 100
     # 実コースは周回路: チェーンが閉じること
     assert np.linalg.norm(c[-1] - c[0]) < 15.0
+
+
+def test_chains_longest_component_when_multiple_loops():
+    # disjoint_course.osm has a main loop (x in [0..20]) plus one isolated
+    # lanelet at x≈1000.  The algorithm must pick the longest connected
+    # component (main loop) and must NOT include any point with x≈1000.
+    m = load_lanelet_map(str(DISJOINT_FIXTURE))
+    c = m.centerline
+    # No centerline point should be near x=1000
+    assert c[:, 0].max() < 500.0, "centerline should not contain the isolated far-away lanelet"

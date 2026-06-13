@@ -50,3 +50,18 @@ def test_set_origin_shifts_progress():
 def test_duplicate_points_dropped():
     t = Track(np.array([[0, 0], [0, 0], [100, 0], [100, 100], [0, 100]], dtype=float))
     assert t.total_length == pytest.approx(400.0)
+
+
+def test_all_duplicate_points_raises():
+    # All points identical — dedup leaves 0 points; must raise, not crash in project()
+    with pytest.raises(ValueError):
+        Track(np.array([[5.0, 5.0], [5.0, 5.0], [5.0, 5.0]], dtype=float))
+
+
+def test_invalid_shape_raises():
+    # (N,3) array is not a valid 2-D track
+    with pytest.raises(ValueError):
+        Track(np.array([[1.0, 2.0, 3.0], [4.0, 5.0, 6.0], [7.0, 8.0, 9.0]]))
+    # 1-D array is not valid
+    with pytest.raises(ValueError):
+        Track(np.array([1.0, 2.0, 3.0]))
