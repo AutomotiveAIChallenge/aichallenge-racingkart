@@ -1,0 +1,21 @@
+/**:
+  ros__parameters:
+    vehicle_id: "d1"
+    map_path: ""  # launchで上書き
+    output_dir: "/output/latest"
+    required_laps: 6
+    session_timeout: 480.0
+    penalty_cooldown_sec: 2.0     # AWSIM CooldownSeconds
+    collision_distance_m: 1.5     # 実車キャリブレーション対象
+    v2x_timeout_sec: 1.0
+    use_imu_confirmation: false   # 実車較正後に有効化
+    imu_impact_threshold: 14.7    # 1.5g [m/s^2]
+    imu_window_sec: 0.2
+    vehicle_length: 2.0
+    vehicle_width: 1.3
+    antenna_offset_x: 0.0
+    start_line_position: [0.0, 0.0]  # [0,0]なら地図centerline先頭が進捗原点
+    pose_covariance_gate: 1.0
+    ready_pose_count: 20
+    publish_awsim_compat: true
+    judge_rate_hz: 20.0

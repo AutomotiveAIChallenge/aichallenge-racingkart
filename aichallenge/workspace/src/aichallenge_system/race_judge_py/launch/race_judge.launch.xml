@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<launch>
+  <arg name="vehicle_id" default="d1"/>
+  <arg name="map_path" default="$(find-pkg-share aichallenge_submit_launch)/map/lanelet2_map.osm"/>
+  <arg name="output_dir" default="/output/latest"/>
+  <arg name="param_file" default="$(find-pkg-share race_judge_py)/config/race_judge.param.yaml"/>
+
+  <node pkg="race_judge_py" exec="vehicle_judge_node" name="vehicle_judge" output="screen">
+    <param from="$(var param_file)"/>
+    <param name="vehicle_id" value="$(var vehicle_id)"/>
+    <param name="map_path" value="$(var map_path)"/>
+    <param name="output_dir" value="$(var output_dir)"/>
+  </node>
+</launch>
