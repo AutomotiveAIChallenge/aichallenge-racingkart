@@ -1,12 +1,12 @@
 # 参加者インターフェース契約
 
-> 参加者（提出者）が**変えてはいけない約束**を列挙します。各項目は「**約束**: …／**破ると**: …」の形式で示します。評価システムが依存する安定面（契約）の集約であり、手順書ではありません。
+> 参加者（提出者）が**変えてはいけない約束**を列挙します。「[守るべき約束（一覧）](#守るべき約束一覧)」で 5 項目を簡潔にまとめたあと、各節で技術的な詳細を補足します。評価システムが依存する安定面（契約）の集約であり、手順書ではありません。
 
 関連ドキュメント:
 
 - 評価システム側契約（FSM・結果 JSON など）: [evaluation-interface.md](evaluation-interface.md)
-- Compose オーバーレイ設計: [../design/specs/compose-overlays.md](../design/specs/compose-overlays.md)
-- MPC 統合仕様: [../design/specs/mpc-integration.md](../design/specs/mpc-integration.md)
+- Compose オーバーレイ設計: [../spec/compose-overlays.md](../spec/compose-overlays.md)
+- MPC 統合仕様: [../spec/mpc-integration.md](../spec/mpc-integration.md)
 - リポジトリルート README: [../../README.md](../../README.md)
 - ドキュメント命名・分類規約: [../README.md](../README.md)
 
@@ -25,11 +25,21 @@
 
 ---
 
-## 2. 提出パッケージの約束
+## 守るべき約束（一覧）
 
-### 約束 1: tar.gz の最上位ディレクトリは `aichallenge_submit/`
+1. tar.gz 内の最上位ディレクトリ名は **必ず `aichallenge_submit/`** にする。異なる名前にすると eval ビルド時に展開後の `aichallenge_submit/` が空になり、参加者パッケージが一切ビルドされない。
+2. tar.gz は**リポジトリ直下（Docker ビルドコンテキスト内）**に置く。リポジトリルート外のパスを指定すると `docker build` の `COPY` が解決できず eval イメージのビルドが失敗する。
+3. エントリ launch ファイルは **`aichallenge_submit_launch` パッケージ内の `aichallenge_submit.launch.xml`** として提供する。このファイルを欠くと評価の launch ツリーが起動できない。
+4. `control_method` に渡せる値は **`mpc`・`pure_pursuit`・`tiny_lidar_net`・`pilot_net`・`joycon` の 5 つのみ**（既定: `mpc`）。それ以外の値を渡すとどの制御ノードも起動せず車両が動かない。既定値を変更すると `control_method` を明示しない既存の起動経路の挙動が変わる。
+5. 提出パッケージは最小インターフェース（AWSIM センサトピックの subscribe、`/localization/kinematic_state` と `/planning/scenario_planning/trajectory` の produce、`/control/command/control_cmd` の publish、`/set_initial_pose` サービスの advertise）をすべて満たす。いずれかのトピック名・型を変更すると localization / planning / control の連結が切れ、車両の起動・走行・評価ができなくなる。
 
-**約束**: `create_submit_file.bash` は次のコマンドで tar を生成します。
+---
+
+## 2. 提出パッケージの形式
+
+### tar.gz の最上位ディレクトリ
+
+`create_submit_file.bash` は次のコマンドで tar を生成します。
 
 ```bash
 tar zcvf submit/aichallenge_submit.tar.gz -C ./aichallenge/workspace/src aichallenge_submit
@@ -37,17 +47,17 @@ tar zcvf submit/aichallenge_submit.tar.gz -C ./aichallenge/workspace/src aichall
 
 tar 内の最上位エントリは `aichallenge_submit/` のみです。独自に tar を生成する場合も、内側の最上位ディレクトリ名は **必ず `aichallenge_submit/`** にしてください。
 
-**破ると**: eval イメージの `Dockerfile` eval ステージは `/aichallenge/workspace/src/aichallenge_submit` を `rm -rf` したうえで `tar zxf /tmp/s.tgz -C /aichallenge/workspace/src` で展開します。ディレクトリ名が異なると展開後に `aichallenge_submit/` が空のままになり、参加者パッケージが一切ビルドされません。
+eval イメージの `Dockerfile` eval ステージは `/aichallenge/workspace/src/aichallenge_submit` を `rm -rf` したうえで `tar zxf /tmp/s.tgz -C /aichallenge/workspace/src` で展開します。ディレクトリ名が異なると展開後に `aichallenge_submit/` が空のままになり、参加者パッケージが一切ビルドされません。
 
-### 約束 2: tar.gz はリポジトリ直下（Docker ビルドコンテキスト内）に置く
+### tar.gz の配置場所
 
-**約束**: `Dockerfile` eval ステージは `COPY ${SUBMIT_TAR} /tmp/s.tgz` でビルドコンテキスト（リポジトリルート）を基準にパスを解決します。既定パスは `submit/aichallenge_submit.tar.gz`（`ARG SUBMIT_TAR=submit/aichallenge_submit.tar.gz`）。別パスを指定する場合は `--submit <リポジトリ直下の相対パス>` を使います。
+`Dockerfile` eval ステージは `COPY ${SUBMIT_TAR} /tmp/s.tgz` でビルドコンテキスト（リポジトリルート）を基準にパスを解決します。既定パスは `submit/aichallenge_submit.tar.gz`（`ARG SUBMIT_TAR=submit/aichallenge_submit.tar.gz`）。別パスを指定する場合は `--submit <リポジトリ直下の相対パス>` を使います。
 
-**破ると**: リポジトリルート外の tar を指定すると `docker build` の `COPY` が解決できず、eval イメージのビルドが失敗します。
+リポジトリルート外の tar を指定すると `docker build` の `COPY` が解決できず、eval イメージのビルドが失敗します。
 
-### 約束 3: エントリ launch ファイルは `aichallenge_submit_launch` パッケージが提供する
+### エントリ launch ファイル
 
-**約束**: `aichallenge_system.launch.xml` は `aichallenge_submit_launch` パッケージの `aichallenge_submit.launch.xml` を固定で `<include>` します。この launch ファイルは `reference.launch.xml` に委譲し、センシング・自己位置・プランニング・制御の全スタックを起動します。
+`aichallenge_system.launch.xml` は `aichallenge_submit_launch` パッケージの `aichallenge_submit.launch.xml` を固定で `<include>` します。この launch ファイルは `reference.launch.xml` に委譲し、センシング・自己位置・プランニング・制御の全スタックを起動します。
 
 ```
 aichallenge_submit.launch.xml
@@ -59,15 +69,15 @@ aichallenge_submit.launch.xml
     └── map（lanelet2_map_loader）
 ```
 
-**破ると**: `aichallenge_submit_launch` パッケージを提出物に含めない、または `aichallenge_submit.launch.xml` を削除すると、評価の launch ツリーが起動できません。
+`aichallenge_submit_launch` パッケージを提出物に含めない、または `aichallenge_submit.launch.xml` を削除すると、評価の launch ツリーが起動できません。
 
 ---
 
-## 3. 制御方式の約束
+## 3. 制御方式の選択
 
-### 約束 4: `control_method` は 5 値、既定は `mpc`
+### `control_method` の有効値
 
-**約束**: `reference.launch.xml` は以下の引数を持ちます。
+`reference.launch.xml` は以下の引数を持ちます。
 
 ```xml
 <arg name="control_method" default="mpc"
@@ -86,7 +96,7 @@ aichallenge_submit.launch.xml
 
 各値は `control/<name>.launch.xml` を `<include>` する `<group if=...>` で実装されており、いずれも `/control/command/control_cmd`（`autoware_auto_control_msgs/AckermannControlCommand`）を publish します。
 
-**破ると**: 上記 5 値以外を渡すと、どの `<group if=...>` にも一致せず制御ノードが起動せず車両が動きません。既定値 `mpc` を変更すると、`control_method` を明示しない既存の起動経路の挙動が変わります。
+上記 5 値以外を渡すと、どの `<group if=...>` にも一致せず制御ノードが起動せず車両が動きません。既定値 `mpc` を変更すると、`control_method` を明示しない既存の起動経路の挙動が変わります。
 
 ---
 
@@ -144,9 +154,9 @@ AWSIM はこのトピックを受けてカートを動かします。全制御�
 
 オーケストレータ（`autostart_orchestrator_node`）は起動時にこのサービスを呼び出して初期自己位置を設定します。未提供の場合は `initial_pose_service_timeout_sec` 経過後にスキップされます。
 
-### 約束 5: 評価可能な提出物が満たす最小インターフェース
+### 評価可能な提出物が満たす最小インターフェース
 
-**約束**: 提出パッケージは以下をすべて満たすこと。
+提出パッケージは以下をすべて満たす必要があります。
 
 1. AWSIM センサ入力を subscribe: `/sensing/imu/imu_raw`（Imu）、`/sensing/gnss/nav_sat_fix`（NavSatFix）、`/vehicle/status/velocity_status`（VelocityReport）
 2. `/localization/kinematic_state`（`nav_msgs/Odometry`）を produce する（`ekf_localizer` が publish）
@@ -154,7 +164,7 @@ AWSIM はこのトピックを受けてカートを動かします。全制御�
 4. `/control/command/control_cmd`（`autoware_auto_control_msgs/AckermannControlCommand`）を publish する
 5. `/set_initial_pose`（`std_srvs/srv/Trigger`）を advertise する（`imu_gnss_poser` が実装）
 
-**破ると**: いずれかのトピック名・型を変更すると、対応する localization / planning / control の連結が切れ、車両の起動・走行・評価ができなくなります。
+いずれかのトピック名・型を変更すると、対応する localization / planning / control の連結が切れ、車両の起動・走行・評価ができなくなります。
 
 ---
 
@@ -184,9 +194,9 @@ AWSIM はこのトピックを受けてカートを動かします。全制御�
 
 ### .env・make は評価環境側の設定
 
-**約束**: `.env`（`COMPOSE_FILE`、`HOST_UID`、`ROS_DOMAIN_ID` 等）および `Makefile` のターゲットは評価環境（運営）側が管理します。参加者は `.env` や `Makefile` を直接変更して評価を制御することはできません。
+`.env`（`COMPOSE_FILE`、`HOST_UID`、`ROS_DOMAIN_ID` 等）および `Makefile` のターゲットは評価環境（運営）側が管理します。参加者は `.env` や `Makefile` を直接変更して評価を制御することはできません。
 
-**破ると**: 提出 tar.gz 内に `.env` や `Makefile` を含めても、eval イメージはホストから切り離して動作するため効果がありません。評価環境の挙動を変えたい場合は、`aichallenge_submit/` パッケージの launch 引数・パラメータ YAML の変更で対応してください。
+提出 tar.gz 内に `.env` や `Makefile` を含めても、eval イメージはホストから切り離して動作するため効果がありません。評価環境の挙動を変えたい場合は、`aichallenge_submit/` パッケージの launch 引数・パラメータ YAML の変更で対応してください。
 
 ---
 
@@ -195,8 +205,8 @@ AWSIM はこのトピックを受けてカートを動かします。全制御�
 | ドキュメント | 内容 |
 |---|---|
 | [evaluation-interface.md](evaluation-interface.md) | 評価 FSM（`autostart_orchestrator` / `awsim_state_manager`）、結果 JSON スキーマ、AWS 評価パイプライン |
-| [../design/specs/compose-overlays.md](../design/specs/compose-overlays.md) | `COMPOSE_FILE` の GPU/CPU/headless/WSL2 選択肢と `docker-compose.eval.yml` 必須の根拠 |
-| [../design/specs/mpc-integration.md](../design/specs/mpc-integration.md) | MPC 制御器（`multi_purpose_mpc_ros`）の統合仕様 |
-| [../design/specs/makefile-target-naming.md](../design/specs/makefile-target-naming.md) | make ターゲット命名規約 |
+| [../spec/compose-overlays.md](../spec/compose-overlays.md) | `COMPOSE_FILE` の GPU/CPU/headless/WSL2 選択肢と `docker-compose.eval.yml` 必須の根拠 |
+| [../spec/mpc-integration.md](../spec/mpc-integration.md) | MPC 制御器（`multi_purpose_mpc_ros`）の統合仕様 |
+| [../spec/makefile-target-naming.md](../spec/makefile-target-naming.md) | make ターゲット命名規約 |
 | [../README.md](../README.md) | ドキュメント命名・分類規約 |
 | [../../README.md](../../README.md) | リポジトリルート README |

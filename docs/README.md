@@ -2,16 +2,18 @@
 
 ## 方針
 
-- `docs/design/specs/` — 現仕様を記述する spec。コミットして最新を維持する。
-- `docs/design/plans/` — 実装計画（手順 / PR 分割 / TODO）。陳腐化しやすいため **コミットしない**（`.gitignore` 済み）。ローカル管理のみ。耐久性のある設計判断は spec に反映する。
+- `docs/spec/` — 現仕様を記述する spec。コミットして最新を維持する。
+- `docs/plan/` — 実装計画（手順 / PR 分割 / TODO）。陳腐化しやすいため **コミットしない**（`.gitignore` 済み）。ローカル管理のみ。耐久性のある設計判断は spec に反映する。
 - `docs/interface/` — **インターフェイス契約**（変更すると依存側が壊れる安定面）。spec が「なぜ・どう作ったか」を記述するのに対し、interface は「何を約束し、破ると何が壊れるか」を記述する。コミットして最新を維持する。
-- `docs/` 直下の `*.drawio.svg` — アーキテクチャ図。
+- `docs/guide/` — オンボーディング・発表用ガイド・スライド。**ここだけ Marp スライド（`*.marp.md`）を許可**する。
+- `docs/spec/architecture.md` — リポジトリ構成・Compose トポロジ・評価フローのテキスト図（画像は使わず ASCII / 表で表現）。
+- リファレンスドキュメント（`docs/spec/`・`docs/interface/`）は画像なし・Marp なし・SVG なしの plain Markdown のみ。図は ASCII ツリー / 表で表現する。`docs/guide/` は Marp デッキ（`*.marp.md`）を使用可。
 - 命名規約: spec / interface はトピック名・日付なし（例: `compose-overlays.md`、`participant-interface.md`）。
 
-## docs/design/specs/ 一覧
+## docs/spec/ 一覧
 
 - `host-uid-containers.md` — 全 dev サービスをホスト UID/GID で実行する設計（rocker 相当を docker compose の `user:` / `HOME=/tmp` / `group_add` で再現）。実装状況・差異（sound.yml は simulator のみ、group_add は数値 GID）も記載。
-- `beginner-deck.marp.md` — リポジトリの構造と基本操作を短時間で把握するための初学者向け Marp スライド。
+- `architecture.md` — リポジトリ構成 / Compose トポロジ / ドメイン・Launch 階層 / 評価フローのテキスト図。
 - `compose-overlays.md` — `.env` の `COMPOSE_FILE` で GPU / サウンド / WSL2 を切り替えるオーバーレイ設計（複数 compose ファイル構成の正）。
 - `docker-audio.md` — Linux（PipeWire / Pulse）で `simulator` コンテナからホストへ音声を出すための前提と手順。
 - `how-to-setup.md` — 環境構築（Ubuntu 22.04 想定）。`setup.bash` による対話一括セットアップから起動確認まで。
@@ -20,6 +22,10 @@
 - `makefile-target-naming.md` — Makefile ターゲットの `<service>-<command>` 命名ガイドライン。
 - `mpc-integration.md` — `multi_purpose_mpc_ros` のインテグレーション設計。
 - `windows-wsl2-setup.md` — WSL2（Ubuntu）上で `make` / `docker compose` を動かす手順と注意点。
+
+## docs/guide/ 一覧
+
+- `beginner-deck.marp.md` — リポジトリの構造と基本操作を10分で把握する初学者向け Marp スライド。
 
 ## docs/interface/ 一覧
 
@@ -41,7 +47,5 @@
 
 `repo-cruft-cleanup` 計画の未完了項目（いずれも実在確認済み）。
 
-- `remote/connect_zenoh.bash` の 1 行目が二重 shebang（`##!/bin/bash`）のまま → `#!/bin/bash` に修正が必要。
-- `docker_run.sh` が未削除 — rocker に依存する旧スクリプトがリポジトリに残存。
 - `record_rosbag.bash` が `aichallenge/utils/` と `vehicle/` に重複。手動記録ワークフロー（`vehicle/README.md`）が参照するのは `aichallenge/utils/record_rosbag.bash` で、`vehicle/record_rosbag.bash` への参照は見当たらない。どちらを正とするか（重複解消）を要確認。
 - `docker-entrypoint.sh` 3 行目のコメントに `for rocker sessions` が残存 → rocker 廃止に合わせた更新が必要。

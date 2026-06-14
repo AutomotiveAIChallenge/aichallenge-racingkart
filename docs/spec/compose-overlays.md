@@ -1,6 +1,6 @@
 # Docker Compose 構成: `.env` COMPOSE_FILE によるオーバーレイ設計
 
-> 仕様ドキュメント（現仕様の正）。最終確認: 2026-06-14。文書運用方針は [docs/README.md](../../README.md) を参照。
+> 仕様ドキュメント（現仕様の正）。最終確認: 2026-06-14。文書運用方針は [docs/README.md](../README.md) を参照。
 
 ## 現在の構成
 

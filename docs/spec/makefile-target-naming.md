@@ -1,6 +1,6 @@
 # Makefile ターゲット命名ガイドライン（サービス-コマンド）
 
-> 仕様ドキュメント（現仕様の正）。最終確認: 2026-06-14。文書運用方針は [docs/README.md](../../README.md) を参照。
+> 仕様ドキュメント（現仕様の正）。最終確認: 2026-06-14。文書運用方針は [docs/README.md](../README.md) を参照。
 
 このリポジトリの `Makefile` ターゲットは **`<service>-<command>`** 形式を基本とし、一覧性・検索性・拡張性を重視します。
 
@@ -108,4 +108,4 @@ Bad（語順が逆・曖昧・存在しない）:
 ## 7. 変更時の互換性
 
 互換 alias を残さずにターゲット名を整理する場合があります。
-`README.md` / `docs/design/specs/` と `docker-compose.yml` の整合を優先してください。
+`README.md` / `docs/spec/` と `docker-compose.yml` の整合を優先してください。

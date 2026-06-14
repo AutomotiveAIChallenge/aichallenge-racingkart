@@ -1,6 +1,6 @@
 # Introduction（初学者向け）: `make dev` / `make eval`
 
-> 仕様ドキュメント（現仕様の正）。最終確認: 2026-06-14。文書運用方針は [docs/README.md](../../README.md) を参照。
+> 仕様ドキュメント（現仕様の正）。最終確認: 2026-06-14。文書運用方針は [docs/README.md](../README.md) を参照。
 
 **ホストのPC でコマンドを打つ → `docker compose` で AWSIM と Autoware が起動する**、という構成です。
 

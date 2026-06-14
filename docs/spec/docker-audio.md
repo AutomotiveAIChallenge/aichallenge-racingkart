@@ -1,6 +1,6 @@
 # Dockerで音を出す（Linux / PipeWire・Pulse）
 
-> 仕様ドキュメント（現仕様の正）。最終確認: 2026-06-14。文書運用方針は [docs/README.md](../../README.md) を参照。
+> 仕様ドキュメント（現仕様の正）。最終確認: 2026-06-14。文書運用方針は [docs/README.md](../README.md) を参照。
 
 `simulator` コンテナ（AWSIM）からホストに音を出すための設定をまとめます。
 

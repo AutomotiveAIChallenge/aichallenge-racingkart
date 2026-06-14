@@ -1,6 +1,6 @@
 # Windows（WSL2）で動かすためのセットアップメモ
 
-> 仕様ドキュメント（現仕様の正）。最終確認: 2026-06-14。文書運用方針は [docs/README.md](../../README.md) を参照。
+> 仕様ドキュメント（現仕様の正）。最終確認: 2026-06-14。文書運用方針は [docs/README.md](../README.md) を参照。
 
 このリポジトリは **Linux（Ubuntu）** を主ターゲットとして設計されています。  
 Windows で使う場合は、Windows ネイティブ移植ではなく **WSL2 上で Linux として動かす**のが最短です。
@@ -138,7 +138,7 @@ COMPOSE_FILE=docker-compose.yml:docker-compose.eval.yml:docker-compose.wsl.yml
 
 ### (E) Windows 側のパス/シンボリックリンク
 
-`/output/latest/` は実ディレクトリで、内部エントリだけが最新 run へのシンボリックリンクです（`latest/` 自体は symlink にしない。契約は [`../../interface/evaluation-interface.md`](../../interface/evaluation-interface.md) 約束 9）。  
+`/output/latest/` は実ディレクトリで、内部エントリだけが最新 run へのシンボリックリンクです（`latest/` 自体は symlink にしない。契約は [`../interface/evaluation-interface.md`](../interface/evaluation-interface.md) 約束 9）。  
 Windows ドライブ上では symlink の扱いが厳しくなるため、やはり `~/...` 配下での運用を推奨します。
 
 ---

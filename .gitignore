@@ -23,5 +23,5 @@ doc/tmp/*
 /PR.md
 /CLAUDE.md
 
-# Design plans are local working drafts; specs (docs/design/specs/) are the committed source of truth
-docs/design/plans/
+# Implementation plans are local working drafts; specs (docs/spec/) are the committed source of truth
+docs/plan/
