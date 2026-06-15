@@ -17,6 +17,7 @@ x-autoware-base: &autoware-base
     - XAUTHORITY=${XAUTHORITY:-}
     - QT_X11_NO_MITSHM=1
     - TZ=Asia/Tokyo
+    - RUN_MODE=${RUN_MODE:-}
     - SIM_MODE=${SIM_MODE:-}
     - CMD=${CMD:-}
     - COLCON_TRACE=${COLCON_TRACE:-}
@@ -43,6 +44,22 @@ x-autoware-base: &autoware-base
     - /dev/video0
     - /dev/input
   working_dir: /aichallenge
+
+x-autoware-eval-base: &autoware-eval-base
+  <<: *autoware-base
+  volumes:
+    - ./output:${OUTPUT_ROOT:-/output}
+    # /aichallenge is baked into the eval image; intentionally not mounted here
+    # - ./aichallenge:/aichallenge
+    - ./vehicle/cyclonedds.xml:/opt/autoware/cyclonedds.xml
+    - /tmp/.X11-unix:/tmp/.X11-unix:rw
+    # Audio (PipeWire/Pulse) socket access on the host
+    - /run/user:/run/user:rw
+    - /dev/dri:/dev/dri
+    - ${XAUTHORITY:-/dev/null}:${XAUTHORITY:-/dev/null}:rw
+    # Resolve the host UID/GID to a name inside the container.
+    - /etc/passwd:/etc/passwd:ro
+    - /etc/group:/etc/group:ro
 
 x-autoware-rosbag-base: &autoware-rosbag-base
   <<: *autoware-base
@@ -113,16 +130,21 @@ services:
     command: ["bash", "-lc", "exec /aichallenge/build_autoware.bash ${HOST_UID:-} ${HOST_GID:-}"]
 
   simulator:
-    <<: *autoware-base
+    <<: *autoware-base 
     command: ["bash", "-lc", "exec /aichallenge/run_simulator.bash"]
 
   autoware-command:
     <<: *autoware-base
-    command: ["bash", "-lc", "cd ${CMD_WORKDIR:-/aichallenge} && exec bash -c \"$${CMD:?CMD is required}\""]
+    command: ["bash", "-lc", "cd ${CMD_WORKDIR:-/aichallenge} && exec bash -lc \"${CMD:-}\""]
 
   rosbag:
     <<: *autoware-rosbag-base
     command: ["bash", "-lc", 'exec /aichallenge/utils/record_all_rosbag.bash "${ROS_DOMAIN_ID:-1}" "${LOG_DIR:-}" "${RACING_KART_INTERFACE_DIR:-/home/tier4/racing_kart_interface}"']
+
+  autoware-simulator-evaluation:
+    <<: *autoware-eval-base
+    image: "aichallenge-2025-eval"
+    command: ["bash", "-lc", "exec /aichallenge/run_evaluation.bash"]
 
 #### vehicle specific services can be added here ####
   # Zenoh service
@@ -141,17 +163,3 @@ services:
   rviz2:
     <<: *autoware-base 
     command: ["bash", "-lc", "exec /aichallenge/utils/run_rviz.bash remote"]
-
-  autoware-simulator-evaluation:
-    <<: *autoware-base
-    image: "aichallenge-2025-eval"
-    # /aichallenge is baked into the eval image; intentionally not mounted here.
-    volumes:
-      - ./output:${OUTPUT_ROOT:-/output}
-      - ./vehicle/cyclonedds.xml:/opt/autoware/cyclonedds.xml
-      - /tmp/.X11-unix:/tmp/.X11-unix:rw
-      - ${XAUTHORITY:-/dev/null}:${XAUTHORITY:-/dev/null}:rw
-      # Resolve the host UID/GID to a name inside the container.
-      - /etc/passwd:/etc/passwd:ro
-      - /etc/group:/etc/group:ro
-    command: ["bash", "-lc", "exec /aichallenge/run_evaluation.bash"]
