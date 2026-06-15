@@ -4,11 +4,10 @@ target="${1}"
 device="${2}"
 device_drivers="/dev/dri"
 
-# Legacy single-shot path. rocker is no longer installed by ./setup.bash (use make dev/eval).
-# Install manually if you need this script: pip3 install --user rocker
+# rocker runs the container as the host user (--user/--pulse).
+# Install it via `./setup.bash bootstrap` (rocker step) or `pip3 install --user rocker`.
 if ! command -v rocker >/dev/null 2>&1; then
-    echo "[ERROR] rocker not found. This is a legacy path; prefer 'make dev' / 'make eval'."
-    echo "[ERROR] To use docker_run.sh, install rocker manually: pip3 install --user rocker"
+    echo "[ERROR] rocker not found. Install it: ./setup.bash bootstrap (or pip3 install --user rocker)"
     exit 1
 fi
 

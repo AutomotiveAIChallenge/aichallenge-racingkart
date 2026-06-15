@@ -362,6 +362,22 @@ install_base_packages() {
         python3-pip
 }
 
+install_rocker() {
+    if cmd_exists rocker; then
+        log "${OK} rocker already installed"
+        return 0
+    fi
+    pip3 install --user rocker
+    # Ensure ~/.local/bin is on PATH
+    if ! echo "$PATH" | tr ':' '\n' | grep -qx "$HOME/.local/bin"; then
+        # shellcheck disable=SC2016
+        echo 'export PATH="$HOME/.local/bin:$PATH"' >>~/.bashrc
+        export PATH="$HOME/.local/bin:$PATH"
+        log "${INFO} Added ~/.local/bin to PATH in ~/.bashrc"
+    fi
+    log "${OK} Installed rocker"
+}
+
 install_docker_if_missing() {
     if cmd_exists docker && docker --version >/dev/null 2>&1; then
         log "${OK} Docker already installed"
@@ -595,6 +611,7 @@ EOF
 
     local do_install_base=0
     local do_install_docker=0
+    local do_install_rocker=0
     local do_docker_group=0
     local do_dds_tuning=0
     local do_clone_repo=0
@@ -615,6 +632,7 @@ EOF
     log "${INFO} Planned steps (answer y/N for each, then execution starts):"
     log_step "Install base packages (apt)"
     log_step "Install Docker (if missing)"
+    log_step "Install rocker (pip)"
     log_step "Add user to docker group (recommended)"
     log_step "Configure host DDS tuning (rmem_max + lo multicast, sudo)"
     log_step "Clone/update repository (branch=${branch}) -> ${dest_dir}"
@@ -628,6 +646,7 @@ EOF
 
     confirm_step "Install base packages (apt)" && do_install_base=1 || true
     confirm_step "Install Docker (if missing)" && do_install_docker=1 || true
+    confirm_step "Install rocker (pip)" && do_install_rocker=1 || true
     confirm_step "Add user to docker group (recommended)" && do_docker_group=1 || true
     confirm_step "Configure host DDS tuning (rmem_max + lo multicast, sudo)" && do_dds_tuning=1 || true
 
@@ -656,6 +675,7 @@ EOF
 
     run_step_if "${do_install_base}" "Install base packages (apt)" install_base_packages
     run_step_if "${do_install_docker}" "Install Docker (if missing)" install_docker_if_missing
+    run_step_if "${do_install_rocker}" "Install rocker (pip)" install_rocker
     run_step_if "${do_docker_group}" "Add user to docker group (recommended)" ensure_docker_group
     run_step_if "${do_dds_tuning}" "Configure host DDS tuning (rmem_max + lo multicast)" setup_dds_tuning || true
 
@@ -1076,7 +1096,7 @@ doctor() {
         fi
     done
     if cmd_exists python3 && ! python3 -m pip --version >/dev/null 2>&1; then
-        _chk WARN "python3-pip not found (optional)" "Fix: sudo apt update && sudo apt install -y python3-pip"
+        _chk WARN "python3-pip not found (optional, needed for rocker)" "Fix: sudo apt update && sudo apt install -y python3-pip"
     fi
 
     echo ""
