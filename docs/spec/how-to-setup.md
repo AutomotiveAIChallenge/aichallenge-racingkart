@@ -64,10 +64,6 @@ GPU / CPU の切り替え:
   ```
   COMPOSE_FILE=docker-compose.yml:docker-compose.eval.yml
   ```
-- **WSL2（WSLg）**:
-  ```
-  COMPOSE_FILE=docker-compose.yml:docker-compose.eval.yml:docker-compose.wsl.yml
-  ```
 
 完了の目安: `.env` が存在し、`COMPOSE_FILE` の設定が自分の環境に合っている。
 

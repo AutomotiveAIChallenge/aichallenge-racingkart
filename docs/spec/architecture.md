@@ -38,7 +38,6 @@ aichallenge-racingkart/              # リポジトリルート（Docker ビル�
 ├── docker-compose.eval.yml          # eval サービス（autoware-simulator-evaluation）
 ├── docker-compose.gpu.yml           # GPU オーバーレイ（NVIDIA ランタイム付与）
 ├── docker-compose.sound.yml         # サウンドオーバーレイ（PulseAudio / PipeWire）
-├── docker-compose.wsl.yml           # WSL2 オーバーレイ（WSLg ソケット・デバイス差し替え）
 ├── Makefile                         # make ターゲット群（HOST_UID/GID, COMPOSE_FILE を一元管理）
 ├── setup.bash                       # 初回環境セットアップ（.env 生成・DDS ホストチューニング）
 └── create_submit_file.bash          # 提出 tar.gz 生成（aichallenge/workspace/src/aichallenge_submit/ をパック）
@@ -83,7 +82,7 @@ aichallenge-racingkart/              # リポジトリルート（Docker ビル�
 
 ### COMPOSE_FILE オーバーレイモデル
 
-GPU / サウンド / WSL2 の切り替えは `.env` の `COMPOSE_FILE` 変数で制御する。
+GPU / サウンド の切り替えは `.env` の `COMPOSE_FILE` 変数で制御する。
 `./setup.bash env` が `/dev/nvidia0` の存在を自動検出して正しい行を書き込む。
 
 | 構成 | `COMPOSE_FILE` の値 |
@@ -92,11 +91,9 @@ GPU / サウンド / WSL2 の切り替えは `.env` の `COMPOSE_FILE` 変数で
 | CPU + サウンドあり | `docker-compose.yml:docker-compose.eval.yml:docker-compose.sound.yml` |
 | GPU + サウンドなし | `docker-compose.yml:docker-compose.eval.yml:docker-compose.gpu.yml` |
 | GPU + サウンドあり | `docker-compose.yml:docker-compose.eval.yml:docker-compose.gpu.yml:docker-compose.sound.yml` |
-| WSL2 | `docker-compose.yml:docker-compose.eval.yml:docker-compose.wsl.yml` |
 
 `docker-compose.eval.yml` は `autoware-simulator-evaluation` サービスを提供するため、ローカル評価では常に必須。
-GPU / サウンド / WSL2 オーバーレイはそれぞれ対応サービスにのみ差分を適用するため単独では動作しない。
-`docker-compose.wsl.yml` と `docker-compose.sound.yml` は併用しない（WSL2 側で WSLg オーディオを別途配線するため）。
+GPU / サウンド オーバーレイはそれぞれ対応サービスにのみ差分を適用するため単独では動作しない。
 
 詳細は [compose-overlays.md](compose-overlays.md) を参照。
 

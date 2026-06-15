@@ -14,14 +14,13 @@
 
 - `host-uid-containers.md` — 全 dev サービスをホスト UID/GID で実行する設計（rocker 相当を docker compose の `user:` / `HOME=/tmp` / `group_add` で再現）。実装状況・差異（sound.yml は simulator のみ、group_add は数値 GID）も記載。
 - `architecture.md` — リポジトリ構成 / Compose トポロジ / ドメイン・Launch 階層 / 評価フローのテキスト図。
-- `compose-overlays.md` — `.env` の `COMPOSE_FILE` で GPU / サウンド / WSL2 を切り替えるオーバーレイ設計（複数 compose ファイル構成の正）。
+- `compose-overlays.md` — `.env` の `COMPOSE_FILE` で GPU / サウンド を切り替えるオーバーレイ設計（複数 compose ファイル構成の正）。
 - `docker-audio.md` — Linux（PipeWire / Pulse）で `simulator` コンテナからホストへ音声を出すための前提と手順。
 - `how-to-setup.md` — 環境構築（Ubuntu 22.04 想定）。`setup.bash` による対話一括セットアップから起動確認まで。
 - `introduction.md` — 初学者向け `make dev` / `make eval` 入門。ホストでコマンドを実行し docker compose で AWSIM と Autoware を動かす全体像。
 - `log-design.md` — `/output` 配下へログを集約する設計（compose / `run_evaluation.bash` の出力レイアウト）。
 - `makefile-target-naming.md` — Makefile ターゲットの `<service>-<command>` 命名ガイドライン。
 - `mpc-integration.md` — `multi_purpose_mpc_ros` のインテグレーション設計。
-- `windows-wsl2-setup.md` — WSL2（Ubuntu）上で `make` / `docker compose` を動かす手順と注意点。
 
 ## docs/guide/ 一覧
 

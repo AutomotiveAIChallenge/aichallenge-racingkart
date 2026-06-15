@@ -85,9 +85,6 @@ COMPOSE_FILE=docker-compose.yml:docker-compose.eval.yml:docker-compose.gpu.yml:d
 
 # ヘッドレス（サウンドなし）
 COMPOSE_FILE=docker-compose.yml:docker-compose.eval.yml
-
-# WSL2（WSLg使用）
-COMPOSE_FILE=docker-compose.yml:docker-compose.eval.yml:docker-compose.wsl.yml
 ```
 
 `/dev/nvidia0` の有無から GPU/CPU を自動判定します。

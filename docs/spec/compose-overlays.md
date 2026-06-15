@@ -4,10 +4,10 @@
 
 ## 現在の構成
 
-GPU/サウンド/WSL2 の有無は **`.env` の `COMPOSE_FILE` 変数**で切り替える。
+GPU/サウンド の有無は **`.env` の `COMPOSE_FILE` 変数**で切り替える。
 `docker compose` は `.env` を自動で読み込むため、`make` 経由でも直接 `docker compose up` でも同じオーバーレイが適用される。
 
-### ファイル構成（5 ファイル）
+### ファイル構成（4 ファイル）
 
 | ファイル | 役割 | 備考 |
 |---|---|---|
@@ -15,7 +15,6 @@ GPU/サウンド/WSL2 の有無は **`.env` の `COMPOSE_FILE` 変数**で切り
 | `docker-compose.eval.yml` | `autoware-simulator-evaluation` サービス（eval イメージに `/aichallenge` を内包済み） | 常時必須 |
 | `docker-compose.gpu.yml` | NVIDIA GPU オーバーレイ（`NVIDIA_VISIBLE_DEVICES=all`、`NVIDIA_DRIVER_CAPABILITIES=all`、`deploy.resources` nvidia） | NVIDIA 環境のみ |
 | `docker-compose.sound.yml` | PulseAudio（`simulator` サービスのみ） | 音声が必要な場合 |
-| `docker-compose.wsl.yml` | WSL2 オーバーレイ（存在しないホストデバイスの `!override` 除去、WSLg PulseAudio） | WSL2 環境のみ |
 
 `docker-compose.eval.yml` は必ず `COMPOSE_FILE` に含める（`autoware-simulator-evaluation` サービスがここに定義されているため）。
 
@@ -68,9 +67,6 @@ COMPOSE_FILE=docker-compose.yml:docker-compose.eval.yml:docker-compose.gpu.yml:d
 
 # ヘッドレス（サウンドなし）
 COMPOSE_FILE=docker-compose.yml:docker-compose.eval.yml
-
-# WSL2（WSLg 経由の PulseAudio；ホスト GPU デバイスなし）
-COMPOSE_FILE=docker-compose.yml:docker-compose.eval.yml:docker-compose.wsl.yml
 ```
 
 `./setup.bash env` を実行すると `/dev/nvidia0` の有無で GPU/CPU を自動判定し、`.env` を生成する。
@@ -104,7 +100,7 @@ compose の `user:` と `group_add:` がこれらを参照するため、`output
 | **C. デフォルトランタイム（daemon.json）** | `daemon.json` がホスト依存になる; 全参加者環境の統一が必要 |
 | **D. deploy 直接埋め込み** | GPU なしホストで `deploy.resources.reservations.devices` がエラー |
 | **E. CDI** | Docker 25+ 限定; CDI spec 事前生成が必要; 成熟度不足 |
-| **F. COMPOSE_FILE in .env** | `make` 不要でも `docker compose up` が正しく動作; 最小変更で 5 ファイル構成に拡張可能 ✓ |
+| **F. COMPOSE_FILE in .env** | `make` 不要でも `docker compose up` が正しく動作; 最小変更で 4 ファイル構成に拡張可能 ✓ |
 
 **採用理由:** F が最もシンプルで互換性が高い。`make` 経由・直接 `docker compose` 経由どちらでも同じオーバーレイが適用され、`setup.bash env` で自動生成できるため参加者の設定ミスも減らせる。
 

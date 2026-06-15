@@ -204,9 +204,6 @@ COMPOSE_FILE=docker-compose.yml:docker-compose.eval.yml:docker-compose.sound.yml
 
 # GPU（NVIDIA）+ サウンド
 COMPOSE_FILE=docker-compose.yml:docker-compose.eval.yml:docker-compose.gpu.yml:docker-compose.sound.yml
-
-# WSL2（WSLg）
-COMPOSE_FILE=docker-compose.yml:docker-compose.eval.yml:docker-compose.wsl.yml
 ```
 
 `./setup.bash env` を使うと GPU の有無を自動検出して `.env` を作成します。
