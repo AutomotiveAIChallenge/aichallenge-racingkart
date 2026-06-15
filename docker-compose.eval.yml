@@ -43,6 +43,9 @@ services:
       - ./vehicle/cyclonedds.xml:/opt/autoware/cyclonedds.xml
       - /tmp/.X11-unix:/tmp/.X11-unix:rw
       - ${XAUTHORITY:-/dev/null}:${XAUTHORITY:-/dev/null}:rw
+      # Resolve the host UID/GID to a name inside the container.
+      - /etc/passwd:/etc/passwd:ro
+      - /etc/group:/etc/group:ro
     devices:
       - /dev/dri
     working_dir: /aichallenge

@@ -35,6 +35,9 @@ x-autoware-base: &autoware-base
     - /tmp/.X11-unix:/tmp/.X11-unix:rw
     - /dev/dri:/dev/dri
     - ${XAUTHORITY:-/dev/null}:${XAUTHORITY:-/dev/null}:rw
+    # Resolve the host UID/GID to a name inside the container.
+    - /etc/passwd:/etc/passwd:ro
+    - /etc/group:/etc/group:ro
   devices:
     - /dev/dri
     - /dev/video0
@@ -51,6 +54,9 @@ x-autoware-rosbag-base: &autoware-rosbag-base
     - ./vehicle:/vehicle
     - ./vehicle/cyclonedds.xml:/opt/autoware/cyclonedds.xml
     - ${RACING_KART_INTERFACE_DIR:-/home/tier4/racing_kart_interface}:${RACING_KART_INTERFACE_DIR:-/home/tier4/racing_kart_interface}:ro
+    # Resolve the host UID/GID to a name inside the container.
+    - /etc/passwd:/etc/passwd:ro
+    - /etc/group:/etc/group:ro
     - /tmp/.X11-unix:/tmp/.X11-unix:rw
     # Audio (PipeWire/Pulse) socket access on the host
     - /run/user:/run/user:rw
@@ -84,6 +90,9 @@ x-racing_kart_interface-base: &racing_kart_interface-base
     - /dev/gnss:/dev/gnss
     - /tmp/.X11-unix:/tmp/.X11-unix:rw
     - /dev/dri:/dev/dri
+    # Resolve the host UID/GID to a name inside the container.
+    - /etc/passwd:/etc/passwd:ro
+    - /etc/group:/etc/group:ro
   devices:
     - /dev/dri
   group_add:

@@ -1,10 +1,8 @@
 #!/bin/bash
-# Common container initialization: network tuning + ROS workspace setup.
+# Common container initialization: ROS workspace setup.
 # Used as ENTRYPOINT in Dockerfile and sourced from .bashrc for rocker sessions.
-
-# --- DDS network tuning (multicast on loopback + large receive buffer) ---
-ip link set multicast on lo || true
-sysctl -w net.core.rmem_max=2147483647 >/dev/null || true
+# DDS host tuning (lo multicast + net.core.rmem_max) is applied on the HOST via
+# `./setup.bash network tune`; containers run as the host user and cannot set it.
 
 # --- Source ROS workspace (skip when not yet built, e.g. first dev session) ---
 if [ -f /aichallenge/workspace/install/setup.bash ]; then

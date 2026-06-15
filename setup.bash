@@ -247,7 +247,6 @@ Usage:
   ./setup.bash network if [name]
                             # add network interface to cyclonedds.xml
   ./setup.bash network if     # remove all ai-challenge-added interfaces from cyclonedds.xml
-                            # (./setup.bash dds / network-if remain as deprecated aliases)
   ./setup.bash bootstrap --yes
                             # non-interactive bootstrap (auto-yes)
   ./setup.bash bootstrap --temp-dir [--keep-dir]
@@ -951,12 +950,10 @@ ensure_env() {
         log "${OK} .env created (CPU + sound)"
     fi
 
-    # Persist resolved host GIDs so a direct `docker compose up` (no make) joins the
-    # host's render/video/input groups (/dev/dri, /dev/input) and dialout (/dev/vcu
-    # serial). The Makefile resolves these via getent for the make path; compose alone
-    # would otherwise fall back to the hardcoded group_add guesses in the yml. docker
-    # compose prioritizes the process env (Makefile export) over .env, so the make path
-    # still wins when both are set.
+    # Persist resolved host GIDs into .env (single source of truth) so both `make`
+    # and a direct `docker compose up` join the host's render/video/input groups
+    # (/dev/dri, /dev/input) and dialout (/dev/vcu serial). Without this, compose
+    # falls back to the hardcoded group_add guesses in the yml.
     {
         echo ""
         echo "# Host GIDs for group_add (resolved at .env creation; for direct 'docker compose up')."
@@ -1347,16 +1344,6 @@ main() {
             exit 2
             ;;
         esac
-        ;;
-    # Deprecated aliases (kept for backward compatibility).
-    dds)
-        warn "${INFO} './setup.bash dds' is deprecated; use './setup.bash network tune'"
-        setup_dds_tuning
-        ;;
-    network-if)
-        warn "${INFO} './setup.bash network-if' is deprecated; use './setup.bash network if'"
-        shift
-        add_network_interface "$@"
         ;;
     download)
         case "${2-}" in
