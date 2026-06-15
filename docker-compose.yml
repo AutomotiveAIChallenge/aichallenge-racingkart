@@ -141,3 +141,41 @@ services:
   rviz2:
     <<: *autoware-base 
     command: ["bash", "-lc", "exec /aichallenge/utils/run_rviz.bash remote"]
+
+  autoware-simulator-evaluation:
+    image: "aichallenge-2025-eval"
+    privileged: true
+    pull_policy: never
+    network_mode: host
+    stop_grace_period: 10s
+    user: "${HOST_UID:-1000}:${HOST_GID:-1000}"
+    group_add:
+      - "${HOST_GID_RENDER:-110}"
+      - "${HOST_GID_VIDEO:-44}"
+      - "${HOST_GID_INPUT:-107}"
+    environment:
+      - HOME=/tmp
+      - DISPLAY=${DISPLAY}
+      - USER=${USER}
+      - ROS_DISTRO=humble
+      - XAUTHORITY=${XAUTHORITY:-}
+      - QT_X11_NO_MITSHM=1
+      - TZ=Asia/Tokyo
+      - SIM_MODE=${SIM_MODE:-}
+      - COLCON_TRACE=${COLCON_TRACE:-}
+      - HOST_UID=${HOST_UID:-}
+      - HOST_GID=${HOST_GID:-}
+      - ROS_DOMAIN_ID=${ROS_DOMAIN_ID:-1}
+    volumes:
+      - ./output:${OUTPUT_ROOT:-/output}
+      # /aichallenge is baked into the eval image; intentionally not mounted here
+      - ./vehicle/cyclonedds.xml:/opt/autoware/cyclonedds.xml
+      - /tmp/.X11-unix:/tmp/.X11-unix:rw
+      - ${XAUTHORITY:-/dev/null}:${XAUTHORITY:-/dev/null}:rw
+      # Resolve the host UID/GID to a name inside the container.
+      - /etc/passwd:/etc/passwd:ro
+      - /etc/group:/etc/group:ro
+    devices:
+      - /dev/dri
+    working_dir: /aichallenge
+    command: ["bash", "-lc", "exec /aichallenge/run_evaluation.bash"]

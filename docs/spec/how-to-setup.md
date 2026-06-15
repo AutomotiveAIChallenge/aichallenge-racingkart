@@ -48,21 +48,21 @@ curl -fsSL "https://raw.githubusercontent.com/AutomotiveAIChallenge/aichallenge-
 
 GPU の有無を自動検出して `.env` を作成します。手動で編集したい場合は `cp .env.example .env` でコピーしてから修正してください。
 
-**`docker-compose.eval.yml` は `COMPOSE_FILE` に必ず含めてください**（eval サービスの定義がここにあります）。
+eval サービス（`autoware-simulator-evaluation`）はベースの `docker-compose.yml` に含まれます。
 
 GPU / CPU の切り替え:
 
 - **CPU + サウンド（デフォルト）**:
   ```
-  COMPOSE_FILE=docker-compose.yml:docker-compose.eval.yml:docker-compose.sound.yml
+  COMPOSE_FILE=docker-compose.yml:docker-compose.sound.yml
   ```
 - **GPU（NVIDIA）+ サウンド**（GPU あり環境ではこちら）:
   ```
-  COMPOSE_FILE=docker-compose.yml:docker-compose.eval.yml:docker-compose.gpu.yml:docker-compose.sound.yml
+  COMPOSE_FILE=docker-compose.yml:docker-compose.gpu.yml:docker-compose.sound.yml
   ```
 - **ヘッドレス（サウンドなし）**:
   ```
-  COMPOSE_FILE=docker-compose.yml:docker-compose.eval.yml
+  COMPOSE_FILE=docker-compose.yml
   ```
 
 完了の目安: `.env` が存在し、`COMPOSE_FILE` の設定が自分の環境に合っている。

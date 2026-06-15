@@ -205,7 +205,7 @@ AWSIM はこのトピックを受けてカートを動かします。全制御�
 | ドキュメント | 内容 |
 |---|---|
 | [evaluation-interface.md](evaluation-interface.md) | 評価 FSM（`autostart_orchestrator` / `awsim_state_manager`）、結果 JSON スキーマ、AWS 評価パイプライン |
-| [../spec/compose-overlays.md](../spec/compose-overlays.md) | `COMPOSE_FILE` の GPU/CPU/headless 選択肢と `docker-compose.eval.yml` 必須の根拠 |
+| [../spec/compose-overlays.md](../spec/compose-overlays.md) | `COMPOSE_FILE` の GPU/CPU/headless 選択肢 |
 | [../spec/mpc-integration.md](../spec/mpc-integration.md) | MPC 制御器（`multi_purpose_mpc_ros`）の統合仕様 |
 | [../spec/makefile-target-naming.md](../spec/makefile-target-naming.md) | make ターゲット命名規約 |
 | [../README.md](../README.md) | ドキュメント命名・分類規約 |

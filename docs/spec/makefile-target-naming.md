@@ -37,11 +37,11 @@ GPU / 音声の構成は `.env` の `COMPOSE_FILE` で指定します:
 
 | 構成 | `COMPOSE_FILE` の値 |
 |------|---------------------|
-| CPU + 音声（デフォルト） | `docker-compose.yml:docker-compose.eval.yml:docker-compose.sound.yml` |
-| GPU + 音声 | `docker-compose.yml:docker-compose.eval.yml:docker-compose.gpu.yml:docker-compose.sound.yml` |
-| ヘッドレス（音声なし） | `docker-compose.yml:docker-compose.eval.yml` |
+| CPU + 音声（デフォルト） | `docker-compose.yml:docker-compose.sound.yml` |
+| GPU + 音声 | `docker-compose.yml:docker-compose.gpu.yml:docker-compose.sound.yml` |
+| ヘッドレス（音声なし） | `docker-compose.yml` |
 
-`docker-compose.yml` は CPU 前提のベース。`docker-compose.eval.yml` は常に含めます。
+`docker-compose.yml` は CPU 前提のベース。eval サービスも含みます。
 
 ## 3. service の命名
 

@@ -196,14 +196,14 @@ SIM_MODE=gate1 make eval    # 安全ゲートシナリオ など
 
 ## GPU / CPU の切り替え
 
-`.env` の `COMPOSE_FILE` で選択します（`docker-compose.eval.yml` は必須）。
+`.env` の `COMPOSE_FILE` で選択します。
 
 ```bash
 # CPU + サウンド（デフォルト）
-COMPOSE_FILE=docker-compose.yml:docker-compose.eval.yml:docker-compose.sound.yml
+COMPOSE_FILE=docker-compose.yml:docker-compose.sound.yml
 
 # GPU（NVIDIA）+ サウンド
-COMPOSE_FILE=docker-compose.yml:docker-compose.eval.yml:docker-compose.gpu.yml:docker-compose.sound.yml
+COMPOSE_FILE=docker-compose.yml:docker-compose.gpu.yml:docker-compose.sound.yml
 ```
 
 `./setup.bash env` を使うと GPU の有無を自動検出して `.env` を作成します。

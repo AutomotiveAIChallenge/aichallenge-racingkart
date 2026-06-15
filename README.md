@@ -39,7 +39,6 @@ Host (you)
         │     ├─ zenoh              (Zenoh ブリッジ)
         │     ├─ driver             (実車ドライバ)
         │     └─ rviz2              (可視化)
-        ├─ docker-compose.eval.yml  (常時必須: autoware-simulator-evaluation)
         ├─ docker-compose.gpu.yml   (NVIDIA GPU オーバーレイ、オプション)
         └─ docker-compose.sound.yml (PulseAudio / simulator のみ、オプション)
         → output/ にログ・結果を出力（最新結果は output/latest/d<domain>/）

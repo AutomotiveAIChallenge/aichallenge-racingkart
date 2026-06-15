@@ -74,17 +74,17 @@ make down
 
 ### GPU を使う / 使わない（詰まったらまず CPU）
 
-`.env` の `COMPOSE_FILE` を編集します。**`docker-compose.eval.yml` は必ず含めてください**（eval サービスがここで定義されています）。
+`.env` の `COMPOSE_FILE` を編集します。eval サービスはベースの `docker-compose.yml` に含まれます。
 
 ```bash
 # CPU + サウンド（デフォルト）
-COMPOSE_FILE=docker-compose.yml:docker-compose.eval.yml:docker-compose.sound.yml
+COMPOSE_FILE=docker-compose.yml:docker-compose.sound.yml
 
 # GPU（NVIDIA）+ サウンド（GPU環境ではこちらを選択）
-COMPOSE_FILE=docker-compose.yml:docker-compose.eval.yml:docker-compose.gpu.yml:docker-compose.sound.yml
+COMPOSE_FILE=docker-compose.yml:docker-compose.gpu.yml:docker-compose.sound.yml
 
 # ヘッドレス（サウンドなし）
-COMPOSE_FILE=docker-compose.yml:docker-compose.eval.yml
+COMPOSE_FILE=docker-compose.yml
 ```
 
 `/dev/nvidia0` の有無から GPU/CPU を自動判定します。

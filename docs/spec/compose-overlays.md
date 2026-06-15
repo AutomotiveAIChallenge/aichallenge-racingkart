@@ -12,11 +12,10 @@ GPU/サウンド の有無は **`.env` の `COMPOSE_FILE` 変数**で切り替�
 | ファイル | 役割 | 備考 |
 |---|---|---|
 | `docker-compose.yml` | ベース定義（全サービス、YAML anchor `x-autoware-base`） | 常時必須 |
-| `docker-compose.eval.yml` | `autoware-simulator-evaluation` サービス（eval イメージに `/aichallenge` を内包済み） | 常時必須 |
 | `docker-compose.gpu.yml` | NVIDIA GPU オーバーレイ（`NVIDIA_VISIBLE_DEVICES=all`、`NVIDIA_DRIVER_CAPABILITIES=all`、`deploy.resources` nvidia） | NVIDIA 環境のみ |
 | `docker-compose.sound.yml` | PulseAudio（`simulator` サービスのみ） | 音声が必要な場合 |
 
-`docker-compose.eval.yml` は必ず `COMPOSE_FILE` に含める（`autoware-simulator-evaluation` サービスがここに定義されているため）。
+`autoware-simulator-evaluation` サービスはベースの `docker-compose.yml` に含まれる（別ファイル不要）。
 
 ### `x-autoware-base` アンカーの主要設定
 
@@ -49,7 +48,7 @@ volumes: `./output:/output`, `./aichallenge:/aichallenge`, `./remote:/remote`, `
 | `driver` | 実車ドライバスタック（racing_kart_interface） |
 | `rviz2` | RViz2 可視化 |
 
-eval サービス `autoware-simulator-evaluation`（image: `aichallenge-2025-eval`）は `docker-compose.eval.yml` に定義する。
+eval サービス `autoware-simulator-evaluation`（image: `aichallenge-2025-eval`）は `docker-compose.yml` に定義する。
 このサービスは `/aichallenge` をマウントせず、イメージに焼き込まれた状態で `aichallenge/run_evaluation.bash` を実行する。
 
 ---
@@ -60,13 +59,13 @@ eval サービス `autoware-simulator-evaluation`（image: `aichallenge-2025-eva
 
 ```bash
 # CPU + サウンド（デフォルト）
-COMPOSE_FILE=docker-compose.yml:docker-compose.eval.yml:docker-compose.sound.yml
+COMPOSE_FILE=docker-compose.yml:docker-compose.sound.yml
 
 # GPU（NVIDIA）+ サウンド
-COMPOSE_FILE=docker-compose.yml:docker-compose.eval.yml:docker-compose.gpu.yml:docker-compose.sound.yml
+COMPOSE_FILE=docker-compose.yml:docker-compose.gpu.yml:docker-compose.sound.yml
 
 # ヘッドレス（サウンドなし）
-COMPOSE_FILE=docker-compose.yml:docker-compose.eval.yml
+COMPOSE_FILE=docker-compose.yml
 ```
 
 `./setup.bash env` を実行すると `/dev/nvidia0` の有無で GPU/CPU を自動判定し、`.env` を生成する。

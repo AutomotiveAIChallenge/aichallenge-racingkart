@@ -48,7 +48,7 @@ x-autoware-base: &autoware-base
 - `HOME=/tmp` — `/etc/passwd` にエントリのない UID で起動すると HOME が `/` になり、ROS（`~/.ros`）・colcon・Qt（rviz）が書き込みエラーを起こす。コンテナごとに独立した `/tmp` を HOME にして回避する。
 - `group_add` — `/dev/dri`（render/video）と `/dev/input` のデバイスファイルへアクセスするため。`privileged: true` により cgroup デバイス制限はないが、ファイルパーミッション（660）対策として補助グループを付与する。
 
-`docker-compose.eval.yml` の `autoware-simulator-evaluation` サービスは `x-autoware-base` を継承せず、`user:`/`HOME=/tmp`/`group_add` を同じ値で直接定義している（アンカー継承なし）。このサービスも `user:` で動くが、`fix_ownership.bash` が非 root 時にスキップするため所有者問題は起きない。
+`docker-compose.yml` の `autoware-simulator-evaluation` サービスは `x-autoware-base` を継承せず、`user:`/`HOME=/tmp`/`group_add` を同じ値で直接定義している（アンカー継承なし）。このサービスも `user:` で動くが、`fix_ownership.bash` が非 root 時にスキップするため所有者問題は起きない。
 
 `x-racing_kart_interface-base` は既存の `group_add: [dialout]` に `video`/`render` を統合し、`user:` と `HOME=/tmp` を追加する（`input` は追加していない）。
 

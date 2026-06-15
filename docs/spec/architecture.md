@@ -34,8 +34,7 @@ aichallenge-racingkart/              # リポジトリルート（Docker ビル�
 ├── submit/                          # 提出物配置先（評価 tar.gz を置く。git 管理外）
 ├── output/                          # 評価成果物出力先（git 管理外）
 ├── Dockerfile                       # dev / eval 2 ステージ定義（common ステージ共有）
-├── docker-compose.yml               # ベース Compose 定義（全 dev サービス）
-├── docker-compose.eval.yml          # eval サービス（autoware-simulator-evaluation）
+├── docker-compose.yml               # ベース Compose 定義（全サービス、eval 含む）
 ├── docker-compose.gpu.yml           # GPU オーバーレイ（NVIDIA ランタイム付与）
 ├── docker-compose.sound.yml         # サウンドオーバーレイ（PulseAudio / PipeWire）
 ├── Makefile                         # make ターゲット群（HOST_UID/GID, COMPOSE_FILE を一元管理）
@@ -66,7 +65,7 @@ aichallenge-racingkart/              # リポジトリルート（Docker ビル�
 
 ### Compose サービス一覧
 
-ベース定義（`docker-compose.yml`）と eval 定義（`docker-compose.eval.yml`）のサービス。
+`docker-compose.yml` が定義する全サービス。
 全サービスは `network_mode: host`（DDS = CycloneDDS、ホストネットワーク直接利用）。
 
 | サービス名 | イメージ | 用途 | エントリ |
@@ -78,7 +77,7 @@ aichallenge-racingkart/              # リポジトリルート（Docker ビル�
 | `zenoh` | `aichallenge-2025-dev` | Zenoh ブリッジ（実車連携用。実車環境でのみ使用） | `zenoh-bridge-ros2dds` |
 | `driver` | `ghcr.io/tier4/racing_kart_interface:latest-experiment` | 実車ドライバスタック（racing_kart_interface） | `vehicle` モード |
 | `rviz2` | `aichallenge-2025-dev` | RViz2 リモートビジュアライゼーション | `run_rviz.bash remote` |
-| `autoware-simulator-evaluation` | `aichallenge-2025-eval` | 封入評価実行（eval.yml で定義） | `run_evaluation.bash` |
+| `autoware-simulator-evaluation` | `aichallenge-2025-eval` | 封入評価実行 | `run_evaluation.bash` |
 
 ### COMPOSE_FILE オーバーレイモデル
 
@@ -87,12 +86,12 @@ GPU / サウンド の切り替えは `.env` の `COMPOSE_FILE` 変数で制御�
 
 | 構成 | `COMPOSE_FILE` の値 |
 |---|---|
-| CPU + サウンドなし（ヘッドレス） | `docker-compose.yml:docker-compose.eval.yml` |
-| CPU + サウンドあり | `docker-compose.yml:docker-compose.eval.yml:docker-compose.sound.yml` |
-| GPU + サウンドなし | `docker-compose.yml:docker-compose.eval.yml:docker-compose.gpu.yml` |
-| GPU + サウンドあり | `docker-compose.yml:docker-compose.eval.yml:docker-compose.gpu.yml:docker-compose.sound.yml` |
+| CPU + サウンドなし（ヘッドレス） | `docker-compose.yml` |
+| CPU + サウンドあり | `docker-compose.yml:docker-compose.sound.yml` |
+| GPU + サウンドなし | `docker-compose.yml:docker-compose.gpu.yml` |
+| GPU + サウンドあり | `docker-compose.yml:docker-compose.gpu.yml:docker-compose.sound.yml` |
 
-`docker-compose.eval.yml` は `autoware-simulator-evaluation` サービスを提供するため、ローカル評価では常に必須。
+`autoware-simulator-evaluation` サービスはベースの `docker-compose.yml` に含まれる。
 GPU / サウンド オーバーレイはそれぞれ対応サービスにのみ差分を適用するため単独では動作しない。
 
 詳細は [compose-overlays.md](compose-overlays.md) を参照。

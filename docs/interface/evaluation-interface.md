@@ -186,7 +186,7 @@ AWS `result_update` Lambda は `vehicles[].vehicle_number` と `vehicles[].final
 ## 6. 関連ドキュメント
 
 - ログ設計（`/output` 詳細・ローテーション方針・rosbag 安全停止）: [`../spec/log-design.md`](../spec/log-design.md)
-- Compose オーバーレイ選択（`COMPOSE_FILE`、`docker-compose.eval.yml` 常時必須）: [`../spec/compose-overlays.md`](../spec/compose-overlays.md)
+- Compose オーバーレイ選択（`COMPOSE_FILE` の GPU/CPU/headless）: [`../spec/compose-overlays.md`](../spec/compose-overlays.md)
 - Makefile ターゲット命名規約: [`../spec/makefile-target-naming.md`](../spec/makefile-target-naming.md)
 - 参加者インターフェース契約（センサ入力 / 制御出力 / 提出物フォーマット）: [`participant-interface.md`](./participant-interface.md)
 - ドキュメント運用方針: [`../README.md`](../README.md)
