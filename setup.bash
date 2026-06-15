@@ -417,7 +417,14 @@ ensure_docker_group() {
     log "${INFO} Adding ${USER-} to docker group"
     sudo_refresh
     sudo usermod -aG docker "${USER-}"
-    warn "${WARN} Docker group takes effect after re-login (or reboot)."
+    warn "${WARN} Docker group takes effect after re-login."
+    if [ "${SETUP_ASSUME_YES}" = "1" ]; then
+        warn "${INFO} Non-interactive mode: continuing, but docker commands may fail until re-login."
+        return 0
+    fi
+    warn "${INFO} To apply: log out and log back in, or run 'newgrp docker' in this terminal."
+    warn "${INFO} Then re-run the same setup command to continue."
+    exit 0
 }
 
 clone_or_update_repo() {
