@@ -59,8 +59,8 @@ x-autoware-rosbag-base: &autoware-rosbag-base
     - /etc/passwd:/etc/passwd:ro
     - /etc/group:/etc/group:ro
     - /tmp/.X11-unix:/tmp/.X11-unix:rw
-    # Audio (PipeWire/Pulse) socket access on the host
-    - /run/user:/run/user:rw
+    # No audio mount: rosbag recording needs no PulseAudio, and the sound overlay
+    # patches only the `simulator` service.
     - /dev/dri:/dev/dri
     - ${XAUTHORITY:-/dev/null}:${XAUTHORITY:-/dev/null}:rw
 
@@ -133,8 +133,8 @@ services:
       - ./output:${OUTPUT_ROOT:-/output}
       - ./vehicle/cyclonedds.xml:/opt/autoware/cyclonedds.xml
       - /tmp/.X11-unix:/tmp/.X11-unix:rw
-      # Audio (PipeWire/Pulse) socket access on the host
-      - /run/user:/run/user:rw
+      # No audio mount: the sound overlay patches only the `simulator` service, so
+      # eval has no PULSE_SERVER and a /run/user bind here would be dead weight.
       - /dev/dri:/dev/dri
       - ${XAUTHORITY:-/dev/null}:${XAUTHORITY:-/dev/null}:rw
       # Resolve the host UID/GID to a name inside the container.

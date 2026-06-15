@@ -957,19 +957,25 @@ ensure_env() {
         log "${OK} .env created (CPU + sound)"
     fi
 
-    # Persist resolved host GIDs into .env (single source of truth) so both `make`
-    # and a direct `docker compose up` join the host's render/video/input groups
-    # (/dev/dri, /dev/input) and dialout (/dev/vcu serial). Without this, compose
-    # falls back to the hardcoded group_add guesses in the yml.
+    # Persist the resolved host UID/GID and group GIDs into .env (single source of
+    # truth) so a direct `docker compose up` (without `make`) runs containers as the
+    # host user — otherwise compose falls back to 1000:1000, which produces
+    # root/other-owned outputs and a wrong PulseAudio socket path on hosts where the
+    # user is not UID 1000. `make` still exports HOST_UID/HOST_GID from id and those
+    # env values override these .env defaults.
     {
         echo ""
-        echo "# Host GIDs for group_add (resolved at .env creation; for direct 'docker compose up')."
+        echo "# Host user identity for container 'user:' (resolved at .env creation;"
+        echo "# for direct 'docker compose up'. 'make' exports id -u/-g and overrides these)."
+        echo "HOST_UID=$(id -u)"
+        echo "HOST_GID=$(id -g)"
+        echo "# Host GIDs for group_add (/dev/dri, /dev/input, /dev/vcu serial)."
         for grp in render video input dialout; do
             gid="$(getent group "${grp}" | cut -d: -f3)"
             [ -n "${gid}" ] && echo "HOST_GID_${grp^^}=${gid}"
         done
     } >>.env
-    log "${OK} Persisted host GIDs to .env (render/video/input/dialout)"
+    log "${OK} Persisted host UID/GID + group GIDs to .env"
 }
 
 # --- Host DDS tuning (CycloneDDS): persist rmem_max + multicast on lo ---

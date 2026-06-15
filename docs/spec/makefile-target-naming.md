@@ -108,3 +108,8 @@ Bad（語順が逆・曖昧・存在しない）:
 
 互換 alias を残さずにターゲット名を整理する場合があります。
 `README.md` / `docs/spec/` と `docker-compose.yml` の整合を優先してください。
+
+### 削除・変更されたターゲット
+
+- `down2` / `down3` / `down4`（旧: `down` への互換 alias）は削除しました。`make down` が
+  プロジェクト 1〜4 を含め全コンテナを停止するため、`make down` に一本化してください。

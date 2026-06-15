@@ -1,6 +1,7 @@
 #!/bin/bash
 # Common container initialization: ROS workspace setup.
-# Used as ENTRYPOINT in Dockerfile and sourced from .bashrc for rocker sessions.
+# Used as ENTRYPOINT in Dockerfile and sourced from /etc/skel/.bashrc for any
+# interactive shell session (rocker, docker_run.sh, docker_exec.sh).
 # DDS host tuning (lo multicast + net.core.rmem_max) is applied on the HOST via
 # `./setup.bash network tune`; containers run as the host user and cannot set it.
 
