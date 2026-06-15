@@ -616,7 +616,7 @@ EOF
     log_step "Install base packages (apt)"
     log_step "Install Docker (if missing)"
     log_step "Add user to docker group (recommended)"
-    log_step "Configure host DDS tuning (rmem_max + lo multicast) [always]"
+    log_step "Configure host DDS tuning (rmem_max + lo multicast, sudo)"
     log_step "Clone/update repository (branch=${branch}) -> ${dest_dir}"
     log_step "Repo doctor: ./setup.bash doctor (requires repo)"
     log_step "Create .env (GPU/CPU auto-detect)"
@@ -629,8 +629,7 @@ EOF
     confirm_step "Install base packages (apt)" && do_install_base=1 || true
     confirm_step "Install Docker (if missing)" && do_install_docker=1 || true
     confirm_step "Add user to docker group (recommended)" && do_docker_group=1 || true
-    # DDS host tuning is mandatory for CycloneDDS on lo; always run (no prompt).
-    do_dds_tuning=1
+    confirm_step "Configure host DDS tuning (rmem_max + lo multicast, sudo)" && do_dds_tuning=1 || true
 
     local repo_exists_now=0
     is_repo_root_dir "${dest_dir}" && repo_exists_now=1 || true
@@ -658,7 +657,7 @@ EOF
     run_step_if "${do_install_base}" "Install base packages (apt)" install_base_packages
     run_step_if "${do_install_docker}" "Install Docker (if missing)" install_docker_if_missing
     run_step_if "${do_docker_group}" "Add user to docker group (recommended)" ensure_docker_group
-    run_step_if "${do_dds_tuning}" "Configure host DDS tuning (rmem_max + lo multicast)" setup_dds_tuning
+    run_step_if "${do_dds_tuning}" "Configure host DDS tuning (rmem_max + lo multicast)" setup_dds_tuning || true
 
     # Best-effort verification (avoid hard-fail on network issues)
     if cmd_exists docker; then
@@ -917,14 +916,36 @@ ensure_env() {
     cp .env.example .env
 
     if [ -e /dev/nvidia0 ]; then
-        sed -i \
-            -e 's|^COMPOSE_FILE=docker-compose.yml:docker-compose.eval.yml:docker-compose.sound.yml$|# COMPOSE_FILE=docker-compose.yml:docker-compose.eval.yml:docker-compose.sound.yml|' \
-            -e 's|^# COMPOSE_FILE=docker-compose.yml:docker-compose.eval.yml:docker-compose.gpu.yml:docker-compose.sound.yml$|COMPOSE_FILE=docker-compose.yml:docker-compose.eval.yml:docker-compose.gpu.yml:docker-compose.sound.yml|' \
+        # Activate the GPU overlay independently of the exact COMPOSE_FILE wording
+        # in .env.example: comment any active non-GPU line, then uncomment the GPU one.
+        sed -i -E \
+            -e '/^COMPOSE_FILE=/{/gpu\.yml/!s/^/# /}' \
+            -e '/^#[[:space:]]*COMPOSE_FILE=.*gpu\.yml/s/^#[[:space:]]*//' \
             .env
-        log "${OK} .env created (GPU + sound)"
+        if grep -qE '^COMPOSE_FILE=.*gpu\.yml' .env; then
+            log "${OK} .env created (GPU + sound)"
+        else
+            warn "${WARN} GPU detected but could not activate the GPU overlay line in .env (did .env.example change?). Edit COMPOSE_FILE to include docker-compose.gpu.yml."
+        fi
     else
         log "${OK} .env created (CPU + sound)"
     fi
+
+    # Persist resolved host GIDs so a direct `docker compose up` (no make) joins the
+    # host's render/video/input groups (/dev/dri, /dev/input) and dialout (/dev/vcu
+    # serial). The Makefile resolves these via getent for the make path; compose alone
+    # would otherwise fall back to the hardcoded group_add guesses in the yml. docker
+    # compose prioritizes the process env (Makefile export) over .env, so the make path
+    # still wins when both are set.
+    {
+        echo ""
+        echo "# Host GIDs for group_add (resolved at .env creation; for direct 'docker compose up')."
+        for grp in render video input dialout; do
+            gid="$(getent group "${grp}" | cut -d: -f3)"
+            [ -n "${gid}" ] && echo "HOST_GID_${grp^^}=${gid}"
+        done
+    } >>.env
+    log "${OK} Persisted host GIDs to .env (render/video/input/dialout)"
 }
 
 # --- Host DDS tuning (CycloneDDS): persist rmem_max + multicast on lo ---
@@ -1293,7 +1314,7 @@ main() {
         #   network tune       persist DDS host tuning (rmem_max + lo multicast)
         #   network if [name]  add/remove cyclonedds.xml interfaces
         case "${2-}" in
-        tune | "")
+        tune)
             setup_dds_tuning
             ;;
         if)

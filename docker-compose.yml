@@ -105,7 +105,6 @@ services:
 
   simulator:
     <<: *autoware-base
-    working_dir: ${LOG_DIR:-/output}
     command: ["bash", "-lc", "exec /aichallenge/run_simulator.bash"]
 
   autoware-command:

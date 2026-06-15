@@ -4,8 +4,29 @@ target="${1}"
 device="${2}"
 device_drivers="/dev/dri"
 
-# No rocker --x11 (it clobbers XAUTHORITY); mount X socket + gdm Xauthority like compose.
-x11_volume="/tmp/.X11-unix:/tmp/.X11-unix /run/user/1000/gdm/Xauthority:/run/user/1000/gdm/Xauthority"
+# Legacy single-shot path. rocker is no longer installed by ./setup.bash (use make dev/eval).
+# Install manually if you need this script: pip3 install --user rocker
+if ! command -v rocker >/dev/null 2>&1; then
+    echo "[ERROR] rocker not found. This is a legacy path; prefer 'make dev' / 'make eval'."
+    echo "[ERROR] To use docker_run.sh, install rocker manually: pip3 install --user rocker"
+    exit 1
+fi
+
+# No rocker --x11 (it clobbers XAUTHORITY); mount X socket + Xauthority like compose.
+# Resolve Xauthority UID-independently: prefer an exported $XAUTHORITY, else the
+# per-UID gdm cookie, else ~/.Xauthority. Only bind/--env it when the file exists.
+x11_volume="/tmp/.X11-unix:/tmp/.X11-unix"
+xauth_opts=""
+uid="$(id -u)"
+xauthority="${XAUTHORITY-}"
+[ -z "${xauthority}" ] && [ -f "/run/user/${uid}/gdm/Xauthority" ] && xauthority="/run/user/${uid}/gdm/Xauthority"
+[ -z "${xauthority}" ] && [ -f "${HOME}/.Xauthority" ] && xauthority="${HOME}/.Xauthority"
+if [ -n "${xauthority}" ] && [ -f "${xauthority}" ]; then
+    x11_volume="${x11_volume} ${xauthority}:${xauthority}"
+    xauth_opts="--env XAUTHORITY=${xauthority}"
+else
+    echo "[WARN] No Xauthority file found; X11 apps (RViz/AWSIM) may fail. Try: export XAUTHORITY=~/.Xauthority"
+fi
 
 case "${target}" in
 "eval")
@@ -52,4 +73,4 @@ mkdir -p output/docker output/latest
 ln -sfn "${PWD}/${LOG_FILE}" output/latest/docker_run.log
 
 # shellcheck disable=SC2086
-rocker ${opts} --devices ${device_drivers} --user --pulse ${group_add_opts} --env DISPLAY --env QT_X11_NO_MITSHM=1 --env XAUTHORITY=/run/user/1000/gdm/Xauthority --net host --privileged --name "aichallenge-2025-$(date "+%Y-%m-%d-%H-%M-%S")" --volume ${volume} -- "aichallenge-2025-${target}" bash 2>&1 | tee "$LOG_FILE"
+rocker ${opts} --devices ${device_drivers} --user --pulse ${group_add_opts} --env DISPLAY --env QT_X11_NO_MITSHM=1 ${xauth_opts} --net host --privileged --name "aichallenge-2025-$(date "+%Y-%m-%d-%H-%M-%S")" --volume ${volume} -- "aichallenge-2025-${target}" bash 2>&1 | tee "$LOG_FILE"
