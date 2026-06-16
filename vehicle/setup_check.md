@@ -157,8 +157,6 @@ git branch --show-current
 - ✅ `docker-compose.yml exists`
 - ℹ️ `Current git branch: experiment`
 
-> **注意:** 音声付き評価環境には `docker-compose.sound.yml` も必要です。デフォルトの `.env` では `COMPOSE_FILE=docker-compose.yml:docker-compose.sound.yml` が設定されているため、`docker compose` をそのまま実行すれば全オーバーレイが読み込まれます。`-f docker-compose.yml` を単独で指定すると sound オーバーレイが無効になるので注意してください。
-
 ---
 
 ## 出力例

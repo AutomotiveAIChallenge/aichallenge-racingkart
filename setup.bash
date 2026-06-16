@@ -750,6 +750,7 @@ Repo dir:
 Common commands:
   make autoware-build
   make dev        # ROS_DOMAIN_ID is read from .env
+  make down_all   # stop/remove all docker containers (sudo)
 EOF
 }
 
@@ -942,47 +943,28 @@ ensure_env() {
     cp .env.example .env
 
     if [ -e /dev/nvidia0 ]; then
-        # Activate the GPU overlay independently of the exact COMPOSE_FILE wording
-        # in .env.example: comment any active non-GPU line, then uncomment the GPU one.
         sed -i -E \
             -e '/^COMPOSE_FILE=/{/gpu\.yml/!s/^/# /}' \
             -e '/^#[[:space:]]*COMPOSE_FILE=.*gpu\.yml/s/^#[[:space:]]*//' \
             .env
         if grep -qE '^COMPOSE_FILE=.*gpu\.yml' .env; then
             log "${OK} .env created (GPU + sound)"
-        else
-            warn "${WARN} GPU detected but could not activate the GPU overlay line in .env (did .env.example change?). Edit COMPOSE_FILE to include docker-compose.gpu.yml."
         fi
     else
         log "${OK} .env created (CPU + sound)"
     fi
 
-    # Persist the resolved host UID/GID and group GIDs into .env (single source of
-    # truth) so a direct `docker compose up` (without `make`) runs containers as the
-    # host user — otherwise compose falls back to 1000:1000, which produces
-    # root/other-owned outputs and a wrong PulseAudio socket path on hosts where the
-    # user is not UID 1000. `make` still exports HOST_UID/HOST_GID from id and those
-    # env values override these .env defaults.
     {
         echo ""
-        echo "# Host user identity for container 'user:' (resolved at .env creation;"
-        echo "# for direct 'docker compose up'. 'make' exports id -u/-g and overrides these)."
         echo "HOST_UID=$(id -u)"
         echo "HOST_GID=$(id -g)"
-        echo "# Host GIDs for group_add (/dev/dri, /dev/input, /dev/vcu serial)."
-        for grp in render video input dialout; do
-            gid="$(getent group "${grp}" | cut -d: -f3)"
-            [ -n "${gid}" ] && echo "HOST_GID_${grp^^}=${gid}"
-        done
+        gid="$(getent group dialout | cut -d: -f3)"
+        [ -n "${gid}" ] && echo "HOST_GID_DIALOUT=${gid}"
     } >>.env
     log "${OK} Persisted host UID/GID + group GIDs to .env"
 }
 
-# --- Host DDS tuning (CycloneDDS): persist rmem_max + multicast on lo ---
-# vehicle/cyclonedds.xml binds DDS to lo, which needs the MULTICAST flag, and
-# AWSIM's large messages need a big UDP receive buffer. Both are host-level
-# settings that reset on reboot, so persist them instead of relying on
-# docker-entrypoint.sh re-applying them (which only works as root).
+# Host DDS tuning (CycloneDDS): persist rmem_max + multicast on lo
 DDS_RMEM_MAX=2147483647
 DDS_SYSCTL_CONF="/etc/sysctl.d/10-cyclone-max-receive-buffer-size.conf"
 DDS_MULTICAST_UNIT="/etc/systemd/system/multicast-lo.service"
@@ -1001,7 +983,6 @@ setup_dds_tuning() {
     require_cmd sudo || return 1
     sudo_refresh
 
-    # net.core.rmem_max: apply now, persist across reboots via sysctl.d.
     if dds_rmem_max_ok && [ -f "${DDS_SYSCTL_CONF}" ]; then
         log "${OK} net.core.rmem_max already >= ${DDS_RMEM_MAX} (persisted: ${DDS_SYSCTL_CONF})"
     else
@@ -1015,7 +996,6 @@ setup_dds_tuning() {
         fi
     fi
 
-    # multicast on lo: the flag resets on reboot; persist via a systemd oneshot.
     if [ ! -d /run/systemd/system ]; then
         warn "${WARN} systemd not running; enabling multicast on lo for this boot only"
         sudo ip link set lo multicast on || true
@@ -1340,9 +1320,6 @@ main() {
         ensure_env
         ;;
     network)
-        # Unified host-network namespace.
-        #   network tune       persist DDS host tuning (rmem_max + lo multicast)
-        #   network if [name]  add/remove cyclonedds.xml interfaces
         case "${2-}" in
         tune)
             setup_dds_tuning

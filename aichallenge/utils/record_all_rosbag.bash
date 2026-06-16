@@ -30,7 +30,7 @@ fix_ownership() {
     bash /aichallenge/utils/fix_ownership.bash \
         "${HOST_UID-}" \
         "${HOST_GID-}" \
-        "${OUTPUT_ROOT:-/output}" \
+        /output \
         "$(dirname "${out_dir}")" || true
 }
 

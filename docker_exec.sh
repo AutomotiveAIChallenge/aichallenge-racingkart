@@ -1,15 +1,9 @@
 #!/bin/bash
 
-# Passwd-less host-UID containers never load ~/.bashrc; force the dev rc for the colored prompt.
 EXEC_BASH=(bash --rcfile /etc/skel/.bashrc -i)
 
-# Shortcut: a project number targets that compose project's autoware directly (skip the picker).
+# A project number execs directly into that compose project's autoware.
 if [ -n "${1-}" ]; then
-    if ! [[ $1 =~ ^[0-9]+$ ]]; then
-        echo "Usage: $0 [PROJECT_NUMBER]"
-        echo "  PROJECT_NUMBER must be numeric (e.g. 1..4). Got: '$1'"
-        exit 1
-    fi
     exec docker compose -p "$1" exec autoware "${EXEC_BASH[@]}"
 fi
 

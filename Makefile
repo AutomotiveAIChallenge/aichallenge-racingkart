@@ -5,8 +5,6 @@ SHELL := /bin/bash
 	simulator dev dev2 dev3 dev4 driver zenoh download rviz2 down down_all ps autoware-bash eval
 
 # Used by docker-compose.yml for build/eval artifact ownership.
-# Supplementary group GIDs (render/video/input/dialout) are resolved into .env
-# by `./setup.bash env`; compose reads them from there (single source of truth).
 HOST_UID ?= $(shell id -u)
 HOST_GID ?= $(shell id -g)
 export HOST_UID HOST_GID
@@ -116,7 +114,6 @@ down:
 	@for p in 1 2 3 4; do docker compose -p $$p down --remove-orphans; done
 	@docker compose down --remove-orphans
 
-# Emergency cleanup: force-remove ALL docker containers on the host.
 down_all:
 	sudo docker ps -aq | xargs -r sudo docker rm -f
 
@@ -131,11 +128,7 @@ ps:
 	done
 
 autoware-bash:
-	@if [ -z "$(VEHICLE_NUM)" ]; then \
-		docker compose exec autoware bash; \
-	else \
-		docker compose -p $(VEHICLE_NUM) exec autoware bash; \
-	fi
+	@./docker_exec.sh $(VEHICLE_NUM)
 
 # Download submission data by asking for credentials interactively
 # Usage:

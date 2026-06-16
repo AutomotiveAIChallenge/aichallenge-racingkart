@@ -4,16 +4,7 @@ target="${1}"
 device="${2}"
 device_drivers="/dev/dri"
 
-# rocker runs the container as the host user (--user/--pulse).
-# Install it via `./setup.bash bootstrap` (rocker step) or `pip3 install --user rocker`.
-if ! command -v rocker >/dev/null 2>&1; then
-    echo "[ERROR] rocker not found. Install it: ./setup.bash bootstrap (or pip3 install --user rocker)"
-    exit 1
-fi
-
-# No rocker --x11 (it clobbers XAUTHORITY); mount X socket + Xauthority like compose.
-# Resolve Xauthority UID-independently: prefer an exported $XAUTHORITY, else the
-# per-UID gdm cookie, else ~/.Xauthority. Only bind/--env it when the file exists.
+# Mount X socket + Xauthority instead of rocker --x11 (it clobbers XAUTHORITY).
 x11_volume="/tmp/.X11-unix:/tmp/.X11-unix"
 xauth_opts=""
 uid="$(id -u)"
@@ -59,7 +50,7 @@ else
     echo "[INFO] No NVIDIA GPU detected → running on CPU"
 fi
 
-# Join render/video groups so AWSIM (Unity) can open /dev/dri nodes; else it core dumps at GL init.
+# Join render/video groups for /dev/dri access.
 gid_render="$(getent group render | cut -d: -f3)"
 gid_video="$(getent group video | cut -d: -f3)"
 group_add_opts=""

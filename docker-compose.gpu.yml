@@ -1,6 +1,3 @@
-# NVIDIA GPU overlay. Must be combined with the base docker-compose.yml:
-#   COMPOSE_FILE=docker-compose.yml:docker-compose.gpu.yml
-# Standalone use will fail — services have no image or build context here.
 x-gpu: &gpu
   # Ensure the NVIDIA runtime exposes devices+capabilities even when the
   # host environment variables are unset.

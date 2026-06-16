@@ -23,5 +23,4 @@ doc/tmp/*
 /PR.md
 /CLAUDE.md
 
-# Implementation plans are local working drafts; specs (docs/spec/) are the committed source of truth
 docs/plan/

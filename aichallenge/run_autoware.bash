@@ -28,7 +28,7 @@ export ROS_DOMAIN_ID=$id
 
 mkdir -p "${out_dir}"
 exec >"${out_dir}/autoware.log" 2>&1
-trap 'bash /aichallenge/utils/fix_ownership.bash "${HOST_UID}" "${HOST_GID}" "${OUTPUT_ROOT:-/output}" "$(dirname "${out_dir}")"' EXIT
+trap 'bash /aichallenge/utils/fix_ownership.bash "${HOST_UID}" "${HOST_GID}" /output "$(dirname "${out_dir}")"' EXIT
 
 cd "${out_dir}" || exit
 # Persist ROS node logs under the run output directory (so autostart_orchestrator logs are collectible).

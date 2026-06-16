@@ -5,10 +5,6 @@ x-autoware-base: &autoware-base
   network_mode: host
   stop_grace_period: 10s
   user: "${HOST_UID:-1000}:${HOST_GID:-1000}"
-  group_add:
-    - "${HOST_GID_RENDER:-110}"
-    - "${HOST_GID_VIDEO:-44}"
-    - "${HOST_GID_INPUT:-107}"
   environment:
     - HOME=/tmp
     - DISPLAY=${DISPLAY}
@@ -36,7 +32,6 @@ x-autoware-base: &autoware-base
     - /tmp/.X11-unix:/tmp/.X11-unix:rw
     - /dev/dri:/dev/dri
     - ${XAUTHORITY:-/dev/null}:${XAUTHORITY:-/dev/null}:rw
-    # Resolve the host UID/GID to a name inside the container.
     - /etc/passwd:/etc/passwd:ro
     - /etc/group:/etc/group:ro
   devices:
@@ -55,12 +50,10 @@ x-autoware-rosbag-base: &autoware-rosbag-base
     - ./vehicle:/vehicle
     - ./vehicle/cyclonedds.xml:/opt/autoware/cyclonedds.xml
     - ${RACING_KART_INTERFACE_DIR:-/home/tier4/racing_kart_interface}:${RACING_KART_INTERFACE_DIR:-/home/tier4/racing_kart_interface}:ro
-    # Resolve the host UID/GID to a name inside the container.
     - /etc/passwd:/etc/passwd:ro
     - /etc/group:/etc/group:ro
     - /tmp/.X11-unix:/tmp/.X11-unix:rw
-    # No audio mount: rosbag recording needs no PulseAudio, and the sound overlay
-    # patches only the `simulator` service.
+    # No audio mount: rosbag recording needs no PulseAudio.
     - /dev/dri:/dev/dri
     - ${XAUTHORITY:-/dev/null}:${XAUTHORITY:-/dev/null}:rw
 
@@ -91,15 +84,12 @@ x-racing_kart_interface-base: &racing_kart_interface-base
     - /dev/gnss:/dev/gnss
     - /tmp/.X11-unix:/tmp/.X11-unix:rw
     - /dev/dri:/dev/dri
-    # Resolve the host UID/GID to a name inside the container.
     - /etc/passwd:/etc/passwd:ro
     - /etc/group:/etc/group:ro
   devices:
     - /dev/dri
   group_add:
     - "${HOST_GID_DIALOUT:-20}"
-    - "${HOST_GID_RENDER:-110}"
-    - "${HOST_GID_VIDEO:-44}"
   working_dir: /workspace
 
 services:
@@ -115,7 +105,7 @@ services:
 
   simulator:
     <<: *autoware-base 
-    command: ["bash", "-lc", "exec /aichallenge/run_simulator.bash"]
+    command: ["bash", "-lc", "exec /aichallenge/run_simulator.bash >\"${LOG_DIR:-/output}/awsim.log\" 2>&1"]
 
   autoware-command:
     <<: *autoware-base
@@ -133,11 +123,8 @@ services:
       - ./output:${OUTPUT_ROOT:-/output}
       - ./vehicle/cyclonedds.xml:/opt/autoware/cyclonedds.xml
       - /tmp/.X11-unix:/tmp/.X11-unix:rw
-      # No audio mount: the sound overlay patches only the `simulator` service, so
-      # eval has no PULSE_SERVER and a /run/user bind here would be dead weight.
       - /dev/dri:/dev/dri
       - ${XAUTHORITY:-/dev/null}:${XAUTHORITY:-/dev/null}:rw
-      # Resolve the host UID/GID to a name inside the container.
       - /etc/passwd:/etc/passwd:ro
       - /etc/group:/etc/group:ro
     command: ["bash", "-lc", "exec /aichallenge/run_evaluation.bash"]
