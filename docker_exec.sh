@@ -2,11 +2,6 @@
 
 EXEC_BASH=(bash --rcfile /etc/skel/.bashrc -i)
 
-# A project number execs directly into that compose project's autoware.
-if [ -n "${1-}" ]; then
-    exec docker compose -p "$1" exec autoware "${EXEC_BASH[@]}"
-fi
-
 # Display title
 echo "======================================"
 echo "  Docker Container Exec Tool"
