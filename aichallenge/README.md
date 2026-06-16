@@ -16,7 +16,7 @@
 - `aichallenge/workspace/`: ROS 2 overlay の colcon ワークスペース（`src/` をビルドして `install/` を生成）
 - `aichallenge/simulator/`: AWSIM バイナリ/データ。`run_simulator.bash` はここを参照して起動する
 - `aichallenge/ml_workspace/`: 学習/データ収集用（この配下は独立性を高く保ち、別READMEで説明）
-- `aichallenge/utils/`: 補助スクリプト群（`topic_check.sh`、`run_rviz.bash`、`fix_ownership.bash`、`record_rosbag.bash` など）
+- `aichallenge/utils/`: 補助スクリプト群（`topic_check.sh`、`run_rviz.bash`、`record_rosbag.bash` など）
 
 ## `aichallenge/` 配下の主要ファイル（設計思想）
 
@@ -26,7 +26,6 @@
 - `aichallenge/run_autoware.bash`: Autoware の起動。`awsim/vehicle/rosbag` などモード別に launch 引数を整理
 - `aichallenge/utils/run_rviz.bash`: RViz の起動補助（`awsim`/`vehicle`/`remote` モード）。可視化は本質ではないので簡易スクリプトで十分
 - `aichallenge/utils/topic_check.sh`: 走行前のトピック存在/HZチェック。ログは `output/latest/` に残す運用を想定
-- `aichallenge/utils/fix_ownership.bash`: コンテナが生成した出力ファイルのオーナーをホストユーザーに戻す
 - `aichallenge/utils/record_rosbag.bash`: rosbag 手動記録用スクリプト
 
 ## 評価フロー（現状）

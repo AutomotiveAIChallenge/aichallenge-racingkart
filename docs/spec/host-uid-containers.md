@@ -19,12 +19,12 @@ compose の `user:` 指定のみで実現する（entrypoint でのユーザー�
 
 ### 既存コードとの互換性
 
-ファイル所有者を root からホストユーザーに直す処理は、すでに非 root 実行時にスキップされる実装になっている。`user:` 方式と整合する。
+compose の全サービスが `user:` で非 root 実行されるため、`/output` への書き込みは常にホストユーザー所有になり、root → ホストユーザーの chown 自体が不要になった。
 
-- `aichallenge/build_autoware.bash` — `if [ "$(id -u)" -eq 0 ]` でガードされ、非 root 時は chown をスキップ。
-- `aichallenge/run_autoware.bash` / `run_evaluation.bash` — EXIT trap で `fix_ownership.bash` を呼ぶが、同様に非 root 時はスキップ想定。
+- `aichallenge/build_autoware.bash` — `if [ "$(id -u)" -eq 0 ]` でガードされ、非 root 時は chown をスキップ（こちらは残置）。
+- `aichallenge/run_autoware.bash` / `run_evaluation.bash` / `vehicle/run_{driver,zenoh}.bash` / `utils/record_all_rosbag.bash` — 以前は EXIT trap で `fix_ownership.bash` を呼んでいたが、非 root 実行では常に no-op のため、`fix_ownership.bash` 本体ごと削除した。
 
-これらのコードは**残す**。AWS Batch 上の eval ジョブは docker compose を使わず従来どおり root で動くため、chown が引き続き機能する必要がある。
+なお AWS Batch 上の eval ジョブは docker compose を使わず root で動くが、`aichallenge-aws/base_image/aichallenge/` 配下に独自コピーのスクリプトを持つため、本リポジトリの削除の影響は受けない（AWS 側で chown が必要なら、そちらのコピーで個別に維持する）。
 
 ## 変更内容
 
@@ -48,7 +48,7 @@ x-autoware-base: &autoware-base
 - `HOME=/tmp` — `/etc/passwd` にエントリのない UID で起動すると HOME が `/` になり、ROS（`~/.ros`）・colcon・Qt（rviz）が書き込みエラーを起こす。コンテナごとに独立した `/tmp` を HOME にして回避する。
 - `group_add` — `/dev/dri`（render/video）と `/dev/input` のデバイスファイルへアクセスするため。`privileged: true` により cgroup デバイス制限はないが、ファイルパーミッション（660）対策として補助グループを付与する。
 
-`docker-compose.yml` の `autoware-simulator-evaluation` サービスは `x-autoware-base` を継承せず、`user:`/`HOME=/tmp`/`group_add` を同じ値で直接定義している（アンカー継承なし）。このサービスも `user:` で動くが、`fix_ownership.bash` が非 root 時にスキップするため所有者問題は起きない。
+`docker-compose.yml` の `autoware-simulator-evaluation` サービスは `x-autoware-base` を継承せず、`user:`/`HOME=/tmp`/`group_add` を同じ値で直接定義している（アンカー継承なし）。このサービスも `user:` で非 root 実行されるため、所有者問題は起きない。
 
 `x-racing_kart_interface-base` は既存の `group_add: [dialout]` に `video`/`render` を統合し、`user:` と `HOME=/tmp` を追加する（`input` は追加していない）。
 

@@ -9,7 +9,6 @@ export ROS_DOMAIN_ID=$id
 
 mkdir -p "${out_dir}"
 exec >"${out_dir}/driver.log" 2>&1
-trap 'bash /aichallenge/utils/fix_ownership.bash "${HOST_UID}" "${HOST_GID}" /output "$(dirname "${out_dir}")"' EXIT
 
 cd "${out_dir}" || exit
 export ROS_HOME="${out_dir}/ros"
