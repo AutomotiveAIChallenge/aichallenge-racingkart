@@ -951,17 +951,24 @@ ensure_env() {
             log "${OK} .env created (GPU + sound)"
         fi
     else
-        log "${OK} .env created (CPU + sound)"
+        log "${OK} .env created (CPU, no sound)"
     fi
 
-    {
-        echo ""
-        echo "HOST_UID=$(id -u)"
-        echo "HOST_GID=$(id -g)"
-        gid="$(getent group dialout | cut -d: -f3)"
-        [ -n "${gid}" ] && echo "HOST_GID_DIALOUT=${gid}"
-    } >>.env
-    log "${OK} Persisted host UID/GID + group GIDs to .env"
+    # Overwrite the placeholder host-identity lines copied from .env.example with the
+    # resolved values in place (keep the .env.example default when a group is absent).
+    upsert_env_var() {
+        local key="$1" val="$2"
+        if grep -qE "^${key}=" .env; then
+            sed -i -E "s|^${key}=.*|${key}=${val}|" .env
+        else
+            printf '%s=%s\n' "${key}" "${val}" >>.env
+        fi
+    }
+    upsert_env_var HOST_UID "$(id -u)"
+    upsert_env_var HOST_GID "$(id -g)"
+    gid="$(getent group dialout | cut -d: -f3)"
+    [ -n "${gid}" ] && upsert_env_var HOST_GID_DIALOUT "${gid}"
+    log "${OK} Set host UID/GID + dialout GID in .env"
 }
 
 # Host DDS tuning (CycloneDDS): persist rmem_max + multicast on lo
