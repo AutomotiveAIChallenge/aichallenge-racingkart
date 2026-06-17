@@ -18,7 +18,8 @@
 
   <!-- Control method -->
   <arg name="control_method" default="mpc"
-       description="Select control: mpc, pure_pursuit, tiny_lidar_net, pilot_net, joycon"/>
+       description="Select control: mpc, mpc_recovery, pure_pursuit, tiny_lidar_net, pilot_net, joycon, none"/>
+  <arg name="recovery_supervisor_param_file" default="$(find-pkg-share recovery_supervisor)/config/recovery_supervisor.param.yaml"/>
 
   <!-- Global parameters -->
   <group scoped="false">
@@ -144,6 +145,22 @@
     <include file="$(find-pkg-share aichallenge_submit_launch)/launch/control/mpc.launch.xml">
       <arg name="use_sim_time" value="$(var use_sim_time)"/>
     </include>
+  </group>
+
+  <group if="$(eval &quot;'$(var control_method)' == 'mpc_recovery'&quot;)">
+    <include file="$(find-pkg-share aichallenge_submit_launch)/launch/control/mpc.launch.xml">
+      <arg name="use_sim_time" value="$(var use_sim_time)"/>
+      <arg name="output_control_cmd" value="/control/command/nominal_control_cmd"/>
+      <arg name="output_raw_control_cmd" value="/control/command/nominal_control_cmd_raw"/>
+    </include>
+
+    <node pkg="recovery_supervisor"
+          exec="recovery_supervisor_node.py"
+          name="recovery_supervisor"
+          output="screen">
+      <param from="$(var recovery_supervisor_param_file)"/>
+      <param name="use_sim_time" value="$(var use_sim_time)"/>
+    </node>
   </group>
 
   <group if="$(eval &quot;'$(var control_method)' == 'tiny_lidar_net'&quot;)">

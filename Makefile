@@ -2,7 +2,7 @@
 SHELL := /bin/bash
 
 .PHONY: autoware-build autoware-vehicle autoware-simulator autoware-request-initialpose autoware-request-control  awsim-request-start awsim-request-reset autoware-driver-zenoh \
-	simulator dev dev2 dev3 dev4 driver zenoh download rviz2 down down2 down3 down4 ps autoware-bash
+	simulator dev dev2 dev3 dev4 recovery-dev recovery-repro recovery-reverse-smoke recovery-supervisor-repro recovery-check driver zenoh download rviz2 down down2 down3 down4 ps autoware-bash
 
 # Used by docker-compose.yml for build/eval artifact ownership.
 HOST_UID ?= $(shell id -u)
@@ -17,6 +17,24 @@ endif
 
 TIMESTAMP := $(shell date +%Y%m%d-%H%M%S)
 LOG_DIR := /output/$(TIMESTAMP)
+RECOVERY_PROFILE_INITIAL_DELAY_SEC ?= 15.0
+RECOVERY_PROFILE_MAX_DURATION_SEC ?= 35.0
+RECOVERY_SUPERVISOR_PARAM_FILE ?=
+RECOVERY_SUPERVISOR_STUCK_SPEED_THRESHOLD ?=
+RECOVERY_SUPERVISOR_STUCK_DURATION ?=
+RECOVERY_SUPERVISOR_COMMAND_SPEED_THRESHOLD ?=
+RECOVERY_SUPERVISOR_COMMAND_ACCEL_THRESHOLD ?=
+RECOVERY_SUPERVISOR_MOVING_SPEED_THRESHOLD ?=
+RECOVERY_SUPERVISOR_REVERSE_SPEED ?=
+RECOVERY_SUPERVISOR_REVERSE_ACCEL ?=
+RECOVERY_SUPERVISOR_REVERSE_DURATION ?=
+RECOVERY_SUPERVISOR_DRIVE_SETTLE_DURATION ?=
+RECOVERY_SUPERVISOR_COOLDOWN_DURATION ?=
+RECOVERY_SUPERVISOR_MAX_RECOVERY_ATTEMPTS ?=
+RECOVERY_SUPERVISOR_NOMINAL_TIMEOUT_SEC ?=
+RECOVERY_SUPERVISOR_VELOCITY_TIMEOUT_SEC ?=
+RECOVERY_SUPERVISOR_TIMER_HZ ?=
+RECOVERY_SUPERVISOR_CMD_ENV = RECOVERY_SUPERVISOR=true RECOVERY_PROFILE_INITIAL_DELAY_SEC=$(RECOVERY_PROFILE_INITIAL_DELAY_SEC) RECOVERY_PROFILE_MAX_DURATION_SEC=$(RECOVERY_PROFILE_MAX_DURATION_SEC) RECOVERY_SUPERVISOR_PARAM_FILE="$(RECOVERY_SUPERVISOR_PARAM_FILE)" RECOVERY_SUPERVISOR_STUCK_SPEED_THRESHOLD="$(RECOVERY_SUPERVISOR_STUCK_SPEED_THRESHOLD)" RECOVERY_SUPERVISOR_STUCK_DURATION="$(RECOVERY_SUPERVISOR_STUCK_DURATION)" RECOVERY_SUPERVISOR_COMMAND_SPEED_THRESHOLD="$(RECOVERY_SUPERVISOR_COMMAND_SPEED_THRESHOLD)" RECOVERY_SUPERVISOR_COMMAND_ACCEL_THRESHOLD="$(RECOVERY_SUPERVISOR_COMMAND_ACCEL_THRESHOLD)" RECOVERY_SUPERVISOR_MOVING_SPEED_THRESHOLD="$(RECOVERY_SUPERVISOR_MOVING_SPEED_THRESHOLD)" RECOVERY_SUPERVISOR_REVERSE_SPEED="$(RECOVERY_SUPERVISOR_REVERSE_SPEED)" RECOVERY_SUPERVISOR_REVERSE_ACCEL="$(RECOVERY_SUPERVISOR_REVERSE_ACCEL)" RECOVERY_SUPERVISOR_REVERSE_DURATION="$(RECOVERY_SUPERVISOR_REVERSE_DURATION)" RECOVERY_SUPERVISOR_DRIVE_SETTLE_DURATION="$(RECOVERY_SUPERVISOR_DRIVE_SETTLE_DURATION)" RECOVERY_SUPERVISOR_COOLDOWN_DURATION="$(RECOVERY_SUPERVISOR_COOLDOWN_DURATION)" RECOVERY_SUPERVISOR_MAX_RECOVERY_ATTEMPTS="$(RECOVERY_SUPERVISOR_MAX_RECOVERY_ATTEMPTS)" RECOVERY_SUPERVISOR_NOMINAL_TIMEOUT_SEC="$(RECOVERY_SUPERVISOR_NOMINAL_TIMEOUT_SEC)" RECOVERY_SUPERVISOR_VELOCITY_TIMEOUT_SEC="$(RECOVERY_SUPERVISOR_VELOCITY_TIMEOUT_SEC)" RECOVERY_SUPERVISOR_TIMER_HZ="$(RECOVERY_SUPERVISOR_TIMER_HZ)"
 
 # make simulator-<mode>: <mode> は simulator_scripts/*.sh のファイル名
 SIM_MODES := $(notdir $(basename $(wildcard aichallenge/simulator_scripts/*.sh)))
@@ -71,6 +89,39 @@ dev: SIM_MODE := dev
 dev: simulator autoware-simulator
 	@echo "Start dev simulation (AWSIM + Autoware)"
 	@echo "To stop: make down  (docker compose down --remove-orphans)"
+
+recovery-dev: SIM_MODE := recovery-dev
+recovery-dev: simulator autoware-simulator
+	@echo "Start recovery dev simulation (AWSIM wall-recovery off + Autoware)"
+	@echo "To stop: make down  (docker compose down --remove-orphans)"
+
+recovery-repro: SIM_MODE := recovery-dev
+recovery-repro:
+	@echo "Start recovery repro (stuck under throttle + rosbag + stuck_under_throttle check)"
+	LOG_DIR=$(LOG_DIR) SIM_MODE="$(SIM_MODE)" ROS_DOMAIN_ID=0 docker compose up -d simulator
+	LOG_DIR=$(LOG_DIR) RUN_MODE=awsim-no-control docker compose up -d autoware
+	CMD='RECOVERY_PROFILE_INITIAL_DELAY_SEC=$(RECOVERY_PROFILE_INITIAL_DELAY_SEC) RECOVERY_OUTPUT_DIR=$(LOG_DIR)/recovery bash /aichallenge/utils/run_recovery_profile.bash stuck_repro stuck_under_throttle' docker compose run --rm --no-deps autoware-command
+
+recovery-reverse-smoke: SIM_MODE := recovery-dev
+recovery-reverse-smoke:
+	@echo "Start recovery reverse smoke (reverse gear + rosbag + reverse_capable check)"
+	LOG_DIR=$(LOG_DIR) SIM_MODE="$(SIM_MODE)" ROS_DOMAIN_ID=0 docker compose up -d simulator
+	LOG_DIR=$(LOG_DIR) RUN_MODE=awsim-no-control docker compose up -d autoware
+	CMD='RECOVERY_PROFILE_INITIAL_DELAY_SEC=$(RECOVERY_PROFILE_INITIAL_DELAY_SEC) RECOVERY_OUTPUT_DIR=$(LOG_DIR)/recovery bash /aichallenge/utils/run_recovery_profile.bash reverse_smoke reverse_capable' docker compose run --rm --no-deps autoware-command
+
+recovery-supervisor-repro: SIM_MODE := recovery-dev
+recovery-supervisor-repro:
+	@echo "Start recovery supervisor repro (stuck + supervisor reverse + recovered check)"
+	LOG_DIR=$(LOG_DIR) SIM_MODE="$(SIM_MODE)" ROS_DOMAIN_ID=0 docker compose up -d simulator
+	LOG_DIR=$(LOG_DIR) RUN_MODE=awsim-no-control docker compose up -d autoware
+	CMD='$(RECOVERY_SUPERVISOR_CMD_ENV) RECOVERY_OUTPUT_DIR=$(LOG_DIR)/recovery bash /aichallenge/utils/run_recovery_profile.bash stuck_repro recovered' docker compose run --rm --no-deps autoware-command
+
+EXPECT ?= stuck_under_throttle
+recovery-check:
+	@if [ -z "$(BAG)" ]; then echo "Usage: make recovery-check BAG=/output/<run>/recovery/rosbag2_recovery [EXPECT=stuck_under_throttle]"; exit 2; fi
+	@bag="$(BAG)"; \
+	case "$$bag" in output/*) bag="/$$bag" ;; ./output/*) bag="/$${bag#./}" ;; esac; \
+	CMD="ros2 run recovery_test_tools analyze_recovery_bag.py $$bag --expect $(EXPECT)" docker compose run --rm --no-deps autoware-command
 
 dev2: SIM_MODE := dev2
 dev3: SIM_MODE := dev3

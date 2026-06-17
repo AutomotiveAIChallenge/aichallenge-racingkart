@@ -1,0 +1,23 @@
+<?xml version="1.0"?>
+<package format="3">
+  <name>recovery_test_tools</name>
+  <version>0.1.0</version>
+  <description>Recovery development tools for AWSIM reproducibility and rosbag analysis</description>
+  <maintainer email="masa@example.com">masa</maintainer>
+  <license>Apache-2.0</license>
+
+  <buildtool_depend>ament_cmake</buildtool_depend>
+  <buildtool_depend>ament_cmake_python</buildtool_depend>
+
+  <depend>rclpy</depend>
+  <depend>std_msgs</depend>
+  <depend>autoware_auto_control_msgs</depend>
+  <depend>autoware_auto_vehicle_msgs</depend>
+  <depend>nav_msgs</depend>
+  <exec_depend>rosbag2_py</exec_depend>
+  <exec_depend>rosidl_runtime_py</exec_depend>
+
+  <export>
+    <build_type>ament_cmake</build_type>
+  </export>
+</package>

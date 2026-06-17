@@ -5,6 +5,8 @@
     <arg name="run_rviz"/>
     <arg name="sensor_model" default="racing_kart_sensor_kit"/>
     <arg name="launch_vehicle_interface" default="$(eval &quot;'$(var simulation)' == 'false'&quot;)"/>
+    <arg name="control_method" default="mpc"/>
+    <arg name="recovery_supervisor_param_file" default="$(find-pkg-share recovery_supervisor)/config/recovery_supervisor.param.yaml"/>
     <arg name="capture" default="false"/>
     <arg name="rosbag" default="false"/>
     <arg name="domain_id" default="0"/>
@@ -19,6 +21,8 @@
     <log message=" - use_sim_time: $(var use_sim_time)"/>
     <log message=" - sensor_model: $(var sensor_model)"/>
     <log message=" - launch_vehicle_interface: $(var launch_vehicle_interface)"/>
+    <log message=" - control_method: $(var control_method)"/>
+    <log message=" - recovery_supervisor_param_file: $(var recovery_supervisor_param_file)"/>
     <log message=" - rviz config: $(var rviz_config)"/>
     <log message=" - capture: $(var capture)"/>
     <log message=" - rosbag: $(var rosbag)"/>
@@ -30,6 +34,8 @@
         <arg name="use_sim_time" value="$(var use_sim_time)"/>
         <arg name="sensor_model" value="$(var sensor_model)"/>
         <arg name="launch_vehicle_interface" value="$(var launch_vehicle_interface)"/>
+        <arg name="control_method" value="$(var control_method)"/>
+        <arg name="recovery_supervisor_param_file" value="$(var recovery_supervisor_param_file)"/>
     </include>
 
     <!-- Visualization. -->
