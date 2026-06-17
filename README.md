@@ -37,6 +37,18 @@ Host (you)
         └─ output/ にログ・結果を出力（最新結果は `/output/latest/d<domain>/`）
 ```
 
+### TUIランチャー
+
+`./setup.bash` とルート `Makefile` のコマンドはTUIからも実行できます。
+TUIは Python の `textual` で実装しており、マウスクリックで選択・実行できます。
+
+```bash
+./tui.bash
+```
+
+未導入の場合は `python3 -m pip install textual` で導入できます。
+light/dark mode はTUI内の `Toggle Theme`、または `AIC_TUI_THEME=light ./tui.bash` / `AIC_TUI_THEME=dark ./tui.bash` で切り替えられます。
+
 ## まずは読んでほしいもの
 
 [初学者向けセットアップ資料](./design_docs/how_to_setup.md)

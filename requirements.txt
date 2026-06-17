@@ -31,3 +31,4 @@ grad-cam
 tensorboard
 tomli==2.3.0
 packaging>=22.0
+textual>=0.85
