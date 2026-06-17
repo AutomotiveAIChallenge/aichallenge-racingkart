@@ -7,7 +7,7 @@ recovery_supervisor:
     moving_speed_threshold: 0.5
     reverse_speed: 1.0
     reverse_accel: 1.0
-    reverse_duration: 2.0
+    reverse_duration: 4.0
     drive_settle_duration: 0.5
     cooldown_duration: 3.0
     nominal_timeout_sec: 0.5

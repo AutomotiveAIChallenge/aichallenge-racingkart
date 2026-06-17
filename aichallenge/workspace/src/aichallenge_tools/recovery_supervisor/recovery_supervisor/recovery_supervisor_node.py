@@ -35,7 +35,7 @@ class RecoverySupervisor(Node):
         self.declare_parameter("moving_speed_threshold", 0.5)
         self.declare_parameter("reverse_speed", 1.0)
         self.declare_parameter("reverse_accel", 1.0)
-        self.declare_parameter("reverse_duration", 2.0)
+        self.declare_parameter("reverse_duration", 4.0)
         self.declare_parameter("drive_settle_duration", 0.5)
         self.declare_parameter("cooldown_duration", 3.0)
         self.declare_parameter("nominal_timeout_sec", 0.5)
