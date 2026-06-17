@@ -49,3 +49,33 @@ make recovery-supervisor-repro \
 ```
 
 検証時は `recovery_supervisor.param.yaml` と `recovery_supervisor_params.env` が出力ディレクトリに保存される。
+
+## Manual smoke
+
+AWSIMを手動操作して壁に当て、自動制御へ戻して復帰を見る場合:
+
+```bash
+make down
+make recovery-mpc-dev
+```
+
+別ターミナルでrosbag記録:
+
+```bash
+make recovery-manual-record LOG_DIR=/output/$(date +%Y%m%d-%H%M%S)-manual-recovery
+```
+
+別ターミナルで状態監視:
+
+```bash
+make recovery-watch
+```
+
+手動操作が終わったら `recovery-manual-record` を Ctrl-C で止める。
+記録済みbagは既存の analyzer で確認できる。
+
+```bash
+make recovery-check \
+  BAG=/output/<run-id>-manual-recovery/recovery/rosbag2_recovery \
+  EXPECT=recovered
+```

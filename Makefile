@@ -2,7 +2,7 @@
 SHELL := /bin/bash
 
 .PHONY: autoware-build autoware-vehicle autoware-simulator autoware-request-initialpose autoware-request-control  awsim-request-start awsim-request-reset autoware-driver-zenoh \
-	simulator dev dev2 dev3 dev4 recovery-dev recovery-repro recovery-reverse-smoke recovery-supervisor-repro recovery-check driver zenoh download rviz2 down down2 down3 down4 ps autoware-bash
+	simulator dev dev2 dev3 dev4 recovery-dev recovery-mpc-dev recovery-repro recovery-reverse-smoke recovery-supervisor-repro recovery-manual-record recovery-watch recovery-check driver zenoh download rviz2 down down2 down3 down4 ps autoware-bash
 
 # Used by docker-compose.yml for build/eval artifact ownership.
 HOST_UID ?= $(shell id -u)
@@ -19,6 +19,8 @@ TIMESTAMP := $(shell date +%Y%m%d-%H%M%S)
 LOG_DIR := /output/$(TIMESTAMP)
 RECOVERY_PROFILE_INITIAL_DELAY_SEC ?= 15.0
 RECOVERY_PROFILE_MAX_DURATION_SEC ?= 35.0
+RECOVERY_BAG_NAME ?= rosbag2_recovery
+RECOVERY_WATCH_RATE_HZ ?= 2.0
 RECOVERY_SUPERVISOR_PARAM_FILE ?=
 RECOVERY_SUPERVISOR_STUCK_SPEED_THRESHOLD ?=
 RECOVERY_SUPERVISOR_STUCK_DURATION ?=
@@ -95,6 +97,12 @@ recovery-dev: simulator autoware-simulator
 	@echo "Start recovery dev simulation (AWSIM wall-recovery off + Autoware)"
 	@echo "To stop: make down  (docker compose down --remove-orphans)"
 
+recovery-mpc-dev: SIM_MODE := recovery-dev
+recovery-mpc-dev: simulator
+	@echo "Start recovery MPC dev simulation (AWSIM wall-recovery off + Autoware mpc_recovery)"
+	LOG_DIR=$(LOG_DIR) RUN_MODE=awsim-mpc-recovery docker compose up -d autoware
+	@echo "To stop: make down  (docker compose down --remove-orphans)"
+
 recovery-repro: SIM_MODE := recovery-dev
 recovery-repro:
 	@echo "Start recovery repro (stuck under throttle + rosbag + stuck_under_throttle check)"
@@ -115,6 +123,13 @@ recovery-supervisor-repro:
 	LOG_DIR=$(LOG_DIR) SIM_MODE="$(SIM_MODE)" ROS_DOMAIN_ID=0 docker compose up -d simulator
 	LOG_DIR=$(LOG_DIR) RUN_MODE=awsim-no-control docker compose up -d autoware
 	CMD='$(RECOVERY_SUPERVISOR_CMD_ENV) RECOVERY_OUTPUT_DIR=$(LOG_DIR)/recovery bash /aichallenge/utils/run_recovery_profile.bash stuck_repro recovered' docker compose run --rm --no-deps autoware-command
+
+recovery-manual-record:
+	@echo "Record manual recovery smoke topics. Press Ctrl-C when the manual scenario is done."
+	CMD='RECOVERY_OUTPUT_DIR=$(LOG_DIR)/recovery RECOVERY_BAG_NAME=$(RECOVERY_BAG_NAME) bash /aichallenge/utils/record_recovery_manual.bash' docker compose run --rm --no-deps autoware-command
+
+recovery-watch:
+	CMD='ros2 run recovery_test_tools watch_recovery_topics.py --ros-args -p rate_hz:=$(RECOVERY_WATCH_RATE_HZ)' docker compose run --rm --no-deps autoware-command
 
 EXPECT ?= stuck_under_throttle
 recovery-check:

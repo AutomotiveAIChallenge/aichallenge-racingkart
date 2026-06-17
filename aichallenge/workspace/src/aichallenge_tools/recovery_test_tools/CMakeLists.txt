@@ -9,6 +9,7 @@ ament_python_install_package(${PROJECT_NAME})
 install(PROGRAMS
   recovery_test_tools/analyze_recovery_bag.py
   recovery_test_tools/command_profile_node.py
+  recovery_test_tools/watch_recovery_topics.py
   DESTINATION lib/${PROJECT_NAME}
 )
 
