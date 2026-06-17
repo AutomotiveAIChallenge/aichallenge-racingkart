@@ -1025,20 +1025,14 @@ class AutostartOrchestrator(Node):
             if not ok:
                 self.get_logger().error(f"failed waiting stop: expected={stop_on} last={last}")
                 self._set_workflow_state(self._STATE_STOPPING, f"stop wait failed: expected={stop_on} last={last}")
-                if enable_rosbag:
-                    self._stop_rosbag_with_postprocess(enable_motion_analytics)
-                if enable_capture:
-                    self._capture(False)
+                self._finalize_recordings(enable_rosbag, enable_capture, enable_motion_analytics)
                 self._set_workflow_state(self._STATE_ERROR, f"failed waiting stop: expected={stop_on} last={last}")
                 self._set_exit_code(3)
                 self._shutdown()
                 return
 
             self._set_workflow_state(self._STATE_STOPPING, "stopping capture/rosbag")
-            if enable_rosbag:
-                self._stop_rosbag_with_postprocess(enable_motion_analytics)
-            if enable_capture:
-                self._capture(False)
+            self._finalize_recordings(enable_rosbag, enable_capture, enable_motion_analytics)
 
             self._set_workflow_state(self._STATE_FINISHED, "shutdown requested")
             if exit_on_finish:
@@ -1047,18 +1041,15 @@ class AutostartOrchestrator(Node):
             self.get_logger().error(f"unhandled exception in worker: {e}")
             self._set_workflow_state(self._STATE_ERROR, f"unhandled exception: {e}")
             try:
-                if enable_rosbag:
-                    self._stop_rosbag_with_postprocess(enable_motion_analytics)
-            except Exception:  # noqa: BLE001
-                pass
-            try:
-                if enable_capture:
-                    self._capture(False)
+                self._finalize_recordings(enable_rosbag, enable_capture, enable_motion_analytics)
             except Exception:  # noqa: BLE001
                 pass
             self._set_exit_code(10)
             self._shutdown()
         finally:
+            # 早期 return / 例外経路で capture停止スレッドが残っていても、
+            # latestリンク更新(cap-*.mp4 への symlink)前に確実に合流させる。
+            self._join_capture_stop()
             try:
                 self._refresh_latest_artifact_links()
             except Exception as exc:  # noqa: BLE001
@@ -1068,8 +1059,9 @@ class AutostartOrchestrator(Node):
         try:
             self._stop_debug_visualization()
             enable_motion_analytics = bool(self.get_parameter("enable_motion_analytics").value)
-            self._stop_rosbag_with_postprocess(enable_motion_analytics)
-            self._capture(False)
+            enable_rosbag = bool(self.get_parameter("enable_rosbag").value)
+            enable_capture = bool(self.get_parameter("enable_capture").value)
+            self._finalize_recordings(enable_rosbag, enable_capture, enable_motion_analytics)
         finally:
             return super().destroy_node()
 
