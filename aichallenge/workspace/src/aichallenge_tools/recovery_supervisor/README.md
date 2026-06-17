@@ -20,7 +20,6 @@
 - `reverse_duration`
 - `drive_settle_duration`
 - `cooldown_duration`
-- `max_recovery_attempts`
 - `nominal_timeout_sec`
 - `velocity_timeout_sec`
 - `timer_hz`
@@ -70,6 +69,8 @@ make recovery-manual-record LOG_DIR=/output/$(date +%Y%m%d-%H%M%S)-manual-recove
 ```bash
 make recovery-watch
 ```
+
+`recovery-watch` は `/recovery_supervisor/state` の変化だけを表示する。
 
 手動操作が終わったら `recovery-manual-record` を Ctrl-C で止める。
 記録済みbagは既存の analyzer で確認できる。

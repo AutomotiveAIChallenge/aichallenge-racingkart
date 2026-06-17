@@ -20,7 +20,6 @@ class RecoveryState(str, Enum):
     REVERSING = "REVERSING"
     DRIVE_SETTLE = "DRIVE_SETTLE"
     COOLDOWN = "COOLDOWN"
-    FAILED = "FAILED"
 
 
 class RecoverySupervisor(Node):
@@ -39,7 +38,6 @@ class RecoverySupervisor(Node):
         self.declare_parameter("reverse_duration", 2.0)
         self.declare_parameter("drive_settle_duration", 0.5)
         self.declare_parameter("cooldown_duration", 3.0)
-        self.declare_parameter("max_recovery_attempts", 3)
         self.declare_parameter("nominal_timeout_sec", 0.5)
         self.declare_parameter("velocity_timeout_sec", 0.5)
         self.declare_parameter("timer_hz", 20.0)
@@ -54,7 +52,6 @@ class RecoverySupervisor(Node):
         self.reverse_duration = float(self.get_parameter("reverse_duration").value)
         self.drive_settle_duration = float(self.get_parameter("drive_settle_duration").value)
         self.cooldown_duration = float(self.get_parameter("cooldown_duration").value)
-        self.max_recovery_attempts = int(self.get_parameter("max_recovery_attempts").value)
         self.nominal_timeout_sec = float(self.get_parameter("nominal_timeout_sec").value)
         self.velocity_timeout_sec = float(self.get_parameter("velocity_timeout_sec").value)
         timer_hz = max(1.0, float(self.get_parameter("timer_hz").value))
@@ -108,7 +105,6 @@ class RecoverySupervisor(Node):
             f"reverse_duration={self.reverse_duration} "
             f"drive_settle_duration={self.drive_settle_duration} "
             f"cooldown_duration={self.cooldown_duration} "
-            f"max_recovery_attempts={self.max_recovery_attempts} "
             f"nominal_timeout_sec={self.nominal_timeout_sec} "
             f"velocity_timeout_sec={self.velocity_timeout_sec} "
             f"timer_hz={timer_hz}"
@@ -142,9 +138,6 @@ class RecoverySupervisor(Node):
             self._run_drive_settle(now)
         elif self._state == RecoveryState.COOLDOWN:
             self._run_cooldown(now)
-        elif self._state == RecoveryState.FAILED:
-            self._publish_gear(GearCommand.DRIVE)
-            self._publish_command(0.0, 0.0, 0.0)
 
     def _run_normal(self, now: float) -> None:
         if self._has_fresh_nominal(now):
@@ -212,11 +205,6 @@ class RecoverySupervisor(Node):
             self._set_state(RecoveryState.NORMAL, now)
 
     def _start_recovery(self, now: float) -> None:
-        if self._attempt_count >= self.max_recovery_attempts:
-            self._set_state(RecoveryState.FAILED, now)
-            self.get_logger().error("recovery failed: max_recovery_attempts exceeded")
-            return
-
         self._attempt_count += 1
         self._stuck_start_time = None
         self.get_logger().warn(

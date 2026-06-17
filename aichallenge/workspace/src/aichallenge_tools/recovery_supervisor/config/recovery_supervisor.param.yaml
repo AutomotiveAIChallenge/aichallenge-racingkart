@@ -10,7 +10,6 @@ recovery_supervisor:
     reverse_duration: 2.0
     drive_settle_duration: 0.5
     cooldown_duration: 3.0
-    max_recovery_attempts: 3
     nominal_timeout_sec: 0.5
     velocity_timeout_sec: 0.5
     timer_hz: 20.0

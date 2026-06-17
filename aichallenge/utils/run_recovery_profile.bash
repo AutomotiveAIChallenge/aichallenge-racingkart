@@ -117,7 +117,6 @@ add_supervisor_param_override "reverse_accel" "${RECOVERY_SUPERVISOR_REVERSE_ACC
 add_supervisor_param_override "reverse_duration" "${RECOVERY_SUPERVISOR_REVERSE_DURATION:-}"
 add_supervisor_param_override "drive_settle_duration" "${RECOVERY_SUPERVISOR_DRIVE_SETTLE_DURATION:-}"
 add_supervisor_param_override "cooldown_duration" "${RECOVERY_SUPERVISOR_COOLDOWN_DURATION:-}"
-add_supervisor_param_override "max_recovery_attempts" "${RECOVERY_SUPERVISOR_MAX_RECOVERY_ATTEMPTS:-}"
 add_supervisor_param_override "nominal_timeout_sec" "${RECOVERY_SUPERVISOR_NOMINAL_TIMEOUT_SEC:-}"
 add_supervisor_param_override "velocity_timeout_sec" "${RECOVERY_SUPERVISOR_VELOCITY_TIMEOUT_SEC:-}"
 add_supervisor_param_override "timer_hz" "${RECOVERY_SUPERVISOR_TIMER_HZ:-}"
