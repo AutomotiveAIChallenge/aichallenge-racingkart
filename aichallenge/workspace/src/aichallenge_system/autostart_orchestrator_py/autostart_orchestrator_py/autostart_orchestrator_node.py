@@ -97,6 +97,8 @@ class AutostartOrchestrator(Node):
         self.declare_parameter("motion_analytics_input_dir", "")
         # 0 or negative => wait forever (legacy behavior).
         self.declare_parameter("initial_pose_service_timeout_sec", 120.0)
+        # capture停止(別スレッド)のjoin上限秒。0以下で無限待ち。
+        self.declare_parameter("capture_stop_timeout_sec", 60.0)
 
         vehicle_state_topic = str(self.get_parameter("vehicle_state_topic").value).strip()
         if not vehicle_state_topic:
@@ -140,6 +142,8 @@ class AutostartOrchestrator(Node):
         self._motion_analytics_run_once = False
         self._motion_analytics_lock = threading.Lock()
         self._latest_link_lock = threading.Lock()
+        self._capture_stop_lock = threading.Lock()
+        self._capture_stop_thread: Optional[threading.Thread] = None
 
         self._exit_code = 0
 
@@ -735,6 +739,54 @@ class AutostartOrchestrator(Node):
         if had_rosbag and enable_motion_analytics:
             self._set_workflow_state(self._STATE_POST_PROCESS, "running motion_analytics")
             self._run_motion_analytics()
+
+    def _start_capture_stop_async(self) -> None:
+        with self._capture_stop_lock:
+            if self._capture_stop_thread is not None:
+                return
+            thread = threading.Thread(
+                target=self._capture, args=(False,), name="capture-stop", daemon=True
+            )
+            self._capture_stop_thread = thread
+            thread.start()
+
+    def _capture_stop_timeout(self) -> Optional[float]:
+        try:
+            value = float(self.get_parameter("capture_stop_timeout_sec").value)
+        except (TypeError, ValueError):
+            return None
+        return value if value > 0.0 else None
+
+    def _join_capture_stop(self) -> None:
+        with self._capture_stop_lock:
+            thread = self._capture_stop_thread
+        if thread is None:
+            return
+        timeout = self._capture_stop_timeout()
+        thread.join(timeout=timeout)
+        if thread.is_alive():
+            self.get_logger().warn(
+                f"capture stop did not finish within {timeout}s; continuing"
+            )
+            return
+        with self._capture_stop_lock:
+            if self._capture_stop_thread is thread:
+                self._capture_stop_thread = None
+
+    def _finalize_recordings(
+        self, enable_rosbag: bool, enable_capture: bool, enable_motion_analytics: bool
+    ) -> None:
+        # capture停止を別スレッドで起動し、rosbag停止→motion_analytics(直列)と並列に走らせる。
+        # rosbag/motion が例外を投げても finally で必ず capture を join してから戻る
+        # （戻った時点で _shutdown / latestリンク更新が安全になる）。
+        if enable_capture:
+            self._start_capture_stop_async()
+        try:
+            if enable_rosbag:
+                self._stop_rosbag_with_postprocess(enable_motion_analytics)
+        finally:
+            if enable_capture:
+                self._join_capture_stop()
 
     @staticmethod
     def _latest_file_by_pattern(base_dir: Path, pattern: str) -> Optional[Path]:

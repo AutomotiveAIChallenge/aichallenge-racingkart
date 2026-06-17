@@ -14,6 +14,8 @@
     initial_pose_service_timeout_sec: 60.0
     control_mode_request_topic: /awsim/control_mode_request_topic
     capture_service: /debug/service/capture_screen
+    # capture停止(別スレッド)のjoin上限秒。0以下で無限待ち。
+    capture_stop_timeout_sec: 60.0
     enable_debug_visualization: true
     rosbag_topics:
       - /control/command/control_cmd
