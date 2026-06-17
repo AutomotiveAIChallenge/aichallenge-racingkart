@@ -36,3 +36,4 @@ Autostart Orchestrator (aichallenge_system)
 - `autostart_orchestrator_node.py` の debug 可視化では `vehicle`（`ROS_DOMAIN_ID` 由来）と `vehicle_topic` を表示します。
 - Auto startノードは終了時に `/output/latest` ディレクトリ配下の `d<id>/` に固定名シンボリックリンクを更新します。
 - `ros2 bag record -o <name>` の標準命名により、最初のmcapは `<name>_0.mcap` になります（例: `rosbag2_autoware_0.mcap`）。
+- 停止後処理では `capture` 停止を `rosbag 停止 → motion_analytics` と並列に実行します（`_shutdown` / `latest` リンク更新の前に `capture_stop_timeout_sec` を上限に合流）。詳細は `autostart_orchestrator_node.md` を参照。
