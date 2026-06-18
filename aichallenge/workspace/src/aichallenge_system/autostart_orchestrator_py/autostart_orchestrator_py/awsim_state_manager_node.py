@@ -27,7 +27,9 @@ class AwsimStateManager(Node):
     state is observed on ``/admin/awsim/state``.
     """
 
-    _DEFAULT_AWSIM_KILL_PATTERNS = "AWSIM.x86_64,aichallenge_awsim_eval"
+    # Empty by default: no awsim_kill_patterns => state_manager does not kill AWSIM
+    # (set patterns explicitly in the param yaml to re-enable the phase1 kill).
+    _DEFAULT_AWSIM_KILL_PATTERNS = ""
     _DEFAULT_ADMIN_START_TOPIC = "/admin/awsim/start"
     _DEFAULT_ADMIN_START_TRIGGER_STATE = "waitstart,ready"
     _KNOWN_ADMIN_STATES = (
@@ -587,11 +589,11 @@ class AwsimStateManager(Node):
             "shutdown timing: "
             f"shutdown_delay_sec={delay}s, kill_wait_sec={kill_wait_sec}s, shutdown_grace_sec={sigint_grace_sec}s"
         )
-        if delay > 0:
-            self.get_logger().warn(f"waiting {delay}s before killing awsim processes")
-            time.sleep(delay)
-
-        self._kill_by_patterns(self._awsim_kill_patterns, "phase1-awsim")
+        if self._awsim_kill_patterns:
+            if delay > 0:
+                self.get_logger().warn(f"waiting {delay}s before killing awsim processes")
+                time.sleep(delay)
+            self._kill_by_patterns(self._awsim_kill_patterns, "phase1-awsim")
 
         if bool(self.get_parameter("exit_on_finish").value):
             if bool(self.get_parameter("request_launch_shutdown").value):
@@ -606,10 +608,7 @@ class AwsimStateManager(Node):
 
     def _run(self) -> None:
         if not self._awsim_kill_patterns:
-            self._set_state("ERROR")
-            self._set_exit_code(1)
-            self._shutdown_reason = "awsim_kill_patterns is empty"
-            self.get_logger().error("awsim_kill_patterns is empty; shutdown logic disabled")
+            self.get_logger().info("awsim_kill_patterns is empty; awsim kill/monitor disabled")
             return
 
         self._set_state("WAIT_AWSIM")
