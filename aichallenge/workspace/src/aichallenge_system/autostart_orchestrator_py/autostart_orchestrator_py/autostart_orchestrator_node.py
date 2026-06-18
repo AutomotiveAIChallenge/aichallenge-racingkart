@@ -768,7 +768,6 @@ class AutostartOrchestrator(Node):
             self.get_logger().warn(
                 f"capture stop did not finish within {timeout}s; continuing"
             )
-            return
         with self._capture_stop_lock:
             if self._capture_stop_thread is thread:
                 self._capture_stop_thread = None
