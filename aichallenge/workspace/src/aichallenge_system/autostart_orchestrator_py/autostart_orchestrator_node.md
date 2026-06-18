@@ -35,12 +35,12 @@ Autostart オーケストレータは、車両状態を起点にデータ収集�
 ## ローカル処理
 
 - rosbag 録画子プロセス起動/停止（`subprocess`）
-- rosbag 停止 → `motion_analytics` 実行（この2つは直列。`enable_motion_analytics=true` のとき）
+- rosbag 停止後に `motion_analytics` 実行（`enable_motion_analytics=true` のとき）
 - 終了時に `/output/latest/d<id>/` ディレクトリを作成し、固定名シンボリックリンクを更新
   - `result-details.json`, `capture.mp4`, `rosbag2_autoware.mcap`, `motion_analytics.html`, `autoware.log`
   - `result-details.json` は同一ドメイン (`d<id>-result-details.json`) のみを探索対象にする
   - rosbag は `.mcap` と `.mcap.zstd` の両方を探索対象にする
-- capture service 開始/停止（停止は上記 `rosbag 停止 → motion_analytics` と**並列**に実行）
+- capture service 開始/停止
 - 初期姿勢要求（`/set_initial_pose`）
 - ログ監視・デバッグ可視化（`enable_debug_visualization`）
   - Qtパネル表示: `state`, `detail`, `vehicle`, `vehicle_state`, `vehicle_topic`
@@ -99,9 +99,8 @@ output/
 2. 記録開始 (`enable_capture`, `enable_rosbag`)
 3. `RECORDING` 開始
 4. `stop_on_vehicle_state` 到達で停止処理実行（`STOPPING`）
-   - capture 停止を別スレッドで起動し、`rosbag 停止 → motion_analytics`（`POST_PROCESS`）と**並列**に実行する
-   - `_shutdown` / `/output/latest` リンク更新の前に、capture 停止を `capture_stop_timeout_sec` を上限に join する（超過時は WARN ログを出して後続を継続）
-5. 完了時に `FINISHED`（`exit_on_finish=true` の場合は終了処理）
+5. rosbag 停止後の解析を実行（`POST_PROCESS`）
+6. 完了時に `FINISHED`（`exit_on_finish=true` の場合は終了処理）
 
 ## パラメータ
 
@@ -124,18 +123,12 @@ output/
 - `initial_pose_service`
 - `control_mode_request_topic`
 - `capture_service`
-- `capture_stop_timeout_sec`（default: 60.0。並列実行する capture 停止 join の上限秒。0以下で無限待ち）
 - `enable_debug_visualization`（任意: default false）
 
 圧縮を有効にしたい場合は、`rosbag_compression_format=zstd` と
 `rosbag_compression_mode=file` を両方指定してください。
 
 `motion_analytics` は rosbag 停止後に 1 回だけ実行されます。失敗時は WARN ログを出して継続します。
-
-capture 停止は `rosbag 停止 → motion_analytics` と並列に実行され、`_shutdown` および
-`/output/latest` リンク更新の前に `capture_stop_timeout_sec`（default 60秒、0以下で無限待ち）を
-上限に join します。上限超過時は WARN ログを出して後続処理を継続します
-（`rosbag 停止 → motion_analytics` の直列順序自体は不変）。
 
 rosbag のファイル名 `rosbag2_autoware_0.mcap` は、`ros2 bag record -o rosbag2_autoware` の
 標準命名（`<output>_0.mcap`）で自動生成されます。
