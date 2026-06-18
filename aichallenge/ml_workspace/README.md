@@ -15,24 +15,25 @@ ml_workspace/
 │  └─ YYYYMMDD-HHMMSS/...
 ├─ val/                     # 検証用に分けたrosbag置き場（任意）
 │  └─ YYYYMMDD-HHMMSS/...
-└─ tiny_lidar_net/
-   ├─ README.md
-   ├─ requirements.txt
-   ├─ train.py
-   ├─ config/
-   │  └─ train.yaml
-   ├─ datasets/             # extract_data_from_bag.py の出力先（例）
-   │  ├─ train/...
-   │  └─ val/...
-   ├─ lib/
-   │  ├─ __init__.py
-   │  ├─ data.py
-   │  ├─ loss.py
-   │  └─ model.py
-   ├─ outputs/              # 学習ログ出力先（Hydraの既定）
-   ├─ extract_data_from_bag.py
-   ├─ osm2csv.py
-   └─ convert_weight.py
+├─ tiny_lidar_net/
+│  ├─ README.md
+│  ├─ requirements.txt
+│  ├─ train.py
+│  ├─ config/
+│  │  └─ train.yaml
+│  ├─ datasets/             # extract_data_from_bag.py の出力先（実行時に生成；コミットされない）
+│  │  ├─ train/...
+│  │  └─ val/...
+│  ├─ lib/
+│  │  ├─ __init__.py
+│  │  ├─ data.py
+│  │  ├─ loss.py
+│  │  └─ model.py
+│  ├─ outputs/              # 学習ログ出力先（Hydraの既定；実行時に生成；コミットされない）
+│  ├─ extract_data_from_bag.py
+│  ├─ osm2csv.py
+│  └─ convert_weight.py
+└─ pilot_net/               # PilotNet 用のデータ変換・学習コード一式
 ```
 
 ## 各項目の説明
@@ -42,3 +43,4 @@ ml_workspace/
 - `rawdata/`: 記録した rosbag（mcap）の保存先です（タイムスタンプ名のディレクトリが作られます）。
 - `train/`, `val/`: `rawdata/` から分けた rosbag（mcap）を置くためのディレクトリです（運用に応じて使います）。
 - `tiny_lidar_net/`: TinyLiDARNet 用のデータ変換・学習・重み変換コード一式です。使い方は `aichallenge/ml_workspace/tiny_lidar_net/README.md` を参照してください。
+- `pilot_net/`: PilotNet 用のデータ変換・学習コード一式です。

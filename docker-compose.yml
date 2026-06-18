@@ -4,11 +4,13 @@ x-autoware-base: &autoware-base
   pull_policy: never
   network_mode: host
   stop_grace_period: 10s
+  user: "${HOST_UID:-1000}:${HOST_GID:-1000}"
   environment:
+    - HOME=/tmp
     - DISPLAY=${DISPLAY}
     - USER=${USER}
     - ROS_DISTRO=humble
-    - XAUTHORITY=${XAUTHORITY}
+    - XAUTHORITY=${XAUTHORITY:-}
     - QT_X11_NO_MITSHM=1
     - TZ=Asia/Tokyo
     - RUN_MODE=${RUN_MODE:-}
@@ -20,6 +22,7 @@ x-autoware-base: &autoware-base
     - HOST_UID=${HOST_UID:-}
     - HOST_GID=${HOST_GID:-}
     - ROS_DOMAIN_ID=${ROS_DOMAIN_ID:-1}
+    - LOG_DIR=${LOG_DIR:-}
   volumes:
     - ./output:${OUTPUT_ROOT:-/output}
     - ./aichallenge:/aichallenge
@@ -27,28 +30,15 @@ x-autoware-base: &autoware-base
     - ./vehicle:/vehicle
     - ./vehicle/cyclonedds.xml:/opt/autoware/cyclonedds.xml
     - /tmp/.X11-unix:/tmp/.X11-unix:rw
-    # Audio (PipeWire/Pulse) socket access on the host
-    - /run/user:/run/user:rw
     - /dev/dri:/dev/dri
-    - ${XAUTHORITY}:${XAUTHORITY}:rw
+    - ${XAUTHORITY:-/dev/null}:${XAUTHORITY:-/dev/null}:rw
+    - /etc/passwd:/etc/passwd:ro
+    - /etc/group:/etc/group:ro
   devices:
     - /dev/dri
     - /dev/video0
     - /dev/input
-  working_dir: ${LOG_DIR:-/aichallenge}
-
-x-autoware-eval-base: &autoware-eval-base
-  <<: *autoware-base
-  volumes:
-    - ./output:${OUTPUT_ROOT:-/output}
-    # /aichallenge is baked into the eval image; intentionally not mounted here
-    # - ./aichallenge:/aichallenge
-    - ./vehicle/cyclonedds.xml:/opt/autoware/cyclonedds.xml
-    - /tmp/.X11-unix:/tmp/.X11-unix:rw
-    # Audio (PipeWire/Pulse) socket access on the host
-    - /run/user:/run/user:rw
-    - /dev/dri:/dev/dri
-    - ${XAUTHORITY}:${XAUTHORITY}:rw
+  working_dir: /aichallenge
 
 x-autoware-rosbag-base: &autoware-rosbag-base
   <<: *autoware-base
@@ -60,11 +50,12 @@ x-autoware-rosbag-base: &autoware-rosbag-base
     - ./vehicle:/vehicle
     - ./vehicle/cyclonedds.xml:/opt/autoware/cyclonedds.xml
     - ${RACING_KART_INTERFACE_DIR:-/home/tier4/racing_kart_interface}:${RACING_KART_INTERFACE_DIR:-/home/tier4/racing_kart_interface}:ro
+    - /etc/passwd:/etc/passwd:ro
+    - /etc/group:/etc/group:ro
     - /tmp/.X11-unix:/tmp/.X11-unix:rw
-    # Audio (PipeWire/Pulse) socket access on the host
-    - /run/user:/run/user:rw
+    # No audio mount: rosbag recording needs no PulseAudio.
     - /dev/dri:/dev/dri
-    - ${XAUTHORITY}:${XAUTHORITY}:rw
+    - ${XAUTHORITY:-/dev/null}:${XAUTHORITY:-/dev/null}:rw
 
 x-racing_kart_interface-base: &racing_kart_interface-base
   image: "ghcr.io/tier4/racing_kart_interface:latest-experiment"
@@ -72,7 +63,9 @@ x-racing_kart_interface-base: &racing_kart_interface-base
   pull_policy: never
   network_mode: host
   stop_grace_period: 10s
+  user: "${HOST_UID:-1000}:${HOST_GID:-1000}"
   environment:
+    - HOME=/tmp
     - DISPLAY=${DISPLAY}
     - USER=${USER}
     - TZ=Asia/Tokyo
@@ -91,10 +84,12 @@ x-racing_kart_interface-base: &racing_kart_interface-base
     - /dev/gnss:/dev/gnss
     - /tmp/.X11-unix:/tmp/.X11-unix:rw
     - /dev/dri:/dev/dri
+    - /etc/passwd:/etc/passwd:ro
+    - /etc/group:/etc/group:ro
   devices:
     - /dev/dri
   group_add:
-    - dialout
+    - "${HOST_GID_DIALOUT:-20}"
   working_dir: /workspace
 
 services:
@@ -110,7 +105,7 @@ services:
 
   simulator:
     <<: *autoware-base 
-    command: ["bash", "-lc", "exec env PULSE_SERVER=unix:/run/user/${HOST_UID:-1000}/pulse/native /aichallenge/run_simulator.bash ${SIM_MODE:-} >\"${LOG_DIR:-/output}/awsim.log\" 2>&1"]
+    command: ["bash", "-lc", "exec /aichallenge/run_simulator.bash"]
 
   autoware-command:
     <<: *autoware-base
@@ -121,8 +116,17 @@ services:
     command: ["bash", "-lc", 'exec /aichallenge/utils/record_all_rosbag.bash "${ROS_DOMAIN_ID:-1}" "${LOG_DIR:-}" "${RACING_KART_INTERFACE_DIR:-/home/tier4/racing_kart_interface}"']
 
   autoware-simulator-evaluation:
-    <<: *autoware-eval-base
+    <<: *autoware-base
     image: "aichallenge-2025-eval"
+    # /aichallenge is baked into the eval image; intentionally not mounted here.
+    volumes:
+      - ./output:${OUTPUT_ROOT:-/output}
+      - ./vehicle/cyclonedds.xml:/opt/autoware/cyclonedds.xml
+      - /tmp/.X11-unix:/tmp/.X11-unix:rw
+      - /dev/dri:/dev/dri
+      - ${XAUTHORITY:-/dev/null}:${XAUTHORITY:-/dev/null}:rw
+      - /etc/passwd:/etc/passwd:ro
+      - /etc/group:/etc/group:ro
     command: ["bash", "-lc", "exec /aichallenge/run_evaluation.bash"]
 
 #### vehicle specific services can be added here ####

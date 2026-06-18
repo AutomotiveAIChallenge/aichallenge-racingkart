@@ -14,5 +14,9 @@ if [[ ! -f ${script} ]]; then
     exit 1
 fi
 
+log_dir="${LOG_DIR:-/output}"
+mkdir -p "${log_dir}"
+exec >"${log_dir}/awsim.log" 2>&1
+
 echo "[INFO] Starting AWSIM: ${mode}.sh $*"
 exec bash "${script}" "$@"

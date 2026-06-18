@@ -26,14 +26,6 @@ source_setup() {
     set -u
 }
 
-fix_ownership() {
-    bash /aichallenge/utils/fix_ownership.bash \
-        "${HOST_UID-}" \
-        "${HOST_GID-}" \
-        /output \
-        "$(dirname "${out_dir}")" || true
-}
-
 finish_recording() {
     if [ "${FINALIZED}" = "1" ]; then
         return 0
@@ -45,8 +37,6 @@ finish_recording() {
         wait "${PID}" 2>/dev/null || true
     fi
     PID=""
-
-    fix_ownership
 }
 
 export ROS_DOMAIN_ID="${id}"

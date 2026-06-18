@@ -13,7 +13,7 @@ $AWSIM_DIRECTORY/AWSIM.x86_64 \
     --npcs 0 \
     --boosts 2 \
     --laps unlimited \
-    --timeout unlimited \
+    --timeout 10000000.0 \
     --steer-source ackermann \
     --sound off \
     --collisions on \

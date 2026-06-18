@@ -2,7 +2,7 @@
 SHELL := /bin/bash
 
 .PHONY: autoware-build autoware-vehicle autoware-simulator autoware-request-initialpose autoware-request-control  awsim-request-start awsim-request-reset autoware-driver-zenoh autoware-driver-zenoh-rosbag \
-	simulator dev dev2 dev3 dev4 driver zenoh download rviz2 down down2 down3 down4 ps autoware-bash
+	simulator dev dev2 dev3 dev4 driver zenoh download rviz2 down down_all ps autoware-bash eval
 
 # Used by docker-compose.yml for build/eval artifact ownership.
 HOST_UID ?= $(shell id -u)
@@ -88,10 +88,6 @@ gate1 gate2 gate3: simulator autoware-simulator
 	@echo "Start safety gate simulation (AWSIM + Autoware)"
 	@echo "To stop: make down  (docker compose down --remove-orphans)"
 
-# Kept for backward compatibility; `make down` already cleans all projects.
-down2 down3 down4: down
-
-eval:
 eval:
 	@echo "Start evaluation simulation (AWSIM + Autoware)"
 	docker compose up -d autoware-simulator-evaluation
@@ -132,11 +128,7 @@ ps:
 	done
 
 autoware-bash:
-	@if [ -z "$(VEHICLE_NUM)" ]; then \
-		docker compose exec autoware bash; \
-	else \
-		docker compose -p $(VEHICLE_NUM) exec autoware bash; \
-	fi
+	@./docker_exec.sh $(VEHICLE_NUM)
 
 # Download submission data by asking for credentials interactively
 # Usage:
