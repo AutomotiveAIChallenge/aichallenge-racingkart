@@ -31,4 +31,4 @@
     motion_analytics_cmd: "ros2 run aichallenge_system_launch motion_analytics.py"
     # Empty means <cwd>/<rosbag_output>.
     motion_analytics_input_dir: ""
-    exit_on_finish: true
+    exit_on_finish: false
