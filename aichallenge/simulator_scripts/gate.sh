@@ -6,7 +6,7 @@ export ROS_DOMAIN_ID=0
 # テスト指定: 第1引数（1/2/3 または all、既定 all = test1〜3 を順次実行）
 test="${1:-all}"
 
-$AWSIM_DIRECTORY/AWSIM.x86_64 \
+exec $AWSIM_DIRECTORY/AWSIM.x86_64 \
     --vehicles 1 \
     --safety-gate "${test}" \
     --steer-source ackermann \

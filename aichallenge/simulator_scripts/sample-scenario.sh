@@ -5,7 +5,7 @@ export ROS_DOMAIN_ID=0
 
 SCENARIO_DIRECTORY=/aichallenge/simulator/AWSIM/AWSIM_Data/StreamingAssets/Race/official.yaml
 
-$AWSIM_DIRECTORY/AWSIM.x86_64 \
+exec $AWSIM_DIRECTORY/AWSIM.x86_64 \
     --sound off \
     --collisions on \
     --scenario "${SCENARIO_DIRECTORY}" \

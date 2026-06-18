@@ -3,13 +3,13 @@
 AWSIM_DIRECTORY=/aichallenge/simulator/AWSIM
 export ROS_DOMAIN_ID=0
 
-$AWSIM_DIRECTORY/AWSIM.x86_64 \
+exec "$AWSIM_DIRECTORY/AWSIM.x86_64" \
     --start-mode sync \
     --start-count-seconds 5 \
     --vehicles 1 \
     --npcs 0 \
     --boosts 2 \
-    --laps 6 \
+    --laps 1 \
     --timeout 600 \
     --steer-source ackermann \
     --sound off \
