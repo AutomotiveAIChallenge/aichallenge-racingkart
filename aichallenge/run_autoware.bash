@@ -35,4 +35,8 @@ export ROS_HOME="${out_dir}/ros"
 export ROS_LOG_DIR="${ROS_HOME}/log"
 mkdir -p "${ROS_LOG_DIR}"
 
-ros2 launch aichallenge_system_launch aichallenge_system.launch.xml "${opts[@]}" "domain_id:=$id"
+# set -m keeps bash from setting SIGINT to SIG_IGN on the backgrounded child (then the forwarded INT would be a no-op).
+set -m
+ros2 launch aichallenge_system_launch aichallenge_system.launch.xml "${opts[@]}" "domain_id:=$id" &
+trap 'kill -INT $! 2>/dev/null' TERM INT
+while kill -0 $! 2>/dev/null; do wait; done
