@@ -9,7 +9,7 @@ exec "$AWSIM_DIRECTORY/AWSIM.x86_64" \
     --vehicles 1 \
     --npcs 0 \
     --boosts 2 \
-    --laps 1 \
+    --laps 6 \
     --timeout 600 \
     --steer-source ackermann \
     --sound off \
