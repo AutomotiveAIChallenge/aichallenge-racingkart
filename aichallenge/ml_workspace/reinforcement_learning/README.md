@@ -24,6 +24,15 @@ cp ./src/config/config_store/default_config.yaml ./workspace/202605122237/defaul
 COMPOSE_FILE=docker-compose.yml:docker-compose.gpu.yml
 ```
 
+また、AWSIMのカメラ画像を有効にするために、`aichallenge/simulator_scripts/dev.sh`の`--camera off \`を`--camera cpu \`に変更してください。
+
+その後、`aichallenge-racingkart/aichallenge/workspace/src/aichallenge_submit/aichallenge_submit_launch/launch/reference.launch.xml`のL20の下記の内容をrl_trainに書き換えてください。
+
+```.xml
+  <arg name="control_method" default="rl_train"
+```
+
+
 次に、Autoware をビルドし、Autoware と強化学習用の設定にした AWSIM を起動します。
 
 
