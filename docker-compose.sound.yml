@@ -1,0 +1,10 @@
+x-sound: &sound
+  environment:
+    - PULSE_SERVER=unix:/tmp/pulse/native
+  volumes:
+    - /run/user/${HOST_UID:-1000}/pulse:/tmp/pulse
+
+services:
+
+  simulator:
+    <<: *sound

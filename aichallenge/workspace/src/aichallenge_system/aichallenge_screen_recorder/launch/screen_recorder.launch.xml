@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<launch>
+    <arg name="service_name" default="/debug/service/capture_screen"/>
+    <!-- output_dir should be an absolute path; a relative path resolves against the node's working directory. -->
+    <arg name="output_dir" default="capture"/>
+    <arg name="filename_prefix" default="cap"/>
+    <!-- hz is passed via env because the recorder is created before the ROS node exists (see main()). -->
+    <arg name="hz" default="10"/>
+
+    <node pkg="aichallenge_screen_recorder" exec="screen_recorder_node" name="screen_recorder" output="screen">
+        <param name="service_name" value="$(var service_name)"/>
+        <param name="output_dir" value="$(var output_dir)"/>
+        <param name="filename_prefix" value="$(var filename_prefix)"/>
+        <env name="AIC_SCREEN_RECORDER_HZ" value="$(var hz)"/>
+    </node>
+</launch>

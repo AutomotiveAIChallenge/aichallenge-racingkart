@@ -3,9 +3,9 @@
     shutdown_grace_sec: 2
     kill_wait_sec: 10
     shutdown_delay_sec: 20.0
-    request_launch_shutdown: true
-    awsim_kill_patterns: AWSIM.x86_64
-    exit_on_finish: true
+    request_launch_shutdown: false
+    awsim_kill_patterns: ""
+    exit_on_finish: false
     shutdown_on_exit: false
     enable_debug_visualization: true
     admin_state_topic: /admin/awsim/state

@@ -1,8 +1,8 @@
 # make file inspired by https://roborovsky-racers.github.io/RoborovskyNote/
 SHELL := /bin/bash
 
-.PHONY: autoware-build autoware-vehicle autoware-simulator autoware-request-initialpose autoware-request-control  awsim-request-start awsim-request-reset autoware-driver-zenoh \
-	simulator dev dev2 dev3 dev4 driver zenoh download rviz2 down down2 down3 down4 ps autoware-bash
+.PHONY: autoware-build autoware-vehicle autoware-simulator autoware-request-initialpose autoware-request-control  awsim-request-start awsim-request-reset autoware-driver-zenoh autoware-driver-zenoh-rosbag \
+	simulator dev dev2 dev3 dev4 driver zenoh download rviz2 down down_all ps autoware-bash eval
 
 # Used by docker-compose.yml for build/eval artifact ownership.
 HOST_UID ?= $(shell id -u)
@@ -17,6 +17,14 @@ endif
 
 TIMESTAMP := $(shell date +%Y%m%d-%H%M%S)
 LOG_DIR := /output/$(TIMESTAMP)
+
+# make simulator-<mode>: <mode> は simulator_scripts/*.sh のファイル名
+SIM_MODES := $(notdir $(basename $(wildcard aichallenge/simulator_scripts/*.sh)))
+# dev<N>（車両数）/ gate<N>（テスト番号）は run_simulator.bash が展開するエイリアス
+SIM_MODES += dev2 dev3 dev4 gate1 gate2 gate3
+.PHONY: $(addprefix simulator-,$(SIM_MODES))
+$(addprefix simulator-,$(SIM_MODES)): simulator-%:
+	@$(MAKE) simulator SIM_MODE=$*
 
 # autowareのbuildのみ
 autoware-build:
@@ -49,7 +57,7 @@ awsim-request-reset:
 # run simulator (docker compose up -d simulator)
 simulator:
 	@echo "Start AWSIM (SIM_MODE=$(SIM_MODE))"
-	LOG_DIR=$(LOG_DIR) SIM_MODE=$(SIM_MODE) ROS_DOMAIN_ID=0 docker compose up -d simulator
+	LOG_DIR=$(LOG_DIR) SIM_MODE="$(SIM_MODE)" ROS_DOMAIN_ID=0 docker compose up -d simulator
 
 # 強化学習訓練用オプションでシミュレーターの起動
 simulator-rl:
@@ -69,22 +77,26 @@ dev: simulator autoware-simulator
 	@echo "Start dev simulation (AWSIM + Autoware)"
 	@echo "To stop: make down  (docker compose down --remove-orphans)"
 
-dev2: SIM_MODE := 2p
-dev3: SIM_MODE := 3p
-dev4: SIM_MODE := 4p
+dev2: SIM_MODE := dev2
+dev3: SIM_MODE := dev3
+dev4: SIM_MODE := dev4
 dev2 dev3 dev4: simulator
 	@N=$(@:dev%=%); \
 	echo "Start $$N-vehicle dev (autoware on ROS_DOMAIN_ID 1..$$N via docker compose -p)"; \
 	for p in $$(seq 1 $$N); do LOG_DIR=$(LOG_DIR) ROS_DOMAIN_ID=$$p docker compose -p $$p up -d autoware; done; \
-	$(MAKE) awsim-request-start; \
 	echo "To Stop: make down"
 
-# Kept for backward compatibility; `make down` already cleans all projects.
-down2 down3 down4: down
+gate1: SIM_MODE := gate1
+gate2: SIM_MODE := gate2
+gate3: SIM_MODE := gate3
+gate1 gate2 gate3: simulator autoware-simulator
+	@echo "Start safety gate simulation (AWSIM + Autoware)"
+	@echo "To stop: make down  (docker compose down --remove-orphans)"
 
 eval:
 	@echo "Start evaluation simulation (AWSIM + Autoware)"
 	docker compose up -d autoware-simulator-evaluation
+	$(MAKE) awsim-request-start
 	@echo "To stop: make down  (docker compose down --remove-orphans)"
 
 rl: simulator-rl autoware-simulator
@@ -98,9 +110,15 @@ rviz2:
 
 # driver + autoware + zenoh
 autoware-driver-zenoh:
-	RUN_MODE=vehicle docker compose up -d driver autoware
+	LOG_DIR=$(LOG_DIR) RUN_MODE=vehicle docker compose up -d driver autoware
 	sleep 15
-	docker compose up -d zenoh
+	LOG_DIR=$(LOG_DIR) docker compose up -d zenoh
+
+# driver + autoware + all-topic rosbag + zenoh
+autoware-driver-zenoh-rosbag:
+	LOG_DIR=$(LOG_DIR) RUN_MODE=vehicle docker compose up -d driver autoware rosbag
+	sleep 15
+	LOG_DIR=$(LOG_DIR) docker compose up -d zenoh
 
 down:
 	@for p in 1 2 3 4; do docker compose -p $$p down --remove-orphans; done
@@ -120,11 +138,7 @@ ps:
 	done
 
 autoware-bash:
-	@if [ -z "$(VEHICLE_NUM)" ]; then \
-		docker compose exec autoware bash; \
-	else \
-		docker compose -p $(VEHICLE_NUM) exec autoware bash; \
-	fi
+	@./docker_exec.sh $(VEHICLE_NUM)
 
 # Download submission data by asking for credentials interactively
 # Usage:
