@@ -59,11 +59,6 @@ simulator:
 	@echo "Start AWSIM (SIM_MODE=$(SIM_MODE))"
 	LOG_DIR=$(LOG_DIR) SIM_MODE="$(SIM_MODE)" ROS_DOMAIN_ID=0 docker compose up -d simulator
 
-# 強化学習訓練用オプションでシミュレーターの起動
-simulator-rl:
-	@echo "Start AWSIM"
-	LOG_DIR=$(LOG_DIR) SIM_MODE=rl docker compose up -d simulator
-
 # racing kart (docker compose up -d driver)
 driver:
 	docker compose up -d driver
@@ -97,10 +92,6 @@ eval:
 	@echo "Start evaluation simulation (AWSIM + Autoware)"
 	docker compose up -d autoware-simulator-evaluation
 	$(MAKE) awsim-request-start
-	@echo "To stop: make down  (docker compose down --remove-orphans)"
-
-rl: simulator-rl autoware-simulator
-	@echo "Start rl simulation (AWSIM + Autoware, DOMAIN_ID=$(DOMAIN_ID))"
 	@echo "To stop: make down  (docker compose down --remove-orphans)"
 
 # remote operation (docker compose up -d rviz2)
