@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<launch>
+  <arg name="use_sim_time" default="true"/>
+  <arg name="param_file" default="$(find-pkg-share longitudinal_safety_filter)/config/longitudinal_safety_filter.param.yaml"/>
+
+  <node pkg="longitudinal_safety_filter"
+        exec="longitudinal_safety_filter_node.py"
+        name="longitudinal_safety_filter"
+        output="screen">
+    <param from="$(var param_file)"/>
+    <param name="use_sim_time" value="$(var use_sim_time)"/>
+  </node>
+</launch>

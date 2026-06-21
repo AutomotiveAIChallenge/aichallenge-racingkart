@@ -1,0 +1,49 @@
+/**:
+  ros__parameters:
+    reference_trajectory_topic: /planning/scenario_planning/reference_trajectory
+    output_trajectory_topic: /planning/scenario_planning/trajectory
+    visualization_marker_topic: /planning/scenario_planning/v2x_avoidance_planner/markers
+    v2x_topic: /v2x/vehicle_positions
+    ego_odom_topic: /localization/kinematic_state
+    map_yaml_path: /aichallenge/workspace/src/aichallenge_submit/multi_purpose_mpc_ros/env/final_ver3/occupancy_grid_map.yaml
+
+    publish_rate_hz: 5.0
+    horizon_points: 90
+    transition_points: 12
+    candidate_offsets_m: [0.0, -0.5, 0.5, -1.0, 1.0, -1.5, 1.5]
+    return_to_reference: true
+    initial_offset_ratio: 0.8
+    emergency_lateral_escape_distance_m: 6.0
+    emergency_lateral_offsets_m: [-1.5, 1.5, -1.0, 1.0]
+    reuse_previous_trajectory: true
+    previous_trajectory_reuse_duration_sec: 2.0
+    previous_trajectory_min_offset_m: 0.2
+    min_output_velocity_mps: 0.0
+
+    wheel_base_m: 1.087
+    max_steering_angle_rad: 0.64
+    max_lateral_accel_mps2: 3.0
+    max_curvature_rate: 0.8
+    min_velocity_mps: 1.0
+    reduce_velocity_for_curvature: true
+
+    ego_radius_m: 0.55
+    wall_margin_m: 0.15
+    wall_check_lateral_offsets_m: [-0.45, 0.0, 0.45]
+    max_wall_collision_points: 0
+    obstacle_radius_m: 1.2
+    obstacle_margin_m: 0.0
+    use_spatial_obstacle_check: true
+    obstacle_timeout_sec: 2.5
+    obstacle_v_max_mps: 30.0
+    obstacle_jump_threshold_m: 8.0
+
+    offset_cost_weight: 1.0
+    smoothness_cost_weight: 0.35
+    obstacle_cost_weight: 1.0
+    reuse_previous_offset_cost_weight: 0.1
+
+    publish_reference_when_blocked: true
+    publish_stop_when_blocked: false
+    stop_buffer_points: 4
+    marker_z_offset_m: 0.3

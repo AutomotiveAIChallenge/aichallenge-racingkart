@@ -4,6 +4,7 @@
   <arg name="vehicle_id" default="$(env VEHICLE_ID default)" description="vehicle specific ID"/>
   <arg name="simulation" description="used for sensor kit param"/>
   <arg name="use_sim_time"/>
+  <arg name="use_cpp_mpc" default="true"/>
   <arg name="map_path" default="$(find-pkg-share aichallenge_submit_launch)/map"/>
   <arg name="vehicle_model" default="racing_kart"  description="vehicle model name"/>
   <arg name="sensor_model" default="racing_kart_sensor_kit" description="sensor model name"/>
@@ -18,7 +19,19 @@
 
   <!-- Control method -->
   <arg name="control_method" default="mpc"
-       description="Select control: mpc, pure_pursuit, tiny_lidar_net, pilot_net, joycon"/>
+       description="Select control: mpc, pure_pursuit, tiny_lidar_net, joycon, keyboard"/>
+  <arg name="launch_v2x_avoidance_planner" default="false" description="Generate a wall-safe V2X avoidance trajectory"/>
+  <arg name="launch_longitudinal_safety_filter" default="false" description="Filter control_cmd with V2X longitudinal safety"/>
+  <arg name="launch_v2x_safety_debug" default="false" description="Publish synthetic V2X obstacles for safety debugging"/>
+  <arg name="v2x_safety_debug_mode" default="trajectory_relative" description="V2X debug mode: trajectory_relative, ego_relative, or map_static"/>
+  <arg name="v2x_safety_debug_scenario" default="front_slowdown" description="V2X debug scenario"/>
+  <arg name="launch_trajectory_image_overlay" default="false" description="Overlay trajectory and MPC prediction on camera image"/>
+
+  <let name="controller_output_control_cmd_topic" value="/control/command/control_cmd_raw" if="$(var launch_longitudinal_safety_filter)"/>
+  <let name="controller_output_control_cmd_topic" value="/control/command/control_cmd" unless="$(var launch_longitudinal_safety_filter)"/>
+  <let name="controller_raw_debug_control_cmd_topic" value="/control/command/control_cmd_mpc_debug_raw" if="$(var launch_longitudinal_safety_filter)"/>
+  <let name="controller_raw_debug_control_cmd_topic" value="/control/command/control_cmd_raw" unless="$(var launch_longitudinal_safety_filter)"/>
+
 
   <!-- Global parameters -->
   <group scoped="false">
@@ -124,10 +137,18 @@
       <push-ros-namespace namespace="scenario_planning"/>
 
       <!-- Customizable -->
-      <node pkg="simple_trajectory_generator" exec="simple_trajectory_generator_node" name="simple_trajectory_generator" output="screen">
-            <param name="csv_path" value="$(find-pkg-share simple_trajectory_generator)/data/raceline_awsim_30km_from_garage.csv"/>
+      <node pkg="simple_trajectory_generator" exec="simple_trajectory_generator_node" name="simple_trajectory_generator" output="screen" if="$(var launch_v2x_avoidance_planner)">
+            <param name="csv_path" value="$(find-pkg-share simple_trajectory_generator)/data/raceline_awsim_30km.csv"/>
             <param name="z" value="6.5"/>
       </node>
+
+      <group if="$(var launch_v2x_avoidance_planner)">
+        <include file="$(find-pkg-share v2x_avoidance_planner)/launch/v2x_avoidance_planner.launch.xml">
+          <arg name="use_sim_time" value="$(var use_sim_time)"/>
+          <arg name="reference_trajectory_topic" value="/planning/scenario_planning/reference_trajectory"/>
+          <arg name="output_trajectory_topic" value="/planning/scenario_planning/trajectory"/>
+        </include>
+      </group>
       
     </group>
   </group>
@@ -137,29 +158,61 @@
     <include file="$(find-pkg-share aichallenge_submit_launch)/launch/control/pure_pursuit.launch.xml">
       <arg name="simulation" value="$(var simulation)"/>
       <arg name="use_sim_time" value="$(var use_sim_time)"/>
+      <arg name="output_control_cmd_topic" value="$(var controller_output_control_cmd_topic)"/>
+      <arg name="raw_debug_control_cmd_topic" value="$(var controller_raw_debug_control_cmd_topic)"/>
     </include>
   </group>
 
   <group if="$(eval &quot;'$(var control_method)' == 'mpc'&quot;)">
     <include file="$(find-pkg-share aichallenge_submit_launch)/launch/control/mpc.launch.xml">
       <arg name="use_sim_time" value="$(var use_sim_time)"/>
+      <arg name="use_cpp_mpc" value="$(var use_cpp_mpc)"/>
+      <arg name="output_control_cmd_topic" value="$(var controller_output_control_cmd_topic)"/>
+      <arg name="raw_debug_control_cmd_topic" value="$(var controller_raw_debug_control_cmd_topic)"/>
     </include>
   </group>
 
   <group if="$(eval &quot;'$(var control_method)' == 'tiny_lidar_net'&quot;)">
     <include file="$(find-pkg-share aichallenge_submit_launch)/launch/control/tiny_lidar_net.launch.xml">
       <arg name="use_sim_time" value="$(var use_sim_time)"/>
+      <arg name="output_control_cmd_topic" value="$(var controller_output_control_cmd_topic)"/>
     </include>
   </group>
 
   <group if="$(eval &quot;'$(var control_method)' == 'pilot_net'&quot;)">
     <include file="$(find-pkg-share aichallenge_submit_launch)/launch/control/pilot_net.launch.xml">
       <arg name="use_sim_time" value="$(var use_sim_time)"/>
+      <arg name="output_control_cmd_topic" value="$(var controller_output_control_cmd_topic)"/>
     </include>
   </group>
 
   <group if="$(eval &quot;'$(var control_method)' == 'joycon'&quot;)">
     <include file="$(find-pkg-share aichallenge_submit_launch)/launch/control/joycon.launch.xml"/>
+  </group>
+
+  <group if="$(eval &quot;'$(var control_method)' == 'keyboard'&quot;)">
+    <include file="$(find-pkg-share aichallenge_submit_launch)/launch/control/keyboard.launch.xml"/>
+  </group>
+
+  <group if="$(var launch_longitudinal_safety_filter)">
+    <include file="$(find-pkg-share longitudinal_safety_filter)/launch/longitudinal_safety_filter.launch.xml">
+      <arg name="use_sim_time" value="$(var use_sim_time)"/>
+    </include>
+  </group>
+
+  <group if="$(var launch_v2x_safety_debug)">
+    <include file="$(find-pkg-share v2x_safety_debug)/launch/v2x_safety_debug.launch.xml">
+      <arg name="use_sim_time" value="$(var use_sim_time)"/>
+      <arg name="mode" value="$(var v2x_safety_debug_mode)"/>
+      <arg name="scenario" value="$(var v2x_safety_debug_scenario)"/>
+    </include>
+  </group>
+
+  <!-- Debug visualization -->
+  <group if="$(var launch_trajectory_image_overlay)">
+    <include file="$(find-pkg-share trajectory_image_overlay)/launch/trajectory_image_overlay.launch.xml">
+      <arg name="use_sim_time" value="$(var use_sim_time)"/>
+    </include>
   </group>
 
   <!-- Map -->

@@ -1,0 +1,24 @@
+/**:
+  ros__parameters:
+    image_topic: /sensing/camera/image_raw
+    camera_info_topic: /sensing/camera/camera_info
+    trajectory_topic: /planning/scenario_planning/trajectory
+    mpc_prediction_topic: /mpc/prediction
+    output_image_topic: /trajectory_image_overlay/image
+
+    # Projection assumes an optical camera frame: +Z forward, +X right, +Y down.
+    camera_frame: camera_optical_link
+    # 0 means project the whole cached trajectory and draw only visible points.
+    max_trajectory_points: 0
+    max_mpc_points: 100
+    min_depth_m: 0.1
+    mpc_prediction_z_from_trajectory: true
+
+    trajectory_color_bgr: [0, 255, 0]
+    mpc_prediction_color_bgr: [0, 0, 255]
+    line_thickness: 3
+    point_radius: 4
+
+    # Used until CameraInfo is received. Keep these broad enough for AWSIM previews.
+    fallback_horizontal_fov_deg: 90.0
+    fallback_vertical_fov_deg: 60.0

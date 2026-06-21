@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<launch>
+  <arg name="param_file" default="$(find-pkg-share v2x_avoidance_planner)/config/v2x_avoidance_planner.param.yaml"/>
+  <arg name="use_sim_time" default="true"/>
+  <arg name="reference_trajectory_topic" default="/planning/scenario_planning/reference_trajectory"/>
+  <arg name="output_trajectory_topic" default="/planning/scenario_planning/trajectory"/>
+  <arg name="v2x_topic" default="/v2x/vehicle_positions"/>
+  <arg name="ego_odom_topic" default="/localization/kinematic_state"/>
+
+  <node pkg="v2x_avoidance_planner"
+        exec="v2x_avoidance_planner_node.py"
+        name="v2x_avoidance_planner_node"
+        output="screen">
+    <param from="$(var param_file)"/>
+    <param name="use_sim_time" value="$(var use_sim_time)"/>
+    <param name="reference_trajectory_topic" value="$(var reference_trajectory_topic)"/>
+    <param name="output_trajectory_topic" value="$(var output_trajectory_topic)"/>
+    <param name="v2x_topic" value="$(var v2x_topic)"/>
+    <param name="ego_odom_topic" value="$(var ego_odom_topic)"/>
+  </node>
+</launch>
