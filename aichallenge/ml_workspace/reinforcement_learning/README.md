@@ -4,21 +4,21 @@
 
 ## 強化学習の実行方法
 
-まず、コンフィグや学習のログ、学習済みモデルを保存しておくディレクトリをつくります。名前はわかりやすければなんでもいいです。この説明では`202605122237`としますので適宜読み替えてください。
+まず、コンフィグや学習のログ、学習済みモデルを保存しておくディレクトリをつくります。名前はわかりやすければなんでもいいです。この説明では`202605122237`としますので適宜読み替えてください。aichallenge-racingkartのディレクトリもcloneしたレポジトリのディレクトリに読み替えてください。
 
 ```.bash
-cd ~/aichallenge-racingkart-aaa-2026/aichallenge/ml_workspace/reinforcement_learning/
+cd ~/aichallenge-racingkart/aichallenge/ml_workspace/reinforcement_learning/
 mkdir workspace/202605122237/ -p
 ```
 
 コンフィグを作るかコピーします。作ったコンフィグは今作ったディレクトリの中に置きます。この説明ではコピーの方法をかきます。
 
 ```.bash
-cd ~/aichallenge-racingkart-aaa-2026/aichallenge/mk_workspace/reinforcement_learning/
+cd ~/aichallenge-racingkart/aichallenge/mk_workspace/reinforcement_learning/
 cp ./src/config/config_store/default_config.yaml ./workspace/202605122237/default_condig.yaml
 ```
 
-次に、AWSIM が GPU を使って描画するように設定をします。`~/aichallenge-racingkart-aaa-2026/.env`ファイルの中に以下の一行が存在するようにしてください。コメントアウトされていた場合は先頭の`#`を取り除いてください。
+次に、AWSIM が GPU を使って描画するように設定をします。`~/aichallenge-racingkart/.env`ファイルの中に以下の一行が存在するようにしてください。コメントアウトされていた場合は先頭の`#`を取り除いてください。
 
 ```text
 COMPOSE_FILE=docker-compose.yml:docker-compose.gpu.yml
@@ -26,16 +26,17 @@ COMPOSE_FILE=docker-compose.yml:docker-compose.gpu.yml
 
 次に、Autoware をビルドし、Autoware と強化学習用の設定にした AWSIM を起動します。
 
+
 ```.bash
-cd ~/aichallenge-racingkart-aaa-2026/
+cd ~/aichallenge-racingkart/
 make autoware-build
-make rl
+make dev
 ```
 
 AWSIM の中に`Race Result`というウィンドウが出てきますが、これは正常な動作です。次に、Autoware を実行している docker コンテナのシェルにアクセスします。
 
 ```.bash
-cd ~/aichallenge-racingkart-aaa-2026/
+cd ~/aichallenge-racingkart/
 ./docker_exec.sh
 ```
 
