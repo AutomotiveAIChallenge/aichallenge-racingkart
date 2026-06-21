@@ -24,7 +24,11 @@ cp ./src/config/config_store/default_config.yaml ./workspace/202605122237/defaul
 COMPOSE_FILE=docker-compose.yml:docker-compose.gpu.yml
 ```
 
-また、AWSIMのカメラ画像を有効にするために、`aichallenge/simulator_scripts/dev.sh`の`--camera off \`を`--camera cpu \`に変更してください。
+また、AWSIMのカメラ画像を有効にするために、
+`aichallenge/simulator_scripts/dev.sh`の下記２点を変更してください。
+
+1. `--camera off \`を`--camera cpu \`に変更してください。
+2. `--start-count-seconds 5 \`を`--start-count-seconds 0 \`に変更してください。
 
 その後、`aichallenge-racingkart/aichallenge/workspace/src/aichallenge_submit/aichallenge_submit_launch/launch/reference.launch.xml`のL20の下記の内容をrl_trainに書き換えてください。
 
