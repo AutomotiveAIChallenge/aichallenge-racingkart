@@ -202,7 +202,7 @@ check_hardware() {
             record_result "pass"
         else
             log "${FAIL} CAN interface can0 exists but not UP"
-            log "   Fix: sudo ip link set can0 up type can bitrate 500000"
+            log "   Fix: sudo ip link set can0 up type can bitrate 1000000"
             record_result "fail"
         fi
     else

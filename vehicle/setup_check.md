@@ -32,7 +32,7 @@ ip -details link show can0
 **期待する結果:**
 - ✅ `CAN interface can0 is UP`
 - ❌ `CAN interface can0 not found` → ハードウェア接続確認
-- ❌ `CAN interface can0 exists but not UP` → `sudo ip link set can0 up type can bitrate 500000`
+- ❌ `CAN interface can0 exists but not UP` → `sudo ip link set can0 up type can bitrate 1000000`
 
 #### VCU（Vehicle Control Unit）
 ```bash
