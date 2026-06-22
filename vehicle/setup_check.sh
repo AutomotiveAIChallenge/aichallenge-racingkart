@@ -351,6 +351,30 @@ check_docker() {
             log "   Fix: Build aichallenge development image"
             record_result "warn"
         fi
+
+        local required_services=(driver autoware rosbag zenoh)
+        local running_services
+        local missing_services=()
+        if running_services="$(docker compose -f "${REPO_ROOT}/docker-compose.yml" ps --services --filter status=running 2>/dev/null)"; then
+            for service in "${required_services[@]}"; do
+                if ! grep -Fxq "${service}" <<<"${running_services}"; then
+                    missing_services+=("${service}")
+                fi
+            done
+
+            if [ "${#missing_services[@]}" -eq 0 ]; then
+                log "${OK} Required compose services are running: ${required_services[*]}"
+                record_result "pass"
+            else
+                log "${FAIL} Required compose services not running: ${missing_services[*]}"
+                log "   Expected running services: ${required_services[*]}"
+                record_result "fail"
+            fi
+        else
+            log "${FAIL} Cannot inspect docker compose services"
+            log "   Fix: Check docker-compose.yml and Docker daemon"
+            record_result "fail"
+        fi
     fi
 
     # 環境変数確認

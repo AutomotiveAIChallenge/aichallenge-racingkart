@@ -102,12 +102,14 @@ nc -zv zenoh.dev.aichallenge-board.jsae.or.jp 7450
 # 手動確認コマンド
 docker ps
 docker images
+docker compose -f ../docker-compose.yml ps
 ```
 
 #### Dockerイメージ確認
 **期待する結果:**
 - ✅ `Racing kart interface image: ghcr.io/tier4/racing_kart_interface:latest-experiment (2025-08-25 10:30:45 +0900 JST)`
 - ✅ `Aichallenge dev image: aichallenge-2025-dev-t4tanaka:latest (2025-08-24 15:22:11 +0900 JST)`
+- ✅ `Required compose services are running: driver autoware rosbag zenoh`
 
 #### 環境変数・権限
 ```bash
