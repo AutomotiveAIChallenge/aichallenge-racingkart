@@ -14,7 +14,7 @@ mkdir workspace/202605122237/ -p
 コンフィグを作るかコピーします。作ったコンフィグは今作ったディレクトリの中に置きます。この説明ではコピーの方法をかきます。
 
 ```.bash
-cd ~/aichallenge-racingkart/aichallenge/mk_workspace/reinforcement_learning/
+cd ~/aichallenge-racingkart/aichallenge/ml_workspace/reinforcement_learning/
 cp ./src/config/config_store/default_config.yaml ./workspace/202605122237/default_condig.yaml
 ```
 
