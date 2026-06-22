@@ -28,6 +28,11 @@ TOTAL_CHECKS=0
 PASSED_CHECKS=0
 FAILED_CHECKS=0
 WARNING_CHECKS=0
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(git -C "${SCRIPT_DIR}" rev-parse --show-toplevel 2>/dev/null || true)"
+if [ -z "${REPO_ROOT}" ]; then
+    REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
+fi
 
 # ログ関数
 log() {
@@ -128,25 +133,50 @@ check_file_exists() {
     fi
 }
 
-check_systemd_service() {
-    local service=$1
-    local required=$2
+read_env_value() {
+    local key=$1
+    local env_file="${REPO_ROOT}/.env"
 
-    if systemctl is-active --quiet "$service" 2>/dev/null; then
-        log "${OK} Service $service is active"
-        record_result "pass"
-        return 0
-    else
-        if [ "$required" = "required" ]; then
-            log "${FAIL} Service $service is not active"
-            log "   Fix: sudo systemctl start $service"
-            record_result "fail"
-        else
-            log "${WARN} Service $service is not active (optional)"
-            record_result "warn"
-        fi
-        return 0 # エラーでも継続するためreturn 0に変更
+    [ -f "${env_file}" ] || return 0
+    awk -F= -v key="${key}" '
+        $1 == key {
+            value = substr($0, length(key) + 2)
+            gsub(/^["'\'']|["'\'']$/, "", value)
+            print value
+        }
+    ' "${env_file}" | tail -1
+}
+
+detect_vehicle_id() {
+    local vehicle_id="${VEHICLE_ID:-}"
+
+    if [ -z "${vehicle_id}" ]; then
+        vehicle_id="$(read_env_value VEHICLE_ID)"
     fi
+
+    if [ -z "${vehicle_id}" ]; then
+        case "$(hostname)" in
+        ECU-RK-01) vehicle_id="A2" ;;
+        ECU-RK-02) vehicle_id="A3" ;;
+        ECU-RK-06) vehicle_id="A6" ;;
+        ECU-RK-00) vehicle_id="A7" ;;
+        esac
+    fi
+
+    printf '%s\n' "${vehicle_id}"
+}
+
+zenoh_port_for_vehicle_id() {
+    case "$1" in
+    A2) echo 7448 ;;
+    A3) echo 7449 ;;
+    A6) echo 7450 ;;
+    A7) echo 7451 ;;
+    A1) echo 7452 ;;
+    A5) echo 7453 ;;
+    A8) echo 7454 ;;
+    *) return 1 ;;
+    esac
 }
 
 # ヘッダー表示
@@ -171,9 +201,9 @@ check_hardware() {
             log "${OK} CAN interface can0 is UP"
             record_result "pass"
         else
-            log "${WARN} CAN interface can0 exists but not UP"
+            log "${FAIL} CAN interface can0 exists but not UP"
             log "   Fix: sudo ip link set can0 up type can bitrate 500000"
-            record_result "warn"
+            record_result "fail"
         fi
     else
         log "${FAIL} CAN interface can0 not found"
@@ -214,15 +244,36 @@ check_network() {
         record_result "fail"
     fi
 
-    # ネットワーク接続の確認 (nmcli)
-    # KDDI有線接続の確認
-    if nmcli connection show --active | grep -q "fs050w-wired"; then
-        log "${OK} KDDI connection (fs050w-wired) is active."
+    # デフォルトルート確認。特定の回線名には依存しない。
+    if ip route get 8.8.8.8 >/dev/null 2>&1; then
+        ROUTE_INFO=$(ip route get 8.8.8.8 2>/dev/null | head -1)
+        log "${OK} Internet route available"
+        log "   Route: ${ROUTE_INFO}"
         record_result "pass"
     else
-        log "${FAIL} No active KDDI connection (fs050w-wired)."
-        log "   Fix: Check the physical cable and network configuration."
+        log "${FAIL} No internet route available"
+        log "   Fix: Check Wi-Fi/LTE/router/default route configuration."
         record_result "fail"
+    fi
+
+    # DNS確認。Zenoh bridge はホスト名を使うため名前解決も確認する。
+    if getent hosts zenoh.dev.aichallenge-board.jsae.or.jp >/dev/null 2>&1 ||
+        getent hosts google.com >/dev/null 2>&1; then
+        log "${OK} DNS resolution works"
+        record_result "pass"
+    else
+        log "${FAIL} DNS resolution failed"
+        log "   Fix: Check DNS settings and internet connectivity."
+        record_result "fail"
+    fi
+
+    if command -v nmcli >/dev/null 2>&1; then
+        ACTIVE_CONNECTIONS=$(nmcli -t -f NAME,DEVICE connection show --active 2>/dev/null | sed 's/:/ on /g' | paste -sd ', ' -)
+        if [ -n "${ACTIVE_CONNECTIONS}" ]; then
+            log "${INFO} Active NetworkManager connections: ${ACTIVE_CONNECTIONS}"
+        else
+            log "${INFO} Active NetworkManager connections: none reported"
+        fi
     fi
 
     # リバースSSHサービス状態確認
@@ -235,32 +286,36 @@ check_network() {
         record_result "warn"
     fi
 
-    # Zenohサーバー疎通確認
-    if timeout 5 bash -c "echo >/dev/tcp/57.180.63.135/7447" 2>/dev/null; then
-        log "${OK} Zenoh server connectivity (57.180.63.135:7447)"
-        record_result "pass"
+    # Zenohサーバー疎通確認。run_zenoh.bash と同じ VEHICLE_ID -> port 対応を使う。
+    local zenoh_host="${ZENOH_HOST:-zenoh.dev.aichallenge-board.jsae.or.jp}"
+    local vehicle_id_for_zenoh
+    local zenoh_port
+    vehicle_id_for_zenoh="$(detect_vehicle_id)"
+    if [ -z "${vehicle_id_for_zenoh}" ]; then
+        log "${FAIL} VEHICLE_ID is not set; cannot choose Zenoh endpoint"
+        log "   Fix: export VEHICLE_ID=A6 or add VEHICLE_ID=A6 to .env"
+        record_result "fail"
+    elif zenoh_port="$(zenoh_port_for_vehicle_id "${vehicle_id_for_zenoh}")"; then
+        if timeout 5 bash -c 'echo >/dev/tcp/"$1"/"$2"' _ "${zenoh_host}" "${zenoh_port}" 2>/dev/null; then
+            log "${OK} Zenoh endpoint connectivity (${vehicle_id_for_zenoh}: ${zenoh_host}:${zenoh_port})"
+            record_result "pass"
+        else
+            log "${FAIL} Cannot reach Zenoh endpoint (${vehicle_id_for_zenoh}: ${zenoh_host}:${zenoh_port})"
+            log "   Check: VEHICLE_ID, internet route, firewall, and server-side tunnel/port availability."
+            record_result "fail"
+        fi
     else
-        log "${WARN} Cannot reach Zenoh server"
-        log "   Check: Network connectivity to 57.180.63.135:7447"
-        record_result "warn"
+        log "${FAIL} Invalid VEHICLE_ID for Zenoh: ${vehicle_id_for_zenoh}"
+        log "   Valid: A1, A2, A3, A5, A6, A7, A8"
+        record_result "fail"
     fi
 
     log ""
 }
-# 3. システムサービス確認
-check_services() {
-    log "${INFO} 3. System Services Check"
-    log "----------------------------------------"
 
-    # RTK関連サービス
-    check_systemd_service "rtk_str2str.service" "optional"
-
-    log ""
-}
-
-# 4. Docker・環境確認
+# 3. Docker・環境確認
 check_docker() {
-    log "${INFO} 4. Docker & Environment Check"
+    log "${INFO} 3. Docker & Environment Check"
     log "----------------------------------------"
 
     # Docker確認
@@ -321,9 +376,9 @@ check_docker() {
     log ""
 }
 
-# 5. past_log.md既知問題チェック
+# 4. past_log.md既知問題チェック
 check_known_issues() {
-    log "${INFO} 5. Known Issues Prevention Check"
+    log "${INFO} 4. Known Issues Prevention Check"
     log "----------------------------------------"
 
     # バッテリー警告
@@ -338,24 +393,23 @@ check_known_issues() {
     log ""
 }
 
-# 6. 実行準備確認
+# 5. 実行準備確認
 check_execution_readiness() {
-    log "${INFO} 6. Execution Readiness Check (Vehicle Mode)"
+    log "${INFO} 5. Execution Readiness Check (Vehicle Mode)"
     log "----------------------------------------"
 
-    # Docker Composeファイル存在確認
-    if [ -f "docker-compose.yml" ]; then
-        log "${OK} docker-compose.yml exists"
+    # Docker Composeファイル存在確認（repo root基準、missingでも致命扱いしない）
+    COMPOSE_FILE="${REPO_ROOT}/docker-compose.yml"
+    if [ -f "${COMPOSE_FILE}" ]; then
+        log "${OK} docker-compose.yml exists at repo root: ${COMPOSE_FILE}"
         record_result "pass"
     else
-        log "${FAIL} docker-compose.yml not found"
-        log "   Fix: Check current directory or cd to vehicle/"
-        record_result "fail"
+        log "${INFO} docker-compose.yml not found at repo root (skipping; not a vehicle hardware failure)"
     fi
 
     # 現在のブランチ確認
-    if git rev-parse --git-dir >/dev/null 2>&1; then
-        BRANCH=$(git branch --show-current)
+    if git -C "${REPO_ROOT}" rev-parse --git-dir >/dev/null 2>&1; then
+        BRANCH=$(git -C "${REPO_ROOT}" branch --show-current)
         log "${INFO} Current git branch: $BRANCH"
     fi
 
@@ -399,7 +453,6 @@ main() {
     print_header
     check_hardware
     check_network
-    check_services
     check_docker
     check_known_issues
     check_execution_readiness
