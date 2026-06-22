@@ -139,6 +139,9 @@ services:
   # Driver service
   driver:
     <<: *racing_kart_interface-base
+    # Start as root for CAN/DDS host setup; /vehicle/run_driver.bash
+    # fixes log ownership back to HOST_UID:HOST_GID.
+    user: "root"
     entrypoint: []
     command: ["bash", "-lc", "exec /vehicle/run_driver.bash vehicle ${ROS_DOMAIN_ID:-1} ${LOG_DIR:-}"]
 
