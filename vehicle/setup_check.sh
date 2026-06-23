@@ -22,11 +22,14 @@ INFO="ℹ️"
 
 # デフォルト設定
 MODE="vehicle"
+PHASE="all"
 ENABLE_LOG=false
 LOG_FILE="setup_check_$(date +'%Y%m%d_%H%M%S').log"
 CAN_IFACE="${CAN_IFACE:-can0}"
 CAN_SAMPLE_SEC="${CAN_SAMPLE_SEC:-3}"
 CAN_MIN_FRAMES="${CAN_MIN_FRAMES:-5}"
+GNSS_NAVPVT_TIMEOUT_SEC="${GNSS_NAVPVT_TIMEOUT_SEC:-8}"
+ROS_TOPIC_TIMEOUT_SEC="${ROS_TOPIC_TIMEOUT_SEC:-4}"
 TOTAL_CHECKS=0
 PASSED_CHECKS=0
 FAILED_CHECKS=0
@@ -58,6 +61,7 @@ Racing Kart Setup Check Script
 Usage: $0 [OPTIONS]
 
 OPTIONS:
+  --phase PHASE   Check phase: preflight, runtime, or all [default: all]
   --log           Enable logging to file
   --help          Show this help
 
@@ -65,12 +69,18 @@ ENVIRONMENT:
   CAN_IFACE        CAN interface to check [default: can0]
   CAN_SAMPLE_SEC   candump sampling seconds [default: 3]
   CAN_MIN_FRAMES   minimum expected frames in the sample [default: 5]
+  GNSS_NAVPVT_TIMEOUT_SEC
+                   seconds to wait for /sensing/gnss/navpvt [default: 8]
+  ROS_TOPIC_TIMEOUT_SEC
+                   seconds to wait for each runtime ROS topic [default: 4]
 
 MODE:
   vehicle         Real vehicle mode (CAN + VCU required) [default]
 
 Examples:
   $0
+  $0 --phase preflight
+  $0 --phase runtime
   $0 --log
   CAN_SAMPLE_SEC=5 CAN_MIN_FRAMES=20 $0 --log
 EOF
@@ -79,6 +89,18 @@ EOF
 # 引数解析
 while [[ $# -gt 0 ]]; do
     case $1 in
+    --phase)
+        PHASE="${2:-}"
+        case "${PHASE}" in
+        preflight | runtime | all) ;;
+        *)
+            echo "Invalid phase: ${PHASE}"
+            show_help
+            exit 1
+            ;;
+        esac
+        shift 2
+        ;;
     --log)
         ENABLE_LOG=true
         shift
@@ -139,6 +161,69 @@ check_file_exists() {
             record_result "warn"
         fi
         return 0 # エラーでも継続するためreturn 0に変更
+    fi
+}
+
+is_compose_service_running() {
+    local service=$1
+    docker compose -f "${REPO_ROOT}/docker-compose.yml" ps --services --filter status=running 2>/dev/null |
+        grep -Fxq "${service}"
+}
+
+ros_setup_command_for_service() {
+    case "$1" in
+    driver)
+        cat <<'EOF'
+set +u
+source /opt/ros/humble/setup.bash
+source /workspace/install/setup.bash
+set -u
+EOF
+        ;;
+    autoware)
+        cat <<'EOF'
+set +u
+source /opt/ros/humble/setup.bash
+source /aichallenge/workspace/install/setup.bash
+if [ -f "${RACING_KART_INTERFACE_DIR:-/home/tier4/racing_kart_interface}/install/setup.bash" ]; then
+    source "${RACING_KART_INTERFACE_DIR:-/home/tier4/racing_kart_interface}/install/setup.bash"
+fi
+set -u
+EOF
+        ;;
+    *)
+        return 1
+        ;;
+    esac
+}
+
+check_ros_topic_once() {
+    local service=$1
+    local topic=$2
+    local label=$3
+    local setup_cmd
+
+    if ! is_compose_service_running "${service}"; then
+        log "${FAIL} ${label}: ${service} service is not running"
+        record_result "fail"
+        return 0
+    fi
+
+    if ! setup_cmd="$(ros_setup_command_for_service "${service}")"; then
+        log "${FAIL} ${label}: unknown compose service '${service}'"
+        record_result "fail"
+        return 0
+    fi
+
+    if docker compose -f "${REPO_ROOT}/docker-compose.yml" exec -T "${service}" bash -lc "
+        ${setup_cmd}
+        timeout '${ROS_TOPIC_TIMEOUT_SEC}' ros2 topic echo '${topic}' --once >/dev/null
+    " >/dev/null 2>&1; then
+        log "${OK} ${label}: ${topic}"
+        record_result "pass"
+    else
+        log "${FAIL} ${label}: no message on ${topic} within ${ROS_TOPIC_TIMEOUT_SEC}s"
+        record_result "fail"
     fi
 }
 
@@ -268,6 +353,7 @@ print_header() {
     log "========================================"
     log "Racing Kart Setup Check"
     log "Mode: $MODE"
+    log "Phase: $PHASE"
     log "Time: $(date)"
     log "========================================"
     log ""
@@ -280,20 +366,15 @@ check_hardware() {
 
     # CANデバイス確認
     if ip link show "${CAN_IFACE}" >/dev/null 2>&1; then
-        if ip link show "${CAN_IFACE}" | grep -q "UP"; then
-            log "${OK} CAN interface ${CAN_IFACE} is UP"
-            record_result "pass"
-            check_can_traffic "${CAN_IFACE}"
-        else
-            log "${FAIL} CAN interface ${CAN_IFACE} exists but not UP"
-            log "   Fix: sudo ip link set ${CAN_IFACE} up type can bitrate 1000000"
-            record_result "fail"
-        fi
+        log "${OK} CAN interface ${CAN_IFACE} exists"
+        record_result "pass"
     else
         log "${FAIL} CAN interface ${CAN_IFACE} not found"
         log "   Fix: Check CAN hardware connection"
         record_result "fail"
     fi
+
+    check_command "candump" "candump (can-utils)"
 
     # VCUデバイス確認 (vehicleモードで必須)
     check_file_exists "/dev/vcu" "VCU directory" "required"
@@ -309,6 +390,30 @@ check_hardware() {
     fi
 
     check_file_exists "/dev/gnss/usb" "GNSS symlink" "optional"
+
+    log ""
+}
+
+# 1. 起動後ハードウェア通信確認
+check_runtime_hardware() {
+    log "${INFO} 1. Runtime Hardware Communication Check"
+    log "----------------------------------------"
+
+    if ip link show "${CAN_IFACE}" >/dev/null 2>&1; then
+        if ip link show "${CAN_IFACE}" | grep -q "UP"; then
+            log "${OK} CAN interface ${CAN_IFACE} is UP"
+            record_result "pass"
+            check_can_traffic "${CAN_IFACE}"
+        else
+            log "${FAIL} CAN interface ${CAN_IFACE} exists but not UP"
+            log "   Fix: sudo ip link set ${CAN_IFACE} up type can bitrate 1000000"
+            record_result "fail"
+        fi
+    else
+        log "${FAIL} CAN interface ${CAN_IFACE} not found"
+        log "   Fix: Check CAN hardware connection"
+        record_result "fail"
+    fi
 
     log ""
 }
@@ -436,29 +541,6 @@ check_docker() {
             record_result "warn"
         fi
 
-        local required_services=(driver autoware rosbag zenoh)
-        local running_services
-        local missing_services=()
-        if running_services="$(docker compose -f "${REPO_ROOT}/docker-compose.yml" ps --services --filter status=running 2>/dev/null)"; then
-            for service in "${required_services[@]}"; do
-                if ! grep -Fxq "${service}" <<<"${running_services}"; then
-                    missing_services+=("${service}")
-                fi
-            done
-
-            if [ "${#missing_services[@]}" -eq 0 ]; then
-                log "${OK} Required compose services are running: ${required_services[*]}"
-                record_result "pass"
-            else
-                log "${FAIL} Required compose services not running: ${missing_services[*]}"
-                log "   Expected running services: ${required_services[*]}"
-                record_result "fail"
-            fi
-        else
-            log "${FAIL} Cannot inspect docker compose services"
-            log "   Fix: Check docker-compose.yml and Docker daemon"
-            record_result "fail"
-        fi
     fi
 
     # 環境変数確認
@@ -471,27 +553,156 @@ check_docker() {
         record_result "warn"
     fi
 
-    # ユーザーグループ確認
-    if groups "$USER" | grep -q "dialout"; then
-        log "${OK} User $USER in dialout group"
-        record_result "pass"
+    log ""
+}
+
+# 3. 起動後Dockerサービス確認
+check_runtime_docker_services() {
+    log "${INFO} 3. Runtime Docker Service Check"
+    log "----------------------------------------"
+
+    if ! command -v docker >/dev/null 2>&1; then
+        log "${FAIL} Docker command not found"
+        record_result "fail"
+        log ""
+        return 0
+    fi
+
+    if ! docker ps >/dev/null 2>&1; then
+        log "${FAIL} Docker daemon not accessible"
+        log "   Fix: sudo systemctl start docker"
+        record_result "fail"
+        log ""
+        return 0
+    fi
+
+    local required_services=(driver autoware rosbag zenoh)
+    local running_services
+    local missing_services=()
+    if running_services="$(docker compose -f "${REPO_ROOT}/docker-compose.yml" ps --services --filter status=running 2>/dev/null)"; then
+        for service in "${required_services[@]}"; do
+            if ! grep -Fxq "${service}" <<<"${running_services}"; then
+                missing_services+=("${service}")
+            fi
+        done
+
+        if [ "${#missing_services[@]}" -eq 0 ]; then
+            log "${OK} Required compose services are running: ${required_services[*]}"
+            record_result "pass"
+        else
+            log "${FAIL} Required compose services not running: ${missing_services[*]}"
+            log "   Expected running services: ${required_services[*]}"
+            record_result "fail"
+        fi
     else
-        log "${WARN} User $USER not in dialout group"
-        log "   Fix: sudo usermod -a -G dialout $USER"
-        record_result "warn"
+        log "${FAIL} Cannot inspect docker compose services"
+        log "   Fix: Check docker-compose.yml and Docker daemon"
+        record_result "fail"
     fi
 
     log ""
 }
 
-# 4. past_log.md既知問題チェック
+# 4. GNSS/RTK状態確認
+check_gnss_rtk_status() {
+    log "${INFO} 4. GNSS/RTK Status Check"
+    log "----------------------------------------"
+
+    if ! command -v docker >/dev/null 2>&1; then
+        log "${FAIL} Docker command not found; cannot check /sensing/gnss/navpvt"
+        record_result "fail"
+        log ""
+        return 0
+    fi
+
+    local running_services
+    if ! running_services="$(docker compose -f "${REPO_ROOT}/docker-compose.yml" ps --services --filter status=running 2>/dev/null)"; then
+        log "${FAIL} Cannot inspect docker compose services for GNSS/RTK check"
+        record_result "fail"
+        log ""
+        return 0
+    fi
+
+    if ! grep -Fxq "driver" <<<"${running_services}"; then
+        log "${FAIL} driver service is not running; cannot read /sensing/gnss/navpvt"
+        log "   Fix: start driver service and wait for GNSS messages."
+        record_result "fail"
+        log ""
+        return 0
+    fi
+
+    local output
+    local flags
+    output="$(
+        docker compose -f "${REPO_ROOT}/docker-compose.yml" exec -T driver bash -lc "
+            set +u
+            source /opt/ros/humble/setup.bash
+            source /workspace/install/setup.bash
+            set -u
+            timeout '${GNSS_NAVPVT_TIMEOUT_SEC}' ros2 topic echo /sensing/gnss/navpvt --once --field flags
+        " 2>&1
+    )"
+    flags="$(awk '/^[[:space:]]*[0-9]+[[:space:]]*$/ { value = $1 } END { print value }' <<<"${output}")"
+
+    if [ -z "${flags}" ]; then
+        log "${FAIL} Could not read /sensing/gnss/navpvt flags within ${GNSS_NAVPVT_TIMEOUT_SEC}s"
+        log "   Check: driver logs, GNSS antenna, sky visibility, and /dev/gnss/usb."
+        log "   Do not start autonomous driving until GNSS RTK fixed is confirmed."
+        record_result "fail"
+    elif [ "${flags}" = "131" ]; then
+        log "${OK} GNSS RTK fixed: NavPVT flags=${flags}"
+        record_result "pass"
+    elif [ "${flags}" = "67" ]; then
+        log "${WARN} GNSS RTK float: NavPVT flags=${flags}"
+        log "   Check: ichimil account/status, correction data connection, and open-sky GNSS conditions."
+        log "   Recommendation: wait for RTK fixed before starting autonomous driving."
+        record_result "warn"
+    else
+        log "${FAIL} GNSS RTK status is not acceptable: NavPVT flags=${flags}"
+        log "   Expected: 131=fixed (${OK}), 67=float (${WARN})"
+        log "   Check: ichimil account/status, correction data connection, and open-sky GNSS conditions."
+        log "   Do not start autonomous driving until GNSS RTK fixed is confirmed."
+        record_result "fail"
+    fi
+
+    log ""
+}
+
+# 5. runtime ROS topic出力確認
+check_runtime_ros_topics() {
+    log "${INFO} 5. Runtime ROS Topic Output Check"
+    log "----------------------------------------"
+
+    log "${INFO} Racing kart hardware/status topics"
+    check_ros_topic_once "driver" "/racing_kart/vcu/status" "VCU status"
+    check_ros_topic_once "driver" "/racing_kart/steer/status" "Steer status"
+    check_ros_topic_once "driver" "/racing_kart/brake/status" "Brake status"
+
+    log "${INFO} Racing kart final command topics"
+    check_ros_topic_once "driver" "/racing_kart/vcu/command" "VCU command"
+    check_ros_topic_once "driver" "/racing_kart/steer/command" "Steer command"
+    check_ros_topic_once "driver" "/racing_kart/brake/command" "Brake command"
+
+    log "${INFO} Autoware vehicle status topics"
+    check_ros_topic_once "autoware" "/vehicle/status/velocity_status" "Velocity status"
+    check_ros_topic_once "autoware" "/vehicle/status/steering_status" "Steering status"
+    check_ros_topic_once "autoware" "/vehicle/status/gear_status" "Gear status"
+    check_ros_topic_once "autoware" "/vehicle/status/actuation_status" "Actuation status"
+
+    log "${INFO} Autoware downstream control command topics"
+    check_ros_topic_once "autoware" "/control/command/control_cmd" "Control command"
+    check_ros_topic_once "autoware" "/control/command/actuation_cmd" "Actuation command"
+
+    log ""
+}
+
+# 6. past_log.md既知問題チェック
 check_known_issues() {
-    log "${INFO} 4. Known Issues Prevention Check"
+    log "${INFO} 6. Known Issues Prevention Check"
     log "----------------------------------------"
 
     # バッテリー警告
     log "${WARN} Remember: Check battery level manually (display values unreliable)"
-    log "${WARN} Remember: Avoid direct sunlight exposure for batteries"
     record_result "warn"
 
     # 実行前Wait推奨（GNSSのため）
@@ -501,9 +712,9 @@ check_known_issues() {
     log ""
 }
 
-# 5. 実行準備確認
+# 7. 実行準備確認
 check_execution_readiness() {
-    log "${INFO} 5. Execution Readiness Check (Vehicle Mode)"
+    log "${INFO} 7. Execution Readiness Check (Vehicle Mode)"
     log "----------------------------------------"
 
     # Docker Composeファイル存在確認（repo root基準、missingでも致命扱いしない）
@@ -559,11 +770,32 @@ main() {
     fi
 
     print_header
-    check_hardware
-    check_network
-    check_docker
-    check_known_issues
-    check_execution_readiness
+    case "${PHASE}" in
+    preflight)
+        check_hardware
+        check_network
+        check_docker
+        check_known_issues
+        check_execution_readiness
+        ;;
+    runtime)
+        check_runtime_hardware
+        check_runtime_docker_services
+        check_gnss_rtk_status
+        check_runtime_ros_topics
+        ;;
+    all)
+        check_hardware
+        check_network
+        check_docker
+        check_runtime_hardware
+        check_runtime_docker_services
+        check_gnss_rtk_status
+        check_runtime_ros_topics
+        check_known_issues
+        check_execution_readiness
+        ;;
+    esac
     print_summary
 }
 
