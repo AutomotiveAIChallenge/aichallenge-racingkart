@@ -50,12 +50,14 @@ else
     echo "[INFO] No NVIDIA GPU detected → running on CPU"
 fi
 
-# Join render/video groups for /dev/dri access.
+# Join render/video groups for /dev/dri access, input group for /dev/input/event* (joy_node).
 gid_render="$(getent group render | cut -d: -f3)"
 gid_video="$(getent group video | cut -d: -f3)"
+gid_input="$(getent group input | cut -d: -f3)"
 group_add_opts=""
 [ -n "${gid_render}" ] && group_add_opts="${group_add_opts} --group-add ${gid_render}"
 [ -n "${gid_video}" ] && group_add_opts="${group_add_opts} --group-add ${gid_video}"
+[ -n "${gid_input}" ] && group_add_opts="${group_add_opts} --group-add ${gid_input}"
 
 ts="$(date +%Y%m%d-%H%M%S)"
 LOG_FILE="output/docker/${ts}-docker_run-$$.log"

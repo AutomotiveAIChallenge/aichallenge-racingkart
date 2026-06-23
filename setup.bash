@@ -968,7 +968,9 @@ ensure_env() {
     upsert_env_var HOST_GID "$(id -g)"
     gid="$(getent group dialout | cut -d: -f3)"
     [ -n "${gid}" ] && upsert_env_var HOST_GID_DIALOUT "${gid}"
-    log "${OK} Set host UID/GID + dialout GID in .env"
+    gid="$(getent group input | cut -d: -f3)"
+    [ -n "${gid}" ] && upsert_env_var HOST_GID_INPUT "${gid}"
+    log "${OK} Set host UID/GID + dialout/input GID in .env"
 }
 
 # Host DDS tuning (CycloneDDS): persist rmem_max + multicast on lo
