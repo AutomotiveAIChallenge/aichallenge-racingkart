@@ -4,7 +4,7 @@
   <arg name="self_control_topic" default="/ackermann_cmd"/>
   <arg name="vehicle_control_topic" default="/control/command/control_cmd"/>
   <arg name="trigger_topic" default="/rosbag2_recorder/trigger"/>
-  <arg name="input_source" default="joy" description="Joy input source: joy | keyboard"/>
+  <arg name="input_source" default="joy" description="Joy input source: joy | keyboard | keyboard_x11"/>
 
 
   <!-- joynode -->
@@ -23,6 +23,17 @@
     <node pkg="teleop_manager"
           exec="keyboard_to_joy_node"
           name="keyboard_to_joy_node"
+          output="screen">
+      <param from="$(var teleop_param)"/>
+    </node>
+  </group>
+
+  <!-- keyboard (X11) -> /joy bridge (reads X server key state; use over remote
+       desktop / VNC / RDP where keys are injected into X, not evdev) -->
+  <group if="$(eval &quot;'$(var input_source)' == 'keyboard_x11'&quot;)">
+    <node pkg="teleop_manager"
+          exec="keyboard_x11_to_joy_node"
+          name="keyboard_x11_to_joy_node"
           output="screen">
       <param from="$(var teleop_param)"/>
     </node>

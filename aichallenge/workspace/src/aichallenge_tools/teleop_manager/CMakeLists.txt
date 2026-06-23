@@ -7,6 +7,7 @@ endif()
 
 # find dependencies
 find_package(ament_cmake_auto REQUIRED)
+find_package(X11 REQUIRED)
 
 ament_auto_find_build_dependencies()
 
@@ -17,6 +18,12 @@ ament_auto_add_executable(teleop_manager_node
 ament_auto_add_executable(keyboard_to_joy_node
   src/keyboard_to_joy_node.cpp
 )
+
+ament_auto_add_executable(keyboard_x11_to_joy_node
+  src/keyboard_x11_to_joy_node.cpp
+)
+target_include_directories(keyboard_x11_to_joy_node PRIVATE ${X11_INCLUDE_DIR})
+target_link_libraries(keyboard_x11_to_joy_node ${X11_LIBRARIES})
 
 ament_auto_package(INSTALL_TO_SHARE
   config
