@@ -14,6 +14,10 @@ ament_auto_add_executable(teleop_manager_node
   src/teleop_manager_node.cpp
 )
 
+ament_auto_add_executable(keyboard_to_joy_node
+  src/keyboard_to_joy_node.cpp
+)
+
 ament_auto_package(INSTALL_TO_SHARE
   config
   launch
