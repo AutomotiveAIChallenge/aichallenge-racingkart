@@ -129,7 +129,7 @@ ps:
 	done
 
 autoware-bash:
-	@./docker_exec.sh $(VEHICLE_NUM)
+	CMD="bash --rcfile /etc/skel/.bashrc -i" docker compose run --rm --no-deps autoware-command
 
 # Download submission data by asking for credentials interactively
 # Usage:
