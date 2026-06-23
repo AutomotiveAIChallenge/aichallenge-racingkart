@@ -24,6 +24,9 @@ INFO="ℹ️"
 MODE="vehicle"
 ENABLE_LOG=false
 LOG_FILE="setup_check_$(date +'%Y%m%d_%H%M%S').log"
+CAN_IFACE="${CAN_IFACE:-can0}"
+CAN_SAMPLE_SEC="${CAN_SAMPLE_SEC:-3}"
+CAN_MIN_FRAMES="${CAN_MIN_FRAMES:-5}"
 TOTAL_CHECKS=0
 PASSED_CHECKS=0
 FAILED_CHECKS=0
@@ -58,12 +61,18 @@ OPTIONS:
   --log           Enable logging to file
   --help          Show this help
 
+ENVIRONMENT:
+  CAN_IFACE        CAN interface to check [default: can0]
+  CAN_SAMPLE_SEC   candump sampling seconds [default: 3]
+  CAN_MIN_FRAMES   minimum expected frames in the sample [default: 5]
+
 MODE:
   vehicle         Real vehicle mode (CAN + VCU required) [default]
 
 Examples:
   $0
   $0 --log
+  CAN_SAMPLE_SEC=5 CAN_MIN_FRAMES=20 $0 --log
 EOF
 }
 
@@ -133,6 +142,80 @@ check_file_exists() {
     fi
 }
 
+check_can_traffic() {
+    local iface=$1
+
+    log "${INFO} CAN traffic sample (${iface}, ${CAN_SAMPLE_SEC}s)"
+
+    if ! command -v candump >/dev/null 2>&1; then
+        log "${FAIL} candump command not found; cannot check CAN traffic"
+        log "   Fix: sudo apt-get install -y can-utils"
+        record_result "fail"
+        return 0
+    fi
+
+    local link_details
+    link_details="$(ip -details -statistics link show "${iface}" 2>/dev/null || true)"
+    if grep -Eq "state (ERROR-PASSIVE|BUS-OFF|STOPPED)" <<<"${link_details}"; then
+        local can_state
+        can_state="$(grep -Eo "state (ERROR-PASSIVE|BUS-OFF|STOPPED)" <<<"${link_details}" | head -1)"
+        log "${FAIL} CAN interface ${iface} is unhealthy: ${can_state}"
+        log "   Check: motor/controller power, CAN wiring, termination, and bitrate."
+        record_result "fail"
+    elif grep -q "state ERROR-ACTIVE" <<<"${link_details}"; then
+        log "${OK} CAN interface ${iface} state is ERROR-ACTIVE"
+        record_result "pass"
+    else
+        log "${WARN} CAN interface ${iface} state could not be confirmed"
+        log "   Details: $(grep -Eo 'state [A-Z_-]+' <<<"${link_details}" | head -1)"
+        record_result "warn"
+    fi
+
+    local berr_counter
+    berr_counter="$(grep -Eo "berr-counter tx [0-9]+ rx [0-9]+" <<<"${link_details}" | head -1 || true)"
+    if [ -n "${berr_counter}" ]; then
+        log "${INFO} CAN ${berr_counter}"
+    fi
+
+    local sample
+    sample="$(timeout "${CAN_SAMPLE_SEC}" candump -ta -e "${iface}" 2>/dev/null || true)"
+    local frame_count
+    local error_count
+    local unique_id_count
+    frame_count="$(grep -cve '^[[:space:]]*$' <<<"${sample}" || true)"
+    error_count="$(grep -ciE 'ERRORFRAME|CAN_ERR| error ' <<<"${sample}" || true)"
+    unique_id_count="$(
+        awk '
+            NF >= 3 && $0 !~ /ERRORFRAME|CAN_ERR/ {
+                id = $3
+                sub(/#.*/, "", id)
+                seen[id] = 1
+            }
+            END {
+                for (id in seen) count++
+                print count + 0
+            }
+        ' <<<"${sample}"
+    )"
+
+    if [ "${error_count}" -gt 0 ]; then
+        log "${FAIL} CAN error frames observed during sample: ${error_count}/${frame_count}"
+        log "   Check: motor/controller power, CAN-H/CAN-L wiring, termination, bitrate, and loose connectors."
+        record_result "fail"
+    elif [ "${frame_count}" -ge "${CAN_MIN_FRAMES}" ]; then
+        log "${OK} CAN traffic observed: ${frame_count} frames, ${unique_id_count} IDs, no error frames"
+        record_result "pass"
+    elif [ "${frame_count}" -gt 0 ]; then
+        log "${WARN} CAN traffic is very low: ${frame_count} frames, ${unique_id_count} IDs"
+        log "   Expected at least ${CAN_MIN_FRAMES} frames in ${CAN_SAMPLE_SEC}s. Check motor/controller power if this is lower than usual."
+        record_result "warn"
+    else
+        log "${FAIL} No CAN traffic observed in ${CAN_SAMPLE_SEC}s"
+        log "   Check: motor/controller power, VCU state, CAN wiring, termination, and bitrate."
+        record_result "fail"
+    fi
+}
+
 read_env_value() {
     local key=$1
     local env_file="${REPO_ROOT}/.env"
@@ -196,17 +279,18 @@ check_hardware() {
     log "----------------------------------------"
 
     # CANデバイス確認
-    if ip link show can0 >/dev/null 2>&1; then
-        if ip link show can0 | grep -q "UP"; then
-            log "${OK} CAN interface can0 is UP"
+    if ip link show "${CAN_IFACE}" >/dev/null 2>&1; then
+        if ip link show "${CAN_IFACE}" | grep -q "UP"; then
+            log "${OK} CAN interface ${CAN_IFACE} is UP"
             record_result "pass"
+            check_can_traffic "${CAN_IFACE}"
         else
-            log "${FAIL} CAN interface can0 exists but not UP"
-            log "   Fix: sudo ip link set can0 up type can bitrate 1000000"
+            log "${FAIL} CAN interface ${CAN_IFACE} exists but not UP"
+            log "   Fix: sudo ip link set ${CAN_IFACE} up type can bitrate 1000000"
             record_result "fail"
         fi
     else
-        log "${FAIL} CAN interface can0 not found"
+        log "${FAIL} CAN interface ${CAN_IFACE} not found"
         log "   Fix: Check CAN hardware connection"
         record_result "fail"
     fi
