@@ -7,6 +7,7 @@
 #include "rclcpp/rclcpp.hpp"
 #include "sensor_msgs/msg/joy.hpp"
 #include "autoware_auto_control_msgs/msg/ackermann_control_command.hpp"
+#include "autoware_auto_vehicle_msgs/msg/gear_command.hpp"
 #include "std_msgs/msg/bool.hpp"
 #include "std_msgs/msg/empty.hpp"
 #include "geometry_msgs/msg/pose_with_covariance_stamped.hpp"
@@ -19,6 +20,7 @@ public:
 
 private:
   bool check_button_press(bool curr, bool &prev_flag);
+  void publish_gear(uint8_t command);
 
   // Callbacks
   void status_callback(const std_msgs::msg::Float32MultiArray::SharedPtr msg);
@@ -31,6 +33,7 @@ private:
   rclcpp::Subscription<autoware_auto_control_msgs::msg::AckermannControlCommand>::SharedPtr ack_sub_;
   rclcpp::Subscription<std_msgs::msg::Float32MultiArray>::SharedPtr status_sub_;
   rclcpp::Publisher<autoware_auto_control_msgs::msg::AckermannControlCommand>::SharedPtr drive_pub_;
+  rclcpp::Publisher<autoware_auto_vehicle_msgs::msg::GearCommand>::SharedPtr gear_pub_;
   rclcpp::Publisher<std_msgs::msg::Bool>::SharedPtr                trigger_pub_;
   rclcpp::Publisher<std_msgs::msg::Bool>::SharedPtr                awsim_trigger_pub_;
   rclcpp::Publisher<std_msgs::msg::Empty>::SharedPtr               reset_publisher_;
@@ -44,6 +47,7 @@ private:
   int start_button_index_, stop_button_index_;
   int awsim_button_index_;
   int reset_button_index_;
+  int drive_button_index_, reverse_button_index_;
   int dpad_lr_axis_index_;
   int dpad_ud_axis_index_;
   double timer_hz_;
@@ -65,6 +69,8 @@ private:
   bool prev_steer_scale_dec_pressed_;
   bool prev_speed_scale_inc_pressed_;
   bool prev_speed_scale_dec_pressed_;
+  bool prev_drive_button_pressed_;
+  bool prev_reverse_button_pressed_;
 };
 
 #endif  // TELEOP_MANAGER_NODE_HPP_

@@ -22,7 +22,9 @@ TeleopManagerNode::TeleopManagerNode()
   prev_steer_scale_inc_pressed_(false),
   prev_steer_scale_dec_pressed_(false),
   prev_speed_scale_inc_pressed_(false),
-  prev_speed_scale_dec_pressed_(false)
+  prev_speed_scale_dec_pressed_(false),
+  prev_drive_button_pressed_(false),
+  prev_reverse_button_pressed_(false)
 {
   this->set_parameter(rclcpp::Parameter("use_sim_time", true));
 
@@ -35,6 +37,8 @@ TeleopManagerNode::TeleopManagerNode()
   declare_parameter<int>("stop_button_index",  8);
   declare_parameter<int>("awsim_button_index", 2);
   declare_parameter<int>("reset_button_index", 7);
+  declare_parameter<int>("drive_button_index", 5);    // ギア: DRIVE(前進=2)
+  declare_parameter<int>("reverse_button_index", 4);  // ギア: REVERSE(後進=20)
   declare_parameter<double>("timer_hz", 40.0);
   declare_parameter<double>("joy_timeout_sec", 0.5);
   declare_parameter<int>("dpad_lr_axis_index", 6); 
@@ -57,6 +61,8 @@ TeleopManagerNode::TeleopManagerNode()
   get_parameter("stop_button_index", stop_button_index_);
   get_parameter("awsim_button_index", awsim_button_index_);
   get_parameter("reset_button_index", reset_button_index_);
+  get_parameter("drive_button_index", drive_button_index_);
+  get_parameter("reverse_button_index", reverse_button_index_);
   get_parameter("timer_hz", timer_hz_);
   get_parameter("joy_timeout_sec", joy_timeout_sec_);
   get_parameter("dpad_lr_axis_index", dpad_lr_axis_index_);
@@ -86,6 +92,7 @@ TeleopManagerNode::TeleopManagerNode()
     "/admin/awsim/status", 10, std::bind(&TeleopManagerNode::status_callback, this, _1));
 
   drive_pub_   = create_publisher<autoware_auto_control_msgs::msg::AckermannControlCommand>("/control/command/control_cmd", 10);
+  gear_pub_    = create_publisher<autoware_auto_vehicle_msgs::msg::GearCommand>("/control/command/gear_cmd", 10);
   trigger_pub_ = create_publisher<std_msgs::msg::Bool>("/rosbag2_recorder/trigger", 10);
 
   awsim_trigger_pub_ = create_publisher<std_msgs::msg::Bool>("/awsim/control_mode_request_topic", 10);
@@ -116,6 +123,14 @@ void TeleopManagerNode::status_callback(const std_msgs::msg::Float32MultiArray::
   if (msg->data.size() >= 2) {
     current_lap_ = msg->data[1];
   }
+}
+
+void TeleopManagerNode::publish_gear(uint8_t command)
+{
+  autoware_auto_vehicle_msgs::msg::GearCommand gear;
+  gear.stamp = this->get_clock()->now();
+  gear.command = command;
+  gear_pub_->publish(gear);
 }
 
 void TeleopManagerNode::joy_callback(const sensor_msgs::msg::Joy::SharedPtr msg)
@@ -156,6 +171,20 @@ void TeleopManagerNode::joy_callback(const sensor_msgs::msg::Joy::SharedPtr msg)
     // pose_msg->header.stamp = this->get_clock()->now();
     initialpose_publisher_->publish(std::move(pose_msg));
     RCLCPP_INFO(get_logger(), "Published initial pose to /initialpose");
+  }
+
+  // 1b) Gear selection (DRIVE / REVERSE only, with debounce)
+  bool curr_drive_button = (static_cast<int>(msg->buttons.size()) > drive_button_index_
+                            && msg->buttons[drive_button_index_] == 1);
+  bool curr_reverse_button = (static_cast<int>(msg->buttons.size()) > reverse_button_index_
+                              && msg->buttons[reverse_button_index_] == 1);
+  if (check_button_press(curr_drive_button, prev_drive_button_pressed_)) {
+    publish_gear(autoware_auto_vehicle_msgs::msg::GearCommand::DRIVE);     // 2
+    RCLCPP_INFO(get_logger(), "Gear -> DRIVE");
+  }
+  if (check_button_press(curr_reverse_button, prev_reverse_button_pressed_)) {
+    publish_gear(autoware_auto_vehicle_msgs::msg::GearCommand::REVERSE);   // 20
+    RCLCPP_INFO(get_logger(), "Gear -> REVERSE");
   }
 
   // 2) Mode selection

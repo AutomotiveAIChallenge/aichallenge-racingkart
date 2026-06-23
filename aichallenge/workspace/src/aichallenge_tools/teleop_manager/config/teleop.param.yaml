@@ -12,6 +12,10 @@
     awsim_button_index:   1   # ○ボタンでAWSIMモード
     reset_button_index:   0   # ×ボタンでリセット
 
+    # --- ギア切替ボタン (DRIVE=2 / REVERSE=20 のみ) ---
+    drive_button_index:   5   # R1 で DRIVE(前進)
+    reverse_button_index: 4   # L1 で REVERSE(後進)
+
     # --- start/stop トリガボタン ---
     start_button_index:   7   # R2 ボタンで start=true
     stop_button_index:    6   # L2 ボタンで start=false
