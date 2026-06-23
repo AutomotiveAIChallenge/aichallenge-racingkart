@@ -21,6 +21,7 @@ public:
 private:
   bool check_button_press(bool curr, bool &prev_flag);
   void publish_gear(uint8_t command);
+  void publish_turbo();
 
   // Callbacks
   void status_callback(const std_msgs::msg::Float32MultiArray::SharedPtr msg);
@@ -36,6 +37,7 @@ private:
   rclcpp::Publisher<autoware_auto_vehicle_msgs::msg::GearCommand>::SharedPtr gear_pub_;
   rclcpp::Publisher<std_msgs::msg::Bool>::SharedPtr                trigger_pub_;
   rclcpp::Publisher<std_msgs::msg::Bool>::SharedPtr                awsim_trigger_pub_;
+  rclcpp::Publisher<std_msgs::msg::Float32MultiArray>::SharedPtr   awsim_boost_pub_;
   rclcpp::Publisher<std_msgs::msg::Empty>::SharedPtr               reset_publisher_;
   rclcpp::Publisher<geometry_msgs::msg::PoseWithCovarianceStamped>::SharedPtr initialpose_publisher_;
   rclcpp::TimerBase::SharedPtr                                     timer_;
@@ -47,6 +49,7 @@ private:
   int start_button_index_, stop_button_index_;
   int awsim_button_index_;
   int reset_button_index_;
+  int boost_button_index_;
   int drive_button_index_, reverse_button_index_;
   int speed_axis_index_, steer_axis_index_;
   int dpad_lr_axis_index_;
@@ -72,6 +75,7 @@ private:
   bool prev_speed_scale_dec_pressed_;
   bool prev_drive_button_pressed_;
   bool prev_reverse_button_pressed_;
+  bool prev_boost_button_pressed_;
 };
 
 #endif  // TELEOP_MANAGER_NODE_HPP_

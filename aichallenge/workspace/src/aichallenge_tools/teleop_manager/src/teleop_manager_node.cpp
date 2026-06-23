@@ -24,7 +24,8 @@ TeleopManagerNode::TeleopManagerNode()
   prev_speed_scale_inc_pressed_(false),
   prev_speed_scale_dec_pressed_(false),
   prev_drive_button_pressed_(false),
-  prev_reverse_button_pressed_(false)
+  prev_reverse_button_pressed_(false),
+  prev_boost_button_pressed_(false)
 {
   this->set_parameter(rclcpp::Parameter("use_sim_time", true));
 
@@ -39,6 +40,7 @@ TeleopManagerNode::TeleopManagerNode()
   declare_parameter<int>("reset_button_index", 7);
   declare_parameter<int>("drive_button_index", 5);    // ギア: DRIVE(前進=2)
   declare_parameter<int>("reverse_button_index", 4);  // ギア: REVERSE(後進=20)
+  declare_parameter<int>("boost_button_index", 8);    // AWSIM ターボブースト(トグル)
   declare_parameter<double>("timer_hz", 40.0);
   declare_parameter<double>("joy_timeout_sec", 0.5);
   declare_parameter<int>("speed_axis_index", 1);  // アクセル: 左スティック縦
@@ -65,6 +67,7 @@ TeleopManagerNode::TeleopManagerNode()
   get_parameter("reset_button_index", reset_button_index_);
   get_parameter("drive_button_index", drive_button_index_);
   get_parameter("reverse_button_index", reverse_button_index_);
+  get_parameter("boost_button_index", boost_button_index_);
   get_parameter("timer_hz", timer_hz_);
   get_parameter("joy_timeout_sec", joy_timeout_sec_);
   get_parameter("speed_axis_index", speed_axis_index_);
@@ -100,6 +103,7 @@ TeleopManagerNode::TeleopManagerNode()
   trigger_pub_ = create_publisher<std_msgs::msg::Bool>("/rosbag2_recorder/trigger", 10);
 
   awsim_trigger_pub_ = create_publisher<std_msgs::msg::Bool>("/awsim/control_mode_request_topic", 10);
+  awsim_boost_pub_ = create_publisher<std_msgs::msg::Float32MultiArray>("/awsim/cmd", 10);
 
   reset_publisher_ = create_publisher<std_msgs::msg::Empty>("/admin/awsim/reset", 10);
   initialpose_publisher_ = create_publisher<geometry_msgs::msg::PoseWithCovarianceStamped>("/initialpose", 10);
@@ -135,6 +139,15 @@ void TeleopManagerNode::publish_gear(uint8_t command)
   gear.stamp = this->get_clock()->now();
   gear.command = command;
   gear_pub_->publish(gear);
+}
+
+void TeleopManagerNode::publish_turbo()
+{
+  std_msgs::msg::Float32MultiArray msg;
+  msg.data = {1.0f};
+  awsim_boost_pub_->publish(msg);
+  msg.data = {0.0f};
+  awsim_boost_pub_->publish(msg);
 }
 
 void TeleopManagerNode::joy_callback(const sensor_msgs::msg::Joy::SharedPtr msg)
@@ -189,6 +202,14 @@ void TeleopManagerNode::joy_callback(const sensor_msgs::msg::Joy::SharedPtr msg)
   if (check_button_press(curr_reverse_button, prev_reverse_button_pressed_)) {
     publish_gear(autoware_auto_vehicle_msgs::msg::GearCommand::REVERSE);   // 20
     RCLCPP_INFO(get_logger(), "Gear -> REVERSE");
+  }
+
+  // 1c) AWSIM turbo boost (send [1.0] then [0.0] on each press)
+  bool curr_boost_button = (static_cast<int>(msg->buttons.size()) > boost_button_index_
+                            && msg->buttons[boost_button_index_] == 1);
+  if (check_button_press(curr_boost_button, prev_boost_button_pressed_)) {
+    publish_turbo();
+    RCLCPP_INFO(get_logger(), "Turbo boost command published");
   }
 
   // 2) Mode selection
