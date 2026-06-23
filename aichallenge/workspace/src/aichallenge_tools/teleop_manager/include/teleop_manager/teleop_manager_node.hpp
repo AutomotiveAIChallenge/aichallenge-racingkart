@@ -48,6 +48,7 @@ private:
   int awsim_button_index_;
   int reset_button_index_;
   int drive_button_index_, reverse_button_index_;
+  int speed_axis_index_, steer_axis_index_;
   int dpad_lr_axis_index_;
   int dpad_ud_axis_index_;
   double timer_hz_;

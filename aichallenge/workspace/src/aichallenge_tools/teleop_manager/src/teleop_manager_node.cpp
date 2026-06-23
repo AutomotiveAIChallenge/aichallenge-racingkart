@@ -41,7 +41,9 @@ TeleopManagerNode::TeleopManagerNode()
   declare_parameter<int>("reverse_button_index", 4);  // ギア: REVERSE(後進=20)
   declare_parameter<double>("timer_hz", 40.0);
   declare_parameter<double>("joy_timeout_sec", 0.5);
-  declare_parameter<int>("dpad_lr_axis_index", 6); 
+  declare_parameter<int>("speed_axis_index", 1);  // アクセル: 左スティック縦
+  declare_parameter<int>("steer_axis_index", 0);  // ステアリング: 左スティック横
+  declare_parameter<int>("dpad_lr_axis_index", 6);
   declare_parameter<int>("dpad_ud_axis_index", 7); 
 
   declare_parameter<std::string>("reset_frame_id", "map");
@@ -65,6 +67,8 @@ TeleopManagerNode::TeleopManagerNode()
   get_parameter("reverse_button_index", reverse_button_index_);
   get_parameter("timer_hz", timer_hz_);
   get_parameter("joy_timeout_sec", joy_timeout_sec_);
+  get_parameter("speed_axis_index", speed_axis_index_);
+  get_parameter("steer_axis_index", steer_axis_index_);
   get_parameter("dpad_lr_axis_index", dpad_lr_axis_index_);
   get_parameter("dpad_ud_axis_index", dpad_ud_axis_index_);
 
@@ -203,8 +207,8 @@ void TeleopManagerNode::joy_callback(const sensor_msgs::msg::Joy::SharedPtr msg)
 
   // 3) Calculate speed/steer in Joy mode (using current scales)
   if (joy_active_) {
-    double raw_speed = (static_cast<int>(msg->axes.size()) > 1 ? msg->axes[1] : 0.0);
-    double raw_steer = (static_cast<int>(msg->axes.size()) > 3 ? msg->axes[3] : 0.0);
+    double raw_speed = (static_cast<int>(msg->axes.size()) > speed_axis_index_ ? msg->axes[speed_axis_index_] : 0.0);
+    double raw_steer = (static_cast<int>(msg->axes.size()) > steer_axis_index_ ? msg->axes[steer_axis_index_] : 0.0);
     joy_speed_ = raw_speed * speed_scale_;
     joy_steer_ = raw_steer * steer_scale_;
   }

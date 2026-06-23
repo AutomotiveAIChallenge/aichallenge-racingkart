@@ -20,6 +20,10 @@
     start_button_index:   7   # R2 ボタンで start=true
     stop_button_index:    6   # L2 ボタンで start=false
 
+    # --- アクセル/ステアリング軸インデックス ---
+    speed_axis_index:     1   # アクセル (axes[1] 左スティック縦)
+    steer_axis_index:     0   # ステアリング (axes[0] 左スティック横)
+
     # --- 十字キー（D-pad）軸インデックス ---
     dpad_lr_axis_index:   6   # 左右 (axes[6])
     dpad_ud_axis_index:   7   # 上下 (axes[7])
