@@ -53,13 +53,9 @@ cd ~/aichallenge-racingkart/
 ./docker_exec.sh
 ```
 
-ここでは、`autoware`が名前に含まれる docker コンテナを選んでください。ここから先は今アクセスした docker コンテナのシェルでコマンドを実行します。最初に、強化学習に必要なライブラリをインストールします。
+ここでは、`autoware`が名前に含まれる docker コンテナを選んでください。ここから先は今アクセスした docker コンテナのシェルでコマンドを実行します。
 
-```.bash
-pip install gymnasium stable-baselines3[extra]
-```
-
-最後に強化学習を実行します。
+強化学習の実行には以下のコマンドを使用します。
 
 ```.bash
 cd /aichallenge/ml_workspace/reinforcement_learning/
