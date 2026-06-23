@@ -7,7 +7,7 @@ x-autoware-base: &autoware-base
   user: "${HOST_UID:-1000}:${HOST_GID:-1000}"
   environment:
     - HOME=/tmp
-    - DISPLAY=${DISPLAY}
+    - DISPLAY=${DISPLAY:-}
     - USER=${USER}
     - ROS_DISTRO=humble
     - XAUTHORITY=${XAUTHORITY:-}
@@ -66,7 +66,7 @@ x-racing_kart_interface-base: &racing_kart_interface-base
   user: "${HOST_UID:-1000}:${HOST_GID:-1000}"
   environment:
     - HOME=/tmp
-    - DISPLAY=${DISPLAY}
+    - DISPLAY=${DISPLAY:-}
     - USER=${USER}
     - TZ=Asia/Tokyo
     - ROS_DISTRO=humble
