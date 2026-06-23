@@ -90,7 +90,7 @@ EOF
 while [[ $# -gt 0 ]]; do
     case $1 in
     --phase)
-        PHASE="${2:-}"
+        PHASE="${2-}"
         case "${PHASE}" in
         preflight | runtime | all) ;;
         *)
@@ -316,7 +316,7 @@ read_env_value() {
 }
 
 detect_vehicle_id() {
-    local vehicle_id="${VEHICLE_ID:-}"
+    local vehicle_id="${VEHICLE_ID-}"
 
     if [ -z "${vehicle_id}" ]; then
         vehicle_id="$(read_env_value VEHICLE_ID)"
@@ -485,7 +485,7 @@ check_network() {
         log "   Fix: export VEHICLE_ID=A6 or add VEHICLE_ID=A6 to .env"
         record_result "fail"
     elif zenoh_port="$(zenoh_port_for_vehicle_id "${vehicle_id_for_zenoh}")"; then
-        if timeout 5 bash -c 'echo >/dev/tcp/"$1"/"$2"' _ "${zenoh_host}" "${zenoh_port}" 2>/dev/null; then
+        if timeout 5 bash -c "echo >/dev/tcp/${zenoh_host}/${zenoh_port}" 2>/dev/null; then
             log "${OK} Zenoh endpoint connectivity (${vehicle_id_for_zenoh}: ${zenoh_host}:${zenoh_port})"
             record_result "pass"
         else
