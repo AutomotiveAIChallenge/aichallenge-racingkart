@@ -27,7 +27,7 @@ ENABLE_LOG=false
 LOG_FILE="setup_check_$(date +'%Y%m%d_%H%M%S').log"
 CAN_IFACE="${CAN_IFACE:-can0}"
 CAN_SAMPLE_SEC="${CAN_SAMPLE_SEC:-3}"
-CAN_MIN_FRAMES="${CAN_MIN_FRAMES:-5}"
+CAN_MIN_FRAMES="${CAN_MIN_FRAMES:-100}"
 GNSS_NAVPVT_TIMEOUT_SEC="${GNSS_NAVPVT_TIMEOUT_SEC:-8}"
 ROS_TOPIC_TIMEOUT_SEC="${ROS_TOPIC_TIMEOUT_SEC:-4}"
 TOTAL_CHECKS=0
@@ -68,7 +68,7 @@ OPTIONS:
 ENVIRONMENT:
   CAN_IFACE        CAN interface to check [default: can0]
   CAN_SAMPLE_SEC   candump sampling seconds [default: 3]
-  CAN_MIN_FRAMES   minimum expected frames in the sample [default: 5]
+  CAN_MIN_FRAMES   minimum expected frames in the sample [default: 100]
   GNSS_NAVPVT_TIMEOUT_SEC
                    seconds to wait for /sensing/gnss/navpvt [default: 8]
   ROS_TOPIC_TIMEOUT_SEC
@@ -82,7 +82,7 @@ Examples:
   $0 --phase preflight
   $0 --phase runtime
   $0 --log
-  CAN_SAMPLE_SEC=5 CAN_MIN_FRAMES=20 $0 --log
+  CAN_SAMPLE_SEC=5 CAN_MIN_FRAMES=200 $0 --log
 EOF
 }
 
