@@ -291,9 +291,9 @@ check_can_traffic() {
         log "${OK} CAN traffic observed: ${frame_count} frames, ${unique_id_count} IDs, no error frames"
         record_result "pass"
     elif [ "${frame_count}" -gt 0 ]; then
-        log "${WARN} CAN traffic is very low: ${frame_count} frames, ${unique_id_count} IDs"
+        log "${FAIL} CAN traffic is very low: ${frame_count} frames, ${unique_id_count} IDs"
         log "   Expected at least ${CAN_MIN_FRAMES} frames in ${CAN_SAMPLE_SEC}s. Check motor/controller power if this is lower than usual."
-        record_result "warn"
+        record_result "fail"
     else
         log "${FAIL} No CAN traffic observed in ${CAN_SAMPLE_SEC}s"
         log "   Check: motor/controller power, VCU state, CAN wiring, termination, and bitrate."
