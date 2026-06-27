@@ -2,9 +2,10 @@
 # `!override` drops host-only devices the base needs but WSL lacks (/dev/dri,video0,input); AWSIM_HEADLESS=1 runs AWSIM headless (no GPU Vulkan on WSL, else exit 255), LIBGL_ALWAYS_SOFTWARE=1 forces software GL so RViz avoids the D3D12 crash.
 
 x-wsl-overlay: &wsl-overlay
-  # WSL lacks /dev/dri,video0,input — drop the base device list (headless needs no GPU device).
-  devices: !override []
-  # Override only to drop the base's /dev/dri bind; the rest mirrors x-autoware-base.
+  # Drop the base devices (/dev/dri,video0,input absent on WSL); keep only /dev/dxg.
+  devices: !override
+    - /dev/dxg
+  # Override to drop the base's /dev/dri bind; add WSLg GPU userspace.
   volumes: !override
     - ./output:${OUTPUT_ROOT:-/output}
     - ./aichallenge:/aichallenge
@@ -12,6 +13,8 @@ x-wsl-overlay: &wsl-overlay
     - ./vehicle:/vehicle
     - ./vehicle/cyclonedds.xml:/opt/autoware/cyclonedds.xml
     - /tmp/.X11-unix:/tmp/.X11-unix:rw
+    - /mnt/wslg:/mnt/wslg
+    - /usr/lib/wsl:/usr/lib/wsl
     - /etc/passwd:/etc/passwd:ro
     - /etc/group:/etc/group:ro
   environment:
