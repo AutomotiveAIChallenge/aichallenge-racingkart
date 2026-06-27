@@ -2,10 +2,9 @@
 # `!override` drops host-only devices the base needs but WSL lacks (/dev/dri,video0,input); AWSIM_HEADLESS=1 runs AWSIM headless (no GPU Vulkan on WSL, else exit 255), LIBGL_ALWAYS_SOFTWARE=1 forces software GL so RViz avoids the D3D12 crash.
 
 x-wsl-overlay: &wsl-overlay
-  # Replace the inherited device list (drops /dev/dri, /dev/video0, /dev/input).
-  devices: !override
-    - /dev/dxg
-  # Replace the inherited volume list (drops the /dev/dri bind; adds WSLg libs).
+  # WSL lacks /dev/dri,video0,input — drop the base device list (headless needs no GPU device).
+  devices: !override []
+  # Override only to drop the base's /dev/dri bind; the rest mirrors x-autoware-base.
   volumes: !override
     - ./output:${OUTPUT_ROOT:-/output}
     - ./aichallenge:/aichallenge
@@ -13,15 +12,10 @@ x-wsl-overlay: &wsl-overlay
     - ./vehicle:/vehicle
     - ./vehicle/cyclonedds.xml:/opt/autoware/cyclonedds.xml
     - /tmp/.X11-unix:/tmp/.X11-unix:rw
-    - /mnt/wslg:/mnt/wslg
-    - /usr/lib/wsl:/usr/lib/wsl
     - /etc/passwd:/etc/passwd:ro
     - /etc/group:/etc/group:ro
   environment:
-    # AWSIM (Unity) cannot acquire a GPU/display inside the WSL container
     - AWSIM_HEADLESS=1
-    # WSLg's D3D12 OpenGL driver SIGSEGVs Ogre/RViz ("D3D12: Removing Device").
-    # Force Mesa software GL (llvmpipe) so RViz renders stably (verified working).
     - LIBGL_ALWAYS_SOFTWARE=1
 
 services:

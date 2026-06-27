@@ -7,13 +7,13 @@
 
 | 項目 | 用途 | 必須か | 備考 |
 |---|---|---|---|
-| (追加インストールなし) | — | — | docker / docker compose / WSLg は既存。`/dev/dxg`・`/usr/lib/wsl`(libd3d12)・`lo` multicast・`net.core.rmem_max` も既に揃っていた |
+| (追加インストールなし) | — | — | docker / docker compose / WSLg は既存。`lo` multicast・`net.core.rmem_max` も既に揃っていた |
 
 ## コンテナ側（aichallenge-2025-dev イメージ = `packages.txt`）
 
 | 項目 | 用途 | 必須か | 備考 |
 |---|---|---|---|
-| **`xvfb`** | capture(screen_recorder)を WSL で機能させる仮想フレームバッファ。`packages.txt` に追加済み（反映には `./docker_build.sh dev` で再ビルド、暫定は `apt-get install -y xvfb`） | capture を録る場合に必須 | WSLg の `:0` は各ウィンドウを Wayland コンポジットするため `QScreen::grabWindow(0)`（X ルート全体取得）が**真っ黒**になる。Xvfb 上で RViz を描画して録ると実画面が録れる |
+| **`xvfb`** | capture(screen_recorder)を WSL で機能させる仮想フレームバッファ。**イメージ未同梱** — `apt-get install -y xvfb` で手動導入（恒久化するなら `packages.txt` に追加して `./docker_build.sh dev` で再ビルド） | capture を録る場合に必須 | WSLg の `:0` は各ウィンドウを Wayland コンポジットするため `QScreen::grabWindow(0)`（X ルート全体取得）が**真っ黒**になる。Xvfb 上で RViz を描画して録ると実画面が録れる |
 
 llvmpipe(ソフトGL)・libopencv 4.5・libavcodec は**既にイメージ同梱**のため追加 install 不要。
 
@@ -25,8 +25,7 @@ llvmpipe(ソフトGL)・libopencv 4.5・libavcodec は**既にイメージ同梱
 
 ## 設定変更（install ではないが再現に必要）
 
-- `.env`: `COMPOSE_FILE=docker-compose.yml:docker-compose.wsl.yml`
-- overlay `docker-compose.wsl.yml`: `AWSIM_HEADLESS=1` / `LIBGL_ALWAYS_SOFTWARE=1` / devices=`/dev/dxg` / WSLg マウント
+- `.env` の `COMPOSE_FILE` に `docker-compose.wsl.yml` を追加（内容は overlay ファイル先頭コメント参照）。
 
 ## capture 取得手順（WSL）
 
