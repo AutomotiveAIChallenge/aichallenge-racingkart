@@ -5,6 +5,10 @@ repos:
       - id: check-merge-conflict
       - id: check-xml
       - id: check-yaml
+        # --unsafe: syntax-only check so Compose Spec tags (!override in
+        # docker-compose.wsl.yml) parse without a "could not determine a
+        # constructor" failure, while still catching real YAML syntax errors.
+        args: [--unsafe]
       - id: detect-private-key
       - id: end-of-file-fixer
       - id: mixed-line-ending
