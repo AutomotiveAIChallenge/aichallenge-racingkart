@@ -1,0 +1,71 @@
+# WSL2 (WSLg) overlay.
+#
+# Enable in .env:
+#   COMPOSE_FILE=docker-compose.yml:docker-compose.wsl.yml
+#
+# Why this file exists:
+#   The base docker-compose.yml lists host-only device nodes (/dev/dri,
+#   /dev/video0, /dev/input) that do NOT exist under WSL2. Docker refuses to
+#   start a container when a `devices:` entry is missing
+#   ("error gathering device information ... no such file or directory"),
+#   so plain `make dev` fails on WSL.
+#
+#   Compose merges list fields (devices/volumes) by *appending*, so an empty
+#   list cannot remove inherited entries. We therefore use the Compose Spec
+#   `!override` tag (Compose v2.24+) to REPLACE the inherited lists:
+#     - devices -> only /dev/dxg (the WSLg GPU node, present on WSL)
+#     - volumes -> drop the /dev/dri bind, add WSLg GPU userspace (/usr/lib/wsl)
+#
+#   GUI/X11 already works out of the box on WSLg (DISPLAY=:0, /tmp/.X11-unix).
+#   Mounting /dev/dxg + /usr/lib/wsl exposes the WSLg GPU. Mesa 23.2 then offers
+#   GPU-accelerated OpenGL ("D3D12 (Intel/...)") — but NOT GPU Vulkan (no dzn ICD,
+#   only software lavapipe). Consequences, both handled by env vars below:
+#     - AWSIM (Unity HDRP) needs Vulkan, which is unavailable, so it must run
+#       headless (AWSIM_HEADLESS=1) — otherwise Unity aborts with exit 255.
+#       Headless still runs full physics + ROS topics and drives the vehicle.
+#     - RViz/Ogre crashes (SIGSEGV, "D3D12: Removing Device") on the D3D12 GL
+#       path, so we force Mesa software GL (LIBGL_ALWAYS_SOFTWARE=1).
+#
+#   NOTE (cosmetic): on shutdown, AWSIM's ROS2ForUnity finalizer emits a Mono
+#   SIGABRT/SIGSEGV, and Ctrl-C makes mpc/relay/orchestrator exit non-zero. Both
+#   happen AFTER result-summary.json is saved and do NOT indicate a broken run.
+#   For a clean no-GUI run, use `RUN_MODE=awsim-no-viz` (skips RViz entirely).
+
+x-wsl-overlay: &wsl-overlay
+  # Replace the inherited device list (drops /dev/dri, /dev/video0, /dev/input).
+  devices: !override
+    - /dev/dxg
+  # Replace the inherited volume list (drops the /dev/dri bind; adds WSLg libs).
+  volumes: !override
+    - ./output:${OUTPUT_ROOT:-/output}
+    - ./aichallenge:/aichallenge
+    - ./remote:/remote
+    - ./vehicle:/vehicle
+    - ./vehicle/cyclonedds.xml:/opt/autoware/cyclonedds.xml
+    - /tmp/.X11-unix:/tmp/.X11-unix:rw
+    - /mnt/wslg:/mnt/wslg
+    - /usr/lib/wsl:/usr/lib/wsl
+    - /etc/passwd:/etc/passwd:ro
+    - /etc/group:/etc/group:ro
+  environment:
+    # Let Mesa find the WSLg GPU userspace drivers (merged per-key with the base).
+    - LD_LIBRARY_PATH=/usr/lib/wsl/lib
+    # AWSIM (Unity) cannot acquire a GPU/display inside the WSL container and
+    # aborts (exit 255). Run it headless; dev.sh appends -headless when set.
+    # Physics + ROS topics still run; visualize via Autoware's RViz instead.
+    - AWSIM_HEADLESS=1
+    # WSLg's D3D12 OpenGL driver SIGSEGVs Ogre/RViz ("D3D12: Removing Device").
+    # Force Mesa software GL (llvmpipe) so RViz renders stably (verified working).
+    - LIBGL_ALWAYS_SOFTWARE=1
+
+services:
+  simulator:
+    <<: *wsl-overlay
+  autoware:
+    <<: *wsl-overlay
+  autoware-build:
+    <<: *wsl-overlay
+  autoware-command:
+    <<: *wsl-overlay
+  rviz2:
+    <<: *wsl-overlay
