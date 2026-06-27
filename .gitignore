@@ -24,3 +24,5 @@ doc/tmp/*
 /CLAUDE.md
 
 docs/plan/
+result-summary.json
+d*-result-details.json
