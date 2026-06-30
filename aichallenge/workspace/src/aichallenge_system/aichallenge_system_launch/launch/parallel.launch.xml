@@ -1,0 +1,71 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<launch>
+    <arg name="vehicles" default="3"/>
+    <arg name="log_dir" default="/output"/>
+    <arg name="laps" default="6"/>
+    <arg name="timeout" default="480"/>
+    <arg name="capture" default="true"/>
+    <arg name="rosbag" default="true"/>
+    <arg name="simulation" default="true"/>
+    <arg name="use_sim_time" default="true"/>
+    <arg name="run_rviz" default="false"/>
+    <!-- CPU affinity and memory limits tuned for g4dn.4xlarge (16 vCPUs with uniform performance, 64 GB RAM).
+         mem_* args are passed to prlimit as, which limits virtual address space (VAS), not RSS.
+         CPU 0 is intentionally left unallocated for the OS and system daemons. -->
+    <arg name="cpu_awsim" default="1-4"/>
+    <arg name="mem_awsim" default="unlimited"/>
+    <arg name="cpu_screen_recorder" default="5-6"/>
+    <arg name="mem_screen_recorder" default="unlimited"/>
+    <arg name="cpu_d1" default="7-9"/>
+    <arg name="mem_d1" default="12884901888"/> <!-- 12 GiB in bytes; prlimit does not accept unit suffixes (e.g. 12G) here -->
+    <arg name="cpu_d2" default="10-12"/>
+    <arg name="mem_d2" default="12884901888"/> <!-- 12 GiB in bytes; prlimit does not accept unit suffixes (e.g. 12G) here -->
+    <arg name="cpu_d3" default="13-15"/>
+    <arg name="mem_d3" default="12884901888"/> <!-- 12 GiB in bytes; prlimit does not accept unit suffixes (e.g. 12G) here -->
+
+    <log message="Launching parallel evaluation ($(var vehicles) vehicles)."/>
+
+    <group>
+        <set_env name="ROS_DOMAIN_ID" value="0"/>
+
+        <executable
+            name="aichallenge_awsim_eval"
+            cwd="$(var log_dir)"
+            output="both"
+            cmd="prlimit --as=$(var mem_awsim) taskset -c $(var cpu_awsim) /aichallenge/simulator/AWSIM/AWSIM.x86_64 --vehicles $(var vehicles) --npcs 0 --laps $(var laps) --timeout $(var timeout) --boosts 2 --start-mode sync --start-count-seconds 5 --collisions off --ranking on --sound off --lidar false --camera false -screen-fullscreen 1 -screen-quality low --window-mode borderless"/>
+        <include file="$(find-pkg-share aichallenge_system_launch)/launch/mode/awsim_state_manager.launch.xml"/>
+        <executable name="resource_monitor" output="log" cmd="$(find-pkg-prefix aichallenge_system_launch)/lib/aichallenge_system_launch/resource_monitor.sh $(var log_dir)/d1/autoware.log"/>
+    </group>
+
+    <!-- Standalone Qt screen recorder (replaces rviz AutowareScreenCapturePanel). -->
+    <group if="$(var capture)">
+        <set_env name="ROS_DOMAIN_ID" value="1"/>
+        <let name="screen_recorder_prefix" value="prlimit --as=$(var mem_screen_recorder) taskset -c $(var cpu_screen_recorder)"/>
+        <include file="$(find-pkg-share aichallenge_screen_recorder)/launch/screen_recorder.launch.xml">
+            <arg name="output_dir" value="$(var log_dir)/capture"/>
+            <arg name="launch_prefix" value="$(var screen_recorder_prefix)"/>
+        </include>
+    </group>
+
+    <group>
+        <set_env name="ROS_DOMAIN_ID" value="1"/>
+        <set_env name="ROS_HOME" value="$(var log_dir)/d1/ros"/>
+        <set_env name="ROS_LOG_DIR" value="$(var log_dir)/d1/ros/log"/>
+        <executable name="autoware_d1" output="log" cmd="prlimit --as=$(var mem_d1) taskset -c $(var cpu_d1) bash -c 'mkdir -p '$(var log_dir)'/d1 &amp;&amp; cd '$(var log_dir)'/d1 &amp;&amp; source /aichallenge/workspace/install/setup.bash &amp;&amp; source /aichallenge/d1/workspace/install/setup.bash &amp;&amp; exec ros2 launch aichallenge_system_launch aichallenge_system.launch.xml simulation:=true use_sim_time:=true run_rviz:=false capture:=true rosbag:=true domain_id:=1 &gt; '$(var log_dir)'/d1/autoware.log 2&gt;&amp;1'"/>
+    </group>
+
+    <group>
+        <set_env name="ROS_DOMAIN_ID" value="2"/>
+        <set_env name="ROS_HOME" value="$(var log_dir)/d2/ros"/>
+        <set_env name="ROS_LOG_DIR" value="$(var log_dir)/d2/ros/log"/>
+        <executable name="autoware_d2" output="log" cmd="prlimit --as=$(var mem_d2) taskset -c $(var cpu_d2) bash -c '[ -f /aichallenge/d2/workspace/install/setup.bash ] || exit 0; mkdir -p '$(var log_dir)'/d2 &amp;&amp; cd '$(var log_dir)'/d2 &amp;&amp; source /aichallenge/workspace/install/setup.bash &amp;&amp; source /aichallenge/d2/workspace/install/setup.bash &amp;&amp; exec ros2 launch aichallenge_system_launch aichallenge_system.launch.xml simulation:=true use_sim_time:=true run_rviz:=false capture:=false rosbag:=false domain_id:=2 &gt; '$(var log_dir)'/d2/autoware.log 2&gt;&amp;1'"/>
+    </group>
+
+    <group>
+        <set_env name="ROS_DOMAIN_ID" value="3"/>
+        <set_env name="ROS_HOME" value="$(var log_dir)/d3/ros"/>
+        <set_env name="ROS_LOG_DIR" value="$(var log_dir)/d3/ros/log"/>
+        <executable name="autoware_d3" output="log" cmd="prlimit --as=$(var mem_d3) taskset -c $(var cpu_d3) bash -c '[ -f /aichallenge/d3/workspace/install/setup.bash ] || exit 0; mkdir -p '$(var log_dir)'/d3 &amp;&amp; cd '$(var log_dir)'/d3 &amp;&amp; source /aichallenge/workspace/install/setup.bash &amp;&amp; source /aichallenge/d3/workspace/install/setup.bash &amp;&amp; exec ros2 launch aichallenge_system_launch aichallenge_system.launch.xml simulation:=true use_sim_time:=true run_rviz:=false capture:=false rosbag:=false domain_id:=3 &gt; '$(var log_dir)'/d3/autoware.log 2&gt;&amp;1'"/>
+    </group>
+
+</launch>

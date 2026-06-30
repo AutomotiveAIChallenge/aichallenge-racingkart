@@ -62,13 +62,11 @@ ENV RCUTILS_COLORIZED_OUTPUT=0
 ARG SUBMIT_TAR=submit/aichallenge_submit.tar.gz
 
 COPY ${SUBMIT_TAR} /tmp/s.tgz
-RUN git clone --depth 1 https://github.com/AutomotiveAIChallenge/aichallenge-racingkart /t \
- && mv /t/aichallenge /aichallenge \
- && rm -rf /aichallenge/simulator /aichallenge/workspace/src/aichallenge_submit /t \
+COPY ./aichallenge /aichallenge
+RUN rm -rf /aichallenge/simulator /aichallenge/workspace/src/aichallenge_submit \
  && chmod 757 /aichallenge \
  && tar zxf /tmp/s.tgz -C /aichallenge/workspace/src \
  && rm /tmp/s.tgz
-COPY aichallenge/simulator/ /aichallenge/simulator/
 
 
 RUN bash -c ' \
@@ -76,6 +74,37 @@ RUN bash -c ' \
     cd /aichallenge/workspace; \
     rosdep update; \
     rosdep install -y -r -i --from-paths src --ignore-src --rosdistro $ROS_DISTRO; \
-    python3 -c "from colcon_core.command import main; import sys; sys.exit(main())" build --symlink-install --allow-overriding gyro_odometer --cmake-args -DCMAKE_BUILD_TYPE=Release'
+    colcon build --symlink-install --allow-overriding gyro_odometer --cmake-args -DCMAKE_BUILD_TYPE=Release; \
+    chmod -R a+rwX /aichallenge/workspace/install'
 
 CMD ["bash", "/aichallenge/run_evaluation.bash"]
+
+FROM eval AS parallel
+
+ARG SUBMIT_TAR_D1=submit/aichallenge_submit.tar.gz
+ARG SUBMIT_TAR_D2=submit/aichallenge_submit2.tar.gz
+ARG SUBMIT_TAR_D3=submit/aichallenge_submit3.tar.gz
+
+# D1, D2, D3 用の submission を展開
+COPY ${SUBMIT_TAR_D1} /tmp/s1.tgz
+COPY ${SUBMIT_TAR_D2} /tmp/s2.tgz
+COPY ${SUBMIT_TAR_D3} /tmp/s3.tgz
+RUN mkdir -p /aichallenge/d1/workspace/src /aichallenge/d2/workspace/src /aichallenge/d3/workspace/src \
+ && tar zxf /tmp/s1.tgz -C /aichallenge/d1/workspace/src \
+ && tar zxf /tmp/s2.tgz -C /aichallenge/d2/workspace/src \
+ && tar zxf /tmp/s3.tgz -C /aichallenge/d3/workspace/src \
+ && rm /tmp/s1.tgz /tmp/s2.tgz /tmp/s3.tgz
+
+# Build D1-D3 in parallel (independent workspaces)
+RUN bash -c ' \
+    source /aichallenge/workspace/install/setup.bash; \
+    for d in 1 2 3; do \
+        ( cd /aichallenge/d${d}/workspace; \
+          rosdep install -y -r -i --from-paths src --ignore-src --rosdistro $ROS_DISTRO || true; \
+          colcon build --symlink-install --allow-overriding gyro_odometer --cmake-args -DCMAKE_BUILD_TYPE=Release || true; \
+          chmod -R a+rwX /aichallenge/d${d}/workspace/install || true; \
+        ) & \
+    done; \
+    wait'
+
+CMD ["bash", "/aichallenge/run_parallel.bash"]
