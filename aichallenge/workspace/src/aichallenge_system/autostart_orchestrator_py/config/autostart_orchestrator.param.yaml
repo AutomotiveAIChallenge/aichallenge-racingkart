@@ -14,7 +14,6 @@
     capture_service: /debug/service/capture_screen
     # capture停止(別スレッド)のjoin上限秒。0以下で無限待ち。
     capture_stop_timeout_sec: 60.0
-    enable_debug_visualization: true
     rosbag_topics:
       - /control/command/control_cmd
       - /clock
@@ -25,7 +24,6 @@
     # Leave both empty to keep rosbag output as plain .mcap (no outer compression).
     rosbag_compression_format: ""
     rosbag_compression_mode: ""
-    enable_motion_analytics: true
     motion_analytics_cmd: "ros2 run aichallenge_system_launch motion_analytics.py"
     # Empty means <cwd>/<rosbag_output>.
     motion_analytics_input_dir: ""

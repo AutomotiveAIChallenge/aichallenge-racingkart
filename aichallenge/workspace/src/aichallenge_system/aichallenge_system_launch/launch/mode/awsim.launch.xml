@@ -2,6 +2,7 @@
 <launch>
     <arg name="capture" default="false"/>
     <arg name="rosbag" default="false"/>
+    <arg name="debug" default="false"/>
     <arg name="autostart_orchestrator_params" default="$(find-pkg-share autostart_orchestrator_py)/config/autostart_orchestrator.param.yaml"/>
     <!-- Default start gating is based on vehicle state: READY/START. -->
     <!-- Keep the orchestrator process alive on success (so it will not terminate the entire launch). -->
@@ -16,5 +17,7 @@
 	  <param from="$(var autostart_orchestrator_params)"/>
 	  <param name="enable_capture" value="$(var capture)"/>
 	  <param name="enable_rosbag" value="$(var rosbag)"/>
+	  <param name="enable_debug_visualization" value="$(var debug)"/>
+	  <param name="enable_motion_analytics" value="$(var debug)"/>
 	</node>
 </launch>
