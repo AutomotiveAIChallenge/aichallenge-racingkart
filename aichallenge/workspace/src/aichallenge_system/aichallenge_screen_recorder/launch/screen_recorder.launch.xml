@@ -6,8 +6,9 @@
     <arg name="filename_prefix" default="cap"/>
     <!-- hz is passed via env because the recorder is created before the ROS node exists (see main()). -->
     <arg name="hz" default="10"/>
+    <arg name="launch_prefix" default=""/>
 
-    <node pkg="aichallenge_screen_recorder" exec="screen_recorder_node" name="screen_recorder" output="screen">
+    <node pkg="aichallenge_screen_recorder" exec="screen_recorder_node" name="screen_recorder" output="screen" launch-prefix="$(var launch_prefix)">
         <param name="service_name" value="$(var service_name)"/>
         <param name="output_dir" value="$(var output_dir)"/>
         <param name="filename_prefix" value="$(var filename_prefix)"/>
