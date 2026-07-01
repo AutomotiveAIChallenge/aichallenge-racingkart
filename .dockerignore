@@ -12,12 +12,6 @@ aichallenge/workspace/build
 aichallenge/workspace/install
 aichallenge/workspace/log
 
-# AWSIM simulator binaries (mounted at runtime, not needed in image)
-aichallenge/simulator
-
-# Participant submission tree (eval/parallel stages replace this from the submit tarball)
-aichallenge/workspace/src/aichallenge_submit
-
 # Python caches / virtualenvs
 **/__pycache__
 **/*.pyc
