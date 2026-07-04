@@ -31,6 +31,8 @@
   <exec_depend>default_ad_api</exec_depend>
   <exec_depend>ad_api_adaptors</exec_depend>
   <exec_depend>simple_pure_pursuit</exec_depend>
+  <exec_depend>longitudinal_safety_filter</exec_depend>
+  <exec_depend>v2x_safety_debug</exec_depend>
 
   <exec_depend>tier4_planning_rviz_plugin</exec_depend>
   <exec_depend>tier4_localization_rviz_plugin</exec_depend>

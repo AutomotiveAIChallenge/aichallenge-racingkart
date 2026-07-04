@@ -2,10 +2,11 @@
 <launch>
   <arg name="use_sim_time" default="true"/>
   <arg name="ckpt_path" default="$(find-pkg-share pilot_net_controller)/ckpt/pilotnet_weights.npy"/>
+  <arg name="output_control_cmd_topic" default="/control/command/control_cmd"/>
 
   <include file="$(find-pkg-share pilot_net_controller)/launch/pilot_net.launch.xml">
     <arg name="ckpt_path" value="$(var ckpt_path)"/>
-    <arg name="control_cmd_topic" value="/control/command/control_cmd"/>
+    <arg name="control_cmd_topic" value="$(var output_control_cmd_topic)"/>
     <arg name="use_sim_time" value="$(var use_sim_time)"/>
   </include>
 </launch>

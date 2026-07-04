@@ -2,7 +2,7 @@ from pathlib import Path
 from ament_index_python.packages import get_package_share_directory
 
 from launch import LaunchDescription
-from launch.conditions import IfCondition
+from launch.conditions import IfCondition, UnlessCondition
 from launch.substitutions import LaunchConfiguration
 from launch.actions import (
     DeclareLaunchArgument,
@@ -17,6 +17,7 @@ def launch_setup(context, *args, **kwargs):
     use_obstacle_avoidance = LaunchConfiguration("use_obstacle_avoidance")
     use_boost_acceleration = LaunchConfiguration("use_boost_acceleration")
     use_stats = LaunchConfiguration("use_stats")
+    use_cpp_mpc = LaunchConfiguration("use_cpp_mpc")
 
     config_path = (
         Path(get_package_share_directory("multi_purpose_mpc_ros"))
@@ -51,6 +52,29 @@ def launch_setup(context, *args, **kwargs):
             {"use_obstacle_avoidance": use_obstacle_avoidance},
             {"use_stats": use_stats},
         ],
+        condition=UnlessCondition(use_cpp_mpc),
+    )
+
+    mpc_controller_cpp = Node(
+        package="multi_purpose_mpc_ros",
+        executable="mpc_controller_cpp",
+        name="mpc_controller",
+        output="both",
+        emulate_tty=True,  # https://github.com/ros2/launch/issues/188
+        sigterm_timeout="10",
+        arguments=[
+            "--ros-args",
+            "--log-level",
+            "info",
+        ],
+        parameters=[
+            {"config_path": str(config_path)},
+            {"ref_vel_config_path": str(ref_vel_path)},
+            {"use_boost_acceleration": use_boost_acceleration},
+            {"use_obstacle_avoidance": use_obstacle_avoidance},
+            {"use_stats": use_stats},
+        ],
+        condition=IfCondition(use_cpp_mpc),
     )
 
     boost_commander = Node(
@@ -89,7 +113,7 @@ def launch_setup(context, *args, **kwargs):
 
     return [
         SetParameter('use_sim_time', use_sim_time),
-        mpc_controller, boost_commander, path_constraints_provider]
+        mpc_controller, mpc_controller_cpp, boost_commander, path_constraints_provider]
 
 
 def generate_launch_description():
@@ -110,6 +134,11 @@ def generate_launch_description():
             "use_stats",
             "false",
             "Use the execution statistics",
+        ),
+        (
+            "use_cpp_mpc",
+            "true",
+            "Use the C++ MPC controller instead of the Python controller",
         ),
     ]
 

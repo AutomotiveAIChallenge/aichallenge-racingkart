@@ -1,0 +1,10 @@
+<launch>
+
+  <!-- rl_train_node -->
+  <node pkg="rl_train_controller"
+        exec="rl_train_controller_node.py"
+        name="rl_train_node"
+        output="screen">
+  </node>
+
+</launch>

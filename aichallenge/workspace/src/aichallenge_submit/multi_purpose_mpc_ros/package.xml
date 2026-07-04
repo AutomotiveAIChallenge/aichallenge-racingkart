@@ -13,9 +13,19 @@
 
 
   <depend>rclcpp</depend>
+  <depend>ament_index_cpp</depend>
   <depend>multi_purpose_mpc_ros_msgs</depend>
   <depend>autoware_auto_control_msgs</depend>
+  <depend>geometry_msgs</depend>
+  <depend>nav_msgs</depend>
+  <depend>std_msgs</depend>
+  <depend>visualization_msgs</depend>
   <depend>v2x_msgs</depend>
+  <depend>eigen3_cmake_module</depend>
+  <depend>osqp_vendor</depend>
+  <depend>yaml-cpp-vendor</depend>
+
+  <test_depend>ament_cmake_pytest</test_depend>
 
   <export>
     <build_type>ament_cmake</build_type>

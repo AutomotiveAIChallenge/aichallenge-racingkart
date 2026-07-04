@@ -295,14 +295,12 @@ Visualization Manager:
             Value: /sensing/camera/image_raw
           Value: false
           Visibility:
+            "": true
             Control:
-              MPC: true
-              PointStamped: true
+              "": true
               Value: false
             Localization:
-              Fusion: true
-              HeadingPose: true
-              KinematicState: true
+              "": true
               Value: false
             Map:
               EditorToolServer: true
@@ -310,7 +308,7 @@ Visualization Manager:
               Value: true
               VectorMap: true
             Planning:
-              ScenarioTrajectory: true
+              "": true
               Value: true
             Sensing:
               GNSS: true
@@ -322,13 +320,12 @@ Visualization Manager:
               Value: false
               VehicleModel: true
             V2X:
-              VehicleMarkers: true
               Value: false
+              VehicleMarkers: true
             Value: true
             Vehicle:
-              SignalDisplay: true
+              "": true
               Value: false
-              VelocityHistory: true
           Zoom Factor: 1
       Enabled: true
       Name: Sensing
@@ -447,6 +444,18 @@ Visualization Manager:
             Constant Color: true
             Scale: 0.8999999761581421
             Value: false
+        - Class: rviz_default_plugins/MarkerArray
+          Enabled: true
+          Name: V2XAvoidancePlanner
+          Namespaces:
+            {}
+          Topic:
+            Depth: 1
+            Durability Policy: Transient Local
+            History Policy: Keep Last
+            Reliability Policy: Reliable
+            Value: /planning/scenario_planning/v2x_avoidance_planner/markers
+          Value: true
       Enabled: true
       Name: Planning
     - Class: rviz_common/Group
@@ -540,6 +549,30 @@ Visualization Manager:
           Value: true
       Enabled: true
       Name: V2X
+    - Class: rviz_default_plugins/MarkerArray
+      Enabled: true
+      Name: MarkerArray
+      Namespaces:
+        avoidance_candidates: true
+      Topic:
+        Depth: 5
+        Durability Policy: Volatile
+        History Policy: Keep Last
+        Reliability Policy: Reliable
+        Value: /mpc/avoidance_candidates
+      Value: true
+    - Class: rviz_default_plugins/MarkerArray
+      Enabled: true
+      Name: MarkerArray
+      Namespaces:
+        longitudinal_safety_debug: true
+      Topic:
+        Depth: 5
+        Durability Policy: Volatile
+        History Policy: Keep Last
+        Reliability Policy: Reliable
+        Value: /safety/longitudinal_debug/markers
+      Value: true
   Enabled: true
   Global Options:
     Background Color: 10; 10; 10
@@ -578,11 +611,11 @@ Visualization Manager:
       Invert Z Axis: false
       Name: Current View
       Near Clip Distance: 0.009999999776482582
-      Scale: 13.090400695800781
+      Scale: 41.3369140625
       Target Frame: viewer
       Value: TopDownOrtho (rviz_default_plugins)
-      X: -0.06784480065107346
-      Y: -0.6162068843841553
+      X: -19.146902084350586
+      Y: -16.35506820678711
     Saved:
       - Class: rviz_default_plugins/ThirdPersonFollower
         Distance: 18

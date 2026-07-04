@@ -31,3 +31,7 @@ grad-cam
 tensorboard
 tomli==2.3.0
 packaging>=22.0
+
+# 強化学習用
+gymnasium
+stable-baselines3[extra]

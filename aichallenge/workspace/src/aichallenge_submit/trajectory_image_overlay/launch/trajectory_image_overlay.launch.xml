@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<launch>
+  <arg name="param_file" default="$(find-pkg-share trajectory_image_overlay)/config/trajectory_image_overlay.param.yaml"/>
+  <arg name="use_sim_time" default="true"/>
+  <arg name="image_topic" default="/sensing/camera/image_raw"/>
+  <arg name="camera_info_topic" default="/sensing/camera/camera_info"/>
+  <arg name="trajectory_topic" default="/planning/scenario_planning/trajectory"/>
+  <arg name="mpc_prediction_topic" default="/mpc/prediction"/>
+  <arg name="output_image_topic" default="/trajectory_image_overlay/image"/>
+
+  <node pkg="trajectory_image_overlay"
+        exec="trajectory_image_overlay_node.py"
+        name="trajectory_image_overlay_node"
+        output="screen">
+    <param from="$(var param_file)"/>
+    <param name="use_sim_time" value="$(var use_sim_time)"/>
+    <param name="image_topic" value="$(var image_topic)"/>
+    <param name="camera_info_topic" value="$(var camera_info_topic)"/>
+    <param name="trajectory_topic" value="$(var trajectory_topic)"/>
+    <param name="mpc_prediction_topic" value="$(var mpc_prediction_topic)"/>
+    <param name="output_image_topic" value="$(var output_image_topic)"/>
+  </node>
+</launch>

@@ -8,6 +8,10 @@
     <arg name="capture" default="false"/>
     <arg name="rosbag" default="false"/>
     <arg name="domain_id" default="0"/>
+    <arg name="use_cpp_mpc" default="true"/>
+    <arg name="launch_v2x_safety_debug" default="false"/>
+    <arg name="v2x_safety_debug_mode" default="trajectory_relative"/>
+    <arg name="v2x_safety_debug_scenario" default="front_slowdown"/>
 
     <let name="domain_id" value="$(var domain_id)"/>
     <let name="rviz_config" value="$(find-pkg-share aichallenge_system_launch)/config/autoware_vehicle.rviz"/>
@@ -23,6 +27,10 @@
     <log message=" - capture: $(var capture)"/>
     <log message=" - rosbag: $(var rosbag)"/>
     <log message=" - domain_id: $(var domain_id)"/>
+    <log message=" - use_cpp_mpc: $(var use_cpp_mpc)"/>
+    <log message=" - launch_v2x_safety_debug: $(var launch_v2x_safety_debug)"/>
+    <log message=" - v2x_safety_debug_mode: $(var v2x_safety_debug_mode)"/>
+    <log message=" - v2x_safety_debug_scenario: $(var v2x_safety_debug_scenario)"/>
 
     <!-- Main module of AI challenge 2025. -->
     <include file="$(find-pkg-share aichallenge_submit_launch)/launch/aichallenge_submit.launch.xml" >
@@ -30,6 +38,10 @@
         <arg name="use_sim_time" value="$(var use_sim_time)"/>
         <arg name="sensor_model" value="$(var sensor_model)"/>
         <arg name="launch_vehicle_interface" value="$(var launch_vehicle_interface)"/>
+        <arg name="use_cpp_mpc" value="$(var use_cpp_mpc)"/>
+        <arg name="launch_v2x_safety_debug" value="$(var launch_v2x_safety_debug)"/>
+        <arg name="v2x_safety_debug_mode" value="$(var v2x_safety_debug_mode)"/>
+        <arg name="v2x_safety_debug_scenario" value="$(var v2x_safety_debug_scenario)"/>
     </include>
 
     <!-- Visualization. -->
@@ -48,6 +60,7 @@
         <include file="$(find-pkg-share aichallenge_system_launch)/launch/mode/awsim.launch.xml">
             <arg name="capture" value="$(var capture)"/>
             <arg name="rosbag" value="$(var rosbag)"/>
+            <arg name="debug" value="$(var run_rviz)"/>
         </include>
     </group>
 

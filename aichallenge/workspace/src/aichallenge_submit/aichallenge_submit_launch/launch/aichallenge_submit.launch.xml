@@ -4,12 +4,20 @@
   <arg name="use_sim_time"/>
   <arg name="sensor_model"/>
   <arg name="launch_vehicle_interface"/>
+  <arg name="use_cpp_mpc" default="true"/>
+  <arg name="launch_v2x_safety_debug" default="false"/>
+  <arg name="v2x_safety_debug_mode" default="trajectory_relative"/>
+  <arg name="v2x_safety_debug_scenario" default="front_slowdown"/>
 
   <log message="The arguments for aichallenge_submit_launch."/>
   <log message=" - simulation: $(var simulation)"/>
   <log message=" - use_sim_time: $(var use_sim_time)"/>
   <log message=" - sensor_model: $(var sensor_model)"/>
   <log message=" - launch_vehicle_interface: $(var launch_vehicle_interface)"/>
+  <log message=" - use_cpp_mpc: $(var use_cpp_mpc)"/>
+  <log message=" - launch_v2x_safety_debug: $(var launch_v2x_safety_debug)"/>
+  <log message=" - v2x_safety_debug_mode: $(var v2x_safety_debug_mode)"/>
+  <log message=" - v2x_safety_debug_scenario: $(var v2x_safety_debug_scenario)"/>
 
   <include file="$(find-pkg-share aichallenge_submit_launch)/launch/reference.launch.xml" >
     <arg name="vehicle_model" value="racing_kart"/>
@@ -18,5 +26,9 @@
     <arg name="use_sim_time" value="$(var use_sim_time)"/>
     <arg name="simulation" value="$(var simulation)"/>
     <arg name="launch_vehicle_interface" value="$(var launch_vehicle_interface)"/>
+    <arg name="use_cpp_mpc" value="$(var use_cpp_mpc)"/>
+    <arg name="launch_v2x_safety_debug" value="$(var launch_v2x_safety_debug)"/>
+    <arg name="v2x_safety_debug_mode" value="$(var v2x_safety_debug_mode)"/>
+    <arg name="v2x_safety_debug_scenario" value="$(var v2x_safety_debug_scenario)"/>
   </include>
 </launch>

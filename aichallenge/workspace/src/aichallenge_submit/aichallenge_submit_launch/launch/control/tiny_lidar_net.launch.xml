@@ -5,6 +5,7 @@
   <arg name="ckpt_path" default="$(find-pkg-share tiny_lidar_net_controller)/ckpt/tinylidarnet_weights.npy"/>
   <arg name="model_type" default="tiny_lidar_net"/>
   <arg name="csv_path" default="$(find-pkg-share laserscan_generator)/map/lane.csv"/>
+  <arg name="output_control_cmd_topic" default="/control/command/control_cmd"/>
 
   <group if="$(var vscan_mode)">
     <include file="$(find-pkg-share laserscan_generator)/launch/laserscan_generator.launch.xml">
@@ -16,6 +17,6 @@
   <include file="$(find-pkg-share tiny_lidar_net_controller)/launch/tiny_lidar_net.launch.xml">
     <arg name="ckpt_path" value="$(var ckpt_path)"/>
     <arg name="model_type" value="$(var model_type)"/>
-    <arg name="control_cmd_topic" value="/control/command/control_cmd"/>
+    <arg name="control_cmd_topic" value="$(var output_control_cmd_topic)"/>
   </include>
 </launch>

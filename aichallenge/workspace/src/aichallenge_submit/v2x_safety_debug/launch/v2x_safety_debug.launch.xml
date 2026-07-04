@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<launch>
+  <arg name="use_sim_time" default="true"/>
+  <arg name="param_file" default="$(find-pkg-share v2x_safety_debug)/config/v2x_safety_debug.param.yaml"/>
+  <arg name="mode" default="trajectory_relative"/>
+  <arg name="scenario" default="front_slowdown"/>
+  <arg name="v2x_topic" default="/v2x/vehicle_positions"/>
+  <arg name="odom_topic" default="/localization/kinematic_state"/>
+  <arg name="trajectory_topic" default="/planning/scenario_planning/trajectory"/>
+
+  <node pkg="v2x_safety_debug"
+        exec="v2x_safety_debug_node.py"
+        name="v2x_safety_debug_node"
+        output="screen">
+    <param from="$(var param_file)"/>
+    <param name="use_sim_time" value="$(var use_sim_time)"/>
+    <param name="mode" value="$(var mode)"/>
+    <param name="scenario" value="$(var scenario)"/>
+    <param name="v2x_topic" value="$(var v2x_topic)"/>
+    <param name="odom_topic" value="$(var odom_topic)"/>
+    <param name="trajectory_topic" value="$(var trajectory_topic)"/>
+  </node>
+</launch>

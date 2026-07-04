@@ -56,6 +56,19 @@ class MPC:
         self.last_solved_wp_id = 0
         self.current_control = np.zeros((self.nu*self.N))
         self.optimizer = osqp.OSQP()
+        # Keep the runtime path equivalent to the original stable MPC behavior:
+        # build and setup a fresh OSQP problem every cycle. The update path is
+        # intentionally disabled because the MPC matrix pattern can change with
+        # dropped zeros and produces non-transparent behavior versus setup().
+        self._osqp_cache_enabled = False
+        self._osqp_cache_key = None
+        self._osqp_A_indices = None
+        self._osqp_A_indptr = None
+        self._osqp_problem_dirty = True
+        self._osqp_used_update = False
+        self._osqp_last_problem = None
+        self._osqp_matrix_verify_count = 0
+        self._osqp_solution_verify_count = 0
 
         if not self.use_obstacle_avoidance:
             self.model.reference_path.update_simple_path_constraints(
@@ -73,12 +86,108 @@ class MPC:
 
     def update_Q(self, Q: np.ndarray):
         self.Q = Q
+        self._osqp_problem_dirty = True
 
     def update_R(self, R: np.ndarray):
         self.R = R
+        self._osqp_problem_dirty = True
 
     def update_QN(self, QN: np.ndarray):
         self.QN = QN
+        self._osqp_problem_dirty = True
+
+    def _build_fixed_pattern_equality_matrix(self, N, A_blocks, B_blocks):
+        nx_N = self.nx * (N + 1)
+        nu_N = self.nu * N
+        rows = []
+        cols = []
+        data = []
+
+        for index in range(nx_N):
+            rows.append(index)
+            cols.append(index)
+            data.append(-1.0)
+
+        for n, (A_lin, B_lin) in enumerate(zip(A_blocks, B_blocks)):
+            row_offset = (n + 1) * self.nx
+            state_col_offset = n * self.nx
+            input_col_offset = nx_N + n * self.nu
+
+            for row, col in ((0, 0), (0, 1), (1, 0), (1, 1), (2, 0), (2, 2)):
+                rows.append(row_offset + row)
+                cols.append(state_col_offset + col)
+                data.append(A_lin[row, col])
+
+            for row, col in ((1, 1), (2, 0)):
+                rows.append(row_offset + row)
+                cols.append(input_col_offset + col)
+                data.append(B_lin[row, col])
+
+        return sparse.csc_matrix((data, (rows, cols)), shape=(nx_N, nx_N + nu_N))
+
+    def _setup_or_update_problem(self, P, q, A, l, u, N):
+        self._osqp_used_update = False
+        self._osqp_last_problem = (P, q.copy(), A.copy(), l.copy(), u.copy())
+        if not self._osqp_cache_enabled:
+            self.optimizer = osqp.OSQP()
+            self.optimizer.setup(P=P, q=q, A=A, l=l, u=u, verbose=False, eps_abs=1.0e-8, eps_rel=1.0e-8)
+            self._osqp_problem_dirty = False
+            return
+
+        cache_key = (N, P.shape, A.shape)
+        can_update = (
+            self._osqp_cache_enabled
+            and not self._osqp_problem_dirty
+            and self._osqp_cache_key == cache_key
+            and self._osqp_A_indices is not None
+            and self._osqp_A_indptr is not None
+            and np.array_equal(A.indices, self._osqp_A_indices)
+            and np.array_equal(A.indptr, self._osqp_A_indptr)
+        )
+
+        if can_update:
+            try:
+                self.optimizer.update(q=q, l=l, u=u, Ax=A.data)
+                self._osqp_used_update = True
+                return
+            except Exception as exc:
+                print(f"OSQP update rejected; disabling cache and falling back to setup: {exc}")
+                self._osqp_cache_enabled = False
+
+        self.optimizer = osqp.OSQP()
+        self.optimizer.setup(P=P, q=q, A=A, l=l, u=u, verbose=False, eps_abs=1.0e-8, eps_rel=1.0e-8)
+        self._osqp_cache_key = cache_key
+        self._osqp_A_indices = A.indices.copy()
+        self._osqp_A_indptr = A.indptr.copy()
+        self._osqp_problem_dirty = False
+
+    def _verify_updated_solution(self, updated_solution):
+        if (
+            not self._osqp_used_update
+            or not self._osqp_cache_enabled
+            or self._osqp_solution_verify_count >= 5
+            or self._osqp_last_problem is None
+        ):
+            return updated_solution
+
+        P, q, A, l, u = self._osqp_last_problem
+        fresh_optimizer = osqp.OSQP()
+        fresh_optimizer.setup(P=P, q=q, A=A, l=l, u=u, verbose=False, eps_abs=1.0e-8, eps_rel=1.0e-8)
+        fresh_solution = fresh_optimizer.solve()
+
+        if (
+            fresh_solution.x is None
+            or updated_solution.x is None
+            or fresh_solution.info.status != updated_solution.info.status
+            or not np.allclose(fresh_solution.x, updated_solution.x, rtol=1.0e-5, atol=1.0e-5)
+        ):
+            print("OSQP update solution diverged from fresh setup; disabling cache")
+            self._osqp_cache_enabled = False
+            self._osqp_problem_dirty = True
+            updated_solution = fresh_solution
+
+        self._osqp_solution_verify_count += 1
+        return updated_solution
 
     def _init_problem(self, N, safety_margin):
         """
@@ -94,9 +203,12 @@ class MPC:
         nx_N = self.nx * (N + 1)
         nu_N = self.nu * N
 
-        # LTV System Matrices
-        A = np.zeros((nx_N, nx_N))
-        B = np.zeros((nx_N, nu_N))
+        should_verify_matrix = self._osqp_matrix_verify_count < 5
+        # Legacy dense matrices are kept only for the initial strict equivalence checks.
+        A = np.zeros((nx_N, nx_N)) if should_verify_matrix else None
+        B = np.zeros((nx_N, nu_N)) if should_verify_matrix else None
+        A_blocks = []
+        B_blocks = []
 
         # Reference vector
         ur = np.zeros(nu_N)
@@ -127,8 +239,11 @@ class MPC:
 
             # Compute LTV matrices
             f, A_lin, B_lin = self.model.linearize(v_ref, kappa_ref, delta_s)
-            A[(n+1) * self.nx: (n+2)*self.nx, n * self.nx:(n+1)*self.nx] = A_lin
-            B[(n+1) * self.nx: (n+2)*self.nx, n * self.nu:(n+1)*self.nu] = B_lin
+            A_blocks.append(A_lin)
+            B_blocks.append(B_lin)
+            if should_verify_matrix:
+                A[(n+1) * self.nx: (n+2)*self.nx, n * self.nx:(n+1)*self.nx] = A_lin
+                B[(n+1) * self.nx: (n+2)*self.nx, n * self.nu:(n+1)*self.nu] = B_lin
 
             # Set reference
             ur[n*self.nu:(n+1)*self.nu] = [v_ref, kappa_ref]
@@ -170,10 +285,17 @@ class MPC:
         xmax_dyn[self.nx::self.nx] = ub
         xr[self.nx::self.nx] = (lb + ub) / 2
 
-        # Get equality matrix
-        Ax = sparse.kron(sparse.eye(N + 1), -sparse.eye(self.nx)) + sparse.csc_matrix(A)
-        Bu = sparse.csc_matrix(B)
-        Aeq = sparse.hstack([Ax, Bu])
+        Aeq = self._build_fixed_pattern_equality_matrix(N, A_blocks, B_blocks)
+
+        if should_verify_matrix:
+            Ax = sparse.kron(sparse.eye(N + 1), -sparse.eye(self.nx)) + sparse.csc_matrix(A)
+            Bu = sparse.csc_matrix(B)
+            Aeq_legacy = sparse.hstack([Ax, Bu])
+            if not np.allclose(Aeq.toarray(), Aeq_legacy.toarray(), rtol=1.0e-12, atol=1.0e-12):
+                print("Fixed-pattern MPC matrix differs from legacy matrix; disabling OSQP cache")
+                Aeq = Aeq_legacy
+                self._osqp_cache_enabled = False
+            self._osqp_matrix_verify_count += 1
 
         # ステアリングレート制約の行列を構築
         n_rate_constraints = N - 1
@@ -226,8 +348,7 @@ class MPC:
         ])
 
         # オプティマイザの設定
-        self.optimizer = osqp.OSQP()
-        self.optimizer.setup(P=P, q=q, A=A_full, l=l, u=u, verbose=False)
+        self._setup_or_update_problem(P, q, A_full, l, u, N)
 
     def get_control(self) -> Tuple[np.ndarray, float]:
         """
@@ -249,6 +370,7 @@ class MPC:
 
         try:
             dec = self.optimizer.solve()
+            dec = self._verify_updated_solution(dec)
             control_signals = np.array(dec.x[-N*nu:])
             use_control_signals = control_signals[1::2]
 

@@ -193,11 +193,16 @@ class MPCController(Node):
         return cfg
 
     def _create_reference_path_from_autoware_trajectory(self, trajectory: Trajectory) -> Optional[ReferencePath]:
-        wp_x = [0] * len(trajectory.points)
-        wp_y = [0] * len(trajectory.points)
+        if len(trajectory.points) < 3:
+            return None
+
+        wp_x = [0.0] * len(trajectory.points)
+        wp_y = [0.0] * len(trajectory.points)
+        wp_v = [0.0] * len(trajectory.points)
         for i, p in enumerate(trajectory.points):
             wp_x[i] = p.pose.position.x
             wp_y[i] = p.pose.position.y
+            wp_v[i] = max(0.0, float(p.longitudinal_velocity_mps))
 
         cfg_ref_path = self._cfg.reference_path # type: ignore
         reference_path = ReferencePath(
@@ -209,15 +214,42 @@ class MPCController(Node):
             cfg_ref_path.max_width,
             cfg_ref_path.circular)
 
-        mpc_config = self._mpc_cfg
-        speed_profile_constraints = {
-            "a_min": mpc_config.a_min, "a_max": mpc_config.a_max,
-            "v_min": 0.0, "v_max": mpc_config.v_max, "ay_max": mpc_config.ay_max}
-
-        if not reference_path.compute_speed_profile(speed_profile_constraints):
-            return None
+        self._apply_trajectory_velocity(reference_path, wp_x, wp_y, wp_v)
 
         return reference_path
+
+    def _apply_trajectory_velocity(
+        self, reference_path: ReferencePath, wp_x: List[float], wp_y: List[float], wp_v: List[float]
+    ) -> None:
+        source_s = self._cumulative_distance(wp_x, wp_y)
+        ref_x = [wp.x for wp in reference_path.waypoints]
+        ref_y = [wp.y for wp in reference_path.waypoints]
+        ref_s = self._cumulative_distance(ref_x, ref_y)
+
+        if len(source_s) < 2 or source_s[-1] <= 1.0e-6:
+            reference_path.set_v_ref([0.0] * len(reference_path.waypoints))
+            return
+
+        source_v = np.asarray(wp_v, dtype=np.float64)
+        ref_s_clipped = np.clip(np.asarray(ref_s, dtype=np.float64), source_s[0], source_s[-1])
+        v_ref = np.interp(ref_s_clipped, np.asarray(source_s, dtype=np.float64), source_v)
+        reference_path.set_v_ref(v_ref.tolist())
+
+    def _activate_reference_path(self, reference_path: ReferencePath) -> None:
+        if not self.USE_OBSTACLE_AVOIDANCE:
+            reference_path.update_simple_path_constraints(
+                int(self._mpc_cfg.N), self._car.safety_margin)
+        self._reference_path = reference_path
+        self._car.reference_path = reference_path
+        self._car.update_reference_path(reference_path)
+        self._mpc.model.reference_path = reference_path
+
+    @staticmethod
+    def _cumulative_distance(xs: List[float], ys: List[float]) -> List[float]:
+        distances = [0.0] * len(xs)
+        for i in range(1, len(xs)):
+            distances[i] = distances[i - 1] + float(np.hypot(xs[i] - xs[i - 1], ys[i] - ys[i - 1]))
+        return distances
 
     def _setup_parameters_callback(self) -> None:
         def declatre_parameters():
@@ -442,6 +474,8 @@ class MPCController(Node):
         self._ref_vel_configulator: Optional[ReferenceVelocityConfigulator] = create_ref_vel_configulator()
 
         self._trajectory: Optional[Trajectory] = None
+        self._trajectory_signature = None
+        self._trajectory_dirty = False
         self._path_constraints = None
 
         # Obstacles
@@ -620,6 +654,24 @@ class MPCController(Node):
 
     def _trajectory_callback(self, msg):
         self._trajectory = msg
+        signature = self._trajectory_position_signature(msg)
+        if signature != self._trajectory_signature:
+            self._trajectory_signature = signature
+            self._trajectory_dirty = True
+
+    @staticmethod
+    def _trajectory_position_signature(msg: Trajectory):
+        if not msg.points:
+            return (0,)
+        step = max(1, len(msg.points) // 40)
+        sampled_indices = list(range(0, len(msg.points), step))
+        if sampled_indices[-1] != len(msg.points) - 1:
+            sampled_indices.append(len(msg.points) - 1)
+        signature = [len(msg.points)]
+        for index in sampled_indices:
+            position = msg.points[index].pose.position
+            signature.append((round(float(position.x), 2), round(float(position.y), 2)))
+        return tuple(signature)
 
     def _awsim_status_callback(self, msg):
         laps = int(msg.data[1])
@@ -766,22 +818,15 @@ class MPCController(Node):
         # self.get_logger().info("loop")
         self._control_rate.sleep()
 
-        if self._loop % 100 == 0:
-            # update reference path
-            if self._cfg.reference_path.update_by_topic: # type: ignore
-                new_referece_path = self._create_reference_path_from_autoware_trajectory(self._trajectory)
-                if new_referece_path is not None:
-                    self._car.reference_path = new_referece_path
-                    self._car.update_reference_path(self._car.reference_path)
-
-            def plot_reference_path(car):
-                import matplotlib.pyplot as plt
-                import sys
-                fig, ax = plt.subplots(1, 1)
-                car.reference_path.show(ax)
-                plt.show()
-                sys.exit(1)
-            # plot_reference_path(self._car)
+        if (
+            self._cfg.reference_path.update_by_topic  # type: ignore
+            and self._trajectory_dirty
+            and self._loop % 10 == 0
+        ):
+            new_reference_path = self._create_reference_path_from_autoware_trajectory(self._trajectory)
+            if new_reference_path is not None:
+                self._trajectory_dirty = False
+                self._activate_reference_path(new_reference_path)
 
         if self.USE_OBSTACLE_AVOIDANCE and self._obstacles_updated:
             self._obstacles_updated = False
@@ -882,6 +927,12 @@ class MPCController(Node):
         self._wait_until_odom_received()
         self._wait_until_trajectory_received()
         self._wait_until_path_constraints_received()
+
+        if self._cfg.reference_path.update_by_topic and self._trajectory is not None:  # type: ignore
+            new_reference_path = self._create_reference_path_from_autoware_trajectory(self._trajectory)
+            if new_reference_path is not None:
+                self._trajectory_dirty = False
+                self._activate_reference_path(new_reference_path)
 
         # initialize car states
         pose = odom_to_pose_2d(self._odom) # type: ignore

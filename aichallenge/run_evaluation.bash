@@ -5,7 +5,6 @@ ts="$(date +%Y%m%d-%H%M%S)"
 out_dir="/output/${ts}/d${domain_id}"
 
 mkdir -p "${out_dir}"
-trap 'bash /aichallenge/utils/fix_ownership.bash "${HOST_UID}" "${HOST_GID}" /output "$(dirname "${out_dir}")"' EXIT
 
 cd "${out_dir}" || exit
 mkdir -p "${out_dir}/ros/log"

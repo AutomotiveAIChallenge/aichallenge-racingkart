@@ -1,45 +1,22 @@
 #!/bin/bash
-AWSIM_DIRECTORY=/aichallenge/simulator/AWSIM
-mode="${1:-${SIM_MODE:-eval}}"
-[[ ${mode} == "eval" ]] && mode="1p"
 
-case "${mode}" in
-"dev")
-    start_mode="off"
-    vehicles=1
-    laps=600
-    timeout=60000000
-    ;;
-"test")
-    start_mode="sync"
-    vehicles=1
-    laps=1
-    timeout=90
-    ;;
-"1p" | "2p" | "3p" | "4p")
-    start_mode="sync"
-    vehicles="${mode%p}"
-    laps=6
-    timeout=600
-    ;;
-*)
-    echo "invalid mode: ${mode}"
-    echo "supported: dev, test, eval, 1p, 2p, 3p, 4p"
+SCRIPT_DIR="$(dirname "$0")/simulator_scripts"
+mode="${1:-${SIM_MODE:-simulator}}"
+[ $# -gt 0 ] && shift
+
+# dev2 / gate2 等は dev.sh / gate.sh に番号を渡すエイリアス
+[[ ${mode} =~ ^(dev|gate)([0-9]+)$ ]] && set -- "${BASH_REMATCH[2]}" "$@" && mode="${BASH_REMATCH[1]}"
+
+# simulator_scripts 内のスクリプトを呼び出す
+script="${SCRIPT_DIR}/${mode}.sh"
+if [[ ! -f ${script} ]]; then
+    echo "[ERROR] unknown mode '${mode}' (supported: $(basename -s .sh "${SCRIPT_DIR}"/*.sh | xargs) dev<N> gate<N>)" >&2
     exit 1
-    ;;
-esac
-
-awsim_extra_args="${AWSIM_EXTRA_ARGS-}"
-if [[ -z ${awsim_extra_args} && ! -e /dev/nvidia0 && ${mode} =~ ^(dev|test|[1-4]p)$ ]]; then
-    awsim_extra_args="--camera false --lidar false"
 fi
 
-echo "[INFO] Starting AWSIM in '${mode}' mode"
+log_dir="${LOG_DIR:-/output}"
+mkdir -p "${log_dir}"
+exec >"${log_dir}/awsim.log" 2>&1
 
-declare -a opts=("--start-mode" "${start_mode}" "--vehicles" "${vehicles}" "--laps" "${laps}" "--timeout" "${timeout}")
-declare -a extra_args
-read -r -a extra_args <<<"${awsim_extra_args}"
-opts+=("${extra_args[@]}")
-
-export ROS_DOMAIN_ID=0
-$AWSIM_DIRECTORY/AWSIM.x86_64 "${opts[@]}"
+echo "[INFO] Starting AWSIM: ${mode}.sh $*"
+exec bash "${script}" "$@"

@@ -19,6 +19,163 @@ obstacles:
   # csv_path: "maps/occupancy_grid_map_obstacles.csv"
   radius: 1.25
 
+avoidance:
+  enabled: true
+  wall_margin_m: 0.4
+  blend_length_m: 4.0
+  slow_distance_m: 3.0
+  stop_distance_m: 1.0
+  slow_speed_kmh: 10.0
+  sections:
+    - section_id: 1
+      start_s_m: 0.0
+      end_s_m: 6.9933195
+      line: center
+    - section_id: 2
+      start_s_m: 7.9923651
+      end_s_m: 18.9818671
+      line: right_wall
+    - section_id: 3
+      start_s_m: 19.9809128
+      end_s_m: 29.9713692
+      line: right_wall
+    - section_id: 4
+      start_s_m: 30.9704148
+      end_s_m: 36.9646886
+      line: right_wall
+    - section_id: 5
+      start_s_m: 37.9637343
+      end_s_m: 60.9417840
+      line: right_wall
+    - section_id: 6
+      start_s_m: 61.9408296
+      end_s_m: 84.9188793
+      line: center
+    - section_id: 7
+      start_s_m: 85.9179249
+      end_s_m: 106.8978834
+      line: left_wall
+    - section_id: 8
+      start_s_m: 107.8969290
+      end_s_m: 114.8902485
+      line: center
+    - section_id: 9
+      start_s_m: 115.8892941
+      end_s_m: 124.8807049
+      line: center
+    - section_id: 10
+      start_s_m: 125.8797505
+      end_s_m: 132.8730700
+      line: center
+    - section_id: 11
+      start_s_m: 133.8721156
+      end_s_m: 156.8501653
+      line: center
+    - section_id: 12
+      start_s_m: 157.8492109
+      end_s_m: 166.8406217
+      line: center
+    - section_id: 13
+      start_s_m: 167.8396673
+      end_s_m: 176.8310781
+      line: center
+    - section_id: 14
+      start_s_m: 177.8301237
+      end_s_m: 193.8148539
+      line: center
+    - section_id: 15
+      start_s_m: 194.8138996
+      end_s_m: 208.8005385
+      line: center
+    - section_id: 16
+      start_s_m: 209.7995842
+      end_s_m: 218.7909949
+      line: center
+    - section_id: 17
+      start_s_m: 219.7900406
+      end_s_m: 225.7843144
+      line: center
+    - section_id: 18
+      start_s_m: 226.7833600
+      end_s_m: 232.7776339
+      line: center
+    - section_id: 19
+      start_s_m: 233.7766795
+      end_s_m: 246.7642728
+      line: center
+    - section_id: 20
+      start_s_m: 247.7633185
+      end_s_m: 255.7556836
+      line: center
+    - section_id: 21
+      start_s_m: 256.7547292
+      end_s_m: 275.7365963
+      line: center
+    - section_id: 22
+      start_s_m: 276.7356420
+      end_s_m: 288.7241896
+      line: center
+    - section_id: 23
+      start_s_m: 289.7232353
+      end_s_m: 295.7175091
+      line: center
+    - section_id: 24
+      start_s_m: 296.7165548
+      end_s_m: 304.7089199
+      line: center
+    - section_id: 25
+      start_s_m: 305.7079655
+      end_s_m: 317.6965132
+      line: center
+    - section_id: 26
+      start_s_m: 318.6955588
+      end_s_m: 325.6888783
+      line: center
+    - section_id: 27
+      start_s_m: 326.6879239
+      end_s_m: 332.6821978
+      line: center
+    - section_id: 28
+      start_s_m: 333.6812434
+      end_s_m: 339.6755172
+      line: center
+    - section_id: 29
+      start_s_m: 340.6745629
+      end_s_m: 348.6669280
+      line: center
+
+avoidance_planner:
+  enabled: true
+  candidate_wall_margin_m: 0.1
+  prediction_horizon_s: 3.0
+  prediction_dt_s: 0.2
+  ego_radius_m: 0.75
+  obstacle_radius_m: 0.85
+  collision_margin_m: 0.1
+  min_hold_time_s: 0.5
+  switch_cooldown_s: 0.3
+  switch_margin_m: 0.2
+  obstacle_timeout_s: 1.0
+  obstacle_v_max_mps: 30.0
+  obstacle_jump_threshold_m: 8.0
+  front_slow_distance_m: 3.0
+  front_stop_distance_m: 1.0
+  front_slow_speed_kmh: 10.0
+  emergency_override: true
+  default_line: center
+
+longitudinal_safety:
+  # The controller-independent longitudinal_safety_filter is now the primary safety layer.
+  # Keep the MPC-internal layer disabled to avoid double intervention.
+  enabled: false
+  comfortable_decel_mps2: 1.6
+  emergency_decel_mps2: 2.5
+  max_brake_decel_mps2: 2.5
+  latency_margin_s: 0.3
+  distance_margin_m: 1.0
+  hard_stop_distance_m: 1.0
+  min_speed_mps: 0.2
+
 reference_path:
   update_by_topic: false # When true, 'circle' must be false
   # path from pkg share dir
@@ -44,8 +201,8 @@ mpc:
   # R: [v, delta]
   # QN: [e_y, e_psi, t]
   R: [100000.0, 0.0]
-  a_min: -1.6 # m/s^2
-  a_max: 0.7 # m/s^2
+  a_min: -3.2 # m/s^2
+  a_max: 3.2 # m/s^2
   delta_max_deg: 32.0 # degrees
   steer_rate_max: 0.35 # rad/s
   control_rate: 40.0 # Hz
@@ -93,7 +250,7 @@ mpc:
   ## --------- 中速 -------------- ##
   ## Lap1: 67s, Lap2: 64s
 
-  v_max: 20.0
+  v_max: 35.0
   ay_max: 6.5
   Q: [3000000.0, 90000000.0, 100000.0] # 低速だとインを攻めがちなので、あえて外に膨らむパラメータ
   QN: [1000000.0, 1000.0, 10000.0]
@@ -107,6 +264,6 @@ mpc:
   # QN: [1000000.0, 1000.0, 10000.0]
 
 v2x_obstacle_avoidance:
-  vehicle_radius: 0.5          # [m]
+  vehicle_radius: 0.85         # [m]
   v_max_safety: 30.0           # [m/s]
-  position_jump_threshold: 5.0 # [m]
+  position_jump_threshold: 8.0 # [m]

@@ -1,0 +1,23 @@
+/**:
+  ros__parameters:
+    mode: trajectory_relative
+    scenario: front_slowdown
+    publish_rate_hz: 10.0
+    vehicle_id: debug_obstacle_1
+    odom_topic: /localization/kinematic_state
+    trajectory_topic: /planning/scenario_planning/trajectory
+    v2x_topic: /v2x/vehicle_positions
+    marker_topic: /debug/v2x_safety/markers
+    frame_id: map
+    front_offset_m: 18.0
+    lateral_offset_m: 0.0
+    obstacle_speed_mps: 0.0
+    anchor_ego_relative_obstacle: true
+    map_x: 0.0
+    map_y: 0.0
+    map_yaw: 0.0
+    crossing_front_offset_m: 12.0
+    crossing_lateral_amplitude_m: 4.0
+    crossing_period_s: 4.0
+    covariance_stddev_m: 0.1
+    marker_scale_m: 1.0

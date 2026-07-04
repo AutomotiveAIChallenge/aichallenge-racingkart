@@ -1,0 +1,22 @@
+<?xml version="1.0"?>
+<package format="3">
+  <name>v2x_avoidance_planner</name>
+  <version>0.0.0</version>
+  <description>Frenet lattice local planner for V2X obstacle avoidance.</description>
+  <maintainer email="hayatotokida@example.com">hayatotokida</maintainer>
+  <license>Apache-2.0</license>
+
+  <buildtool_depend>ament_cmake</buildtool_depend>
+  <buildtool_depend>ament_cmake_python</buildtool_depend>
+
+  <depend>rclpy</depend>
+  <depend>autoware_auto_planning_msgs</depend>
+  <depend>nav_msgs</depend>
+  <depend>geometry_msgs</depend>
+  <depend>visualization_msgs</depend>
+  <depend>v2x_msgs</depend>
+
+  <export>
+    <build_type>ament_cmake</build_type>
+  </export>
+</package>
