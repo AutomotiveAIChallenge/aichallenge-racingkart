@@ -16,12 +16,22 @@ from rclpy.serialization import deserialize_message
 from rosidl_runtime_py.utilities import get_message
 
 
-def save_and_show_plot(fig, folder_name, file_name):    
+def save_and_show_plot(fig, folder_name, file_name):
     [name, suffix] = file_name.split(".")
     timestamp = datetime.now().strftime("%y-%m-%d-%H-%M-%S")
-    output_path = (name + "-" + timestamp + "." + suffix)
     output_path_html = f"{name}-{timestamp}.html"
-    # fig.write_image(output_path, width=800, height=600)
+    # 文字・グリッドは焼き込みになるため、light/dark どちらでも読める中間グレーにする。
+    grid_color = "rgba(128,128,128,0.3)"
+    zero_color = "rgba(128,128,128,0.55)"
+    line_color = "rgba(128,128,128,0.6)"
+    fig.update_layout(
+        template="plotly_white",
+        paper_bgcolor="rgba(0,0,0,0)",
+        plot_bgcolor="rgba(0,0,0,0)",
+        font=dict(size=14, color="#808080"),
+    )
+    fig.update_xaxes(gridcolor=grid_color, zerolinecolor=zero_color, linecolor=line_color)
+    fig.update_yaxes(gridcolor=grid_color, zerolinecolor=zero_color, linecolor=line_color)
     fig.write_html(output_path_html)
 
 
@@ -122,7 +132,7 @@ class Analyzer:
     
     def _create_plots(self, pose_time_stamp, pose_speed_filter, pose_acceleration_filter):
         # データを1/10に間引く
-        step = 5
+        step = 20
         pose_time_stamp_sampled = pose_time_stamp[::step]
         pose_speed_filter_sampled = pose_speed_filter[::step] if pose_speed_filter else []
         pose_acceleration_filter_sampled = pose_acceleration_filter[::step] if pose_acceleration_filter else []
@@ -208,8 +218,10 @@ class Analyzer:
         fig.update_yaxes(title_text="y [m]", range=[y_min, y_max], scaleanchor="x", scaleratio=1)
         
         # シンプルで確実なレイアウト設定
+        # template / 文字色は dark/light どちらでも読めるテーマ中立色にする。
+        # サイト側の dark/light トグル実装後に、JS から prefers-color-scheme を
+        # 観測して動的切替する場合は save_and_show_plot 側に手を入れる想定。
         fig.update_layout(
-            template='plotly_dark',
             font=dict(size=14),
             showlegend=False,
             margin=dict(t=120, b=60, l=60, r=120),  # 右マージンを大きく取りカラーバー用スペース確保

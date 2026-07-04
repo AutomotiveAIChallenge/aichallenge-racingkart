@@ -9,6 +9,7 @@ install(PROGRAMS
   script/object_marker.py
   script/motion_analytics.py
   script/v2x_marker_publisher.py
+  script/resource_monitor.sh
   DESTINATION lib/${PROJECT_NAME}
 )
 

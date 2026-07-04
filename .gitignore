@@ -22,3 +22,6 @@ doc/tmp/*
 /Plan.md
 /PR.md
 /CLAUDE.md
+
+docs/plan/
+result-*.json

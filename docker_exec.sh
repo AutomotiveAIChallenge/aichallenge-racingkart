@@ -1,5 +1,7 @@
 #!/bin/bash
 
+EXEC_BASH=(bash --rcfile /etc/skel/.bashrc -i)
+
 # Display title
 echo "======================================"
 echo "  Docker Container Exec Tool"
@@ -29,7 +31,7 @@ if [ "$CONTAINER_COUNT" -eq 1 ]; then
     CONTAINER_NAME=$(docker ps --format "{{.Names}}")
     echo "Only one container running: $CONTAINER_NAME"
     echo "Automatically connecting to this container..."
-    docker exec -it "$SELECTED_CONTAINER" bash
+    docker exec -it "$SELECTED_CONTAINER" "${EXEC_BASH[@]}"
     exit 0
 fi
 
@@ -50,4 +52,4 @@ CONTAINER_NAME=$(docker ps --format "{{.Names}}" | sed -n "${CONTAINER_NUM}p")
 echo "Connecting to container: $CONTAINER_NAME (ID: $SELECTED_CONTAINER)"
 
 # Execute bash in the selected container
-docker exec -it "$SELECTED_CONTAINER" bash
+docker exec -it "$SELECTED_CONTAINER" "${EXEC_BASH[@]}"

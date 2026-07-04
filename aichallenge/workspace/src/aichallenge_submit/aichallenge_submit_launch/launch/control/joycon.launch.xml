@@ -1,4 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <launch>
-  <include file="$(find-pkg-share teleop_manager)/launch/teleop_manager.launch.xml"/>
+  <arg name="input_source" default="joy" description="teleop input: joy | keyboard | keyboard_x11"/>
+  <include file="$(find-pkg-share teleop_manager)/launch/teleop_manager.launch.xml">
+    <arg name="input_source" value="$(var input_source)"/>
+  </include>
 </launch>

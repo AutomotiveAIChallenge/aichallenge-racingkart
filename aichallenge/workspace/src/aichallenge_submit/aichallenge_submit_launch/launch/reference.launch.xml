@@ -19,7 +19,7 @@
 
   <!-- Control method -->
   <arg name="control_method" default="mpc"
-       description="Select control: mpc, pure_pursuit, tiny_lidar_net, joycon, keyboard"/>
+       description="Select control: mpc, pure_pursuit, tiny_lidar_net, pilot_net, joycon, rl_train"/>
   <arg name="launch_v2x_avoidance_planner" default="false" description="Generate a wall-safe V2X avoidance trajectory"/>
   <arg name="launch_longitudinal_safety_filter" default="false" description="Filter control_cmd with V2X longitudinal safety"/>
   <arg name="launch_v2x_safety_debug" default="false" description="Publish synthetic V2X obstacles for safety debugging"/>
@@ -31,7 +31,6 @@
   <let name="controller_output_control_cmd_topic" value="/control/command/control_cmd" unless="$(var launch_longitudinal_safety_filter)"/>
   <let name="controller_raw_debug_control_cmd_topic" value="/control/command/control_cmd_mpc_debug_raw" if="$(var launch_longitudinal_safety_filter)"/>
   <let name="controller_raw_debug_control_cmd_topic" value="/control/command/control_cmd_raw" unless="$(var launch_longitudinal_safety_filter)"/>
-
 
   <!-- Global parameters -->
   <group scoped="false">
@@ -214,8 +213,8 @@
     <include file="$(find-pkg-share aichallenge_submit_launch)/launch/control/joycon.launch.xml"/>
   </group>
 
-  <group if="$(eval &quot;'$(var control_method)' == 'keyboard'&quot;)">
-    <include file="$(find-pkg-share aichallenge_submit_launch)/launch/control/keyboard.launch.xml"/>
+  <group if="$(eval &quot;'$(var control_method)' == 'rl_train'&quot;)">
+    <include file="$(find-pkg-share aichallenge_submit_launch)/launch/control/rl_train.launch.xml"/>
   </group>
 
   <group if="$(var launch_longitudinal_safety_filter)">

@@ -1,0 +1,54 @@
+algorithm:
+  name: sac
+  policy: MultiInputPolicy
+  verbose: 1
+  learning_rate: 0.0003
+  ent_coef: auto_0.1
+  train_freq_n: 1
+  train_freq_unit: episode
+  batch_size: 32
+  gradient_steps: 600
+  learning_starts: 300
+  buffer_size: 30000
+  gamma: 0.99
+  tau: 0.02
+  use_sde_at_warmup: true
+  use_sde: true
+  sde_sample_freq: 64
+  net_arch: [256]
+  total_timesteps: 300000
+  log_interval: 1
+  lambda: 0.95
+  clip_epsilon: 0.2
+  value_loss_coef: 0.5
+  entropy_coef: 0.01
+  wrapper_order: [timelimit]
+  timelimit:
+    enable: true
+    max_episode_steps: 3000
+
+# 基本context_managerは変更しない。このクラスとAWSIMEEnvクラスのみnodeが触れる
+context_manager:
+  name: default_awsim_context_manager
+
+action_adapter:
+  name: default_awsim_action_adapter
+  min_steering: -1.0
+  max_steering: 1.0
+  min_accel: 0.0
+  max_accel: 1.0
+
+observation_builder:
+  name: default_image_speed_observation_builder
+
+reward:
+  name: default_awsim_reward
+  speed_reward_scale: 1.0
+  step_time_penalty: 0.05
+
+termination:
+  name: default_collision_termination
+  collision_speed_threshold: 0.05
+  collision_count_threshold: 100
+  collision_speed_drop_threshold: 0.5
+  min_speed_before_drop: 1.0

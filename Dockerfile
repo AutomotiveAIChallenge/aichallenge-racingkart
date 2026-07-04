@@ -43,6 +43,13 @@ ENTRYPOINT ["/docker-entrypoint.sh"]
 
 FROM common AS dev
 
+# Grant NOPASSWD sudo, and short-circuit PAM's account stack for sudo to work.
+# Note: The proper approach would be to create the user at container start in an entrypoint, but we keep this static rule for simplicity.
+RUN echo 'ALL ALL=(ALL) NOPASSWD: ALL' > /etc/sudoers.d/aichallenge-nopasswd \
+ && chmod 440 /etc/sudoers.d/aichallenge-nopasswd \
+ && visudo -cf /etc/sudoers.d/aichallenge-nopasswd \
+ && printf 'account sufficient pam_permit.so\n%s\n' "$(cat /etc/pam.d/sudo)" > /etc/pam.d/sudo
+
 RUN echo 'export PS1="\[\e]0;(AIC_DEV) ${debian_chroot:+($debian_chroot)}\u@\h: \w\a\](AIC_DEV) ${debian_chroot:+($debian_chroot)}\[\033[01;32m\]\u@\h\[\033[00m\]:\[\033[01;34m\]\w\[\033[00m\]\$ "' >> /etc/skel/.bashrc
 RUN echo 'cd /aichallenge' >> /etc/skel/.bashrc
 RUN echo 'eval $(resize)' >> /etc/skel/.bashrc
