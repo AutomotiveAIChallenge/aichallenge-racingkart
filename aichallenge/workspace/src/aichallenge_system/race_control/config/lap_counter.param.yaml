@@ -1,0 +1,11 @@
+/**:
+  ros__parameters:
+    # Absolute path to the lanelet2 .osm map (must contain local_x/local_y tags).
+    map_path: ""
+    # Lanelet whose entry edge (first left/right bound nodes) is the start line.
+    start_lanelet_id: 14
+    # Crossings closer together than this are ignored (seconds).
+    min_lap_time: 10.0
+    # Extra tolerance beyond the line endpoints (meters).
+    line_margin: 2.0
+    odom_topic: /localization/kinematic_state

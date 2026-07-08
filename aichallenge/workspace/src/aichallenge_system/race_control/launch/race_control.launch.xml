@@ -1,0 +1,9 @@
+<launch>
+  <arg name="map_path" default="$(find-pkg-share aichallenge_submit_launch)/map/lanelet2_map.osm"/>
+  <arg name="param_file" default="$(find-pkg-share race_control)/config/lap_counter.param.yaml"/>
+
+  <node pkg="race_control" exec="lap_counter_node.py" name="lap_counter" output="screen">
+    <param from="$(var param_file)"/>
+    <param name="map_path" value="$(var map_path)"/>
+  </node>
+</launch>

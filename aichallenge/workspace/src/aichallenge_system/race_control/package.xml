@@ -1,0 +1,19 @@
+<?xml version="1.0"?>
+<package format="3">
+  <name>race_control</name>
+  <version>0.1.0</version>
+  <description>Race judging tools: lap counting and lap timing based on a start line derived from the lanelet2 map.</description>
+  <maintainer email="cld-taiki.tanaka@tier4.jp">Taiki Tanaka</maintainer>
+  <license>Apache-2.0</license>
+
+  <buildtool_depend>ament_cmake</buildtool_depend>
+  <buildtool_depend>ament_cmake_python</buildtool_depend>
+
+  <depend>rclpy</depend>
+  <depend>std_msgs</depend>
+  <depend>nav_msgs</depend>
+
+  <export>
+    <build_type>ament_cmake</build_type>
+  </export>
+</package>
