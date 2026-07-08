@@ -10,7 +10,7 @@
   <!-- Optional parameters -->
   <!-- Track selection: kashiwanoha assets live in a <track>/ subdir; citycircuit uses the package default paths.
        Switch tracks by editing this default (and match it with the simulator's venue arg); pass track:= to override. -->
-  <arg name="track" default="kashiwanoha" description="track preset: citycircuit, kashiwanoha"/>
+  <arg name="track" default="citycircuit" description="track preset: citycircuit, kashiwanoha"/>
   <arg name="track_subdir" default="$(eval &quot;'' if '$(var track)' == 'citycircuit' else '$(var track)/'&quot;)"/>
   <!-- Map -->
   <arg name="lanelet2_map_file" default="$(var track_subdir)lanelet2_map.osm" description="lanelet2 map file name"/>

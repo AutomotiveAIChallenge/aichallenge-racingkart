@@ -4,7 +4,6 @@ AWSIM_DIRECTORY=/aichallenge/simulator/AWSIM
 export ROS_DOMAIN_ID=0
 
 exec "$AWSIM_DIRECTORY/AWSIM.x86_64" \
-    --venue kashiwanoha \
     --start-mode sync \
     --start-count-seconds 5 \
     --vehicles 1 \
