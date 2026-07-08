@@ -1,0 +1,7 @@
+<launch>
+  <arg name="visualize" default="false"/>
+
+  <node pkg="race_control" exec="route_safety_monitor.py" name="route_deviation_safety_monitor" output="screen"/>
+
+  <node pkg="race_control" exec="route_safety_visualizer.py" name="route_safety_visualizer" output="screen" if="$(var visualize)"/>
+</launch>

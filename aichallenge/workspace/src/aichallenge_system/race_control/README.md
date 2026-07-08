@@ -1,7 +1,13 @@
 # race_control
 
-Race judging tools. First component: **lap_counter** — counts laps and lap
-times by detecting start-line crossings.
+Race judging tools.
+
+- **lap_counter** — counts laps and lap times by detecting start-line
+  crossings (see below).
+- **route_safety_monitor** — flags when the vehicle leaves the drivable route
+  area, with an optional real-time OpenCV visualizer.
+
+## lap_counter
 
 ## How it works
 
@@ -35,3 +41,29 @@ ros2 launch race_control race_control.launch.xml map_path:=/path/to/lanelet2_map
 
 Parameters: `config/lap_counter.param.yaml` (`start_lanelet_id`,
 `min_lap_time`, `line_margin`, `odom_topic`).
+
+## route_safety_monitor
+
+Detects route deviation. At startup it parses the lanelet2 route map
+(`map/route_area.osm`, `local_x`/`local_y` tags) into per-lanelet polygons
+(left bound + reversed right bound). Every 0.5 s it runs a ray-casting
+point-in-polygon test against the latest `/localization/kinematic_state`
+position and publishes whether the vehicle is off-route.
+
+### Topics
+
+| Topic | Type | Description |
+|-------|------|-------------|
+| `/localization/kinematic_state` (sub) | `nav_msgs/Odometry` | Vehicle position |
+| `/vehicle/emergency/is_route_deviation` (pub) | `std_msgs/Bool` | `true` while off-route |
+
+### Usage
+
+```bash
+ros2 launch race_control route_safety_monitor.launch.xml
+# with the real-time OpenCV visualizer:
+ros2 launch race_control route_safety_monitor.launch.xml visualize:=true
+```
+
+The visualizer (`route_safety_visualizer.py`) opens an OpenCV window with the
+route map, vehicle position, fade-out trail and a status HUD.
