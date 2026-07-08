@@ -8,10 +8,9 @@
   <arg name="vehicle_model" default="racing_kart"  description="vehicle model name"/>
   <arg name="sensor_model" default="racing_kart_sensor_kit" description="sensor model name"/>
   <!-- Optional parameters -->
-  <!-- Track selection: kashiwanoha assets live in a <track>/ subdir; citycircuit (default) stays at the package default paths.
-       Default comes from the TRACK env var (forwarded into the container by docker-compose.yml) so it propagates
-       through the (unmodified) parent launch chain; pass track:= to override. -->
-  <arg name="track" default="$(env TRACK citycircuit)" description="track preset: citycircuit, kashiwanoha"/>
+  <!-- Track selection: kashiwanoha assets live in a <track>/ subdir; citycircuit uses the package default paths.
+       Switch tracks by editing this default (and match it with the simulator's --venue arg). pass track:= to override. -->
+  <arg name="track" default="kashiwanoha" description="track preset: citycircuit, kashiwanoha"/>
   <arg name="track_subdir" default="$(eval &quot;'' if '$(var track)' == 'citycircuit' else '$(var track)/'&quot;)"/>
   <!-- Map -->
   <arg name="lanelet2_map_file" default="$(var track_subdir)lanelet2_map.osm" description="lanelet2 map file name"/>

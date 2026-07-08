@@ -15,7 +15,6 @@ x-autoware-base: &autoware-base
     - TZ=Asia/Tokyo
     - RUN_MODE=${RUN_MODE:-}
     - SIM_MODE=${SIM_MODE:-}
-    - TRACK=${TRACK:-citycircuit}
     - CMD=${CMD:-}
     - COLCON_TRACE=${COLCON_TRACE:-}
     - ROS_HOME=${ROS_HOME:-}
