@@ -147,6 +147,7 @@
   <group if="$(eval &quot;'$(var control_method)' == 'mpc'&quot;)">
     <include file="$(find-pkg-share aichallenge_submit_launch)/launch/control/mpc.launch.xml">
       <arg name="use_sim_time" value="$(var use_sim_time)"/>
+      <arg name="track" value="$(var track)"/>
     </include>
   </group>
 
