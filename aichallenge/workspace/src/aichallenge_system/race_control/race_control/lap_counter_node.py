@@ -10,32 +10,26 @@ work is a couple of 2D geometry operations.
 """
 
 import math
-import xml.etree.ElementTree as ET
+import os
+import sys
 
 import rclpy
 from nav_msgs.msg import Odometry
 from rclpy.node import Node
 from std_msgs.msg import Float64, Int32, String
 
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from lanelet_map import LaneletMap  # noqa: E402
+
 
 def load_start_line(map_path: str, lanelet_id: int):
     """Return ((ax, ay), (bx, by)): entry edge of the given lanelet."""
-    root = ET.parse(map_path).getroot()
-    nodes = {}
-    for n in root.iter("node"):
-        tags = {t.get("k"): t.get("v") for t in n.iter("tag")}
-        nodes[n.get("id")] = (float(tags["local_x"]), float(tags["local_y"]))
-    ways = {
-        w.get("id"): [nd.get("ref") for nd in w.iter("nd")] for w in root.iter("way")
-    }
-    for rel in root.iter("relation"):
-        if int(rel.get("id")) != lanelet_id:
-            continue
-        bounds = {m.get("role"): m.get("ref") for m in rel.iter("member")}
-        left = nodes[ways[bounds["left"]][0]]
-        right = nodes[ways[bounds["right"]][0]]
-        return left, right
-    raise ValueError(f"lanelet id {lanelet_id} not found in {map_path}")
+    lmap = LaneletMap(map_path)
+    bound = lmap.lanelet(lanelet_id)
+    if bound is None:
+        raise ValueError(f"lanelet id {lanelet_id} not found in {map_path}")
+    left_way, right_way = bound
+    return lmap.way_coords(left_way)[0], lmap.way_coords(right_way)[0]
 
 
 class LapCounterNode(Node):

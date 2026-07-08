@@ -65,7 +65,13 @@ class RouteVisualizerNode(rclpy.node.Node):
 
     def __init__(self):
         super().__init__("route_safety_visualizer")
-        self._monitor = RouteDeviationSafetyMonitor(logger=self.get_logger())
+        from ament_index_python.packages import get_package_share_directory
+
+        default_map = os.path.join(
+            get_package_share_directory("race_control"), "map", "route_area.osm"
+        )
+        osm_path = self.declare_parameter("osm_path", default_map).value
+        self._monitor = RouteDeviationSafetyMonitor(osm_path, logger=self.get_logger())
         self._trail = deque(maxlen=self.TRAIL_LEN)
         self._pos = None
         self._deviated = False

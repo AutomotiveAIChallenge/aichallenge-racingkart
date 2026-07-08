@@ -1,11 +1,22 @@
 #!/usr/bin/env python3
+"""Route deviation safety monitor.
+
+Loads the drivable route area from a lanelet2 .osm map (each lanelet becomes a
+polygon of its left bound + reversed right bound) and publishes whether the
+vehicle is currently outside every lanelet.
+"""
+
+import os
+import sys
 
 import rclpy
 import rclpy.node
-import xml.etree.ElementTree as ET
-import os
+from ament_index_python.packages import get_package_share_directory
 from nav_msgs.msg import Odometry
 from std_msgs.msg import Bool
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from lanelet_map import LaneletMap  # noqa: E402
 
 
 def _point_in_polygon(x, y, polygon_x, polygon_y):
@@ -23,81 +34,23 @@ def _point_in_polygon(x, y, polygon_x, polygon_y):
 
 
 class RouteDeviationSafetyMonitor:
-    def __init__(self, osm_file_path=None, logger=None):
-        if osm_file_path:
-            self.osm_file = osm_file_path
-        else:
-            try:
-                from ament_index_python.packages import get_package_share_directory
-                self.osm_file = os.path.join(
-                    get_package_share_directory('race_control'),
-                    'map', 'route_area.osm'
+    """Builds lanelet polygons from an .osm map and tests containment."""
+
+    def __init__(self, osm_file_path, logger=None):
+        lmap = LaneletMap(osm_file_path)
+        self._lane_polygons = []  # list of (xs_tuple, ys_tuple)
+        for _lid, left_way, right_way in lmap.lanelets:
+            coords = lmap.way_coords(left_way) + list(
+                reversed(lmap.way_coords(right_way))
+            )
+            if len(coords) >= 3:
+                self._lane_polygons.append(
+                    (tuple(p[0] for p in coords), tuple(p[1] for p in coords))
                 )
-            except ImportError:
-                script_dir = os.path.dirname(os.path.abspath(__file__))
-                self.osm_file = os.path.join(script_dir, '..', 'map', 'route_area.osm')
-
-        # list of (xs_tuple, ys_tuple) per lanelet polygon
-        self._lane_polygons = []
-        self._load_map(logger)
-
-    def _load_map(self, logger=None):
-        try:
-            tree = ET.parse(self.osm_file)
-        except (ET.ParseError, FileNotFoundError, OSError) as e:
-            if logger:
-                logger.error(f"Failed to load map {self.osm_file}: {e}")
-            raise
-
-        root = tree.getroot()
-
-        nodes = {}
-        for node in root.findall("node"):
-            node_id = node.attrib['id']
-            local_x = local_y = None
-            for tag in node.findall('tag'):
-                if tag.attrib['k'] == 'local_x':
-                    local_x = float(tag.attrib['v'])
-                elif tag.attrib['k'] == 'local_y':
-                    local_y = float(tag.attrib['v'])
-            if local_x is not None and local_y is not None:
-                nodes[node_id] = (local_x, local_y)
-
-        for relation in root.findall("relation"):
-            if relation.find("tag[@k='type'][@v='lanelet']") is not None:
-                left_way = right_way = None
-                for member in relation.findall("member"):
-                    role = member.attrib.get('role')
-                    ref = member.attrib.get('ref')
-                    if role == 'left':
-                        left_way = ref
-                    elif role == 'right':
-                        right_way = ref
-
-                if left_way and right_way:
-                    left_coords = self._get_way_coordinates(root, nodes, left_way)
-                    right_coords = self._get_way_coordinates(root, nodes, right_way)
-                    if left_coords and right_coords:
-                        coords = left_coords + list(reversed(right_coords))
-                        if len(coords) >= 3:
-                            xs = tuple(p[0] for p in coords)
-                            ys = tuple(p[1] for p in coords)
-                            self._lane_polygons.append((xs, ys))
-
         if logger:
-            logger.info(f"Loaded {len(self._lane_polygons)} lanelet polygons from {self.osm_file}")
-
-    @staticmethod
-    def _get_way_coordinates(root, nodes, way_id):
-        way = root.find(f"way[@id='{way_id}']")
-        if way is None:
-            return []
-        coords = []
-        for nd in way.findall('nd'):
-            node_ref = nd.attrib['ref']
-            if node_ref in nodes:
-                coords.append(nodes[node_ref])
-        return coords
+            logger.info(
+                f"Loaded {len(self._lane_polygons)} lanelet polygons from {osm_file_path}"
+            )
 
     def is_in_any_lane(self, x, y):
         for px, py in self._lane_polygons:
@@ -110,25 +63,28 @@ class RouteDeviationSafetyMonitorNode(rclpy.node.Node):
     def __init__(self):
         super().__init__("route_deviation_safety_monitor")
 
-        self.safety_monitor = RouteDeviationSafetyMonitor(logger=self.get_logger())
+        default_map = os.path.join(
+            get_package_share_directory("race_control"), "map", "route_area.osm"
+        )
+        osm_path = self.declare_parameter("osm_path", default_map).value
+        odom_topic = self.declare_parameter(
+            "odom_topic", "/localization/kinematic_state"
+        ).value
+        deviation_topic = self.declare_parameter(
+            "deviation_topic", "/vehicle/emergency/is_route_deviation"
+        ).value
+        period = self.declare_parameter("monitor_period", 0.5).value
 
-        self._position = None  # (x, y) tuple or None
+        self.safety_monitor = RouteDeviationSafetyMonitor(
+            osm_path, logger=self.get_logger()
+        )
+
+        self._position = None  # (x, y) or None
         self.is_outside_route = False
 
-        self.position_sub = self.create_subscription(
-            Odometry,
-            '/localization/kinematic_state',
-            self.position_callback,
-            1
-        )
-
-        self.safety_control_pub = self.create_publisher(
-            Bool,
-            '/vehicle/emergency/is_route_deviation',
-            10
-        )
-
-        self.monitoring_timer = self.create_timer(0.5, self.monitor_position)
+        self.create_subscription(Odometry, odom_topic, self.position_callback, 1)
+        self.safety_control_pub = self.create_publisher(Bool, deviation_topic, 10)
+        self.create_timer(period, self.monitor_position)
 
     def position_callback(self, msg: Odometry):
         self._position = (msg.pose.pose.position.x, msg.pose.pose.position.y)
@@ -139,19 +95,13 @@ class RouteDeviationSafetyMonitorNode(rclpy.node.Node):
             return
 
         is_in_lane = self.safety_monitor.is_in_any_lane(pos[0], pos[1])
+        if is_in_lane and self.is_outside_route:
+            self.get_logger().info("Vehicle returned to route")
+        elif not is_in_lane and not self.is_outside_route:
+            self.get_logger().error("Route deviation detected")
+        self.is_outside_route = not is_in_lane
 
-        if is_in_lane:
-            if self.is_outside_route:
-                self.get_logger().info("Vehicle returned to route")
-            self.is_outside_route = False
-        else:
-            if not self.is_outside_route:
-                self.get_logger().error("Route deviation detected")
-            self.is_outside_route = True
-
-        safety_msg = Bool()
-        safety_msg.data = self.is_outside_route
-        self.safety_control_pub.publish(safety_msg)
+        self.safety_control_pub.publish(Bool(data=self.is_outside_route))
 
 
 def main(args=None):
