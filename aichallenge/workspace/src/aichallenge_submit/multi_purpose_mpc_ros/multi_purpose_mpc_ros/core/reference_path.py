@@ -234,6 +234,7 @@ class ReferencePath:
     def set_v_ref(self, v_ref: List[float]) -> None:
         for wp, v in zip(self.waypoints, v_ref):
             wp.v_ref = v
+        self.v_refs = np.asarray(v_ref, dtype=float)
 
     def _construct_path(self, wp_x, wp_y):
         """
@@ -342,6 +343,20 @@ class ReferencePath:
         """Precompute static per-waypoint geometry used every control cycle."""
         self.waypoints_xy = np.array([[wp.x, wp.y] for wp in self.waypoints])
         self.length_cum = np.cumsum(self.segment_lengths)
+        self.segment_lengths_arr = np.asarray(self.segment_lengths, dtype=float)
+        self.kappas = np.array([wp.kappa for wp in self.waypoints])
+        self._rebuild_v_refs_cache()
+
+    def _rebuild_v_refs_cache(self):
+        """Resync the v_ref array cache from the (mutable) per-waypoint values.
+
+        Must be called after any batch of `wp.v_ref = ...` assignments so
+        that `self.v_refs` (used by MPC._init_problem's vectorized horizon
+        lookup) never goes stale. Cheap relative to path construction /
+        speed-profile computation, so no attempt is made to update it
+        incrementally.
+        """
+        self.v_refs = np.array([wp.v_ref for wp in self.waypoints], dtype=float)
 
     def _is_obstacle_occupied(self, t_x, t_y):
         for i in range(-1, 2):
@@ -526,6 +541,8 @@ class ReferencePath:
             self.waypoints[-1].v_ref = self.waypoints[-2].v_ref
         else:
             self.waypoints[-1].v_ref = 0.0
+
+        self._rebuild_v_refs_cache()
 
         return True
 

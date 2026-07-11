@@ -488,3 +488,31 @@ class BicycleModel(SpatialBicycleModel):
         B = np.stack((b_1, b_2, b_3), axis=0)
 
         return f, A, B
+
+    def linearize_batch(self, v_ref, kappa_ref, delta_s):
+        """
+        Vectorized, element-wise-identical batch version of `linearize`.
+        :param v_ref: (n,) velocity references around which to linearize
+        :param kappa_ref: (n,) waypoint curvatures
+        :param delta_s: (n,) distance between consecutive waypoints
+        :return: f (n,3), A (n,3,3), B (n,3,2)
+        """
+        n = len(delta_s)
+        A = np.zeros((n, 3, 3))
+        B = np.zeros((n, 3, 2))
+        f = np.zeros((n, 3))
+
+        A[:, 0, 0] = 1.0
+        A[:, 0, 1] = delta_s
+        A[:, 1, 0] = -kappa_ref**2 * delta_s
+        A[:, 1, 1] = 1.0
+        A[:, 2, 2] = 1.0
+        B[:, 1, 1] = delta_s
+
+        nz = v_ref != 0
+        with np.errstate(divide="ignore", invalid="ignore"):
+            A[nz, 2, 0] = -kappa_ref[nz] / v_ref[nz] * delta_s[nz]
+            B[nz, 2, 0] = -1.0 / v_ref[nz]**2 * delta_s[nz]
+            f[nz, 2] = 1.0 / v_ref[nz] * delta_s[nz]
+
+        return f, A, B
