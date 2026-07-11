@@ -43,6 +43,16 @@ _NG_GLOW = (45, 45, 160)
 _TRAIL_OK_BASE = np.array([100, 170, 50], dtype=np.float32)
 _TRAIL_NG_BASE = np.array([50, 50, 180], dtype=np.float32)
 
+# r=1 / r=2 の cv2.circle 塗りつぶしと同形状のオフセット
+_OFFSETS_SMALL = np.array(
+    [(dx, dy) for dx in (-1, 0, 1) for dy in (-1, 0, 1) if dx * dx + dy * dy <= 1],
+    dtype=np.int32,
+)
+_OFFSETS_BIG = np.array(
+    [(dx, dy) for dx in range(-2, 3) for dy in range(-2, 3) if dx * dx + dy * dy <= 4],
+    dtype=np.int32,
+)
+
 _HUD_BG = (28, 28, 32)
 _HUD_BORDER = (50, 50, 56)
 _HUD_OK = (55, 130, 55)
@@ -157,19 +167,33 @@ class MapRenderer:
 # ---------------------------------------------------------------------------
 # per-frame drawing (kept minimal)
 # ---------------------------------------------------------------------------
-def _draw_trail(frame, to_px, trail):
+def _draw_trail(frame, renderer, trail):
     n = len(trail)
     if n == 0:
         return
-    inv_n = 1.0 / n
-    for i, (x, y, dev) in enumerate(trail):
-        t = i * inv_n  # 0 = oldest, 1 = newest
-        alpha = 0.12 + 0.88 * t
-        base = _TRAIL_NG_BASE if dev else _TRAIL_OK_BASE
-        col = (int(base[0] * alpha), int(base[1] * alpha), int(base[2] * alpha))
-        r = 1 if t < 0.5 else 2
-        px, py = to_px(x, y)
-        cv2.circle(frame, (px, py), r, col, -1)
+    arr = np.asarray(trail, dtype=np.float64)  # columns: x, y, deviated
+    px = ((arr[:, 0] - renderer.x_min) * renderer.scale + renderer.ox).astype(np.int32)
+    py = (
+        renderer.h - ((arr[:, 1] - renderer.y_min) * renderer.scale + renderer.oy)
+    ).astype(np.int32)
+    dev = arr[:, 2] >= 0.5
+
+    t = np.arange(n, dtype=np.float32) / n  # 0 = oldest, 1 = newest
+    alpha = 0.12 + 0.88 * t
+    colors = np.where(dev[:, None], _TRAIL_NG_BASE, _TRAIL_OK_BASE)
+    colors = (colors * alpha[:, None]).astype(np.uint8)
+
+    h, w = frame.shape[:2]
+    big = t >= 0.5
+    for mask, offsets in ((~big, _OFFSETS_SMALL), (big, _OFFSETS_BIG)):
+        if not mask.any():
+            continue
+        # (points, offsets) 全組み合わせのピクセル座標
+        qx = (px[mask, None] + offsets[None, :, 0]).ravel()
+        qy = (py[mask, None] + offsets[None, :, 1]).ravel()
+        qc = np.repeat(colors[mask], len(offsets), axis=0)
+        ok = (qx >= 0) & (qx < w) & (qy >= 0) & (qy < h)
+        frame[qy[ok], qx[ok]] = qc[ok]
 
 
 def _draw_vehicle(frame, px, py, deviated):
@@ -235,7 +259,7 @@ def main():
         while True:
             frame = renderer.new_frame()
 
-            _draw_trail(frame, renderer.to_px, list(node._trail))
+            _draw_trail(frame, renderer, list(node._trail))
 
             pos = node._pos
             if pos is not None:
