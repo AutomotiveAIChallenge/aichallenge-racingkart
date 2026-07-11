@@ -267,6 +267,10 @@ class MPCController(Node):
                     self._mpc.update_v_max(kmh_to_m_per_sec(param.value))
                     v_ref: List[float] = [kmh_to_m_per_sec(param.value)] * len(self._reference_path.waypoints)
                     self._reference_path.set_v_ref(v_ref)
+                    # v_max override bypasses the per-cycle cache in _control(); invalidate
+                    # it so the next cycle re-evaluates against the configulator's value
+                    # instead of skipping based on a stale comparison.
+                    self._last_applied_ref_vel_kmph = None
 
                     self.get_logger().warn(f"v_max was updated to '{param.value}' [km/h]")
 
@@ -440,6 +444,7 @@ class MPCController(Node):
         compute_speed_profile(self._car, self._mpc_cfg)
 
         self._ref_vel_configulator: Optional[ReferenceVelocityConfigulator] = create_ref_vel_configulator()
+        self._last_applied_ref_vel_kmph: Optional[float] = None
 
         self._trajectory: Optional[Trajectory] = None
         self._path_constraints = None
@@ -773,6 +778,10 @@ class MPCController(Node):
                 if new_referece_path is not None:
                     self._car.reference_path = new_referece_path
                     self._car.update_reference_path(self._car.reference_path)
+                    # reference path (and its waypoints/v_ref) was rebuilt; force the
+                    # next _control() cycle to re-apply v_ref rather than trusting a
+                    # cache keyed against the previous path.
+                    self._last_applied_ref_vel_kmph = None
 
             def plot_reference_path(car):
                 import matplotlib.pyplot as plt
@@ -813,8 +822,10 @@ class MPCController(Node):
                 kmh_to_m_per_sec(ref_vel_mps),
                 self._mpc_cfg.v_max)
             self._mpc.update_v_max(ref_vel_kmph)
-            v_ref: List[float] = [ref_vel_kmph] * len(self._reference_path.waypoints)
-            self._reference_path.set_v_ref(v_ref)
+            if ref_vel_kmph != self._last_applied_ref_vel_kmph:
+                v_ref: List[float] = [ref_vel_kmph] * len(self._reference_path.waypoints)
+                self._reference_path.set_v_ref(v_ref)
+                self._last_applied_ref_vel_kmph = ref_vel_kmph
 
         # override by brake command if control is disabled
         if not self._enable_control:
