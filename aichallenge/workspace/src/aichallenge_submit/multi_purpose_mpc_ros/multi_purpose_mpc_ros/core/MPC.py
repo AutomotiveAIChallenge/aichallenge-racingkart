@@ -68,6 +68,17 @@ class MPC:
         self._eq_pattern_cache = {}
         self._bounds_template_cache = {}
 
+        # 追加: OSQP ワークスペース永続化キャッシュ。setup() 済みの A_full スパース
+        # パターン (N, indptr, indices) を保持し、次サイクルでパターンが一致すれば
+        # optimizer.update() で使い回す (Task 5)。update_Q/update_R/update_QN は P の
+        # 値 (構造ではなく数値) を変えるが optimizer.update() には Px を渡していない
+        # ため、これらの呼び出し時は強制的に None にして re-setup させる。
+        # update_v_max/update_ay_max は l/u/q の値のみに影響し P の値にも A_full の
+        # スパースパターンにも影響しないため、ここでは無効化しない
+        # (mpc_controller.py の _control() から毎サイクル update_v_max が呼ばれており、
+        # 無効化すると update() 経路に一切乗らなくなり Task 5 の効果が消えるため)。
+        self._osqp_cache = None
+
         if not self.use_obstacle_avoidance:
             self.model.reference_path.update_simple_path_constraints(
                 N,
@@ -77,9 +88,15 @@ class MPC:
         self.input_constraints['umax'][0] = v_max
         # umax はテンプレート内に値が焼き込まれているため無効化する
         self._bounds_template_cache.clear()
+        # 注意: v_max は l/u/q の値のみに影響し、P の値にも A_full のスパース
+        # パターンにも影響しないため _osqp_cache は無効化しない (update() 経路を
+        # 維持する)。この関数は mpc_controller.py の _control() から毎サイクル
+        # 呼ばれるため、無効化すると osqp の再 setup が毎サイクル発生してしまう。
 
     def update_ay_max(self, ay_max: float):
         self.ay_max = ay_max
+        # v_max と同様、ay_max も umax_dyn (u ベクトルの値) にのみ影響し P の値にも
+        # A_full のスパースパターンにも影響しないため _osqp_cache は無効化しない。
 
     def update_wp_id_offset(self, wp_id_offset: int):
         self.wp_id_offset = wp_id_offset
@@ -87,14 +104,19 @@ class MPC:
     def update_Q(self, Q: np.ndarray):
         self.Q = Q
         self._cost_cache.clear()
+        # P の数値が変わるが optimizer.update() には Px を渡していないため
+        # 強制的に re-setup させる。
+        self._osqp_cache = None
 
     def update_R(self, R: np.ndarray):
         self.R = R
         self._cost_cache.clear()
+        self._osqp_cache = None
 
     def update_QN(self, QN: np.ndarray):
         self.QN = QN
         self._cost_cache.clear()
+        self._osqp_cache = None
 
     def _get_eq_pattern(self, N):
         """COO (rows, cols) pattern of Aeq for horizon length N (cached).
@@ -310,9 +332,38 @@ class MPC:
             q_R_tile * ur
         ])
 
-        # オプティマイザの設定
+        # オプティマイザの設定 (Task 5: パターン不変なら setup() を省き update() で
+        # ウォームスタート再利用する)
+        self._setup_or_update(P, q, A_full, l, u, N)
+
+    def _setup_or_update(self, P, q, A_full, l, u, N):
+        """Reuse the OSQP workspace via update() when the sparsity pattern of
+        A_full (and N) matches the last setup(); otherwise re-setup from
+        scratch (which also resets OSQP's internal warm-start state).
+
+        NOTE: cross-cycle warm-starting is deliberately disabled (see the
+        explicit warm_start(0, 0) call below) — see task-5-report.md for the
+        equivalence-failure investigation that led to this.
+        """
+        c = self._osqp_cache
+        if (c is not None and c["N"] == N
+                and np.array_equal(c["A_indptr"], A_full.indptr)
+                and np.array_equal(c["A_indices"], A_full.indices)):
+            self.optimizer.update(q=q, l=l, u=u, Ax=A_full.data)
+            # Reset both primal and dual warm-start state to zero. Empirically,
+            # letting OSQP auto-warm-start from the *previous* cycle's solution
+            # across update() (its default behavior) causes the LTV problem's
+            # dual iterate to diverge after ~200 cycles into spurious "primal
+            # infeasible" detections (see task-5-report.md for the
+            # investigation) — passing x=None/y=None to warm_start() is a
+            # documented no-op in this OSQP version (osqp==1.0.4), so an
+            # explicit zero array is required to actually cold-start.
+            self.optimizer.warm_start(x=np.zeros_like(q), y=np.zeros_like(l))
+            return
         self.optimizer = osqp.OSQP()
         self.optimizer.setup(P=P, q=q, A=A_full, l=l, u=u, verbose=False)
+        self._osqp_cache = {"N": N, "A_indptr": A_full.indptr.copy(),
+                             "A_indices": A_full.indices.copy()}
 
     def get_control(self) -> Tuple[np.ndarray, float]:
         """
