@@ -193,8 +193,11 @@ class MPC:
         rebuild here whenever they no longer match the live
         input_constraints values.
         """
-        umin = self.input_constraints['umin']
-        umax = self.input_constraints['umax']
+        # Snapshot once so the values baked into the template and the values
+        # stored as the staleness tag are guaranteed identical even if
+        # update_v_max() writes concurrently mid-build.
+        umin = self.input_constraints['umin'].copy()
+        umax = self.input_constraints['umax'].copy()
         cached = self._bounds_template_cache.get(N)
         if (cached is None
                 or cached[4] != umax[0]
@@ -210,17 +213,29 @@ class MPC:
         return cached[:4]
 
     def _get_cost_cache(self, N):
-        """(P, q_Q_tile, q_R_tile) for horizon N (cached, depends on Q/R/QN)."""
-        if N not in self._cost_cache:
+        """(P, q_Q_tile, q_R_tile) for horizon N (cached, depends on Q/R/QN).
+
+        Staleness is detected fetch-side by identity: update_Q/R/QN rebind
+        the attributes from a parameter-callback thread, so an entry built
+        from an older Q/R/QN (e.g. inserted just after a concurrent clear())
+        is caught on the next fetch, bounding staleness to one cycle.
+        """
+        Q, R, QN = self.Q, self.R, self.QN
+        cached = self._cost_cache.get(N)
+        if (cached is None
+                or cached[3] is not Q
+                or cached[4] is not R
+                or cached[5] is not QN):
             P = sparse.block_diag([
-                sparse.kron(sparse.eye(N), self.Q),
-                self.QN,
-                sparse.kron(sparse.eye(N), self.R)
+                sparse.kron(sparse.eye(N), Q),
+                QN,
+                sparse.kron(sparse.eye(N), R)
             ], format='csc')
-            q_Q_tile = -np.tile(np.diag(self.Q.toarray()), N)
-            q_R_tile = -np.tile(np.diag(self.R.toarray()), N)
-            self._cost_cache[N] = (P, q_Q_tile, q_R_tile)
-        return self._cost_cache[N]
+            q_Q_tile = -np.tile(np.diag(Q.toarray()), N)
+            q_R_tile = -np.tile(np.diag(R.toarray()), N)
+            cached = (P, q_Q_tile, q_R_tile, Q, R, QN)
+            self._cost_cache[N] = cached
+        return cached[:3]
 
     def _init_problem(self, N, safety_margin):
         """
@@ -381,6 +396,9 @@ class MPC:
                 and np.array_equal(c["A_indices"], A_full.indices)
                 and np.array_equal(c["P_indptr"], P.indptr)
                 and np.array_equal(c["P_indices"], P.indices)):
+            # Px=P.data assumes triu(P) == P, i.e. P is diagonal (Q/R/QN are
+            # sparse.diags everywhere) — OSQP stores only the upper triangle,
+            # so a future non-diagonal Q would misalign this data vector.
             self.optimizer.update(q=q, l=l, u=u, Ax=A_full.data, Px=P.data)
             # Reset both primal and dual warm-start state to zero. Empirically,
             # letting OSQP auto-warm-start from the *previous* cycle's solution
