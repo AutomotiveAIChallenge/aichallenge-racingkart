@@ -53,6 +53,10 @@ class TestCrossing:
         # y=11 は端 y=10 の外だが margin 2.0 の内
         assert cross(tr, 0.0, y=11.0) is True
 
+    def test_zero_length_line_rejected(self):
+        with pytest.raises(ValueError, match="zero length"):
+            LapTracker((0.0, 0.0), (0.0, 0.0))
+
 
 class TestDebounce:
     def test_recross_within_min_lap_time_ignored(self):

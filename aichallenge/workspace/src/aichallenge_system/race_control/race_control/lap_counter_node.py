@@ -18,12 +18,18 @@ from race_control.lap_tracker import LapTracker
 
 def load_start_line(map_path: str, lanelet_id: int):
     """Return ((ax, ay), (bx, by)): entry edge of the given lanelet."""
+    if not map_path:
+        raise ValueError("map_path parameter is required (path to a lanelet2 .osm map)")
     lmap = LaneletMap(map_path)
     bound = lmap.lanelet(lanelet_id)
     if bound is None:
         raise ValueError(f"lanelet id {lanelet_id} not found in {map_path}")
     left_way, right_way = bound
-    return lmap.way_coords(left_way)[0], lmap.way_coords(right_way)[0]
+    left_coords = lmap.way_coords(left_way)
+    right_coords = lmap.way_coords(right_way)
+    if not left_coords or not right_coords:
+        raise ValueError(f"lanelet {lanelet_id} has an empty bound way in {map_path}")
+    return left_coords[0], right_coords[0]
 
 
 class LapCounterNode(Node):

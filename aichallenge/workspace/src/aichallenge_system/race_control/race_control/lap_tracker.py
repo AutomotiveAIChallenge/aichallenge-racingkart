@@ -16,6 +16,8 @@ class LapTracker:
         self._a = line_a
         self._ab = (line_b[0] - line_a[0], line_b[1] - line_a[1])
         ab_len = math.hypot(*self._ab)
+        if ab_len == 0.0:
+            raise ValueError("start line has zero length (line_a == line_b)")
         self._ab_len2 = ab_len * ab_len
         self._margin_t = margin / ab_len
         self._min_lap_time = min_lap_time
