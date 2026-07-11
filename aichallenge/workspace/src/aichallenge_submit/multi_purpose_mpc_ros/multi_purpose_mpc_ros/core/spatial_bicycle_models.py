@@ -264,7 +264,7 @@ class SpatialBicycleModel(ABC):
         """
 
         # Compute cumulative path length
-        length_cum = np.cumsum(self.reference_path.segment_lengths)
+        length_cum = self.reference_path.length_cum
         # Get first index with distance larger than distance traveled by car
         # so far
         greater_than_threshold = length_cum > self.s
@@ -298,8 +298,8 @@ class SpatialBicycleModel(ABC):
         :return: Index of the closest waypoint
         """
         # Compute distances from the point to all waypoints
-        distances = np.sqrt((np.array([wp.x for wp in self.reference_path.waypoints]) - x)**2 +
-                            (np.array([wp.y for wp in self.reference_path.waypoints]) - y)**2)
+        xy = self.reference_path.waypoints_xy
+        distances = np.sqrt((xy[:, 0] - x)**2 + (xy[:, 1] - y)**2)
 
         # Get the index of the closest waypoint
         closest_wp_id = np.argmin(distances)
@@ -314,7 +314,7 @@ class SpatialBicycleModel(ABC):
         :return: Distance s along the reference path
         """
         # Compute cumulative path length
-        length_cum = np.cumsum(self.reference_path.segment_lengths)
+        length_cum = self.reference_path.length_cum
 
         # Distance s at the closest waypoint
         s_at_closest_wp = length_cum[wp_id]

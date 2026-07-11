@@ -204,6 +204,9 @@ class ReferencePath:
         # Length of path
         self.length, self.segment_lengths = self._compute_length()
 
+        # Precompute static per-waypoint geometry used every control cycle
+        self._rebuild_geometry_cache()
+
         # Compute path width (attribute of each waypoint)
         self._compute_width(max_width=max_width)
 
@@ -334,6 +337,11 @@ class ReferencePath:
                     [wp_id] for wp_id in range(len(self.waypoints)-1)]
         s = sum(segment_lengths)
         return s, segment_lengths
+
+    def _rebuild_geometry_cache(self):
+        """Precompute static per-waypoint geometry used every control cycle."""
+        self.waypoints_xy = np.array([[wp.x, wp.y] for wp in self.waypoints])
+        self.length_cum = np.cumsum(self.segment_lengths)
 
     def _is_obstacle_occupied(self, t_x, t_y):
         for i in range(-1, 2):
