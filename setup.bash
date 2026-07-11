@@ -917,6 +917,15 @@ PY
     if [ -f "$awsim_bin" ]; then
         chmod +x "$awsim_bin" || true
         log "${OK} AWSIM extracted: ${awsim_bin}"
+        # Keep only the newest numbered backup (AWSIM_<n>); unlimited backups have
+        # piled up to tens of GB. Pruned only after the new binary is confirmed.
+        local keep="${AWSIM_BACKUP_KEEP:-1}"
+        local n
+        for n in $(ls -d "${awsim_dir}_"[0-9]* 2>/dev/null |
+            sed -E "s/^.*_([0-9]+)$/\1/" | sort -rn | tail -n +$((keep + 1))); do
+            log "${INFO} Pruning old AWSIM backup: ${awsim_dir}_${n}"
+            rm -rf "${awsim_dir}_${n}"
+        done
     else
         warn "${WARN} AWSIM extracted but binary not found at expected path: ${awsim_bin}"
         warn "${INFO} Inspect: ls -la ${dest_dir}"
