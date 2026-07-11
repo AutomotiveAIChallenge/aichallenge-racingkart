@@ -10,10 +10,7 @@ Performance: static map pre-rendered once; per-frame cost is minimal
 """
 
 import os
-import sys
 import time
-
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 import rclpy
 import rclpy.node
@@ -26,7 +23,7 @@ import numpy as np
 from nav_msgs.msg import Odometry
 from std_msgs.msg import Bool
 
-from route_safety_monitor import RouteDeviationSafetyMonitor
+from race_control.route_safety_monitor import RouteDeviationSafetyMonitor
 
 # ---------------------------------------------------------------------------
 # colour palette (BGR)

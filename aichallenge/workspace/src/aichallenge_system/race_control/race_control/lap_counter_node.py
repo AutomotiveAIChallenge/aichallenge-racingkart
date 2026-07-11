@@ -10,16 +10,13 @@ work is a couple of 2D geometry operations.
 """
 
 import math
-import os
-import sys
 
 import rclpy
 from nav_msgs.msg import Odometry
 from rclpy.node import Node
 from std_msgs.msg import Float64, Int32, String
 
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from lanelet_map import LaneletMap  # noqa: E402
+from race_control.lanelet_map import LaneletMap
 
 
 def load_start_line(map_path: str, lanelet_id: int):

@@ -4,11 +4,12 @@ project(race_control)
 find_package(ament_cmake REQUIRED)
 find_package(ament_cmake_python REQUIRED)
 
+ament_python_install_package(${PROJECT_NAME})
+
 install(PROGRAMS
   race_control/lap_counter_node.py
   race_control/route_safety_monitor.py
   race_control/route_safety_visualizer.py
-  race_control/lanelet_map.py
   DESTINATION lib/${PROJECT_NAME}
 )
 

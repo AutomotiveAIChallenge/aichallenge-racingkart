@@ -7,7 +7,6 @@ vehicle is currently outside every lanelet.
 """
 
 import os
-import sys
 
 import rclpy
 import rclpy.node
@@ -15,8 +14,7 @@ from ament_index_python.packages import get_package_share_directory
 from nav_msgs.msg import Odometry
 from std_msgs.msg import Bool
 
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from lanelet_map import LaneletMap  # noqa: E402
+from race_control.lanelet_map import LaneletMap
 
 
 def _point_in_polygon(x, y, polygon_x, polygon_y):
