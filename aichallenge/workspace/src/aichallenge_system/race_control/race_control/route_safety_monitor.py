@@ -14,47 +14,21 @@ from ament_index_python.packages import get_package_share_directory
 from nav_msgs.msg import Odometry
 from std_msgs.msg import Bool
 
-from race_control.lanelet_map import LaneletMap
-
-
-def _point_in_polygon(x, y, polygon_x, polygon_y):
-    """Ray-casting point-in-polygon test."""
-    n = len(polygon_x)
-    j = n - 1
-    inside = False
-    for i in range(n):
-        xi, yi = polygon_x[i], polygon_y[i]
-        xj, yj = polygon_x[j], polygon_y[j]
-        if ((yi > y) != (yj > y)) and (x < (xj - xi) * (y - yi) / (yj - yi) + xi):
-            inside = not inside
-        j = i
-    return inside
+from race_control.route_area import RouteArea
 
 
 class RouteDeviationSafetyMonitor:
-    """Builds lanelet polygons from an .osm map and tests containment."""
+    """Thin wrapper: builds a RouteArea from an .osm map and tests containment."""
 
     def __init__(self, osm_file_path, logger=None):
-        lmap = LaneletMap(osm_file_path)
-        self._lane_polygons = []  # list of (xs_tuple, ys_tuple)
-        for _lid, left_way, right_way in lmap.lanelets:
-            coords = lmap.way_coords(left_way) + list(
-                reversed(lmap.way_coords(right_way))
-            )
-            if len(coords) >= 3:
-                self._lane_polygons.append(
-                    (tuple(p[0] for p in coords), tuple(p[1] for p in coords))
-                )
+        self.area = RouteArea.from_osm(osm_file_path)
         if logger:
             logger.info(
-                f"Loaded {len(self._lane_polygons)} lanelet polygons from {osm_file_path}"
+                f"Loaded {len(self.area)} lanelet polygons from {osm_file_path}"
             )
 
     def is_in_any_lane(self, x, y):
-        for px, py in self._lane_polygons:
-            if _point_in_polygon(x, y, px, py):
-                return True
-        return False
+        return self.area.contains(x, y)
 
 
 class RouteDeviationSafetyMonitorNode(rclpy.node.Node):

@@ -99,7 +99,7 @@ class MapRenderer:
     def __init__(self, monitor, width=1280, height=900, margin=20.0):
         self.w = width
         self.h = height
-        polys = monitor._lane_polygons
+        polys = monitor.area.polygons
         all_x = [x for xs, _ in polys for x in xs]
         all_y = [y for _, ys in polys for y in ys]
 
