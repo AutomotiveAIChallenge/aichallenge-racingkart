@@ -920,9 +920,12 @@ PY
         # Keep only the newest numbered backup (AWSIM_<n>); unlimited backups have
         # piled up to tens of GB. Pruned only after the new binary is confirmed.
         local keep="${AWSIM_BACKUP_KEEP:-1}"
-        local n
-        for n in $(ls -d "${awsim_dir}_"[0-9]* 2>/dev/null |
-            sed -E "s/^.*_([0-9]+)$/\1/" | sort -rn | tail -n +$((keep + 1))); do
+        local d n numbers=""
+        for d in "${awsim_dir}_"[0-9]*; do
+            n="${d##*_}"
+            [ -e "$d" ] && [[ $n =~ ^[0-9]+$ ]] && numbers="${numbers}${n}"$'\n'
+        done
+        for n in $(printf '%s' "$numbers" | sort -rn | tail -n +$((keep + 1))); do
             log "${INFO} Pruning old AWSIM backup: ${awsim_dir}_${n}"
             rm -rf "${awsim_dir}_${n}"
         done
