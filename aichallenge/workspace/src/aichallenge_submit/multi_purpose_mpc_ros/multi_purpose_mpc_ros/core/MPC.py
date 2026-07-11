@@ -85,6 +85,10 @@ class MPC:
                 self.model.safety_margin)
 
     def update_v_max(self, v_max: float):
+        if self.input_constraints['umax'][0] == v_max:
+            # 値が変化しない呼び出し (mpc_controller.py の _control() から毎サイクル
+            # 呼ばれる) ではテンプレートを無効化する必要がない。
+            return
         self.input_constraints['umax'][0] = v_max
         # umax はテンプレート内に値が焼き込まれているため無効化する
         self._bounds_template_cache.clear()
