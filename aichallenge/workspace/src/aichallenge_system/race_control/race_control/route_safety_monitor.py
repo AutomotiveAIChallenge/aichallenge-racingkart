@@ -35,10 +35,11 @@ class RouteDeviationSafetyMonitorNode(rclpy.node.Node):
     def __init__(self):
         super().__init__("route_deviation_safety_monitor")
 
-        default_map = os.path.join(
-            get_package_share_directory("race_control"), "map", "route_area.osm"
-        )
-        osm_path = self.declare_parameter("osm_path", default_map).value
+        osm_path = self.declare_parameter("osm_path", "").value
+        if not osm_path:
+            osm_path = os.path.join(
+                get_package_share_directory("race_control"), "map", "route_area.osm"
+            )
         odom_topic = self.declare_parameter(
             "odom_topic", "/localization/kinematic_state"
         ).value

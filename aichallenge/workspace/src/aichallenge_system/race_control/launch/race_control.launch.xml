@@ -1,9 +1,16 @@
 <launch>
   <arg name="map_path" default="$(find-pkg-share aichallenge_submit_launch)/map/lanelet2_map.osm"/>
-  <arg name="param_file" default="$(find-pkg-share race_control)/config/lap_counter.param.yaml"/>
+  <arg name="lap_counter" default="true"/>
+  <arg name="route_safety_monitor" default="true"/>
+  <arg name="visualize" default="false"/>
+  <arg name="lap_counter_param_file" default="$(find-pkg-share race_control)/config/lap_counter.param.yaml"/>
 
-  <node pkg="race_control" exec="lap_counter_node.py" name="lap_counter" output="screen">
-    <param from="$(var param_file)"/>
+  <node pkg="race_control" exec="lap_counter_node.py" name="lap_counter" output="screen" if="$(var lap_counter)">
+    <param from="$(var lap_counter_param_file)"/>
     <param name="map_path" value="$(var map_path)"/>
   </node>
+
+  <include file="$(find-pkg-share race_control)/launch/route_safety_monitor.launch.xml" if="$(var route_safety_monitor)">
+    <arg name="visualize" value="$(var visualize)"/>
+  </include>
 </launch>

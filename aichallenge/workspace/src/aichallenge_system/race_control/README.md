@@ -2,14 +2,21 @@
 
 Race judging tools.
 
-- **lap_counter** — counts laps and lap times by detecting start-line
-  crossings (see below).
+- **lap_counter** — counts laps and lap times by detecting start-line crossings.
 - **route_safety_monitor** — flags when the vehicle leaves the drivable route
   area, with an optional real-time OpenCV visualizer.
 
+Run both together:
+
+    ros2 launch race_control race_control.launch.xml
+    # options: lap_counter:=false / route_safety_monitor:=false / visualize:=true
+
+Tests (pure geometry, no ROS needed): `python3 -m pytest test/ -q`
+(also wired into `colcon test`).
+
 ## lap_counter
 
-## How it works
+### How it works
 
 - At startup, the lanelet2 map (`.osm`, with `local_x`/`local_y` tags) is
   parsed once and the start line is derived from the entry edge of the lanelet
@@ -22,7 +29,7 @@ Race judging tools.
   and record the lap time (odometry stamp based). Crossings within
   `min_lap_time` seconds are ignored (debounce).
 
-## Topics
+### Topics
 
 | Topic | Type | Description |
 |-------|------|-------------|
@@ -31,7 +38,7 @@ Race judging tools.
 | `~/current_lap_time` | `std_msgs/Float64` | Elapsed time of the current lap [s] |
 | `~/summary` | `std_msgs/String` | `lap=N lap_times=[...]` |
 
-## Usage
+### Usage / Parameters
 
 ```bash
 ros2 launch race_control race_control.launch.xml
@@ -44,11 +51,16 @@ Parameters: `config/lap_counter.param.yaml` (`start_lanelet_id`,
 
 ## route_safety_monitor
 
+### How it works
+
 Detects route deviation. At startup it parses the lanelet2 route map
-(`map/route_area.osm`, `local_x`/`local_y` tags) into per-lanelet polygons
-(left bound + reversed right bound). Every 0.5 s it runs a ray-casting
-point-in-polygon test against the latest `/localization/kinematic_state`
-position and publishes whether the vehicle is off-route.
+(`map/route_area.osm` by default, `local_x`/`local_y` tags) into per-lanelet
+polygons (left bound + reversed right bound), pre-converted to numpy edge
+arrays and bounding boxes so each containment query is a cheap bbox reject
+before the full ray-casting point-in-polygon test. The check period is
+configurable via the `monitor_period` parameter (default 0.5 s) and runs
+against the latest `/localization/kinematic_state` position, publishing
+whether the vehicle is off-route.
 
 ### Topics
 
@@ -64,6 +76,9 @@ ros2 launch race_control route_safety_monitor.launch.xml
 # with the real-time OpenCV visualizer:
 ros2 launch race_control route_safety_monitor.launch.xml visualize:=true
 ```
+
+Parameters: `config/route_safety_monitor.param.yaml` (`osm_path`,
+`odom_topic`, `deviation_topic`, `monitor_period`).
 
 The visualizer (`route_safety_visualizer.py`) opens an OpenCV window with the
 route map, vehicle position, fade-out trail and a status HUD.

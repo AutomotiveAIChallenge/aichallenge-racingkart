@@ -1,0 +1,8 @@
+/**:
+  ros__parameters:
+    # Absolute path to the route-area .osm map. Empty -> package map/route_area.osm.
+    osm_path: ""
+    odom_topic: /localization/kinematic_state
+    deviation_topic: /vehicle/emergency/is_route_deviation
+    # Containment check period (seconds).
+    monitor_period: 0.5
