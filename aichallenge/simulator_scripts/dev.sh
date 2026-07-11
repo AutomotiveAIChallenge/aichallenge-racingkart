@@ -7,6 +7,7 @@ export ROS_DOMAIN_ID=0
 vehicles="${1:-1}"
 
 exec $AWSIM_DIRECTORY/AWSIM.x86_64 \
+    --venue citycircuit \
     --start-mode count \
     --start-count-seconds 5 \
     --vehicles "${vehicles}" \
