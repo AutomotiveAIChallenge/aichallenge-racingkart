@@ -355,6 +355,15 @@ class ReferencePath:
         lookup) never goes stale. Cheap relative to path construction /
         speed-profile computation, so no attempt is made to update it
         incrementally.
+
+        NOTE: `Waypoint.v_ref` is `None` until `compute_speed_profile()` has
+        run, so immediately after construction (this is also called from
+        `_rebuild_geometry_cache()` at __init__ time, before any speed
+        profile exists) `self.v_refs` holds NaN (float(None) coerces to NaN
+        via this array's dtype=float cast). Callers must run
+        `compute_speed_profile()` (or `set_v_ref()`) before the MPC consumes
+        `v_refs` — both existing call sites (path construction followed by
+        `compute_speed_profile()`, and `set_v_ref()` itself) already do this.
         """
         self.v_refs = np.array([wp.v_ref for wp in self.waypoints], dtype=float)
 

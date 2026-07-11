@@ -778,9 +778,13 @@ class MPCController(Node):
                 if new_referece_path is not None:
                     self._car.reference_path = new_referece_path
                     self._car.update_reference_path(self._car.reference_path)
-                    # reference path (and its waypoints/v_ref) was rebuilt; force the
-                    # next _control() cycle to re-apply v_ref rather than trusting a
-                    # cache keyed against the previous path.
+                    # Defensive: reset the guard on path rebuild. NOTE: set_v_ref()
+                    # below targets self._reference_path, which is NOT the object
+                    # just installed as self._car.reference_path above (pre-existing
+                    # desync between _reference_path and _car.reference_path) — so
+                    # this reset does not actually make the next cycle re-apply
+                    # v_ref to the new path; it only forces set_v_ref() to re-run
+                    # against whatever self._reference_path currently points to.
                     self._last_applied_ref_vel_kmph = None
 
             def plot_reference_path(car):
