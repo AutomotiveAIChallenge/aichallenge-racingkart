@@ -137,7 +137,7 @@ def build():
     return car, mpc
 
 
-def run(car, mpc, cycles, get_control_stats=None):
+def run(car, mpc, cycles):
     times, controls, traj = [], [], []
     for _ in range(cycles):
         t0 = time.perf_counter()
@@ -203,10 +203,24 @@ def main():
         golden_traj = golden["traj"]
 
         n = min(len(controls), len(golden_controls))
+        if len(controls) != len(golden_controls):
+            print(
+                f"WARNING: controls length mismatch "
+                f"(this run={len(controls)}, golden={len(golden_controls)}); "
+                f"truncating to common prefix ({n}) before comparing",
+                file=sys.stderr,
+            )
         du = controls[:n] - golden_controls[:n]
         max_abs_du = np.max(np.abs(du)) if n > 0 else 0.0
 
         nt = min(len(traj), len(golden_traj))
+        if len(traj) != len(golden_traj):
+            print(
+                f"WARNING: traj length mismatch "
+                f"(this run={len(traj)}, golden={len(golden_traj)}); "
+                f"truncating to common prefix ({nt}) before comparing",
+                file=sys.stderr,
+            )
         traj_diff = traj[:nt] - golden_traj[:nt]
         traj_rms = (
             np.sqrt(np.mean(np.sum(traj_diff ** 2, axis=1))) if nt > 0 else 0.0
