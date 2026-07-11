@@ -68,15 +68,19 @@ class MPC:
         self._eq_pattern_cache = {}
         self._bounds_template_cache = {}
 
-        # 追加: OSQP ワークスペース永続化キャッシュ。setup() 済みの A_full スパース
-        # パターン (N, indptr, indices) を保持し、次サイクルでパターンが一致すれば
-        # optimizer.update() で使い回す (Task 5)。update_Q/update_R/update_QN は P の
-        # 値 (構造ではなく数値) を変えるが optimizer.update() には Px を渡していない
-        # ため、これらの呼び出し時は強制的に None にして re-setup させる。
-        # update_v_max/update_ay_max は l/u/q の値のみに影響し P の値にも A_full の
-        # スパースパターンにも影響しないため、ここでは無効化しない
-        # (mpc_controller.py の _control() から毎サイクル update_v_max が呼ばれており、
-        # 無効化すると update() 経路に一切乗らなくなり Task 5 の効果が消えるため)。
+        # 追加: OSQP ワークスペース永続化キャッシュ。setup() 済みの A_full / P の
+        # スパースパターン (N, indptr, indices) を保持し、次サイクルで両方の
+        # パターンが一致すれば optimizer.update() で使い回す (Task 5)。P の値は
+        # update() 呼び出しのたびに Px=P.data として毎サイクル送信するため、
+        # update_Q/update_R/update_QN はキャッシュを無効化しない (パターンが
+        # 変わらない限り update() 経路が維持される)。パラメータコールバックは
+        # MultiThreadedExecutor 上で _control() (メインスレッド) と非同期に
+        # 実行されるため、値のみを都度送信する方式は「clear してから再構築」
+        # 方式より競合状態に強い (他スレッドの clear が別スレッドの再構築で
+        # 上書きされて古い P が固定されてしまうことがない)。
+        # update_v_max/update_ay_max/update_wp_id_offset は l/u/q の値のみに
+        # 影響し P の値にも A_full のスパースパターンにも影響しないため、
+        # ここでは無効化しない。
         self._osqp_cache = None
 
         if not self.use_obstacle_avoidance:
@@ -87,11 +91,11 @@ class MPC:
     def update_v_max(self, v_max: float):
         if self.input_constraints['umax'][0] == v_max:
             # 値が変化しない呼び出し (mpc_controller.py の _control() から毎サイクル
-            # 呼ばれる) ではテンプレートを無効化する必要がない。
+            # 呼ばれる) では何もする必要がない。テンプレートの失効判定は
+            # _get_bounds_template() 側 (fetch 側) で行うため、ここでキャッシュを
+            # 触る必要はない。
             return
         self.input_constraints['umax'][0] = v_max
-        # umax はテンプレート内に値が焼き込まれているため無効化する
-        self._bounds_template_cache.clear()
         # 注意: v_max は l/u/q の値のみに影響し、P の値にも A_full のスパース
         # パターンにも影響しないため _osqp_cache は無効化しない (update() 経路を
         # 維持する)。この関数は mpc_controller.py の _control() から毎サイクル
@@ -108,19 +112,18 @@ class MPC:
     def update_Q(self, Q: np.ndarray):
         self.Q = Q
         self._cost_cache.clear()
-        # P の数値が変わるが optimizer.update() には Px を渡していないため
-        # 強制的に re-setup させる。
-        self._osqp_cache = None
+        # P の新しい値は _setup_or_update() が毎サイクル Px=P.data として
+        # optimizer.update() に送信するため、ここで _osqp_cache を無効化する
+        # 必要はない (無効化すると P の値のみ変わるだけなのに毎回 re-setup
+        # してしまい、Task 5 の効果が消える)。
 
     def update_R(self, R: np.ndarray):
         self.R = R
         self._cost_cache.clear()
-        self._osqp_cache = None
 
     def update_QN(self, QN: np.ndarray):
         self.QN = QN
         self._cost_cache.clear()
-        self._osqp_cache = None
 
     def _get_eq_pattern(self, N):
         """COO (rows, cols) pattern of Aeq for horizon length N (cached).
@@ -180,18 +183,31 @@ class MPC:
         return self._rate_matrix_cache[N]
 
     def _get_bounds_template(self, N):
-        """kron-expanded constraint templates for horizon N (cached)."""
-        if N not in self._bounds_template_cache:
+        """kron-expanded constraint templates for horizon N (cached).
+
+        Staleness is detected fetch-side rather than at update_v_max()'s call
+        site: update_v_max() runs on a parameter-callback thread concurrently
+        with _control() (main thread) via MultiThreadedExecutor, so a
+        clear-on-write there could race with a rebuild on this thread. Instead
+        we stash the umin[0]/umax[0] values baked into the cached template and
+        rebuild here whenever they no longer match the live
+        input_constraints values.
+        """
+        umin = self.input_constraints['umin']
+        umax = self.input_constraints['umax']
+        cached = self._bounds_template_cache.get(N)
+        if (cached is None
+                or cached[4] != umax[0]
+                or cached[5] != umin[0]):
             xmin = self.state_constraints['xmin']
             xmax = self.state_constraints['xmax']
-            umin = self.input_constraints['umin']
-            umax = self.input_constraints['umax']
             xmin_dyn = np.kron(np.ones(N + 1), xmin)
             xmax_dyn = np.kron(np.ones(N + 1), xmax)
             umin_dyn = np.kron(np.ones(N), umin)
             umax_dyn = np.kron(np.ones(N), umax)
-            self._bounds_template_cache[N] = (xmin_dyn, xmax_dyn, umin_dyn, umax_dyn)
-        return self._bounds_template_cache[N]
+            cached = (xmin_dyn, xmax_dyn, umin_dyn, umax_dyn, umax[0], umin[0])
+            self._bounds_template_cache[N] = cached
+        return cached[:4]
 
     def _get_cost_cache(self, N):
         """(P, q_Q_tile, q_R_tile) for horizon N (cached, depends on Q/R/QN)."""
@@ -342,8 +358,18 @@ class MPC:
 
     def _setup_or_update(self, P, q, A_full, l, u, N):
         """Reuse the OSQP workspace via update() when the sparsity pattern of
-        A_full (and N) matches the last setup(); otherwise re-setup from
-        scratch (which also resets OSQP's internal warm-start state).
+        both A_full and P (and N) matches the last setup(); otherwise
+        re-setup from scratch (which also resets OSQP's internal warm-start
+        state).
+
+        P is transmitted (Px=P.data) on every update() call, not just A, so
+        that Q/R/QN changes made concurrently from another thread (parameter
+        callbacks run on a MultiThreadedExecutor while _control() runs on the
+        main thread) are never silently dropped by a stale cached P — see
+        update_Q/update_R/update_QN below, which no longer invalidate
+        _osqp_cache. If either pattern has drifted (shouldn't normally happen
+        for a fixed N, but checked defensively), fall back to a full re-setup
+        and re-cache both patterns.
 
         NOTE: cross-cycle warm-starting is deliberately disabled (see the
         explicit warm_start(0, 0) call below) — see task-5-report.md for the
@@ -352,8 +378,10 @@ class MPC:
         c = self._osqp_cache
         if (c is not None and c["N"] == N
                 and np.array_equal(c["A_indptr"], A_full.indptr)
-                and np.array_equal(c["A_indices"], A_full.indices)):
-            self.optimizer.update(q=q, l=l, u=u, Ax=A_full.data)
+                and np.array_equal(c["A_indices"], A_full.indices)
+                and np.array_equal(c["P_indptr"], P.indptr)
+                and np.array_equal(c["P_indices"], P.indices)):
+            self.optimizer.update(q=q, l=l, u=u, Ax=A_full.data, Px=P.data)
             # Reset both primal and dual warm-start state to zero. Empirically,
             # letting OSQP auto-warm-start from the *previous* cycle's solution
             # across update() (its default behavior) causes the LTV problem's
@@ -367,7 +395,9 @@ class MPC:
         self.optimizer = osqp.OSQP()
         self.optimizer.setup(P=P, q=q, A=A_full, l=l, u=u, verbose=False)
         self._osqp_cache = {"N": N, "A_indptr": A_full.indptr.copy(),
-                             "A_indices": A_full.indices.copy()}
+                             "A_indices": A_full.indices.copy(),
+                             "P_indptr": P.indptr.copy(),
+                             "P_indices": P.indices.copy()}
 
     def get_control(self) -> Tuple[np.ndarray, float]:
         """
