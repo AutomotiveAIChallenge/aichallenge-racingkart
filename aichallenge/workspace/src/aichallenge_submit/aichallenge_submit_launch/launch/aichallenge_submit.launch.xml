@@ -4,12 +4,14 @@
   <arg name="use_sim_time"/>
   <arg name="sensor_model"/>
   <arg name="launch_vehicle_interface"/>
+  <arg name="control_method" default="mpc"/>
 
   <log message="The arguments for aichallenge_submit_launch."/>
   <log message=" - simulation: $(var simulation)"/>
   <log message=" - use_sim_time: $(var use_sim_time)"/>
   <log message=" - sensor_model: $(var sensor_model)"/>
   <log message=" - launch_vehicle_interface: $(var launch_vehicle_interface)"/>
+  <log message=" - control_method: $(var control_method)"/>
 
   <include file="$(find-pkg-share aichallenge_submit_launch)/launch/reference.launch.xml" >
     <arg name="vehicle_model" value="racing_kart"/>
@@ -18,5 +20,6 @@
     <arg name="use_sim_time" value="$(var use_sim_time)"/>
     <arg name="simulation" value="$(var simulation)"/>
     <arg name="launch_vehicle_interface" value="$(var launch_vehicle_interface)"/>
+    <arg name="control_method" value="$(var control_method)"/>
   </include>
 </launch>
