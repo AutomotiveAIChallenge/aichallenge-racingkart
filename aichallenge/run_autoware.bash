@@ -12,9 +12,6 @@ case "${mode}" in
 "awsim-no-viz")
     opts=("simulation:=true" "use_sim_time:=true" "run_rviz:=false")
     ;;
-"awsim-mpc-recovery")
-    opts=("simulation:=true" "use_sim_time:=true" "run_rviz:=false" "control_method:=mpc_recovery")
-    ;;
 "vehicle")
     opts=("simulation:=false" "use_sim_time:=false" "run_rviz:=false")
     ;;
@@ -22,7 +19,7 @@ case "${mode}" in
     opts=("simulation:=false" "use_sim_time:=true" "run_rviz:=true")
     ;;
 *)
-    echo "invalid argument (use 'awsim', 'awsim-no-viz', 'awsim-mpc-recovery', 'vehicle', or 'rosbag')"
+    echo "invalid argument (use 'awsim' or 'vehicle' or 'rosbag')"
     exit 1
     ;;
 esac
