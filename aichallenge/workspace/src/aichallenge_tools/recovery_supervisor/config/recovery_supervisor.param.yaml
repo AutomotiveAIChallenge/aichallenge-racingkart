@@ -1,0 +1,15 @@
+recovery_supervisor:
+  ros__parameters:
+    stuck_speed_threshold: 0.2
+    stuck_duration: 1.0
+    command_speed_threshold: 1.0
+    command_accel_threshold: 0.3
+    moving_speed_threshold: 0.5
+    reverse_speed: 1.0
+    reverse_accel: 1.0
+    reverse_duration: 4.0
+    drive_settle_duration: 0.5
+    cooldown_duration: 3.0
+    nominal_timeout_sec: 0.5
+    velocity_timeout_sec: 0.5
+    timer_hz: 20.0
