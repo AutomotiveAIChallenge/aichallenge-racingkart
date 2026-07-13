@@ -2,7 +2,7 @@
 SHELL := /bin/bash
 
 .PHONY: autoware-build autoware-vehicle autoware-simulator autoware-request-initialpose autoware-request-control  awsim-request-start awsim-request-reset autoware-driver-zenoh autoware-driver-zenoh-rosbag \
-	simulator dev dev2 dev3 dev4 driver zenoh download rviz2 down down_all ps autoware-attach autoware-bash eval
+	simulator dev dev2 dev3 dev4 recovery-mpc-dev driver zenoh download rviz2 down down_all ps autoware-attach autoware-bash eval
 
 # Used by docker-compose.yml for build/eval artifact ownership.
 HOST_UID ?= $(shell id -u)
@@ -70,6 +70,12 @@ zenoh:
 dev: SIM_MODE := dev
 dev: simulator autoware-simulator
 	@echo "Start dev simulation (AWSIM + Autoware)"
+	@echo "To stop: make down  (docker compose down --remove-orphans)"
+
+recovery-mpc-dev: SIM_MODE := recovery-dev
+recovery-mpc-dev: simulator
+	@echo "Start recovery MPC dev simulation (AWSIM wall recovery off + Autoware mpc_recovery)"
+	LOG_DIR=$(LOG_DIR) RUN_MODE=awsim-mpc-recovery docker compose up -d autoware
 	@echo "To stop: make down  (docker compose down --remove-orphans)"
 
 dev2: SIM_MODE := dev2
