@@ -38,6 +38,8 @@ const char * toString(RecoveryState state)
 
 StuckRecoveryController::StuckRecoveryController() : Node("stuck_recovery_controller")
 {
+  state_enter_time_ = this->now();
+
   control_pub_ = create_publisher<AckermannControlCommand>("/control/command/control_cmd", 1);
   gear_pub_ = create_publisher<GearCommand>("/control/command/gear_cmd", 1);
 
@@ -51,14 +53,9 @@ StuckRecoveryController::StuckRecoveryController() : Node("stuck_recovery_contro
   RCLCPP_INFO(get_logger(), "stuck_recovery_controller started");
 }
 
-double StuckRecoveryController::nowSec()
-{
-  return get_clock()->now().seconds();
-}
-
 void StuckRecoveryController::onNominal(const AckermannControlCommand::SharedPtr msg)
 {
-  const double now = nowSec();
+  const auto now = this->now();
 
   switch (state_) {
     case RecoveryState::NORMAL:
@@ -79,11 +76,11 @@ void StuckRecoveryController::onNominal(const AckermannControlCommand::SharedPtr
 void StuckRecoveryController::onVelocity(const VelocityReport::SharedPtr msg)
 {
   latest_velocity_ = static_cast<double>(msg->longitudinal_velocity);
-  latest_velocity_time_ = nowSec();
+  latest_velocity_time_ = this->now();
 }
 
 void StuckRecoveryController::runNormal(
-  const AckermannControlCommand::SharedPtr & msg, double now)
+  const AckermannControlCommand::SharedPtr & msg, const rclcpp::Time & now)
 {
   control_pub_->publish(*msg);
   publishGear(GearCommand::DRIVE);
@@ -109,7 +106,7 @@ void StuckRecoveryController::runNormal(
   if (std::abs(velocity) <= kStuckSpeedThreshold) {
     if (!stuck_start_time_.has_value()) {
       stuck_start_time_ = now;
-    } else if (now - stuck_start_time_.value() >= kStuckDuration) {
+    } else if ((now - stuck_start_time_.value()).seconds() >= kStuckDuration) {
       startRecovery(now);
     }
   } else {
@@ -117,36 +114,36 @@ void StuckRecoveryController::runNormal(
   }
 }
 
-void StuckRecoveryController::runStuckDetected(double now)
+void StuckRecoveryController::runStuckDetected(const rclcpp::Time & now)
 {
   publishGear(GearCommand::DRIVE);
   publishCommand(0.0, 0.0);
-  if (now - state_enter_time_ >= 0.2) {
+  if ((now - state_enter_time_).seconds() >= 0.2) {
     setState(RecoveryState::REVERSING, now);
   }
 }
 
-void StuckRecoveryController::runReversing(double now)
+void StuckRecoveryController::runReversing(const rclcpp::Time & now)
 {
   publishGear(GearCommand::REVERSE);
   publishCommand(-kReverseSpeed, kReverseAccel);
-  if (now - state_enter_time_ >= kReverseDuration) {
+  if ((now - state_enter_time_).seconds() >= kReverseDuration) {
     setState(RecoveryState::DRIVE_SETTLE, now);
   }
 }
 
-void StuckRecoveryController::runDriveSettle(double now)
+void StuckRecoveryController::runDriveSettle(const rclcpp::Time & now)
 {
   publishGear(GearCommand::DRIVE);
   publishCommand(0.0, 0.0);
-  if (now - state_enter_time_ >= kDriveSettleDuration) {
+  if ((now - state_enter_time_).seconds() >= kDriveSettleDuration) {
     moving_observed_ = false;
     stuck_start_time_.reset();
     setState(RecoveryState::NORMAL, now);
   }
 }
 
-void StuckRecoveryController::startRecovery(double now)
+void StuckRecoveryController::startRecovery(const rclcpp::Time & now)
 {
   stuck_start_time_.reset();
   RCLCPP_WARN(
@@ -155,7 +152,7 @@ void StuckRecoveryController::startRecovery(double now)
   setState(RecoveryState::STUCK_DETECTED, now);
 }
 
-void StuckRecoveryController::setState(RecoveryState state, double now)
+void StuckRecoveryController::setState(RecoveryState state, const rclcpp::Time & now)
 {
   if (state == state_) {
     return;
@@ -165,10 +162,10 @@ void StuckRecoveryController::setState(RecoveryState state, double now)
   state_enter_time_ = now;
 }
 
-bool StuckRecoveryController::hasFreshVelocity(double now) const
+bool StuckRecoveryController::hasFreshVelocity(const rclcpp::Time & now) const
 {
   return latest_velocity_.has_value() && latest_velocity_time_.has_value() &&
-         now - latest_velocity_time_.value() <= kVelocityTimeoutSec;
+         (now - latest_velocity_time_.value()).seconds() <= kVelocityTimeoutSec;
 }
 
 void StuckRecoveryController::publishCommand(double speed, double acceleration)

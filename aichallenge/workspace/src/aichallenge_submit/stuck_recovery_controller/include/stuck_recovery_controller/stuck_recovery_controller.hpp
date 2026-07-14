@@ -31,16 +31,15 @@ public:
   StuckRecoveryController();
 
 private:
-  double nowSec();
   void onNominal(const AckermannControlCommand::SharedPtr msg);
   void onVelocity(const VelocityReport::SharedPtr msg);
-  void runNormal(const AckermannControlCommand::SharedPtr & msg, double now);
-  void runStuckDetected(double now);
-  void runReversing(double now);
-  void runDriveSettle(double now);
-  void startRecovery(double now);
-  void setState(RecoveryState state, double now);
-  bool hasFreshVelocity(double now) const;
+  void runNormal(const AckermannControlCommand::SharedPtr & msg, const rclcpp::Time & now);
+  void runStuckDetected(const rclcpp::Time & now);
+  void runReversing(const rclcpp::Time & now);
+  void runDriveSettle(const rclcpp::Time & now);
+  void startRecovery(const rclcpp::Time & now);
+  void setState(RecoveryState state, const rclcpp::Time & now);
+  bool hasFreshVelocity(const rclcpp::Time & now) const;
   void publishCommand(double speed, double acceleration);
   void publishGear(std::uint8_t command);
 
@@ -50,11 +49,11 @@ private:
   rclcpp::Subscription<VelocityReport>::SharedPtr velocity_sub_;
 
   RecoveryState state_{RecoveryState::NORMAL};
-  double state_enter_time_{0.0};
+  rclcpp::Time state_enter_time_;
   std::optional<double> latest_velocity_;
-  std::optional<double> latest_velocity_time_;
+  std::optional<rclcpp::Time> latest_velocity_time_;
   bool moving_observed_{false};
-  std::optional<double> stuck_start_time_;
+  std::optional<rclcpp::Time> stuck_start_time_;
 };
 
 }  // namespace stuck_recovery_controller
