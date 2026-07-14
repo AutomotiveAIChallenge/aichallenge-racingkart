@@ -17,7 +17,6 @@ constexpr double kReverseSpeed = 1.0;
 constexpr double kReverseAccel = 1.0;
 constexpr double kReverseDuration = 4.0;
 constexpr double kDriveSettleDuration = 0.5;
-constexpr double kCooldownDuration = 3.0;
 constexpr double kNominalTimeoutSec = 0.5;
 constexpr double kVelocityTimeoutSec = 0.5;
 constexpr double kTimerHz = 20.0;
@@ -33,8 +32,6 @@ const char * toString(RecoveryState state)
       return "REVERSING";
     case RecoveryState::DRIVE_SETTLE:
       return "DRIVE_SETTLE";
-    case RecoveryState::COOLDOWN:
-      return "COOLDOWN";
   }
   return "UNKNOWN";
 }
@@ -67,16 +64,11 @@ double StuckRecoveryController::nowSec()
   return get_clock()->now().seconds();
 }
 
-bool StuckRecoveryController::isPassThrough(RecoveryState state)
-{
-  return state == RecoveryState::NORMAL || state == RecoveryState::COOLDOWN;
-}
-
 void StuckRecoveryController::onNominal(const AckermannControlCommand::SharedPtr msg)
 {
   latest_nominal_ = msg;
   latest_nominal_time_ = nowSec();
-  if (isPassThrough(state_)) {
+  if (state_ == RecoveryState::NORMAL) {
     publishNominal();
   }
 }
@@ -103,9 +95,6 @@ void StuckRecoveryController::onTimer()
       break;
     case RecoveryState::DRIVE_SETTLE:
       runDriveSettle(now);
-      break;
-    case RecoveryState::COOLDOWN:
-      runCooldown(now);
       break;
   }
 }
@@ -167,14 +156,6 @@ void StuckRecoveryController::runDriveSettle(double now)
   publishGear(GearCommand::DRIVE);
   publishCommand(0.0, 0.0, 0.0);
   if (now - state_enter_time_ >= kDriveSettleDuration) {
-    setState(RecoveryState::COOLDOWN, now);
-  }
-}
-
-void StuckRecoveryController::runCooldown(double now)
-{
-  publishGear(GearCommand::DRIVE);
-  if (now - state_enter_time_ >= kCooldownDuration) {
     moving_observed_ = false;
     stuck_start_time_.reset();
     setState(RecoveryState::NORMAL, now);

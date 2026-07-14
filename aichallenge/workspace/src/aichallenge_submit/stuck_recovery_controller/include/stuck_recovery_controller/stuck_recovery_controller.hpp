@@ -23,7 +23,6 @@ enum class RecoveryState
   STUCK_DETECTED,
   REVERSING,
   DRIVE_SETTLE,
-  COOLDOWN,
 };
 
 class StuckRecoveryController : public rclcpp::Node
@@ -33,7 +32,6 @@ public:
 
 private:
   double nowSec();
-  static bool isPassThrough(RecoveryState state);
   void onNominal(const AckermannControlCommand::SharedPtr msg);
   void onVelocity(const VelocityReport::SharedPtr msg);
   void onTimer();
@@ -41,7 +39,6 @@ private:
   void runStuckDetected(double now);
   void runReversing(double now);
   void runDriveSettle(double now);
-  void runCooldown(double now);
   void startRecovery(double now);
   void setState(RecoveryState state, double now);
   bool hasFreshNominal(double now) const;
