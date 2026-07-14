@@ -31,9 +31,9 @@ public:
   StuckRecoveryController();
 
 private:
-  void onNominal(const AckermannControlCommand::SharedPtr msg);
-  void onVelocity(const VelocityReport::SharedPtr msg);
-  void runNormal(const AckermannControlCommand::SharedPtr & msg, const rclcpp::Time & now);
+  void onNominal(const AckermannControlCommand::ConstSharedPtr msg);
+  void onVelocity(const VelocityReport::ConstSharedPtr msg);
+  void runNormal(const AckermannControlCommand::ConstSharedPtr & msg, const rclcpp::Time & now);
   void runStuckDetected(const rclcpp::Time & now);
   void runReversing(const rclcpp::Time & now);
   void runDriveSettle(const rclcpp::Time & now);

@@ -10,13 +10,14 @@ namespace
 {
 
 constexpr double kStuckSpeedThreshold = 0.2;
-constexpr double kStuckDuration = 1.0;
+constexpr double kStuckDurationSec = 1.0;
 constexpr double kCommandSpeedThreshold = 1.0;
 constexpr double kMovingSpeedThreshold = 0.5;
 constexpr double kReverseSpeed = 1.0;
 constexpr double kReverseAccel = 1.0;
-constexpr double kReverseDuration = 4.0;
-constexpr double kDriveSettleDuration = 0.5;
+constexpr double kGearChangeDelaySec = 0.2;
+constexpr double kReverseDurationSec = 4.0;
+constexpr double kDriveSettleDurationSec = 0.5;
 constexpr double kVelocityTimeoutSec = 0.5;
 
 const char * toString(RecoveryState state)
@@ -53,7 +54,7 @@ StuckRecoveryController::StuckRecoveryController() : Node("stuck_recovery_contro
   RCLCPP_INFO(get_logger(), "stuck_recovery_controller started");
 }
 
-void StuckRecoveryController::onNominal(const AckermannControlCommand::SharedPtr msg)
+void StuckRecoveryController::onNominal(const AckermannControlCommand::ConstSharedPtr msg)
 {
   const auto now = this->now();
 
@@ -73,14 +74,14 @@ void StuckRecoveryController::onNominal(const AckermannControlCommand::SharedPtr
   }
 }
 
-void StuckRecoveryController::onVelocity(const VelocityReport::SharedPtr msg)
+void StuckRecoveryController::onVelocity(const VelocityReport::ConstSharedPtr msg)
 {
   latest_velocity_ = static_cast<double>(msg->longitudinal_velocity);
   latest_velocity_time_ = this->now();
 }
 
 void StuckRecoveryController::runNormal(
-  const AckermannControlCommand::SharedPtr & msg, const rclcpp::Time & now)
+  const AckermannControlCommand::ConstSharedPtr & msg, const rclcpp::Time & now)
 {
   control_pub_->publish(*msg);
   publishGear(GearCommand::DRIVE);
@@ -106,7 +107,7 @@ void StuckRecoveryController::runNormal(
   if (std::abs(velocity) <= kStuckSpeedThreshold) {
     if (!stuck_start_time_.has_value()) {
       stuck_start_time_ = now;
-    } else if ((now - stuck_start_time_.value()).seconds() >= kStuckDuration) {
+    } else if ((now - stuck_start_time_.value()).seconds() >= kStuckDurationSec) {
       startRecovery(now);
     }
   } else {
@@ -118,7 +119,7 @@ void StuckRecoveryController::runStuckDetected(const rclcpp::Time & now)
 {
   publishGear(GearCommand::DRIVE);
   publishCommand(0.0, 0.0);
-  if ((now - state_enter_time_).seconds() >= 0.2) {
+  if ((now - state_enter_time_).seconds() >= kGearChangeDelaySec) {
     setState(RecoveryState::REVERSING, now);
   }
 }
@@ -127,7 +128,7 @@ void StuckRecoveryController::runReversing(const rclcpp::Time & now)
 {
   publishGear(GearCommand::REVERSE);
   publishCommand(-kReverseSpeed, kReverseAccel);
-  if ((now - state_enter_time_).seconds() >= kReverseDuration) {
+  if ((now - state_enter_time_).seconds() >= kReverseDurationSec) {
     setState(RecoveryState::DRIVE_SETTLE, now);
   }
 }
@@ -136,7 +137,7 @@ void StuckRecoveryController::runDriveSettle(const rclcpp::Time & now)
 {
   publishGear(GearCommand::DRIVE);
   publishCommand(0.0, 0.0);
-  if ((now - state_enter_time_).seconds() >= kDriveSettleDuration) {
+  if ((now - state_enter_time_).seconds() >= kDriveSettleDurationSec) {
     moving_observed_ = false;
     stuck_start_time_.reset();
     setState(RecoveryState::NORMAL, now);
@@ -170,7 +171,7 @@ bool StuckRecoveryController::hasFreshVelocity(const rclcpp::Time & now) const
 
 void StuckRecoveryController::publishCommand(double speed, double acceleration)
 {
-  const auto stamp = get_clock()->now();
+  const auto stamp = this->now();
   AckermannControlCommand msg;
   msg.stamp = stamp;
   msg.lateral.stamp = stamp;
@@ -185,7 +186,7 @@ void StuckRecoveryController::publishCommand(double speed, double acceleration)
 void StuckRecoveryController::publishGear(std::uint8_t command)
 {
   GearCommand msg;
-  msg.stamp = get_clock()->now();
+  msg.stamp = this->now();
   msg.command = command;
   gear_pub_->publish(msg);
 }
