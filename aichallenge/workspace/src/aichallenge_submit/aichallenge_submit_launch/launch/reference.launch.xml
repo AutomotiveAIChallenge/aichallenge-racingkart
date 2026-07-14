@@ -8,8 +8,12 @@
   <arg name="vehicle_model" default="racing_kart"  description="vehicle model name"/>
   <arg name="sensor_model" default="racing_kart_sensor_kit" description="sensor model name"/>
   <!-- Optional parameters -->
+  <!-- Track selection: kashiwanoha assets live in a <track>/ subdir; citycircuit uses the package default paths.
+       Switch tracks by editing this default (and match it with the simulator's venue arg); pass track:= to override. -->
+  <arg name="track" default="citycircuit" description="track preset: citycircuit, kashiwanoha"/>
+  <arg name="track_subdir" default="$(eval &quot;'' if '$(var track)' == 'citycircuit' else '$(var track)/'&quot;)"/>
   <!-- Map -->
-  <arg name="lanelet2_map_file" default="lanelet2_map.osm" description="lanelet2 map file name"/>
+  <arg name="lanelet2_map_file" default="$(var track_subdir)lanelet2_map.osm" description="lanelet2 map file name"/>
   <arg name="pointcloud_map_file" default="pointcloud_map.pcd" description="pointcloud map file name"/>
 
   <!-- Vehicle -->
@@ -78,7 +82,7 @@
 
     <node pkg="imu_gnss_poser" exec="imu_gnss_poser_node" name="imu_gnss_poser" output="screen">
       <param from="$(find-pkg-share imu_gnss_poser)/config/imu_gnss_poser.param.yaml"/>
-      <param name="heading_csv_path" value="$(find-pkg-share imu_gnss_poser)/data/heading_reference.csv"/>
+      <param name="heading_csv_path" value="$(find-pkg-share imu_gnss_poser)/data/$(var track_subdir)heading_reference.csv"/>
     </node>
 
     <include file="$(find-pkg-share ekf_localizer)/launch/ekf_localizer.launch.xml">
@@ -125,7 +129,7 @@
 
       <!-- Customizable -->
       <node pkg="simple_trajectory_generator" exec="simple_trajectory_generator_node" name="simple_trajectory_generator" output="screen">
-            <param name="csv_path" value="$(find-pkg-share simple_trajectory_generator)/data/raceline_awsim_30km_from_garage.csv"/>
+            <param name="csv_path" value="$(find-pkg-share simple_trajectory_generator)/data/$(var track_subdir)raceline_awsim_30km_from_garage.csv"/>
             <param name="z" value="6.5"/>
       </node>
       
@@ -143,6 +147,7 @@
   <group if="$(eval &quot;'$(var control_method)' == 'mpc'&quot;)">
     <include file="$(find-pkg-share aichallenge_submit_launch)/launch/control/mpc.launch.xml">
       <arg name="use_sim_time" value="$(var use_sim_time)"/>
+      <arg name="track" value="$(var track)"/>
       <arg name="output_control_cmd" value="/control/command/nominal_control_cmd"/>
     </include>
   </group>
