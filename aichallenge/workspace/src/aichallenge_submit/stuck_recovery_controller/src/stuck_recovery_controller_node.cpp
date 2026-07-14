@@ -6,13 +6,12 @@
 #include <autoware_auto_vehicle_msgs/msg/velocity_report.hpp>
 #include <std_msgs/msg/string.hpp>
 
-#include <algorithm>
 #include <cmath>
 #include <memory>
 #include <optional>
 #include <string>
 
-namespace recovery_supervisor
+namespace stuck_recovery_controller
 {
 
 using autoware_auto_control_msgs::msg::AckermannControlCommand;
@@ -52,60 +51,51 @@ const char * toString(RecoveryState state)
 // safe to keep always running. When no nominal is being published (e.g. a
 // different controller is active) the node stays silent and never touches the
 // final command topics.
-class RecoverySupervisor : public rclcpp::Node
+class StuckRecoveryController : public rclcpp::Node
 {
 public:
-  RecoverySupervisor() : Node("recovery_supervisor")
+  StuckRecoveryController() : Node("stuck_recovery_controller")
   {
-    stuck_speed_threshold_ = declare_parameter<double>("stuck_speed_threshold", 0.2);
-    stuck_duration_ = declare_parameter<double>("stuck_duration", 1.0);
-    command_speed_threshold_ = declare_parameter<double>("command_speed_threshold", 1.0);
-    command_accel_threshold_ = declare_parameter<double>("command_accel_threshold", 0.3);
-    moving_speed_threshold_ = declare_parameter<double>("moving_speed_threshold", 0.5);
-    reverse_speed_ = declare_parameter<double>("reverse_speed", 1.0);
-    reverse_accel_ = declare_parameter<double>("reverse_accel", 1.0);
-    reverse_duration_ = declare_parameter<double>("reverse_duration", 4.0);
-    drive_settle_duration_ = declare_parameter<double>("drive_settle_duration", 0.5);
-    cooldown_duration_ = declare_parameter<double>("cooldown_duration", 3.0);
-    nominal_timeout_sec_ = declare_parameter<double>("nominal_timeout_sec", 0.5);
-    velocity_timeout_sec_ = declare_parameter<double>("velocity_timeout_sec", 0.5);
-    const double timer_hz = std::max(1.0, declare_parameter<double>("timer_hz", 20.0));
-
     control_pub_ =
       create_publisher<AckermannControlCommand>("/control/command/control_cmd", 1);
     gear_pub_ = create_publisher<GearCommand>("/control/command/gear_cmd", 1);
-    state_pub_ = create_publisher<std_msgs::msg::String>("/recovery_supervisor/state", 1);
+    state_pub_ = create_publisher<std_msgs::msg::String>("/stuck_recovery_controller/state", 1);
 
     nominal_sub_ = create_subscription<AckermannControlCommand>(
       "/control/command/nominal_control_cmd", 1,
-      std::bind(&RecoverySupervisor::onNominal, this, std::placeholders::_1));
+      std::bind(&StuckRecoveryController::onNominal, this, std::placeholders::_1));
     velocity_sub_ = create_subscription<VelocityReport>(
       "/vehicle/status/velocity_status", 1,
-      std::bind(&RecoverySupervisor::onVelocity, this, std::placeholders::_1));
+      std::bind(&StuckRecoveryController::onVelocity, this, std::placeholders::_1));
     gear_sub_ = create_subscription<GearReport>(
       "/vehicle/status/gear_status", 1,
-      std::bind(&RecoverySupervisor::onGear, this, std::placeholders::_1));
+      std::bind(&StuckRecoveryController::onGear, this, std::placeholders::_1));
 
     state_enter_time_ = nowSec();
 
     // Node-clock timer so state timing follows sim time when use_sim_time is set.
     timer_ = rclcpp::create_timer(
-      this, get_clock(), rclcpp::Duration::from_seconds(1.0 / timer_hz),
-      std::bind(&RecoverySupervisor::onTimer, this));
+      this, get_clock(), rclcpp::Duration::from_seconds(1.0 / kTimerHz),
+      std::bind(&StuckRecoveryController::onTimer, this));
 
-    RCLCPP_INFO(
-      get_logger(),
-      "recovery_supervisor started: stuck_speed_threshold=%.3f stuck_duration=%.3f "
-      "command_speed_threshold=%.3f command_accel_threshold=%.3f moving_speed_threshold=%.3f "
-      "reverse_speed=%.3f reverse_accel=%.3f reverse_duration=%.3f drive_settle_duration=%.3f "
-      "cooldown_duration=%.3f nominal_timeout_sec=%.3f velocity_timeout_sec=%.3f timer_hz=%.3f",
-      stuck_speed_threshold_, stuck_duration_, command_speed_threshold_, command_accel_threshold_,
-      moving_speed_threshold_, reverse_speed_, reverse_accel_, reverse_duration_,
-      drive_settle_duration_, cooldown_duration_, nominal_timeout_sec_, velocity_timeout_sec_,
-      timer_hz);
+    RCLCPP_INFO(get_logger(), "stuck_recovery_controller started");
   }
 
 private:
+  static constexpr double kStuckSpeedThreshold = 0.2;
+  static constexpr double kStuckDuration = 1.0;
+  static constexpr double kCommandSpeedThreshold = 1.0;
+  static constexpr double kCommandAccelThreshold = 0.3;
+  static constexpr double kMovingSpeedThreshold = 0.5;
+  static constexpr double kReverseSpeed = 1.0;
+  static constexpr double kReverseAccel = 1.0;
+  static constexpr double kReverseDuration = 4.0;
+  static constexpr double kDriveSettleDuration = 0.5;
+  static constexpr double kCooldownDuration = 3.0;
+  static constexpr double kNominalTimeoutSec = 0.5;
+  static constexpr double kVelocityTimeoutSec = 0.5;
+  static constexpr double kTimerHz = 20.0;
+
   double nowSec() { return get_clock()->now().seconds(); }
 
   static bool isPassThrough(RecoveryState state)
@@ -170,7 +160,7 @@ private:
     }
 
     const double velocity = latest_velocity_.value();
-    if (velocity >= moving_speed_threshold_) {
+    if (velocity >= kMovingSpeedThreshold) {
       moving_observed_ = true;
     }
 
@@ -179,10 +169,10 @@ private:
       return;
     }
 
-    if (std::abs(velocity) <= stuck_speed_threshold_) {
+    if (std::abs(velocity) <= kStuckSpeedThreshold) {
       if (!stuck_start_time_.has_value()) {
         stuck_start_time_ = now;
-      } else if (now - stuck_start_time_.value() >= stuck_duration_) {
+      } else if (now - stuck_start_time_.value() >= kStuckDuration) {
         startRecovery(now);
       }
     } else {
@@ -203,8 +193,8 @@ private:
   {
     publishGear(GearCommand::REVERSE);
     // AWSIM expects a positive drive acceleration while the gear and target speed are reverse.
-    publishCommand(-std::abs(reverse_speed_), std::abs(reverse_accel_), 0.0);
-    if (now - state_enter_time_ >= reverse_duration_) {
+    publishCommand(-std::abs(kReverseSpeed), std::abs(kReverseAccel), 0.0);
+    if (now - state_enter_time_ >= kReverseDuration) {
       setState(RecoveryState::DRIVE_SETTLE, now);
     }
   }
@@ -213,7 +203,7 @@ private:
   {
     publishGear(GearCommand::DRIVE);
     publishCommand(0.0, 0.0, 0.0);
-    if (now - state_enter_time_ >= drive_settle_duration_) {
+    if (now - state_enter_time_ >= kDriveSettleDuration) {
       setState(RecoveryState::COOLDOWN, now);
     }
   }
@@ -221,7 +211,7 @@ private:
   void runCooldown(double now)
   {
     publishGear(GearCommand::DRIVE);  // control command is republished by onNominal()
-    if (now - state_enter_time_ >= cooldown_duration_) {
+    if (now - state_enter_time_ >= kCooldownDuration) {
       moving_observed_ = false;
       stuck_start_time_.reset();
       setState(RecoveryState::NORMAL, now);
@@ -252,13 +242,13 @@ private:
   bool hasFreshNominal(double now) const
   {
     return latest_nominal_ != nullptr && latest_nominal_time_.has_value() &&
-           now - latest_nominal_time_.value() <= nominal_timeout_sec_;
+           now - latest_nominal_time_.value() <= kNominalTimeoutSec;
   }
 
   bool hasFreshVelocity(double now) const
   {
     return latest_velocity_.has_value() && latest_velocity_time_.has_value() &&
-           now - latest_velocity_time_.value() <= velocity_timeout_sec_;
+           now - latest_velocity_time_.value() <= kVelocityTimeoutSec;
   }
 
   bool isForwardRequest(const AckermannControlCommand::SharedPtr & cmd) const
@@ -268,11 +258,11 @@ private:
     }
     const double speed = cmd->longitudinal.speed;
     const double acceleration = cmd->longitudinal.acceleration;
-    const bool speed_forward = std::isfinite(speed) && speed >= command_speed_threshold_;
+    const bool speed_forward = std::isfinite(speed) && speed >= kCommandSpeedThreshold;
     const bool gear_allows_accel =
       !latest_gear_.has_value() || latest_gear_.value() == GearReport::DRIVE;
-    const bool accel_forward = std::isfinite(acceleration) &&
-                               acceleration >= command_accel_threshold_ && gear_allows_accel;
+    const bool accel_forward =
+      std::isfinite(acceleration) && acceleration >= kCommandAccelThreshold && gear_allows_accel;
     return speed_forward || accel_forward;
   }
 
@@ -319,20 +309,6 @@ private:
     state_pub_->publish(msg);
   }
 
-  // parameters
-  double stuck_speed_threshold_;
-  double stuck_duration_;
-  double command_speed_threshold_;
-  double command_accel_threshold_;
-  double moving_speed_threshold_;
-  double reverse_speed_;
-  double reverse_accel_;
-  double reverse_duration_;
-  double drive_settle_duration_;
-  double cooldown_duration_;
-  double nominal_timeout_sec_;
-  double velocity_timeout_sec_;
-
   // interfaces
   rclcpp::Publisher<AckermannControlCommand>::SharedPtr control_pub_;
   rclcpp::Publisher<GearCommand>::SharedPtr gear_pub_;
@@ -355,12 +331,12 @@ private:
   int attempt_count_{0};
 };
 
-}  // namespace recovery_supervisor
+}  // namespace stuck_recovery_controller
 
 int main(int argc, char ** argv)
 {
   rclcpp::init(argc, argv);
-  rclcpp::spin(std::make_shared<recovery_supervisor::RecoverySupervisor>());
+  rclcpp::spin(std::make_shared<stuck_recovery_controller::StuckRecoveryController>());
   rclcpp::shutdown();
   return 0;
 }
