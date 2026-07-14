@@ -144,7 +144,6 @@
     <include file="$(find-pkg-share aichallenge_submit_launch)/launch/control/mpc.launch.xml">
       <arg name="use_sim_time" value="$(var use_sim_time)"/>
       <arg name="output_control_cmd" value="/control/command/nominal_control_cmd"/>
-      <arg name="output_raw_control_cmd" value="/control/command/nominal_control_cmd_raw"/>
     </include>
   </group>
 

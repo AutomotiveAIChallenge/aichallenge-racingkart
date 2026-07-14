@@ -3,7 +3,6 @@
   <arg name="use_sim_time" default="true"/>
   <arg name="use_obstacle_avoidance" default="false"/>
   <arg name="output_control_cmd" default="/control/command/control_cmd"/>
-  <arg name="output_raw_control_cmd" default="/control/command/control_cmd_raw"/>
 
   <node pkg="multi_purpose_mpc_ros" exec="run_mpc_controller.bash"
         name="mpc_controller" output="screen"
@@ -14,6 +13,5 @@
     <param name="use_obstacle_avoidance" value="$(var use_obstacle_avoidance)"/>
     <param name="use_stats" value="false"/>
     <remap from="/control/command/control_cmd" to="$(var output_control_cmd)"/>
-    <remap from="/control/command/control_cmd_raw" to="$(var output_raw_control_cmd)"/>
   </node>
 </launch>
