@@ -12,6 +12,7 @@ namespace
 constexpr float kStuckSpeedThreshold = 0.2;
 constexpr double kStuckDurationSec = 1.0;
 constexpr float kCommandSpeedThreshold = 1.0;
+constexpr float kCommandAccelerationThreshold = 0.3;
 constexpr float kMovingSpeedThreshold = 0.5;
 constexpr double kReverseDurationSec = 4.0;
 constexpr double kDriveSettleDurationSec = 0.5;
@@ -25,29 +26,38 @@ StuckRecoveryController::StuckRecoveryController() : Node("stuck_recovery_contro
 
   nominal_sub_ = create_subscription<AckermannControlCommand>(
     "/control/command/nominal_control_cmd", 1,
-    std::bind(&StuckRecoveryController::onNominal, this, std::placeholders::_1));
+    std::bind(&StuckRecoveryController::onNominalCommand, this, std::placeholders::_1));
   velocity_sub_ = create_subscription<VelocityReport>(
     "/vehicle/status/velocity_status", 1,
-    std::bind(&StuckRecoveryController::onVelocity, this, std::placeholders::_1));
+    [this](const VelocityReport::ConstSharedPtr msg) {
+      latest_velocity_ = msg->longitudinal_velocity;
+    });
 }
 
-void StuckRecoveryController::onNominal(const AckermannControlCommand::ConstSharedPtr msg)
+void StuckRecoveryController::onNominalCommand(
+  const AckermannControlCommand::ConstSharedPtr msg)
 {
   const auto now = this->now();
   if (runRecovery(now)) {
     return;
   }
   control_pub_->publish(*msg);
+  updateStuckDetection(*msg, now);
+}
 
+void StuckRecoveryController::updateStuckDetection(
+  const AckermannControlCommand & command, const rclcpp::Time & now)
+{
   const float velocity = latest_velocity_;
+  // Require movement once to avoid detecting the initial stationary state as stuck.
   if (velocity >= kMovingSpeedThreshold) {
     moving_observed_ = true;
   }
 
-  const float nominal_speed = msg->longitudinal.speed;
-  const bool forward_requested =
-    std::isfinite(nominal_speed) && nominal_speed >= kCommandSpeedThreshold;
-  if (!moving_observed_ || !forward_requested) {
+  if (
+    !moving_observed_ || command.longitudinal.speed < kCommandSpeedThreshold ||
+    command.longitudinal.acceleration < kCommandAccelerationThreshold)
+  {
     stuck_start_time_.reset();
     return;
   }
@@ -65,11 +75,6 @@ void StuckRecoveryController::onNominal(const AckermannControlCommand::ConstShar
   }
 }
 
-void StuckRecoveryController::onVelocity(const VelocityReport::ConstSharedPtr msg)
-{
-  latest_velocity_ = msg->longitudinal_velocity;
-}
-
 bool StuckRecoveryController::runRecovery(const rclcpp::Time & now)
 {
   if (!recovery_start_time_.has_value()) {
@@ -77,6 +82,8 @@ bool StuckRecoveryController::runRecovery(const rclcpp::Time & now)
   }
 
   const double elapsed = (now - recovery_start_time_.value()).seconds();
+
+  // 1. Reverse for kReverseDurationSec.
   if (elapsed < kReverseDurationSec) {
     publishGear(GearCommand::REVERSE);
     // AWSIM expects positive acceleration with reverse gear and negative target speed.
@@ -84,12 +91,14 @@ bool StuckRecoveryController::runRecovery(const rclcpp::Time & now)
     return true;
   }
 
+  // 2. Shift to DRIVE and stop for kDriveSettleDurationSec.
   if (elapsed < kReverseDurationSec + kDriveSettleDurationSec) {
     publishGear(GearCommand::DRIVE);
     publishCommand(0.0, 0.0);
     return true;
   }
 
+  // 3. Finish recovery and resume nominal commands.
   recovery_start_time_.reset();
   moving_observed_ = false;
   return false;

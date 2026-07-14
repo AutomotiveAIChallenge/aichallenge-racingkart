@@ -23,8 +23,9 @@ public:
   StuckRecoveryController();
 
 private:
-  void onNominal(const AckermannControlCommand::ConstSharedPtr msg);
-  void onVelocity(const VelocityReport::ConstSharedPtr msg);
+  void onNominalCommand(const AckermannControlCommand::ConstSharedPtr msg);
+  void updateStuckDetection(
+    const AckermannControlCommand & command, const rclcpp::Time & now);
   bool runRecovery(const rclcpp::Time & now);
   void publishCommand(float speed, float acceleration);
   void publishGear(std::uint8_t command);
