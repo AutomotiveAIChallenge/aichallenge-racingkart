@@ -76,7 +76,7 @@ void StuckRecoveryController::onNominal(const AckermannControlCommand::ConstShar
 
 void StuckRecoveryController::onVelocity(const VelocityReport::ConstSharedPtr msg)
 {
-  latest_velocity_ = static_cast<double>(msg->longitudinal_velocity);
+  latest_velocity_ = msg->longitudinal_velocity;
   latest_velocity_time_ = this->now();
 }
 
