@@ -6,6 +6,21 @@
 
 namespace stuck_recovery_controller
 {
+namespace
+{
+
+constexpr double kStuckSpeedThreshold = 0.2;
+constexpr double kStuckDuration = 1.0;
+constexpr double kCommandSpeedThreshold = 1.0;
+constexpr double kMovingSpeedThreshold = 0.5;
+constexpr double kReverseSpeed = 1.0;
+constexpr double kReverseAccel = 1.0;
+constexpr double kReverseDuration = 4.0;
+constexpr double kDriveSettleDuration = 0.5;
+constexpr double kCooldownDuration = 3.0;
+constexpr double kNominalTimeoutSec = 0.5;
+constexpr double kVelocityTimeoutSec = 0.5;
+constexpr double kTimerHz = 20.0;
 
 const char * toString(RecoveryState state)
 {
@@ -24,11 +39,12 @@ const char * toString(RecoveryState state)
   return "UNKNOWN";
 }
 
+}  // namespace
+
 StuckRecoveryController::StuckRecoveryController() : Node("stuck_recovery_controller")
 {
   control_pub_ = create_publisher<AckermannControlCommand>("/control/command/control_cmd", 1);
   gear_pub_ = create_publisher<GearCommand>("/control/command/gear_cmd", 1);
-  state_pub_ = create_publisher<std_msgs::msg::String>("/stuck_recovery_controller/state", 1);
 
   nominal_sub_ = create_subscription<AckermannControlCommand>(
     "/control/command/nominal_control_cmd", 1,
@@ -36,9 +52,6 @@ StuckRecoveryController::StuckRecoveryController() : Node("stuck_recovery_contro
   velocity_sub_ = create_subscription<VelocityReport>(
     "/vehicle/status/velocity_status", 1,
     std::bind(&StuckRecoveryController::onVelocity, this, std::placeholders::_1));
-  gear_sub_ = create_subscription<GearReport>(
-    "/vehicle/status/gear_status", 1,
-    std::bind(&StuckRecoveryController::onGear, this, std::placeholders::_1));
 
   state_enter_time_ = nowSec();
 
@@ -74,15 +87,9 @@ void StuckRecoveryController::onVelocity(const VelocityReport::SharedPtr msg)
   latest_velocity_time_ = nowSec();
 }
 
-void StuckRecoveryController::onGear(const GearReport::SharedPtr msg)
-{
-  latest_gear_ = msg->report;
-}
-
 void StuckRecoveryController::onTimer()
 {
   const double now = nowSec();
-  publishState();
 
   switch (state_) {
     case RecoveryState::NORMAL:
@@ -111,7 +118,7 @@ void StuckRecoveryController::runNormal(double now)
   }
   publishGear(GearCommand::DRIVE);
 
-  if (!hasFreshVelocity(now) || !latest_velocity_.has_value()) {
+  if (!hasFreshVelocity(now)) {
     stuck_start_time_.reset();
     return;
   }
@@ -176,10 +183,9 @@ void StuckRecoveryController::runCooldown(double now)
 
 void StuckRecoveryController::startRecovery(double now)
 {
-  ++attempt_count_;
   stuck_start_time_.reset();
   RCLCPP_WARN(
-    get_logger(), "stuck under throttle detected: attempt=%d velocity=%.3f", attempt_count_,
+    get_logger(), "stuck under throttle detected: velocity=%.3f",
     latest_velocity_.value_or(0.0));
   setState(RecoveryState::STUCK_DETECTED, now);
 }
@@ -192,7 +198,6 @@ void StuckRecoveryController::setState(RecoveryState state, double now)
   RCLCPP_INFO(get_logger(), "state transition: %s -> %s", toString(state_), toString(state));
   state_ = state;
   state_enter_time_ = now;
-  publishState();
 }
 
 bool StuckRecoveryController::hasFreshNominal(double now) const
@@ -214,13 +219,7 @@ bool StuckRecoveryController::isForwardRequest(
     return false;
   }
   const double speed = cmd->longitudinal.speed;
-  const double acceleration = cmd->longitudinal.acceleration;
-  const bool speed_forward = std::isfinite(speed) && speed >= kCommandSpeedThreshold;
-  const bool gear_allows_accel =
-    !latest_gear_.has_value() || latest_gear_.value() == GearReport::DRIVE;
-  const bool accel_forward =
-    std::isfinite(acceleration) && acceleration >= kCommandAccelThreshold && gear_allows_accel;
-  return speed_forward || accel_forward;
+  return std::isfinite(speed) && speed >= kCommandSpeedThreshold;
 }
 
 void StuckRecoveryController::publishNominal()
@@ -257,13 +256,6 @@ void StuckRecoveryController::publishGear(std::uint8_t command)
   msg.stamp = get_clock()->now();
   msg.command = command;
   gear_pub_->publish(msg);
-}
-
-void StuckRecoveryController::publishState()
-{
-  std_msgs::msg::String msg;
-  msg.data = toString(state_);
-  state_pub_->publish(msg);
 }
 
 }  // namespace stuck_recovery_controller
