@@ -17,14 +17,6 @@ using autoware_auto_control_msgs::msg::AckermannControlCommand;
 using autoware_auto_vehicle_msgs::msg::GearCommand;
 using autoware_auto_vehicle_msgs::msg::VelocityReport;
 
-enum class RecoveryState
-{
-  NORMAL,
-  STUCK_DETECTED,
-  REVERSING,
-  DRIVE_SETTLE,
-};
-
 class StuckRecoveryController : public rclcpp::Node
 {
 public:
@@ -33,14 +25,8 @@ public:
 private:
   void onNominal(const AckermannControlCommand::ConstSharedPtr msg);
   void onVelocity(const VelocityReport::ConstSharedPtr msg);
-  void runNormal(const AckermannControlCommand::ConstSharedPtr & msg, const rclcpp::Time & now);
-  void runStuckDetected(const rclcpp::Time & now);
-  void runReversing(const rclcpp::Time & now);
-  void runDriveSettle(const rclcpp::Time & now);
-  void startRecovery(const rclcpp::Time & now);
-  void setState(RecoveryState state, const rclcpp::Time & now);
-  bool hasFreshVelocity(const rclcpp::Time & now) const;
-  void publishCommand(double speed, double acceleration);
+  bool runRecovery(const rclcpp::Time & now);
+  void publishCommand(float speed, float acceleration);
   void publishGear(std::uint8_t command);
 
   rclcpp::Publisher<AckermannControlCommand>::SharedPtr control_pub_;
@@ -48,12 +34,10 @@ private:
   rclcpp::Subscription<AckermannControlCommand>::SharedPtr nominal_sub_;
   rclcpp::Subscription<VelocityReport>::SharedPtr velocity_sub_;
 
-  RecoveryState state_{RecoveryState::NORMAL};
-  rclcpp::Time state_enter_time_;
-  std::optional<double> latest_velocity_;
-  std::optional<rclcpp::Time> latest_velocity_time_;
+  float latest_velocity_{0.0};
   bool moving_observed_{false};
   std::optional<rclcpp::Time> stuck_start_time_;
+  std::optional<rclcpp::Time> recovery_start_time_;
 };
 
 }  // namespace stuck_recovery_controller
