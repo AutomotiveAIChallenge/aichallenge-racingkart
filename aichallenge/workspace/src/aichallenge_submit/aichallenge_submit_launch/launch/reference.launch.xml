@@ -167,6 +167,10 @@
     <include file="$(find-pkg-share aichallenge_submit_launch)/launch/control/rl_train.launch.xml"/>
   </group>
 
+  <node pkg="stuck_recovery_controller" exec="stuck_recovery_controller_node" name="stuck_recovery_controller" output="screen">
+    <param name="use_sim_time" value="$(var use_sim_time)"/>
+  </node>
+
   <!-- Map -->
   <group>
     <push-ros-namespace namespace="map"/>
@@ -222,10 +226,4 @@
     </include>
   </group>
 
-  <!-- Stuck recovery controller: final control mux that backs the kart up when it gets stuck. -->
-  <!-- Transparent pass-through of /control/command/nominal_control_cmd while driving; -->
-  <!-- stays silent when no nominal command is published. -->
-  <node pkg="stuck_recovery_controller" exec="stuck_recovery_controller_node" name="stuck_recovery_controller" output="screen">
-    <param name="use_sim_time" value="$(var use_sim_time)"/>
-  </node>
 </launch>
