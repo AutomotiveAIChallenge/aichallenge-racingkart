@@ -141,6 +141,7 @@
     <include file="$(find-pkg-share aichallenge_submit_launch)/launch/control/pure_pursuit.launch.xml">
       <arg name="simulation" value="$(var simulation)"/>
       <arg name="use_sim_time" value="$(var use_sim_time)"/>
+      <arg name="output_control_cmd" value="/control/command/nominal_control_cmd"/>
     </include>
   </group>
 

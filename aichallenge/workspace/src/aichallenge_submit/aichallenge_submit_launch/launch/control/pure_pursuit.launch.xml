@@ -2,6 +2,7 @@
 <launch>
   <arg name="simulation" default="true"/>
   <arg name="use_sim_time" default="true"/>
+  <arg name="output_control_cmd" default="/control/command/control_cmd"/>
 
   <let name="steering_tire_angle_gain_var" value="1.50" if="$(var simulation)"/>
   <let name="steering_tire_angle_gain_var" value="1.639" unless="$(var simulation)"/>
@@ -16,6 +17,6 @@
 
     <remap from="input/kinematics" to="/localization/kinematic_state"/>
     <remap from="input/trajectory" to="/planning/scenario_planning/trajectory"/>
-    <remap from="output/control_cmd" to="/control/command/control_cmd"/>
+    <remap from="output/control_cmd" to="$(var output_control_cmd)"/>
   </node>
 </launch>
