@@ -17,9 +17,7 @@ constexpr double kReverseSpeed = 1.0;
 constexpr double kReverseAccel = 1.0;
 constexpr double kReverseDuration = 4.0;
 constexpr double kDriveSettleDuration = 0.5;
-constexpr double kNominalTimeoutSec = 0.5;
 constexpr double kVelocityTimeoutSec = 0.5;
-constexpr double kTimerHz = 20.0;
 
 const char * toString(RecoveryState state)
 {
@@ -50,12 +48,6 @@ StuckRecoveryController::StuckRecoveryController() : Node("stuck_recovery_contro
     "/vehicle/status/velocity_status", 1,
     std::bind(&StuckRecoveryController::onVelocity, this, std::placeholders::_1));
 
-  state_enter_time_ = nowSec();
-
-  timer_ = rclcpp::create_timer(
-    this, get_clock(), rclcpp::Duration::from_seconds(1.0 / kTimerHz),
-    std::bind(&StuckRecoveryController::onTimer, this));
-
   RCLCPP_INFO(get_logger(), "stuck_recovery_controller started");
 }
 
@@ -66,26 +58,11 @@ double StuckRecoveryController::nowSec()
 
 void StuckRecoveryController::onNominal(const AckermannControlCommand::SharedPtr msg)
 {
-  latest_nominal_speed_ = static_cast<double>(msg->longitudinal.speed);
-  latest_nominal_time_ = nowSec();
-  if (state_ == RecoveryState::NORMAL) {
-    control_pub_->publish(*msg);
-  }
-}
-
-void StuckRecoveryController::onVelocity(const VelocityReport::SharedPtr msg)
-{
-  latest_velocity_ = static_cast<double>(msg->longitudinal_velocity);
-  latest_velocity_time_ = nowSec();
-}
-
-void StuckRecoveryController::onTimer()
-{
   const double now = nowSec();
 
   switch (state_) {
     case RecoveryState::NORMAL:
-      runNormal(now);
+      runNormal(msg, now);
       break;
     case RecoveryState::STUCK_DETECTED:
       runStuckDetected(now);
@@ -99,12 +76,16 @@ void StuckRecoveryController::onTimer()
   }
 }
 
-void StuckRecoveryController::runNormal(double now)
+void StuckRecoveryController::onVelocity(const VelocityReport::SharedPtr msg)
 {
-  if (!hasFreshNominal(now)) {
-    stuck_start_time_.reset();
-    return;
-  }
+  latest_velocity_ = static_cast<double>(msg->longitudinal_velocity);
+  latest_velocity_time_ = nowSec();
+}
+
+void StuckRecoveryController::runNormal(
+  const AckermannControlCommand::SharedPtr & msg, double now)
+{
+  control_pub_->publish(*msg);
   publishGear(GearCommand::DRIVE);
 
   if (!hasFreshVelocity(now)) {
@@ -117,7 +98,7 @@ void StuckRecoveryController::runNormal(double now)
     moving_observed_ = true;
   }
 
-  const double nominal_speed = latest_nominal_speed_.value();
+  const double nominal_speed = msg->longitudinal.speed;
   const bool forward_requested =
     std::isfinite(nominal_speed) && nominal_speed >= kCommandSpeedThreshold;
   if (!moving_observed_ || !forward_requested) {
@@ -182,12 +163,6 @@ void StuckRecoveryController::setState(RecoveryState state, double now)
   RCLCPP_INFO(get_logger(), "state transition: %s -> %s", toString(state_), toString(state));
   state_ = state;
   state_enter_time_ = now;
-}
-
-bool StuckRecoveryController::hasFreshNominal(double now) const
-{
-  return latest_nominal_speed_.has_value() && latest_nominal_time_.has_value() &&
-         now - latest_nominal_time_.value() <= kNominalTimeoutSec;
 }
 
 bool StuckRecoveryController::hasFreshVelocity(double now) const

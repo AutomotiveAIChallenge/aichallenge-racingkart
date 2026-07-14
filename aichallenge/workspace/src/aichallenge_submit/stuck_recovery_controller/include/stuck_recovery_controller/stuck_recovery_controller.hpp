@@ -34,14 +34,12 @@ private:
   double nowSec();
   void onNominal(const AckermannControlCommand::SharedPtr msg);
   void onVelocity(const VelocityReport::SharedPtr msg);
-  void onTimer();
-  void runNormal(double now);
+  void runNormal(const AckermannControlCommand::SharedPtr & msg, double now);
   void runStuckDetected(double now);
   void runReversing(double now);
   void runDriveSettle(double now);
   void startRecovery(double now);
   void setState(RecoveryState state, double now);
-  bool hasFreshNominal(double now) const;
   bool hasFreshVelocity(double now) const;
   void publishCommand(double speed, double acceleration);
   void publishGear(std::uint8_t command);
@@ -50,12 +48,9 @@ private:
   rclcpp::Publisher<GearCommand>::SharedPtr gear_pub_;
   rclcpp::Subscription<AckermannControlCommand>::SharedPtr nominal_sub_;
   rclcpp::Subscription<VelocityReport>::SharedPtr velocity_sub_;
-  rclcpp::TimerBase::SharedPtr timer_;
 
   RecoveryState state_{RecoveryState::NORMAL};
   double state_enter_time_{0.0};
-  std::optional<double> latest_nominal_speed_;
-  std::optional<double> latest_nominal_time_;
   std::optional<double> latest_velocity_;
   std::optional<double> latest_velocity_time_;
   bool moving_observed_{false};
