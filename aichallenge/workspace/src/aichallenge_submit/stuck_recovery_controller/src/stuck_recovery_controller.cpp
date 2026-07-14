@@ -66,10 +66,10 @@ double StuckRecoveryController::nowSec()
 
 void StuckRecoveryController::onNominal(const AckermannControlCommand::SharedPtr msg)
 {
-  latest_nominal_ = msg;
+  latest_nominal_speed_ = static_cast<double>(msg->longitudinal.speed);
   latest_nominal_time_ = nowSec();
   if (state_ == RecoveryState::NORMAL) {
-    publishNominal();
+    control_pub_->publish(*msg);
   }
 }
 
@@ -117,7 +117,10 @@ void StuckRecoveryController::runNormal(double now)
     moving_observed_ = true;
   }
 
-  if (!moving_observed_ || !isForwardRequest(latest_nominal_)) {
+  const double nominal_speed = latest_nominal_speed_.value();
+  const bool forward_requested =
+    std::isfinite(nominal_speed) && nominal_speed >= kCommandSpeedThreshold;
+  if (!moving_observed_ || !forward_requested) {
     stuck_start_time_.reset();
     return;
   }
@@ -136,7 +139,7 @@ void StuckRecoveryController::runNormal(double now)
 void StuckRecoveryController::runStuckDetected(double now)
 {
   publishGear(GearCommand::DRIVE);
-  publishCommand(0.0, 0.0, 0.0);
+  publishCommand(0.0, 0.0);
   if (now - state_enter_time_ >= 0.2) {
     setState(RecoveryState::REVERSING, now);
   }
@@ -145,7 +148,7 @@ void StuckRecoveryController::runStuckDetected(double now)
 void StuckRecoveryController::runReversing(double now)
 {
   publishGear(GearCommand::REVERSE);
-  publishCommand(-std::abs(kReverseSpeed), std::abs(kReverseAccel), 0.0);
+  publishCommand(-kReverseSpeed, kReverseAccel);
   if (now - state_enter_time_ >= kReverseDuration) {
     setState(RecoveryState::DRIVE_SETTLE, now);
   }
@@ -154,7 +157,7 @@ void StuckRecoveryController::runReversing(double now)
 void StuckRecoveryController::runDriveSettle(double now)
 {
   publishGear(GearCommand::DRIVE);
-  publishCommand(0.0, 0.0, 0.0);
+  publishCommand(0.0, 0.0);
   if (now - state_enter_time_ >= kDriveSettleDuration) {
     moving_observed_ = false;
     stuck_start_time_.reset();
@@ -183,7 +186,7 @@ void StuckRecoveryController::setState(RecoveryState state, double now)
 
 bool StuckRecoveryController::hasFreshNominal(double now) const
 {
-  return latest_nominal_ != nullptr && latest_nominal_time_.has_value() &&
+  return latest_nominal_speed_.has_value() && latest_nominal_time_.has_value() &&
          now - latest_nominal_time_.value() <= kNominalTimeoutSec;
 }
 
@@ -193,37 +196,13 @@ bool StuckRecoveryController::hasFreshVelocity(double now) const
          now - latest_velocity_time_.value() <= kVelocityTimeoutSec;
 }
 
-bool StuckRecoveryController::isForwardRequest(
-  const AckermannControlCommand::SharedPtr & cmd) const
-{
-  if (cmd == nullptr) {
-    return false;
-  }
-  const double speed = cmd->longitudinal.speed;
-  return std::isfinite(speed) && speed >= kCommandSpeedThreshold;
-}
-
-void StuckRecoveryController::publishNominal()
-{
-  if (latest_nominal_ == nullptr) {
-    publishCommand(0.0, 0.0, 0.0);
-    return;
-  }
-  AckermannControlCommand msg = *latest_nominal_;
-  const auto stamp = get_clock()->now();
-  msg.stamp = stamp;
-  msg.lateral.stamp = stamp;
-  msg.longitudinal.stamp = stamp;
-  control_pub_->publish(msg);
-}
-
-void StuckRecoveryController::publishCommand(double speed, double acceleration, double steer)
+void StuckRecoveryController::publishCommand(double speed, double acceleration)
 {
   const auto stamp = get_clock()->now();
   AckermannControlCommand msg;
   msg.stamp = stamp;
   msg.lateral.stamp = stamp;
-  msg.lateral.steering_tire_angle = static_cast<float>(steer);
+  msg.lateral.steering_tire_angle = 0.0F;
   msg.lateral.steering_tire_rotation_rate = 2.0F;
   msg.longitudinal.stamp = stamp;
   msg.longitudinal.speed = static_cast<float>(speed);
