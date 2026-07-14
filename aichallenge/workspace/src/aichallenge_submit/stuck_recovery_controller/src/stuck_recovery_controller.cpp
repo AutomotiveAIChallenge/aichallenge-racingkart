@@ -9,7 +9,7 @@ namespace stuck_recovery_controller
 namespace
 {
 
-constexpr float kStuckSpeedThreshold = 0.2;
+constexpr float kStuckSpeedThreshold = 0.1;
 constexpr double kStuckDurationSec = 1.0;
 constexpr float kCommandSpeedThreshold = 1.0;
 constexpr float kCommandAccelerationThreshold = 0.3;
@@ -100,7 +100,6 @@ bool StuckRecoveryController::runRecovery(const rclcpp::Time & now)
 
   // 3. Finish recovery and resume nominal commands.
   recovery_start_time_.reset();
-  moving_observed_ = false;
   return false;
 }
 
