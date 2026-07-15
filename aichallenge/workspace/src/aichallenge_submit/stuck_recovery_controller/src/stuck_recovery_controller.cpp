@@ -83,7 +83,7 @@ bool StuckRecoveryController::runRecovery(const rclcpp::Time & now)
 
   const double elapsed = (now - recovery_start_time_.value()).seconds();
 
-  // 1. Reverse for kReverseDurationSec.
+  // STEP1. Reverse for kReverseDurationSec.
   if (elapsed < kReverseDurationSec) {
     publishGear(GearCommand::REVERSE);
     // AWSIM expects positive acceleration with reverse gear and negative target speed.
@@ -91,14 +91,16 @@ bool StuckRecoveryController::runRecovery(const rclcpp::Time & now)
     return true;
   }
 
-  // 2. Shift to DRIVE and stop for kDriveSettleDurationSec.
+  // STEP2. Shift to DRIVE and stop for kDriveSettleDurationSec.
   if (elapsed < kReverseDurationSec + kDriveSettleDurationSec) {
     publishGear(GearCommand::DRIVE);
     publishCommand(0.0, 0.0);
     return true;
   }
 
-  // 3. Finish recovery and resume nominal commands.
+  // STEP3. Finish recovery and resume nominal commands.
+  // If STEP2 was skipped due to a callback dropout, gear would still be REVERSE, so publish DRIVE here too.
+  publishGear(GearCommand::DRIVE);
   recovery_start_time_.reset();
   return false;
 }
