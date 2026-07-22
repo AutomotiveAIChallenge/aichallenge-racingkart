@@ -21,8 +21,8 @@ exec $AWSIM_DIRECTORY/AWSIM.x86_64 \
     --start-random on \
     --ranking on \
     -screen-fullscreen 1 \
-    -screen-width 1920 \
-    -screen-height 1080 \
+    -screen-width 1280 \
+    -screen-height 720 \
     -screen-quality low \
     -window-mode borderless # Unity default arg
 
