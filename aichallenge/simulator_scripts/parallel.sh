@@ -18,7 +18,6 @@ exec $AWSIM_DIRECTORY/AWSIM.x86_64 \
     --collisions off \
     --handicap on \
     --wall-recovery off \
-    --start-random on \
     --ranking on \
     -screen-fullscreen 1 \
     -screen-width 1280 \
