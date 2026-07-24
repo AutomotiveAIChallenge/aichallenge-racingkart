@@ -104,7 +104,7 @@ autoware-driver-zenoh:
 	sleep 15
 	LOG_DIR=$(LOG_DIR) docker compose up -d zenoh
 
-vehicle-setup-check:
+setup-vehicle:
 	@echo "Run vehicle setup check"
 	@cd vehicle && ./setup_check.sh
 
