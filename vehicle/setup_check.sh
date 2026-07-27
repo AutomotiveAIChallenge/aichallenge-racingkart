@@ -30,6 +30,11 @@ CAN_SAMPLE_SEC="${CAN_SAMPLE_SEC:-3}"
 CAN_MIN_FRAMES="${CAN_MIN_FRAMES:-100}"
 GNSS_NAVPVT_TIMEOUT_SEC="${GNSS_NAVPVT_TIMEOUT_SEC:-8}"
 ROS_TOPIC_TIMEOUT_SEC="${ROS_TOPIC_TIMEOUT_SEC:-4}"
+IMU_BIAS_DURATION_SEC="${IMU_BIAS_DURATION_SEC:-5}"
+IMU_BIAS_WARMUP_SEC="${IMU_BIAS_WARMUP_SEC:-2}"
+IMU_BIAS_WARN_THRESHOLD="${IMU_BIAS_WARN_THRESHOLD:-0.005}"
+IMU_BIAS_STD_THRESHOLD="${IMU_BIAS_STD_THRESHOLD:-0.01}"
+IMU_BIAS_VELOCITY_THRESHOLD="${IMU_BIAS_VELOCITY_THRESHOLD:-0.05}"
 TOTAL_CHECKS=0
 PASSED_CHECKS=0
 FAILED_CHECKS=0
@@ -73,6 +78,18 @@ ENVIRONMENT:
                    seconds to wait for /sensing/gnss/navpvt [default: 8]
   ROS_TOPIC_TIMEOUT_SEC
                    seconds to wait for each runtime ROS topic [default: 4]
+  IMU_BIAS_DURATION_SEC
+                   IMU gyro bias sampling seconds [default: 5]
+  IMU_BIAS_WARMUP_SEC
+                   seconds discarded before sampling (IMU warmup) [default: 2]
+  IMU_BIAS_WARN_THRESHOLD
+                   warn if |bias - current offset| exceeds this [rad/s, default: 0.005]
+  IMU_BIAS_STD_THRESHOLD
+                   warn if stationary gyro stddev exceeds this [rad/s, default: 0.01]
+  IMU_BIAS_VELOCITY_THRESHOLD
+                   treat as moving if |velocity| exceeds this [m/s, default: 0.05]
+  IMU_BIAS_ASSUME_STATIONARY
+                   non-interactive answer (y) to the stationary prompt [default: unset]
 
 MODE:
   vehicle         Real vehicle mode (CAN + VCU required) [default]
@@ -697,6 +714,79 @@ check_runtime_ros_topics() {
     log ""
 }
 
+# IMU ジャイロバイアス確認（静止状態で実行、runtime 専用）
+check_imu_bias() {
+    log "${INFO} IMU Gyro Bias Check (stationary)"
+    log "----------------------------------------"
+
+    if ! is_compose_service_running "autoware"; then
+        log "${FAIL} IMU bias check: autoware service is not running"
+        record_result "fail"
+        log ""
+        return 0
+    fi
+
+    # 静止確認。バイアス推定は車両が完全に静止していることが前提なので、
+    # 対話端末では y/N で明示確認する。非対話時は IMU_BIAS_ASSUME_STATIONARY を見る。
+    local answer=""
+    if [ -t 0 ]; then
+        read -r -p "$(echo -e "${WARN} Vehicle must be COMPLETELY stationary for IMU bias check. Proceed? [y/N]: ")" answer
+    else
+        answer="${IMU_BIAS_ASSUME_STATIONARY-}"
+    fi
+
+    case "${answer}" in
+    y | Y | yes | YES) ;;
+    *)
+        log "${WARN} IMU bias check skipped (vehicle not confirmed stationary)"
+        record_result "warn"
+        log ""
+        return 0
+        ;;
+    esac
+
+    local setup_cmd
+    if ! setup_cmd="$(ros_setup_command_for_service autoware)"; then
+        log "${FAIL} IMU bias check: unknown compose service 'autoware'"
+        record_result "fail"
+        log ""
+        return 0
+    fi
+
+    # check_imu_bias.py は ./vehicle:/vehicle マウント経由でコンテナから見える。
+    local output
+    local rc
+    output="$(docker compose -f "${REPO_ROOT}/docker-compose.yml" exec -T autoware bash -lc "
+        ${setup_cmd}
+        python3 /vehicle/check_imu_bias.py \
+            --duration '${IMU_BIAS_DURATION_SEC}' \
+            --warmup '${IMU_BIAS_WARMUP_SEC}' \
+            --velocity-threshold '${IMU_BIAS_VELOCITY_THRESHOLD}' \
+            --warn-threshold '${IMU_BIAS_WARN_THRESHOLD}' \
+            --std-threshold '${IMU_BIAS_STD_THRESHOLD}'
+    " 2>&1)"
+    rc=$?
+
+    log "${output}"
+
+    case "${rc}" in
+    0)
+        log "${OK} IMU gyro bias within tolerance"
+        record_result "pass"
+        ;;
+    2)
+        log "${WARN} IMU gyro bias warning (see above; update imu_corrector.param.yaml manually)"
+        record_result "warn"
+        ;;
+    *)
+        log "${FAIL} IMU gyro bias check failed (rc=${rc}; measurement not completed)"
+        record_result "fail"
+        ;;
+    esac
+
+    log ""
+}
+
 # 6. past_log.md既知問題チェック
 check_known_issues() {
     log "${INFO} 6. Known Issues Prevention Check"
@@ -784,6 +874,7 @@ main() {
         check_runtime_docker_services
         check_gnss_rtk_status
         check_runtime_ros_topics
+        check_imu_bias
         ;;
     all)
         check_hardware
@@ -793,6 +884,7 @@ main() {
         check_runtime_docker_services
         check_gnss_rtk_status
         check_runtime_ros_topics
+        check_imu_bias
         check_known_issues
         check_execution_readiness
         ;;
