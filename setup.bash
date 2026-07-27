@@ -803,7 +803,7 @@ EOF
 }
 
 download_awsim() {
-    local default_url='https://tier4inc-my.sharepoint.com/:u:/g/personal/taiki_tanaka_tier4_jp/IQBywIu_x0HPSaNK3RETn-54ARPUQWNFJ2E3VJTgen6E_vA?e=l2AJPW'
+    local default_url='https://tier4inc-my.sharepoint.com/:u:/g/personal/taiki_tanaka_tier4_jp/IQBsN8eTeQilSoK0WVfAKdNyAbABgcIxEccn3syN0rmwpYU'
     local url="${AWSIM_ZIP_URL:-$default_url}"
 
     local keep_zip=0
@@ -968,7 +968,9 @@ ensure_env() {
     upsert_env_var HOST_GID "$(id -g)"
     gid="$(getent group dialout | cut -d: -f3)"
     [ -n "${gid}" ] && upsert_env_var HOST_GID_DIALOUT "${gid}"
-    log "${OK} Set host UID/GID + dialout GID in .env"
+    gid="$(getent group input | cut -d: -f3)"
+    [ -n "${gid}" ] && upsert_env_var HOST_GID_INPUT "${gid}"
+    log "${OK} Set host UID/GID + dialout/input GID in .env"
 }
 
 # Host DDS tuning (CycloneDDS): persist rmem_max + multicast on lo

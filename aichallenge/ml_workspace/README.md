@@ -33,7 +33,8 @@ ml_workspace/
 │  ├─ extract_data_from_bag.py
 │  ├─ osm2csv.py
 │  └─ convert_weight.py
-└─ pilot_net/               # PilotNet 用のデータ変換・学習コード一式
+├─ pilot_net/               # PilotNet 用のデータ変換・学習コード一式
+└─ reinforcement_learning/  # 強化学習用の学習・評価コード一式
 ```
 
 ## 各項目の説明
@@ -44,3 +45,4 @@ ml_workspace/
 - `train/`, `val/`: `rawdata/` から分けた rosbag（mcap）を置くためのディレクトリです（運用に応じて使います）。
 - `tiny_lidar_net/`: TinyLiDARNet 用のデータ変換・学習・重み変換コード一式です。使い方は `aichallenge/ml_workspace/tiny_lidar_net/README.md` を参照してください。
 - `pilot_net/`: PilotNet 用のデータ変換・学習コード一式です。
+- `reinforcement_learning/`: 強化学習用の学習・評価コード一式です。

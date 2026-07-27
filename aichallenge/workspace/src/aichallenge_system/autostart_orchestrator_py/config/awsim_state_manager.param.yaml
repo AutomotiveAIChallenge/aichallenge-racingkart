@@ -7,7 +7,6 @@
     awsim_kill_patterns: ""
     exit_on_finish: false
     shutdown_on_exit: false
-    enable_debug_visualization: true
     admin_state_topic: /admin/awsim/state
     # AWSIM Sync mode start trigger bridge.
     admin_start_topic: /admin/awsim/start

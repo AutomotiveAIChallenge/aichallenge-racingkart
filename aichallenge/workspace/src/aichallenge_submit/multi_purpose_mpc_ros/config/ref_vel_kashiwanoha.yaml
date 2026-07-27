@@ -1,0 +1,10 @@
+# Reference velocity sections for the kashiwanoha corridor (~298 waypoints).
+# Two sections (required: get_ref_vel needs >=2 keys) at low, in-range wp_ids so
+# the configulator never indexes past the end of the (short, open) reference path.
+ref_vel_configulator:
+  s1:
+    ref_vel: 5.0
+    wp_id: 1
+  s2:
+    ref_vel: 5.0
+    wp_id: 100

@@ -27,7 +27,9 @@
                 cwd="$(var log_dir)"
                 output="both"
                 cmd="bash /aichallenge/run_simulator.bash $(var sim_mode)"/>
-            <include file="$(find-pkg-share aichallenge_system_launch)/launch/mode/awsim_state_manager.launch.xml"/>
+            <include file="$(find-pkg-share aichallenge_system_launch)/launch/mode/awsim_state_manager.launch.xml">
+                <arg name="debug" value="$(var run_rviz)"/>
+            </include>
         </group>
     </group>
 

@@ -12,9 +12,20 @@
     awsim_button_index:   1   # ○ボタンでAWSIMモード
     reset_button_index:   0   # ×ボタンでリセット
 
+    # --- ギア切替ボタン (DRIVE=2 / REVERSE=20 のみ) ---
+    drive_button_index:   5   # R1 で DRIVE(前進)
+    reverse_button_index: 4   # L1 で REVERSE(後進)
+
+    # --- AWSIM ターボブースト (押すたびに発火) ---
+    boost_button_index:   8   # /awsim/cmd へ [1.0]→[0.0] を送信(AWSIM側トグル)
+
     # --- start/stop トリガボタン ---
     start_button_index:   7   # R2 ボタンで start=true
     stop_button_index:    6   # L2 ボタンで start=false
+
+    # --- アクセル/ステアリング軸インデックス ---
+    speed_axis_index:     1   # アクセル (axes[1] 左スティック縦)
+    steer_axis_index:     0   # ステアリング (axes[0] 左スティック横)
 
     # --- 十字キー（D-pad）軸インデックス ---
     dpad_lr_axis_index:   6   # 左右 (axes[6])

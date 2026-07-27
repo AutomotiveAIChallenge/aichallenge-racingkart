@@ -48,6 +48,7 @@
         <include file="$(find-pkg-share aichallenge_system_launch)/launch/mode/awsim.launch.xml">
             <arg name="capture" value="$(var capture)"/>
             <arg name="rosbag" value="$(var rosbag)"/>
+            <arg name="debug" value="$(var run_rviz)"/>
         </include>
     </group>
 

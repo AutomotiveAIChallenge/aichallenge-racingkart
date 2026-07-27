@@ -1,0 +1,275 @@
+# Context extraction map for AWSIMContextManager
+#
+# This file mirrors the context fields currently hardcoded in context_manager.py.
+#
+# Notes:
+# - Plain string leaves are direct attribute-path extraction targets.
+# - Keys like "__len__" and "0" are for documentation of computed/indexed values.
+#   Current _build_named_context supports direct path extraction only.
+
+extract_map:
+  sensing_camera_image_raw: camera_image
+
+  awsim_state:
+    data: awsim_state
+
+  awsim_status:
+    session_time: awsim_session_time_s
+    lap_count: awsim_lap_count
+    lap_time: awsim_lap_time_s
+    section: awsim_section
+    time_scale: awsim_time_scale
+    boost_remaining: awsim_boost_remaining
+    is_boosting: awsim_is_boosting
+
+  sensing_camera_camera_info:
+    width: camera_width_px
+    height: camera_height_px
+
+  sensing_gnss_nav_sat_fix:
+    latitude: gnss_latitude_deg
+    longitude: gnss_longitude_deg
+    altitude: gnss_altitude_m
+
+  v2x_gnss_nav_sat_fix:
+    latitude: v2x_gnss_latitude_deg
+    longitude: v2x_gnss_longitude_deg
+    altitude: v2x_gnss_altitude_m
+
+  sensing_imu_imu_raw:
+    orientation:
+      x: imu_orientation_x
+      y: imu_orientation_y
+      z: imu_orientation_z
+      w: imu_orientation_w
+    angular_velocity:
+      x: imu_angular_velocity_x_rad_s
+      y: imu_angular_velocity_y_rad_s
+      z: imu_angular_velocity_z_rad_s
+    linear_acceleration:
+      x: imu_linear_accel_x_m_s2
+      y: imu_linear_accel_y_m_s2
+      z: imu_linear_accel_z_m_s2
+
+  sensing_lidar_scan:
+    range_min: lidar_min_range_m
+    range_max: lidar_max_range_m
+    ranges:
+      __len__: lidar_range_count
+
+  vehicle_status_gear_status:
+    report: gear_position
+
+  vehicle_status_steering_status:
+    steering_tire_angle: steering_tire_angle_rad
+
+  vehicle_status_velocity_status:
+    longitudinal_velocity: vehicle_speed_mps
+
+  localization_kinematic_state:
+    pose:
+      pose:
+        position:
+          x: kinematic_pose_x_m
+          y: kinematic_pose_y_m
+    twist:
+      twist:
+        linear:
+          x: kinematic_speed_mps
+
+  planning_scenario_planning_trajectory:
+    points: trajectory_points
+
+  awsim_control_cmd:
+    stamp:
+      sec: awsim_control_stamp_sec
+      nanosec: awsim_control_stamp_nanosec
+    lateral:
+      stamp:
+        sec: awsim_control_lateral_stamp_sec
+        nanosec: awsim_control_lateral_stamp_nanosec
+      steering_tire_angle: control_steering_tire_angle_rad
+      steering_tire_rotation_rate: awsim_control_steering_tire_rotation_rate
+    longitudinal:
+      speed: control_speed_mps
+      acceleration: awsim_control_acceleration_mps2
+      jerk: awsim_control_jerk_mps3
+
+  control_command_control_cmd:
+    stamp:
+      sec: control_command_stamp_sec
+      nanosec: control_command_stamp_nanosec
+    lateral:
+      stamp:
+        sec: control_command_lateral_stamp_sec
+        nanosec: control_command_lateral_stamp_nanosec
+      steering_tire_angle: control_command_steering_tire_angle_rad
+      steering_tire_rotation_rate: control_command_steering_tire_rotation_rate
+    longitudinal:
+      stamp:
+        sec: control_command_longitudinal_stamp_sec
+        nanosec: control_command_longitudinal_stamp_nanosec
+      speed: control_command_speed_mps
+      acceleration: control_command_acceleration_mps2
+      jerk: control_command_jerk_mps3
+
+  awsim_control_mode_request_topic:
+    data: awsim_control_mode
+
+  awsim_reset: awsim_reset
+
+  heading_pose_initializer_raceline_markers:
+    markers:
+      __len__: heading_raceline_marker_count
+
+  localization_acceleration:
+    accel:
+      accel:
+        linear:
+          x: localization_accel_x_m_s2
+          y: localization_accel_y_m_s2
+          z: localization_accel_z_m_s2
+
+  localization_biased_pose:
+    pose:
+      position:
+        x: localization_biased_pose_x_m
+        y: localization_biased_pose_y_m
+        z: localization_biased_pose_z_m
+
+  localization_biased_pose_with_covariance:
+    pose:
+      pose:
+        position:
+          x: localization_biased_pose_cov_x_m
+          y: localization_biased_pose_cov_y_m
+          z: localization_biased_pose_cov_z_m
+
+  localization_debug:
+    data:
+      __len__: localization_debug_value_count
+      "0": localization_debug_first_value
+
+  localization_estimated_yaw_bias:
+    data: localization_estimated_yaw_bias_rad
+
+  localization_gyro_twist:
+    twist:
+      linear:
+        x: localization_gyro_twist_linear_x_mps
+      angular:
+        z: localization_gyro_twist_angular_z_rad_s
+
+  localization_gyro_twist_raw:
+    twist:
+      linear:
+        x: localization_gyro_twist_raw_linear_x_mps
+      angular:
+        z: localization_gyro_twist_raw_angular_z_rad_s
+
+  localization_imu_gnss_poser_pose_with_covariance:
+    pose:
+      pose:
+        position:
+          x: localization_imu_gnss_pose_x_m
+          y: localization_imu_gnss_pose_y_m
+          z: localization_imu_gnss_pose_z_m
+
+  localization_pose:
+    pose:
+      position:
+        x: localization_pose_x_m
+        y: localization_pose_y_m
+        z: localization_pose_z_m
+
+  localization_pose_with_covariance:
+    pose:
+      pose:
+        position:
+          x: localization_pose_cov_x_m
+          y: localization_pose_cov_y_m
+          z: localization_pose_cov_z_m
+
+  localization_twist:
+    twist:
+      linear:
+        x: localization_twist_linear_x_mps
+      angular:
+        z: localization_twist_angular_z_rad_s
+
+  localization_twist_estimator_twist_with_covariance:
+    twist:
+      twist:
+        linear:
+          x: localization_twist_estimator_linear_x_mps
+
+  localization_twist_estimator_twist_with_covariance_raw:
+    twist:
+      twist:
+        linear:
+          x: localization_twist_estimator_raw_linear_x_mps
+
+  localization_twist_with_covariance:
+    twist:
+      twist:
+        linear:
+          x: localization_twist_with_cov_linear_x_mps
+
+  map_vector_map:
+    data:
+      __len__: map_vector_map_bytes
+
+  map_vector_map_marker:
+    markers:
+      __len__: map_vector_map_marker_count
+
+  robot_description:
+    data:
+      __len__: robot_description_length
+
+  sensing_gnss_gnss_fixed:
+    data: gnss_fixed
+
+  sensing_gnss_pose:
+    pose:
+      position:
+        x: gnss_pose_x_m
+        y: gnss_pose_y_m
+        z: gnss_pose_z_m
+
+  sensing_gnss_pose_with_covariance:
+    pose:
+      pose:
+        position:
+          x: gnss_pose_cov_x_m
+          y: gnss_pose_cov_y_m
+          z: gnss_pose_cov_z_m
+
+  sensing_imu_imu_data:
+    orientation:
+      x: imu_data_orientation_x
+      y: imu_data_orientation_y
+      z: imu_data_orientation_z
+      w: imu_data_orientation_w
+    angular_velocity:
+      x: imu_data_angular_velocity_x_rad_s
+      y: imu_data_angular_velocity_y_rad_s
+      z: imu_data_angular_velocity_z_rad_s
+    linear_acceleration:
+      x: imu_data_linear_accel_x_m_s2
+      y: imu_data_linear_accel_y_m_s2
+      z: imu_data_linear_accel_z_m_s2
+
+  sensing_vehicle_velocity_converter_twist_with_covariance:
+    twist:
+      twist:
+        linear:
+          x: sensing_vehicle_velocity_converter_linear_x_mps
+
+  tf:
+    transforms:
+      __len__: tf_transform_count
+
+  tf_static:
+    transforms:
+      __len__: tf_static_transform_count

@@ -2,7 +2,7 @@
 SHELL := /bin/bash
 
 .PHONY: autoware-build autoware-vehicle autoware-simulator autoware-request-initialpose autoware-request-control  awsim-request-start awsim-request-reset autoware-driver-zenoh autoware-driver-zenoh-rosbag setup-vehicle \
-	simulator dev dev2 dev3 dev4 driver zenoh download rviz2 down down_all ps autoware-bash eval
+	simulator dev dev2 dev3 dev4 driver zenoh download rviz2 down down_all ps autoware-attach autoware-bash eval
 
 # Used by docker-compose.yml for build/eval artifact ownership.
 HOST_UID ?= $(shell id -u)
@@ -33,11 +33,13 @@ autoware-build:
 # run autoware for vehicle
 autoware-vehicle:
 	@echo "Start Autoware for Vehicle"
+	@echo "Log dir: .$(LOG_DIR)"
 	LOG_DIR=$(LOG_DIR) RUN_MODE=vehicle docker compose up -d autoware
 
 # run autoware for simulator
 autoware-simulator:
 	@echo "Start Autoware for AWSIM"
+	@echo "Log dir: .$(LOG_DIR)"
 	LOG_DIR=$(LOG_DIR) RUN_MODE=awsim docker compose up -d autoware
 
 # autoware command service use ROS_DOMAIN_ID from .env
@@ -57,6 +59,7 @@ awsim-request-reset:
 # run simulator (docker compose up -d simulator)
 simulator:
 	@echo "Start AWSIM (SIM_MODE=$(SIM_MODE))"
+	@echo "Log dir: .$(LOG_DIR)"
 	LOG_DIR=$(LOG_DIR) SIM_MODE="$(SIM_MODE)" ROS_DOMAIN_ID=0 docker compose up -d simulator
 
 # racing kart (docker compose up -d driver)
@@ -93,6 +96,7 @@ eval:
 	docker compose up -d autoware-simulator-evaluation
 	$(MAKE) awsim-request-start
 	@echo "To stop: make down  (docker compose down --remove-orphans)"
+
 # remote operation (docker compose up -d rviz2)
 rviz2:
 	docker compose stop rviz2
@@ -135,8 +139,11 @@ ps:
 		fi; \
 	done
 
+autoware-attach:
+	@./docker_exec.sh
+
 autoware-bash:
-	@./docker_exec.sh $(VEHICLE_NUM)
+	CMD="bash --rcfile /etc/skel/.bashrc -i" docker compose run --rm --no-deps autoware-command
 
 # Download submission data by asking for credentials interactively
 # Usage:

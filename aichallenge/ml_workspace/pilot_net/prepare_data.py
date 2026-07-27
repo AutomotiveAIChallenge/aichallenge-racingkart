@@ -5,7 +5,7 @@ import numpy as np
 from pathlib import Path
 
 
-def main(all_dir: Path, train_dir: Path, val_dir: Path, split_ratio: float = 0.8):
+def main(all_dir: Path, train_dir: Path, val_dir: Path, split_ratio: float = 0.8, frame_stride: int = 1):
     seq_dirs = sorted([p for p in all_dir.iterdir() if p.is_dir()])
     if not seq_dirs:
         raise RuntimeError(f"No sequence directories found in {all_dir}")
@@ -32,10 +32,12 @@ def main(all_dir: Path, train_dir: Path, val_dir: Path, split_ratio: float = 0.8
             print(f"Skipping {src.name}: length mismatch (imgs={len(imgs)}, steers={len(steers)}, accels={len(accels)})")
             continue
 
-        all_imgs.append(np.array(imgs))
-        all_steers.append(steers)
-        all_accels.append(accels)
-        print(f"  Loaded {src.name}: {n} samples")
+        # Decimate to 1/frame_stride: adjacent frames are near-duplicates, so
+        # keeping every stride-th frame removes most temporal redundancy (and leakage).
+        all_imgs.append(np.array(imgs[::frame_stride]))
+        all_steers.append(steers[::frame_stride])
+        all_accels.append(accels[::frame_stride])
+        print(f"  Loaded {src.name}: {n} samples -> {len(steers[::frame_stride])} after 1/{frame_stride} decimation")
 
     if not all_imgs:
         raise RuntimeError(f"No valid sequences found in {all_dir}")
@@ -46,8 +48,15 @@ def main(all_dir: Path, train_dir: Path, val_dir: Path, split_ratio: float = 0.8
     del all_imgs, all_steers, all_accels
 
     n = len(steers)
+
+    # --- Shuffle and split (decimation above already removed most leakage) ---
+    perm = np.random.permutation(n)
+    imgs = imgs[perm]
+    steers = steers[perm]
+    accels = accels[perm]
+
     split = int(n * split_ratio)
-    print(f"Total: {n} samples, split: train={split}, val={n - split}")
+    print(f"Total: {n} samples (after decimation), split: train={split}, val={n - split}")
 
     # --- Output dirs ---
     for d in [train_dir, val_dir]:
@@ -94,6 +103,7 @@ if __name__ == "__main__":
     parser.add_argument("--train-dir", type=Path, default=Path("dataset/train/merged"), help="Output train directory")
     parser.add_argument("--val-dir", type=Path, default=Path("dataset/val/merged"), help="Output val directory")
     parser.add_argument("--split-ratio", type=float, default=0.8, help="Train/val split ratio")
+    parser.add_argument("--frame-stride", type=int, default=1, help="Keep every stride-th frame per sequence (1/stride decimation to reduce temporal redundancy)")
     args = parser.parse_args()
 
-    main(args.all_dir, args.train_dir, args.val_dir, args.split_ratio)
+    main(args.all_dir, args.train_dir, args.val_dir, args.split_ratio, args.frame_stride)
