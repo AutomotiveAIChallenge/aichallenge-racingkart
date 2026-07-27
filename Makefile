@@ -1,7 +1,7 @@
 # make file inspired by https://roborovsky-racers.github.io/RoborovskyNote/
 SHELL := /bin/bash
 
-.PHONY: autoware-build autoware-vehicle autoware-simulator autoware-request-initialpose autoware-request-control  awsim-request-start awsim-request-reset autoware-driver-zenoh autoware-driver-zenoh-rosbag vehicle-setup-check \
+.PHONY: autoware-build autoware-vehicle autoware-simulator autoware-request-initialpose autoware-request-control  awsim-request-start awsim-request-reset autoware-driver-zenoh autoware-driver-zenoh-rosbag setup-vehicle \
 	simulator dev dev2 dev3 dev4 driver zenoh download rviz2 down down_all ps autoware-bash eval
 
 # Used by docker-compose.yml for build/eval artifact ownership.
