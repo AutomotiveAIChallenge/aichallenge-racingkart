@@ -140,7 +140,16 @@ pgrep -af zenoh-bridge-ros2dds     # 何も出ないこと
 
 ### 3-1. 遠隔操作の流れ（遠隔PC 側）
 
-ターミナルウィンドウを2つ用意する。
+ターミナルウィンドウを3つ用意する。
+
+遠隔PC では `.env` の `ROS_DOMAIN_ID` を `0` に設定しておく。端末A・端末B はホスト上で動くため ROS の既定ドメイン（環境変数未設定なら 0）を使う一方、端末C の rviz2 はコンテナなので `.env` の値を読む（`docker-compose.yml`）。ここが揃っていないと rviz2 に何も表示されない。
+
+```diff
+- ROS_DOMAIN_ID=1
++ ROS_DOMAIN_ID=0
+```
+
+なお第2部の1台構成では、車両側 zenoh を domain 1 で起動する必要があるため `.env` は `ROS_DOMAIN_ID=1` のままにする。
 
 ```shell
 # 端末A: joy_node（コントローラ入力 → /racing_kart/joy）
@@ -150,20 +159,26 @@ cd ~/aichallenge-racingkart/remote
 # 端末B: 車両と zenoh 接続（EC2 A6:7450 へ client 接続 / TLS）
 cd ~/aichallenge-racingkart/remote
 ./connect_zenoh.bash A6
+
+# 端末C: RViz（遠隔可視化スタック）
+cd ~/aichallenge-racingkart/remote
+./rviz.bash
 ```
+
+`rviz.bash` は `make rviz2` のラッパで、rviz2 をコンテナとして起動する（`./rviz.bash restart` で開き直し、`./rviz.bash down` で停止）。
 
 ### 3-2. 車両側 ECU の起動
 
-車両側 ECU では別途 `make autoware-driver-zenoh` 等で driver/autoware/zenoh を起動する。
+車両側 ECU では別途 `make autoware-driver-zenoh-rosbag` で driver/autoware/rosbag/zenoh を起動する。`.env` の設定や IMU バイアスの調整を含む実車側の手順は [vehicle/README.md](../vehicle/README.md) にまとまっている。
 
 ### 3-3. 終了手順
 
-端末A の `joy.bash`（joy_node）と端末B の `connect_zenoh.bash`（zenoh bridge）はホスト上のフォアグラウンドプロセスであり、`make down` は Docker Compose のサービスしか停止しない。
+端末A の `joy.bash`（joy_node）と端末B の `connect_zenoh.bash`（zenoh bridge）はホスト上のフォアグラウンドプロセスであり、`make down` は Docker Compose のサービスしか停止しない。逆に端末C の rviz2 はコンテナなので Ctrl+C では止まらず、`make down`（または `./rviz.bash down`）が必要。
 
 ```shell
 # 1) 端末A(joy.bash) と 端末B(connect_zenoh.bash) をそれぞれ Ctrl+C で停止
 
-# 2) コンテナを停止（rviz2 は Ctrl+C では残るので必ず down）
+# 2) コンテナを停止（rviz2 はここで止まる）
 cd ~/aichallenge-racingkart
 make down
 
