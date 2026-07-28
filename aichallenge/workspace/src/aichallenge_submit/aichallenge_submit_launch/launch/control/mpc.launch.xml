@@ -2,6 +2,12 @@
 <launch>
   <arg name="use_sim_time" default="true"/>
   <arg name="use_obstacle_avoidance" default="false"/>
+
+  <!-- Track selection: citycircuit uses config.yaml/ref_vel.yaml; other tracks use config_<track>.yaml/ref_vel_<track>.yaml -->
+  <arg name="track" default="citycircuit"/>
+  <arg name="config_file" default="$(eval &quot;'config.yaml' if '$(var track)' == 'citycircuit' else 'config_' + '$(var track)' + '.yaml'&quot;)"/>
+  <arg name="ref_vel_file" default="$(eval &quot;'ref_vel.yaml' if '$(var track)' == 'citycircuit' else 'ref_vel_' + '$(var track)' + '.yaml'&quot;)"/>
+
   <!-- Boost acceleration: MPC publishes AckermannControlBoostCommand to
        /boost_commander/command and boost_commander re-publishes it at 1700 Hz, which used
        to make older AWSIM builds apply the command several times per physics step.
@@ -22,8 +28,8 @@
   <group if="$(var use_boost_acceleration)">
     <node pkg="multi_purpose_mpc_ros" exec="run_mpc_controller.bash"
           name="mpc_controller" output="screen"
-          args="--config_path $(find-pkg-share multi_purpose_mpc_ros)/config/config.yaml
-                --ref_vel_path $(find-pkg-share multi_purpose_mpc_ros)/config/ref_vel.yaml">
+          args="--config_path $(find-pkg-share multi_purpose_mpc_ros)/config/$(var config_file)
+                --ref_vel_path $(find-pkg-share multi_purpose_mpc_ros)/config/$(var ref_vel_file)">
       <param name="use_sim_time" value="$(var use_sim_time)"/>
       <param name="use_boost_acceleration" value="true"/>
       <param name="use_obstacle_avoidance" value="$(var use_obstacle_avoidance)"/>
@@ -41,8 +47,8 @@
     <group if="$(var use_collision_guard)">
       <node pkg="multi_purpose_mpc_ros" exec="run_mpc_controller.bash"
             name="mpc_controller" output="screen"
-            args="--config_path $(find-pkg-share multi_purpose_mpc_ros)/config/config.yaml
-                  --ref_vel_path $(find-pkg-share multi_purpose_mpc_ros)/config/ref_vel.yaml">
+            args="--config_path $(find-pkg-share multi_purpose_mpc_ros)/config/$(var config_file)
+                  --ref_vel_path $(find-pkg-share multi_purpose_mpc_ros)/config/$(var ref_vel_file)">
         <param name="use_sim_time" value="$(var use_sim_time)"/>
         <param name="use_boost_acceleration" value="false"/>
         <param name="use_obstacle_avoidance" value="$(var use_obstacle_avoidance)"/>
@@ -62,8 +68,8 @@
     <group unless="$(var use_collision_guard)">
       <node pkg="multi_purpose_mpc_ros" exec="run_mpc_controller.bash"
             name="mpc_controller" output="screen"
-            args="--config_path $(find-pkg-share multi_purpose_mpc_ros)/config/config.yaml
-                  --ref_vel_path $(find-pkg-share multi_purpose_mpc_ros)/config/ref_vel.yaml">
+            args="--config_path $(find-pkg-share multi_purpose_mpc_ros)/config/$(var config_file)
+                  --ref_vel_path $(find-pkg-share multi_purpose_mpc_ros)/config/$(var ref_vel_file)">
         <param name="use_sim_time" value="$(var use_sim_time)"/>
         <param name="use_boost_acceleration" value="false"/>
         <param name="use_obstacle_avoidance" value="$(var use_obstacle_avoidance)"/>

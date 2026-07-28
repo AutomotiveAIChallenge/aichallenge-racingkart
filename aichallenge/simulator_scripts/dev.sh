@@ -7,6 +7,7 @@ export ROS_DOMAIN_ID=0
 vehicles="${1:-1}"
 
 exec $AWSIM_DIRECTORY/AWSIM.x86_64 \
+    --venue citycircuit \
     --start-mode count \
     --start-count-seconds 5 \
     --vehicles "${vehicles}" \
@@ -18,7 +19,7 @@ exec $AWSIM_DIRECTORY/AWSIM.x86_64 \
     --sound off \
     --collisions on \
     --handicap off \
-    --wall-recovery on \
+    --wall-recovery off \
     --ranking off \
     --camera off \
     --lidar off
