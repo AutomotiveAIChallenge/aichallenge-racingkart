@@ -12,7 +12,7 @@
 
 ### 1-1. ROS 2 Humble
 
-```
+```shell
 ros2 topic list   # 動けばOK。
 ```
 
@@ -26,20 +26,20 @@ cd aichallenge-racingkart
 
 ### 1-3. 環境セットアップ & イメージ取得
 
-```
+```shell
 ./setup.bash bootstrap
 ```
 
 ### 1-4. Zenoh bridge（ホストにインストール）
 
-```
+```shell
 sudo dpkg -i vehicle/zenoh-bridge-ros2dds_1.5.0_amd64.deb
 apt list --installed zenoh-bridge-ros2dds   # 1.5.0 ならOK
 ```
 
 ### 1-5. ゲームコントローラ用 joy パッケージ
 
-```
+```shell
 sudo apt install -y ros-humble-joy
 sudo usermod -aG input "$USER"
 # 再ログインして反映する
@@ -47,9 +47,9 @@ sudo usermod -aG input "$USER"
 
 ### 1-6. TLS 証明書の配置
 
-`remote/tls/` に配布されたtls.zip を展開。
+`remote/tls/` に配布された tls.zip を展開する。
 
-```
+```shell
 ls remote/tls          # client  server
 ls remote/tls/client   # cert.pem  key.pem(600)
 ls remote/tls/server   # minica.pem
@@ -59,14 +59,14 @@ ls remote/tls/server   # minica.pem
 
 `~/.bashrc` に以下があること：
 
-```
+```shell
 export RMW_IMPLEMENTATION=rmw_cyclonedds_cpp
 export CYCLONEDDS_URI=file:///opt/autoware/cyclonedds.xml
 ```
 
 `/opt/autoware/cyclonedds.xml` の NetworkInterface に `name="lo"` があること：
 
-```
+```shell
 grep -i NetworkInterface ${CYCLONEDDS_URI#file://}
 ```
 
@@ -87,11 +87,12 @@ grep -i NetworkInterface ${CYCLONEDDS_URI#file://}
 
 ### 2-1. 手順
 
-ターミナルウィンドウを4つ用意する。ros2 端末は先に `source /opt/ros/humble/setup.bash` を実行しておく必要がある。
+ターミナルウィンドウを5つ（端末A〜E）用意する。
 
 ```shell
 # 端末A: 車両側 zenoh bridge（domain1 → EC2 A6）
-cd ~/aichallenge-racingkart && make zenoh
+cd ~/aichallenge-racingkart
+make zenoh
 
 # 端末B: 車両側(A6)の joy 受け手（domain1）。echo 自体が subscriber になり bridge が転送を開始
 source /opt/ros/humble/setup.bash
@@ -109,9 +110,26 @@ ROS_DOMAIN_ID=0 ros2 topic pub -r 10 /racing_kart/joy sensor_msgs/msg/Joy \
 
 ### 2-2. 合否判定
 
-```
+```shell
+# 端末E
 source /opt/ros/humble/setup.bash
 ROS_DOMAIN_ID=1 ros2 topic hz /racing_kart/joy     # ~10Hz なら合格
+```
+
+### 2-3. 終了手順
+
+端末B・C・D・E はフォアグラウンドのホストプロセスなので、`make down` では止まらない。先に各端末で Ctrl+C する。
+
+```shell
+# 1) 端末B(echo) / 端末C(zenoh bridge) / 端末D(topic pub) / 端末E(hz) をそれぞれ Ctrl+C
+
+# 2) 端末A で起動した zenoh コンテナを停止
+cd ~/aichallenge-racingkart
+make down
+
+# 3) 残存していないことを確認
+docker compose ps                  # 何も残っていないこと
+pgrep -af zenoh-bridge-ros2dds     # 何も出ないこと
 ```
 
 ---
@@ -125,24 +143,37 @@ ROS_DOMAIN_ID=1 ros2 topic hz /racing_kart/joy     # ~10Hz なら合格
 ターミナルウィンドウを2つ用意する。
 
 ```shell
-cd ~/aichallenge-racingkart
-
 # 端末A: joy_node（コントローラ入力 → /racing_kart/joy）
-cd remote && ./joy.bash
+cd ~/aichallenge-racingkart/remote
+./joy.bash
 
 # 端末B: 車両と zenoh 接続（EC2 A6:7450 へ client 接続 / TLS）
-cd remote && ./connect_zenoh.bash A6
+cd ~/aichallenge-racingkart/remote
+./connect_zenoh.bash A6
 ```
 
-（車両側 ECU では別途 `make autoware-driver-zenoh` 等で driver/autoware/zenoh を起動する。）
+### 3-2. 車両側 ECU の起動
+
+車両側 ECU では別途 `make autoware-driver-zenoh` 等で driver/autoware/zenoh を起動する。
 
 ### 3-3. 終了手順
 
-```
+端末A の `joy.bash`（joy_node）と端末B の `connect_zenoh.bash`（zenoh bridge）はホスト上のフォアグラウンドプロセスであり、`make down` は Docker Compose のサービスしか停止しない。
+
+```shell
+# 1) 端末A(joy.bash) と 端末B(connect_zenoh.bash) をそれぞれ Ctrl+C で停止
+
+# 2) コンテナを停止（rviz2 は Ctrl+C では残るので必ず down）
 cd ~/aichallenge-racingkart
-make down            # コンテナ停止（rviz2 は Ctrl+C では残るので必ず down）
-docker compose ps    # 何も残っていないこと
+make down
+
+# 3) 何も残っていないことを確認
+docker compose ps                  # 何も残っていないこと
+pgrep -af zenoh-bridge-ros2dds     # 何も出ないこと
+pgrep -af joy_node                 # 何も出ないこと
 ```
+
+---
 
 # 第4部 ゲームコントローラの使い方
 
@@ -152,6 +183,6 @@ https://gaming.logicool.co.jp/ja-jp/products/gamepads/f310-gamepad.940-000137.ht
 
 ![ロジクール F310](docs/f310-controller.png)
 
-ゲームコートローラの各ボタンの機能は以下の図の通りです。
+ゲームコントローラの各ボタンの機能は以下の図の通り。
 
 ![F310 ジョイスティックマッピング（ボタン/軸割当）](docs/f310-button-mapping.png)
