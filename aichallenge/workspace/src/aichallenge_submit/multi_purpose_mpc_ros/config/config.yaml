@@ -36,7 +36,9 @@ reference_path:
 bicycle_model:
   length: 1.087
   # width: 1.45   # real machine width
-  width: 2.30   # +safety margin
+  width: 1.70   # +safety margin. 2.30 left so little corridor that the MPC repeatedly logged
+                # "Relaxed safety margin ... to solve the problem", i.e. the QP went infeasible
+                # and the corner line was dictated by the corridor rather than by grip.
 
 mpc:
   N: 20
@@ -44,10 +46,11 @@ mpc:
   # R: [v, delta]
   # QN: [e_y, e_psi, t]
   R: [100000.0, 0.0]
-  a_min: -1.6 # m/s^2
-  a_max: 0.7 # m/s^2
+  a_min: -4.5 # m/s^2 (braking is NOT the limit: measured decel reaches -4.1 while accel is
+              # power-limited to ~0.4 m/s^2 at racing speed, so braking as late as possible pays)
+  a_max: 3.0 # m/s^2 (MPC-side clip; accel_map is NOT in the sim loop, so this is the real accel)
   delta_max_deg: 32.0 # degrees
-  steer_rate_max: 0.35 # rad/s
+  steer_rate_max: 2.0 # rad/s (matches steering_tire_rotation_rate the vehicle accepts)
   control_rate: 40.0 # Hz
   steering_tire_angle_gain_var: 1.639
   # steering_tire_angle_gain_var: 1.0
@@ -57,6 +60,15 @@ mpc:
   steer_low_pass_gain: 1.0
   wp_id_offset: 2
   use_max_kappa_pred: true
+
+  # 速度上限の決め方。true にすると、コース全体の曲率から a_max / a_min / ay_max を
+  # 満たす前進後退速度プロファイルを事前計算し、それを各 waypoint の速度上限とする。
+  # false の場合は use_max_kappa_pred の従来ロジック（予測ホライゾン内の最大曲率で
+  # 速度を頭打ちにする）で、コーナー手前をホライゾン長ぶん一定の低速で走ってしまう。
+  use_speed_profile: true
+  # プロファイル計算前に曲率へかける移動平均の半幅 [waypoint]。離散化ノイズによる
+  # 見せかけの急コーナーで無駄に減速するのを防ぐ。0 で無効。
+  kappa_smoothing: 1
 
 
   ## ---------- 究極 ------------- ##
@@ -90,13 +102,43 @@ mpc:
   # Q: [1000000.0, 100000000.0, 850000.0]
   # QN: [1000000.0, 1000.0, 10000.0]
 
+  ## ===== sub-40 s STABLE, updated AWSIM 2026-07-27 (ACTIVE) ===== ##
+  ## Measured over 48 flying laps in one session: median 39.51 s, mean 39.55 s,
+  ## best 39.18 s, stdev 0.30 s, 45/48 laps under 40 s, one incident (82 s) in 48.
+  ## Progression from the previous 45.8 s tune:
+  ##   45.8 -> 43.9  use_speed_profile (see below) instead of the max-kappa-pred cap
+  ##   43.9 -> 40.9  ay_max 10 -> 16, and 40.5 at ay 19
+  ##   40.5 -> 40.3  a_min -3.0 -> -4.5, bicycle_model.width 2.30 -> 1.70
+  ##   40.3 -> 39.5  Q[0] 600000 -> 200000
+  ##
+  ## What the car is actually limited by, measured from a speed trace (scripts/trace_speed.py):
+  ##   * ACCELERATION, not grip. Commanding a_max 3.0 yields only ~0.4 m/s^2 at racing speed
+  ##     while braking reaches -4.1 m/s^2. a*v is roughly constant (~3 m^2/s^3), i.e. AWSIM's
+  ##     kart is power-limited. Raising a_max further does nothing.
+  ##   * Top speed is 37.0 km/h (not the 34.1 previously believed).
+  ##   * Because acceleration is so weak, every km/h kept through a corner is worth far more
+  ##     than any braking gain — hence the high ay_max and the late-braking a_min.
+  ## Dead ends: wp_id_offset 5 (72-127 s laps), Q[2] 8e6 (two offs in eight laps), ay 25.
+  ## Next gains are in the racing line and the 500 ms GNSS pose delay, not in these knobs.
+  v_max: 45.0   # km/h — headroom only; the kart tops out at 37 and the profile never binds here
+  ay_max: 19.0  # m/s^2 — corner limit. NOTE: with use_speed_profile this is applied to the
+                # reference path's own (smoothed) curvature, which is milder than the
+                # steering-based curvature the old max_kappa_pred path used, so the same
+                # number is more aggressive than before. Tune live with `ros2 param set`.
+  # Q[0] は e_y の重み。xr の e_y 目標は「走行可能コリドーの中心」であってリファレンス
+  # ラインではないので、大きすぎるとコースセンター側へ引き戻されてラインを殺す。
+  # 600000 -> 200000 でラップが 40.3 -> 39.6 秒になった。さらに下げる（80000）と平均は
+  # ほぼ同じでばらつきだけ増える。
+  Q: [200000.0, 100000000.0, 2000000.0]
+  QN: [1000000.0, 1000000.0, 10000.0]
+
   ## --------- 中速 -------------- ##
   ## Lap1: 67s, Lap2: 64s
 
-  v_max: 20.0
-  ay_max: 6.5
-  Q: [3000000.0, 90000000.0, 100000.0] # 低速だとインを攻めがちなので、あえて外に膨らむパラメータ
-  QN: [1000000.0, 1000.0, 10000.0]
+  # v_max: 20.0
+  # ay_max: 6.5
+  # Q: [3000000.0, 90000000.0, 100000.0] # 低速だとインを攻めがちなので、あえて外に膨らむパラメータ
+  # QN: [1000000.0, 1000.0, 10000.0]
 
   ## -------- 低速 -------------- ##
   ## Lap1: 86s

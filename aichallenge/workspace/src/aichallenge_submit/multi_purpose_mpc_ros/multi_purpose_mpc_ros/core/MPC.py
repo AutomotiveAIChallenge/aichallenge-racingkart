@@ -13,7 +13,8 @@ PREDICTION = '#BA4A00'
 
 class MPC:
     def __init__(self, model, N, Q, R, QN, StateConstraints, InputConstraints,
-                 ay_max, max_steering_rate, wp_id_offset, use_obstacle_avoidance, use_path_constraints_topic, use_max_kappa_pred=True):
+                 ay_max, max_steering_rate, wp_id_offset, use_obstacle_avoidance, use_path_constraints_topic, use_max_kappa_pred=True,
+                 use_speed_profile=False):
         """
         Constructor for the Model Predictive Controller.
         :param model: bicycle model object to be controlled
@@ -28,6 +29,8 @@ class MPC:
         :param use_obstacle_avoidance: flag to enable obstacle avoidance
         :param use_path_constraints_topic: flag to use path constraints from topic
         :param max_steering_rate: maximum allowed steering rate in rad/s
+        :param use_speed_profile: use the waypoints' forward-backward speed
+        profile as the per-step velocity limit instead of the curvature cap
         """
         # 既存の初期化パラメータ
         self.N = N
@@ -50,6 +53,8 @@ class MPC:
 
         # 追加: ay_maxによる速度制限の方式切り替え
         self.use_max_kappa_pred = use_max_kappa_pred
+        # 追加: 事前計算した前進後退速度プロファイルを速度上限として使う
+        self.use_speed_profile = use_speed_profile
         # 既存の初期化
         self.current_prediction = None
         self.infeasibility_counter = 0
@@ -135,7 +140,12 @@ class MPC:
             uq[n * self.nx:(n+1)*self.nx] = B_lin.dot([v_ref, kappa_ref]) - f
 
             # Constrain maximum speed based on curvature
-            if self.use_max_kappa_pred:
+            if self.use_speed_profile:
+                # The waypoint reference already is a braking-feasible speed
+                # profile over the whole lap, so it is the cap as well: no need
+                # to hold the tightest speed of the horizon over its full length.
+                vmax_dyn = current_waypoint.v_ref
+            elif self.use_max_kappa_pred:
                 max_kappa_pred = np.max(np.abs(kappa_pred[n:]))
                 vmax_dyn = np.sqrt(self.ay_max / (np.abs(max_kappa_pred) + 1e-12))
             else:

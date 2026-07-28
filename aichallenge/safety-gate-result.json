@@ -1,0 +1,13 @@
+{
+    "schema_version": "v1",
+    "all_passed": false,
+    "gate_arg": "1",
+    "scenario_folder": "SafetyGate",
+    "tests": [
+        {
+            "test_name": "test1",
+            "passed": false,
+            "fail_reason": "collision: ego contacted a non-ground object (wall/obstacle)"
+        }
+    ]
+}

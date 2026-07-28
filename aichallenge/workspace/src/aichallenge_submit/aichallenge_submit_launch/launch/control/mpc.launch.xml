@@ -2,14 +2,73 @@
 <launch>
   <arg name="use_sim_time" default="true"/>
   <arg name="use_obstacle_avoidance" default="false"/>
+  <!-- Boost acceleration: MPC publishes AckermannControlBoostCommand to
+       /boost_commander/command and boost_commander re-publishes it at 1700 Hz, which used
+       to make older AWSIM builds apply the command several times per physics step.
+       KEEP THIS OFF. Measured on the 2026-07-24 AWSIM: the flood is no longer amplified,
+       it only starves the simulator, and lap 1 took 238 s against ~52 s without it. The
+       accel ceiling it was meant to dodge does not exist in the sim either: the vehicle
+       interface (and with it accel_map) is not launched, so AWSIM consumes control_cmd
+       directly and mpc.a_max is the only accel clip that matters. -->
+  <arg name="use_boost_acceleration" default="false"/>
+  <!-- Longitudinal collision guard (AEB + slowdown for karts/walls ahead). -->
+  <arg name="use_collision_guard" default="true"/>
+  <!-- Wall(scan) AEB defaults OFF: current /scan source false-triggers. See collision_guard README. -->
+  <arg name="use_scan_wall" default="false"/>
 
-  <node pkg="multi_purpose_mpc_ros" exec="run_mpc_controller.bash"
-        name="mpc_controller" output="screen"
-        args="--config_path $(find-pkg-share multi_purpose_mpc_ros)/config/config.yaml
-              --ref_vel_path $(find-pkg-share multi_purpose_mpc_ros)/config/ref_vel.yaml">
-    <param name="use_sim_time" value="$(var use_sim_time)"/>
-    <param name="use_boost_acceleration" value="false"/>
-    <param name="use_obstacle_avoidance" value="$(var use_obstacle_avoidance)"/>
-    <param name="use_stats" value="false"/>
-  </node>
+  <!-- Boost mode: the guard is bypassed. It is a Python node and cannot republish at
+       1700 Hz, so putting it in the path would both throttle the boost and lag the
+       command. Run with use_boost_acceleration:=false to race with the guard. -->
+  <group if="$(var use_boost_acceleration)">
+    <node pkg="multi_purpose_mpc_ros" exec="run_mpc_controller.bash"
+          name="mpc_controller" output="screen"
+          args="--config_path $(find-pkg-share multi_purpose_mpc_ros)/config/config.yaml
+                --ref_vel_path $(find-pkg-share multi_purpose_mpc_ros)/config/ref_vel.yaml">
+      <param name="use_sim_time" value="$(var use_sim_time)"/>
+      <param name="use_boost_acceleration" value="true"/>
+      <param name="use_obstacle_avoidance" value="$(var use_obstacle_avoidance)"/>
+      <param name="use_stats" value="false"/>
+    </node>
+
+    <node pkg="multi_purpose_mpc_ros" exec="boost_commander"
+          name="boost_commander" output="screen">
+      <param name="use_sim_time" value="$(var use_sim_time)"/>
+    </node>
+  </group>
+
+  <group unless="$(var use_boost_acceleration)">
+    <!-- With guard: MPC command is routed through the guard before the vehicle. -->
+    <group if="$(var use_collision_guard)">
+      <node pkg="multi_purpose_mpc_ros" exec="run_mpc_controller.bash"
+            name="mpc_controller" output="screen"
+            args="--config_path $(find-pkg-share multi_purpose_mpc_ros)/config/config.yaml
+                  --ref_vel_path $(find-pkg-share multi_purpose_mpc_ros)/config/ref_vel.yaml">
+        <param name="use_sim_time" value="$(var use_sim_time)"/>
+        <param name="use_boost_acceleration" value="false"/>
+        <param name="use_obstacle_avoidance" value="$(var use_obstacle_avoidance)"/>
+        <param name="use_stats" value="false"/>
+        <remap from="/control/command/control_cmd" to="/control/command/control_cmd_mpc"/>
+      </node>
+
+      <include file="$(find-pkg-share collision_guard)/launch/collision_guard.launch.xml">
+        <arg name="use_sim_time" value="$(var use_sim_time)"/>
+        <arg name="input_cmd_topic" value="/control/command/control_cmd_mpc"/>
+        <arg name="output_cmd_topic" value="/control/command/control_cmd"/>
+        <arg name="use_scan_wall" value="$(var use_scan_wall)"/>
+      </include>
+    </group>
+
+    <!-- Without guard: MPC publishes the vehicle command directly (original behavior). -->
+    <group unless="$(var use_collision_guard)">
+      <node pkg="multi_purpose_mpc_ros" exec="run_mpc_controller.bash"
+            name="mpc_controller" output="screen"
+            args="--config_path $(find-pkg-share multi_purpose_mpc_ros)/config/config.yaml
+                  --ref_vel_path $(find-pkg-share multi_purpose_mpc_ros)/config/ref_vel.yaml">
+        <param name="use_sim_time" value="$(var use_sim_time)"/>
+        <param name="use_boost_acceleration" value="false"/>
+        <param name="use_obstacle_avoidance" value="$(var use_obstacle_avoidance)"/>
+        <param name="use_stats" value="false"/>
+      </node>
+    </group>
+  </group>
 </launch>

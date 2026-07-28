@@ -1,0 +1,432 @@
+<title>Racing Kart — Trajectory Editor</title>
+<style>
+  :root{
+    --bg:#f3f5f8; --panel:#ffffff; --panel-2:#eef1f5; --panel-3:#e7ebf1;
+    --ink:#141d27; --muted:#57677a; --faint:#8493a2;
+    --line:#d8dfe7; --line-strong:#c3ccd6;
+    --accent:#0b93a3; --accent-soft:#0b93a31a; --accent-ink:#ffffff;
+    --good:#1c9c50; --warn:#b06d10; --crit:#cf3644;
+    --grid:#e2e7ee; --canvas-bg:#eef2f6;
+    --shadow:0 1px 2px rgba(20,29,39,.06),0 6px 18px rgba(20,29,39,.06);
+    --mono:ui-monospace,"SF Mono","Cascadia Code",Menlo,Consolas,monospace;
+    --sans:system-ui,-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+  }
+  @media (prefers-color-scheme:dark){
+    :root{
+      --bg:#0b1017; --panel:#131b24; --panel-2:#19222d; --panel-3:#202b37;
+      --ink:#e8eff6; --muted:#98a8b6; --faint:#66757f;
+      --line:#243039; --line-strong:#31404c;
+      --accent:#2ad4e6; --accent-soft:#2ad4e61f; --accent-ink:#04222a;
+      --good:#3fce74; --warn:#e2a53f; --crit:#f2565f;
+      --grid:#1a232d; --canvas-bg:#0e151d;
+      --shadow:0 1px 0 rgba(0,0,0,.35),0 10px 26px rgba(0,0,0,.3);
+    }
+  }
+  :root[data-theme="dark"]{
+    --bg:#0b1017; --panel:#131b24; --panel-2:#19222d; --panel-3:#202b37;
+    --ink:#e8eff6; --muted:#98a8b6; --faint:#66757f;
+    --line:#243039; --line-strong:#31404c;
+    --accent:#2ad4e6; --accent-soft:#2ad4e61f; --accent-ink:#04222a;
+    --good:#3fce74; --warn:#e2a53f; --crit:#f2565f;
+    --grid:#1a232d; --canvas-bg:#0e151d;
+    --shadow:0 1px 0 rgba(0,0,0,.35),0 10px 26px rgba(0,0,0,.3);
+  }
+  :root[data-theme="light"]{
+    --bg:#f3f5f8; --panel:#ffffff; --panel-2:#eef1f5; --panel-3:#e7ebf1;
+    --ink:#141d27; --muted:#57677a; --faint:#8493a2;
+    --line:#d8dfe7; --line-strong:#c3ccd6;
+    --accent:#0b93a3; --accent-soft:#0b93a31a; --accent-ink:#ffffff;
+    --good:#1c9c50; --warn:#b06d10; --crit:#cf3644;
+    --grid:#e2e7ee; --canvas-bg:#eef2f6;
+    --shadow:0 1px 2px rgba(20,29,39,.06),0 6px 18px rgba(20,29,39,.06);
+  }
+
+  *{box-sizing:border-box}
+  html,body{margin:0; height:100%}
+  body{font-family:var(--sans); color:var(--ink); background:var(--bg); -webkit-font-smoothing:antialiased}
+  .app{display:flex; flex-direction:column; height:100vh; min-height:0}
+
+  /* toolbar */
+  .toolbar{display:flex; align-items:center; gap:10px; flex-wrap:wrap; padding:10px 14px; background:var(--panel); border-bottom:1px solid var(--line)}
+  .brand{display:flex; flex-direction:column; margin-right:6px}
+  .brand .t{font-size:14px; font-weight:600; letter-spacing:-.01em}
+  .brand .s{font-family:var(--mono); font-size:9.5px; letter-spacing:.16em; text-transform:uppercase; color:var(--accent)}
+  .sep{width:1px; align-self:stretch; background:var(--line); margin:2px 4px}
+  .seg{display:inline-flex; border:1px solid var(--line); border-radius:9px; overflow:hidden}
+  .seg button{border:none}
+  button,.filebtn{font-family:var(--sans); font-size:12.5px; color:var(--ink); background:var(--panel-2); border:1px solid var(--line); border-radius:9px; padding:7px 11px; cursor:pointer; display:inline-flex; align-items:center; gap:6px; white-space:nowrap}
+  button:hover,.filebtn:hover{background:var(--panel-3)}
+  button:focus-visible,.filebtn:focus-visible{outline:2px solid var(--accent); outline-offset:1px}
+  .seg button{background:var(--panel); border-radius:0; border:none; border-right:1px solid var(--line); padding:7px 12px}
+  .seg button:last-child{border-right:none}
+  .seg button.on{background:var(--accent); color:var(--accent-ink)}
+  button.primary{background:var(--accent); color:var(--accent-ink); border-color:transparent; font-weight:600}
+  button.ghost{background:transparent}
+  .spacer{flex:1}
+  .fmt{font-family:var(--mono); font-size:11px; color:var(--muted); background:var(--panel-2); border:1px solid var(--line); border-radius:7px; padding:5px 9px}
+  .fmt b{color:var(--accent)}
+
+  /* body */
+  .main{display:flex; flex:1; min-height:0}
+  .stage{position:relative; flex:1; min-width:0; background:var(--canvas-bg)}
+  canvas{display:block; width:100%; height:100%; touch-action:none; cursor:crosshair}
+  .hud{position:absolute; left:12px; bottom:12px; font-family:var(--mono); font-size:11px; color:var(--muted); background:color-mix(in srgb, var(--panel) 82%, transparent); border:1px solid var(--line); border-radius:8px; padding:6px 9px; pointer-events:none; line-height:1.6}
+  .hud b{color:var(--ink)}
+  .scalebar{position:absolute; right:14px; bottom:14px; font-family:var(--mono); font-size:10px; color:var(--muted); text-align:center; pointer-events:none}
+  .scalebar .bar{height:4px; background:var(--ink); opacity:.6; border-radius:2px; margin-top:3px}
+
+  /* panel */
+  .side{width:288px; flex:none; background:var(--panel); border-left:1px solid var(--line); overflow-y:auto; display:flex; flex-direction:column}
+  .block{padding:13px 15px; border-bottom:1px solid var(--line)}
+  .block h3{margin:0 0 9px; font-family:var(--mono); font-size:10px; letter-spacing:.13em; text-transform:uppercase; color:var(--faint); font-weight:600}
+  .kv{display:grid; grid-template-columns:auto 1fr; gap:4px 10px; font-family:var(--mono); font-size:12px}
+  .kv .k{color:var(--faint)} .kv .v{text-align:right; font-variant-numeric:tabular-nums}
+  .field{display:flex; align-items:center; gap:8px; margin-top:9px}
+  .field label{font-family:var(--mono); font-size:11px; color:var(--muted); width:52px}
+  input[type=number]{flex:1; width:100%; font-family:var(--mono); font-size:12.5px; color:var(--ink); background:var(--panel-2); border:1px solid var(--line); border-radius:7px; padding:6px 8px; font-variant-numeric:tabular-nums}
+  input[type=range]{flex:1; accent-color:var(--accent)}
+  input:focus-visible{outline:2px solid var(--accent); outline-offset:1px}
+  .row{display:flex; gap:7px; margin-top:9px; flex-wrap:wrap}
+  .row button{flex:1; justify-content:center; font-size:12px; padding:7px 8px}
+  .muted{color:var(--muted); font-size:11.5px; line-height:1.5}
+  .none{color:var(--faint); font-family:var(--mono); font-size:12px}
+
+  .legend{margin-top:4px}
+  .ramp{height:12px; border-radius:6px; margin:6px 0 4px}
+  .ramp-lab{display:flex; justify-content:space-between; font-family:var(--mono); font-size:10px; color:var(--faint)}
+
+  .stat{display:flex; justify-content:space-between; font-family:var(--mono); font-size:12px; padding:2px 0}
+  .stat .k{color:var(--faint)} .stat .v{font-variant-numeric:tabular-nums}
+  .stat .v.warn{color:var(--warn)}
+  .hint{font-size:11px; color:var(--faint); margin-top:8px; line-height:1.5}
+  kbd{font-family:var(--mono); font-size:10px; background:var(--panel-2); border:1px solid var(--line); border-bottom-width:2px; border-radius:4px; padding:1px 5px}
+  a{color:var(--accent)}
+  @media (max-width:720px){ .side{width:236px} }
+</style>
+
+<div class="app">
+  <div class="toolbar">
+    <div class="brand"><span class="s">AI Challenge · Racing Kart</span><span class="t">Trajectory Editor</span></div>
+    <div class="sep"></div>
+    <div class="seg" id="modes" role="group" aria-label="Edit mode">
+      <button data-mode="move" class="on" title="Move points (drag). Drag empty space to pan.">Move</button>
+      <button data-mode="add" title="Insert a point on the nearest segment">Add</button>
+      <button data-mode="del" title="Delete a point">Delete</button>
+    </div>
+    <button class="ghost" id="fit" title="Fit the line to view">Fit view</button>
+    <button class="ghost" id="undo" title="Undo (Ctrl+Z)">Undo</button>
+    <div class="spacer"></div>
+    <span class="fmt">format <b id="fmtName">raceline</b></span>
+    <label class="filebtn" title="Import a raceline / traj_mincurv CSV">Import CSV<input id="file" type="file" accept=".csv,text/csv" hidden></label>
+    <button id="export" class="primary">Export CSV</button>
+    <button class="ghost" id="reset" title="Reload the sample raceline">Reset</button>
+  </div>
+
+  <div class="main">
+    <div class="stage">
+      <canvas id="cv"></canvas>
+      <div class="hud" id="hud"></div>
+      <div class="scalebar" id="scalebar"><span id="scaleTxt">10 m</span><div class="bar" id="scaleBar" style="width:60px"></div></div>
+    </div>
+
+    <aside class="side">
+      <div class="block">
+        <h3>Selected point</h3>
+        <div id="selNone" class="none">None — click a point.</div>
+        <div id="selBody" hidden>
+          <div class="kv">
+            <span class="k">index</span><span class="v" id="pIdx">–</span>
+            <span class="k">x</span><span class="v" id="pX">–</span>
+            <span class="k">y</span><span class="v" id="pY">–</span>
+          </div>
+          <div class="field">
+            <label for="pV">speed</label>
+            <input id="pV" type="number" step="0.1" min="0"> <span class="muted" id="pVk"></span>
+          </div>
+          <input id="pVr" type="range" min="0" max="12" step="0.1" style="width:100%;margin-top:8px">
+          <div class="row">
+            <button id="pDel">Delete point</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="block">
+        <h3>Speed tools · m/s</h3>
+        <div class="field"><label for="allV">set all</label><input id="allV" type="number" step="0.1" min="0" value="8.3"></div>
+        <div class="row">
+          <button id="applyAll">Apply to all</button>
+          <button id="scaleUp" title="×1.05">＋5%</button>
+          <button id="scaleDn" title="×0.95">−5%</button>
+        </div>
+        <div class="row">
+          <button id="clampRule" title="Clamp every point to ≤ 30 km/h">Clamp ≤ 30 km/h</button>
+        </div>
+        <div class="legend">
+          <div class="ramp" id="ramp"></div>
+          <div class="ramp-lab"><span id="rampLo">–</span><span>speed</span><span id="rampHi">–</span></div>
+        </div>
+      </div>
+
+      <div class="block">
+        <h3>Trajectory stats</h3>
+        <div class="stat"><span class="k">points</span><span class="v" id="sN">–</span></div>
+        <div class="stat"><span class="k">loop length</span><span class="v" id="sLen">–</span></div>
+        <div class="stat"><span class="k">speed min / max</span><span class="v" id="sSpd">–</span></div>
+        <div class="stat"><span class="k">over 30 km/h</span><span class="v" id="sOver">–</span></div>
+        <div class="stat"><span class="k">est. lap time</span><span class="v" id="sLap">–</span></div>
+        <div class="hint">Lap estimate integrates segment length ÷ speed (speed floored at 0.5 m/s). The 30 km/h rule cap = 8.333 m/s.</div>
+      </div>
+
+      <div class="block">
+        <h3>How to</h3>
+        <div class="hint">
+          <b>Move</b>: drag a point; drag empty space to pan; wheel to zoom.<br>
+          <b>Add</b>: click a segment to insert. <b>Delete</b>: click a point.<br>
+          <kbd>Ctrl</kbd>+<kbd>Z</kbd> undo · <kbd>Del</kbd> remove selected · <kbd>F</kbd> fit.<br>
+          Import your <span style="font-family:var(--mono)">raceline_*.csv</span> or <span style="font-family:var(--mono)">traj_mincurv.csv</span>; Export writes the same format (headings / arc-length / curvature recomputed).
+        </div>
+      </div>
+    </aside>
+  </div>
+</div>
+
+<script id="seed" type="application/json">[[89630.067,43130.695,8.333],[89628.315,43133.11,8.333],[89626.596,43135.549,8.333],[89624.889,43137.997,8.333],[89623.182,43140.444,8.333],[89621.481,43142.896,8.333],[89619.781,43145.349,8.333],[89618.101,43147.815,8.333],[89616.446,43150.296,8.333],[89614.865,43152.824,8.333],[89613.516,43155.487,8.333],[89612.693,43158.348,8.333],[89612.729,43161.34,8.333],[89613.774,43164.112,8.333],[89616.038,43165.932,8.333],[89618.951,43166.498,8.333],[89621.71,43165.507,8.333],[89623.884,43163.429,8.333],[89625.738,43161.108,8.333],[89627.182,43158.501,8.333],[89628.453,43155.802,8.333],[89629.583,43153.037,8.333],[89630.634,43150.244,8.333],[89632.252,43147.753,8.333],[89633.21,43145.51,8.333],[89634.458,43143.112,8.333],[89636.123,43140.328,8.333],[89638.413,43138.317,8.333],[89640.702,43137.157,8.333],[89642.825,43136.925,8.333],[89644.906,43137.621,8.333],[89646.738,43139.168,8.333],[89647.612,43141.256,8.333],[89647.695,43145.123,8.333],[89646.322,43147.753,8.333],[89644.865,43150.537,8.333],[89643.158,43153.089,8.333],[89641.41,43155.1,8.333],[89639.477,43156.873,8.333],[89637.636,43159.216,8.333],[89635.732,43161.518,8.333],[89633.785,43163.778,8.333],[89631.807,43166.024,8.333],[89629.875,43168.33,8.333],[89628.073,43170.695,8.333],[89626.177,43172.859,8.333],[89623.949,43175.024,8.333],[89621.892,43177.279,8.333],[89620.644,43179.827,8.333],[89620.458,43182.804,8.333],[89621.537,43185.55,8.333],[89623.859,43187.389,8.333],[89626.737,43188.153,8.333],[89629.662,43187.717,8.333],[89632.088,43186.905,8.333],[89634.642,43184.487,8.333],[89637.219,43182.805,8.333],[89639.982,43181.865,8.333],[89642.9,43181.806,8.333],[89645.845,43182.361,8.333],[89648.639,43183.407,8.333],[89651.279,43184.805,8.333],[89653.958,43186.173,8.333],[89656.696,43187.324,8.333],[89659.62,43187.655,8.333],[89662.465,43186.8,8.333],[89664.611,43184.806,8.333],[89665.533,43181.968,8.333],[89664.935,43179.048,8.333],[89662.944,43176.906,8.333],[89660.164,43175.878,8.333],[89657.21,43175.431,8.333],[89654.281,43174.993,8.333],[89651.4,43174.794,8.333],[89648.403,43173.651,8.333],[89646.114,43171.899,8.333],[89645.156,43169.69,8.333],[89645.697,43166.642,8.333],[89647.237,43164.281,8.333],[89649.026,43162.33,8.333],[89651.759,43161.084,8.333],[89654.505,43159.942,8.333],[89657.47,43159.628,8.333],[89660.363,43160.47,8.333],[89662.442,43162.284,8.333],[89663.743,43165.045,8.333],[89665.285,43168.57,8.333],[89667.794,43170.307,8.333],[89670.496,43170.693,8.333],[89673.147,43169.456,8.333],[89675.526,43167.618,8.333],[89677.428,43165.332,8.333],[89678.868,43162.712,8.333],[89679.693,43159.85,8.333],[89679.7,43156.876,8.333],[89678.798,43154.066,8.333],[89677.108,43151.615,8.333],[89674.803,43149.699,8.333],[89672.123,43148.379,8.333],[89669.329,43147.532,8.333],[89666.361,43147.083,8.333],[89663.332,43146.545,8.333],[89659.495,43145.989,8.333],[89657.565,43143.673,8.333],[89657.035,43140.815,8.333],[89656.239,43137.908,8.333],[89656.104,43134.682,8.333],[89656.395,43132.052,8.333],[89656.312,43129.268,8.333],[89655.563,43125.401,8.333],[89654.17,43123.338,8.333],[89652.209,43121.086,8.333],[89649.652,43120.451,8.333],[89646.863,43120.374,8.333],[89643.824,43120.528,8.333],[89640.91,43121.456,8.333],[89638.264,43122.129,8.333],[89635.87,43123.899,8.333],[89633.77,43126.014,8.333],[89631.863,43128.311,8.333],[89630.067,43130.695,8.333]]</script>
+<script>
+(function(){
+  "use strict";
+  var CAP = 30/3.6; // 8.333 m/s
+
+  // ---------- state ----------
+  var S = { pts:[], format:'raceline', selected:null, mode:'move', hist:[] };
+  var view = { scale:1, tx:0, ty:0 };
+  var cv = document.getElementById('cv'), ctx = cv.getContext('2d');
+  var DPR = Math.max(1, window.devicePixelRatio||1);
+
+  try{ S.pts = JSON.parse(document.getElementById('seed').textContent).map(function(a){return {x:a[0],y:a[1],v:a[2]};}); }
+  catch(e){ S.pts = []; }
+
+  // ---------- geometry ----------
+  function dist(a,b){ return Math.hypot(a.x-b.x, a.y-b.y); }
+  function loopLen(){ var L=0,n=S.pts.length; for(var i=0;i<n;i++) L+=dist(S.pts[i],S.pts[(i+1)%n]); return L; }
+  function speeds(){ return S.pts.map(function(p){return p.v;}); }
+  function lapTime(){ var t=0,n=S.pts.length; for(var i=0;i<n;i++){ var a=S.pts[i],b=S.pts[(i+1)%n];
+      var v=Math.max((a.v+b.v)/2,0.5); t+=dist(a,b)/v; } return t; }
+  function heading(i){ var n=S.pts.length, a=S.pts[i], b=S.pts[(i+1)%n]; if(a===b) b=S.pts[(i-1+n)%n];
+      return Math.atan2(b.y-a.y, b.x-a.x); }
+  function curvature(i){ var n=S.pts.length, p0=S.pts[(i-1+n)%n], p1=S.pts[i], p2=S.pts[(i+1)%n];
+      var a=dist(p0,p1), b=dist(p1,p2), c=dist(p0,p2); if(a*b*c<1e-9) return 0;
+      var cross=(p1.x-p0.x)*(p2.y-p1.y)-(p1.y-p0.y)*(p2.x-p1.x); return 2*cross/(a*b*c); }
+
+  // ---------- speed color ramp (slow blue -> fast red) ----------
+  var STOPS=[[48,90,160],[24,160,190],[40,180,110],[230,180,50],[225,70,70]];
+  function ramp(t){ t=Math.max(0,Math.min(1,t)); var f=t*(STOPS.length-1), i=Math.floor(f), r=f-i;
+      if(i>=STOPS.length-1) return STOPS[STOPS.length-1];
+      var A=STOPS[i],B=STOPS[i+1]; return [A[0]+(B[0]-A[0])*r|0, A[1]+(B[1]-A[1])*r|0, A[2]+(B[2]-A[2])*r|0]; }
+  function spdColor(v){ var sp=speeds(), lo=Math.min.apply(null,sp), hi=Math.max.apply(null,sp);
+      var t=hi>lo?(v-lo)/(hi-lo):0.5; var c=ramp(t); return 'rgb('+c[0]+','+c[1]+','+c[2]+')'; }
+
+  // ---------- transform ----------
+  function W(){ return cv.clientWidth; } function H(){ return cv.clientHeight; }
+  function sx(x){ return x*view.scale + view.tx; }
+  function sy(y){ return -y*view.scale + view.ty; }
+  function wx(px){ return (px - view.tx)/view.scale; }
+  function wy(py){ return (view.ty - py)/view.scale; }
+  function fit(){
+    if(!S.pts.length) return;
+    var xs=S.pts.map(function(p){return p.x;}), ys=S.pts.map(function(p){return p.y;});
+    var minx=Math.min.apply(null,xs),maxx=Math.max.apply(null,xs),miny=Math.min.apply(null,ys),maxy=Math.max.apply(null,ys);
+    var bw=Math.max(maxx-minx,1e-6), bh=Math.max(maxy-miny,1e-6), cx=(minx+maxx)/2, cy=(miny+maxy)/2;
+    view.scale = Math.min(W()/bw, H()/bh)*0.86;
+    view.tx = W()/2 - cx*view.scale; view.ty = H()/2 + cy*view.scale;
+    draw();
+  }
+
+  // ---------- rendering ----------
+  function resize(){ DPR=Math.max(1,window.devicePixelRatio||1);
+    cv.width=cv.clientWidth*DPR; cv.height=cv.clientHeight*DPR; ctx.setTransform(DPR,0,0,DPR,0,0); draw(); }
+  function cssVar(n){ return getComputedStyle(document.documentElement).getPropertyValue(n).trim(); }
+
+  function draw(){
+    var w=W(),h=H(); ctx.clearRect(0,0,w,h);
+    ctx.fillStyle=cssVar('--canvas-bg'); ctx.fillRect(0,0,w,h);
+    var n=S.pts.length; if(!n){ return; }
+    // grid (world-aligned, nice step)
+    drawGrid(w,h);
+    // segments colored by average speed
+    ctx.lineWidth=3; ctx.lineJoin='round'; ctx.lineCap='round';
+    for(var i=0;i<n;i++){ var a=S.pts[i], b=S.pts[(i+1)%n];
+      ctx.strokeStyle=spdColor((a.v+b.v)/2); ctx.beginPath(); ctx.moveTo(sx(a.x),sy(a.y)); ctx.lineTo(sx(b.x),sy(b.y)); ctx.stroke(); }
+    // points
+    for(var j=0;j<n;j++){ var p=S.pts[j], X=sx(p.x), Y=sy(p.y), sel=(j===S.selected);
+      ctx.beginPath(); ctx.arc(X,Y, sel?6:3.2, 0, 6.283);
+      ctx.fillStyle=spdColor(p.v); ctx.fill();
+      ctx.lineWidth=sel?2.5:1; ctx.strokeStyle=sel?cssVar('--accent'):cssVar('--panel'); ctx.stroke();
+      if(j===0){ ctx.lineWidth=2; ctx.strokeStyle=cssVar('--ink'); ctx.beginPath(); ctx.arc(X,Y,7,0,6.283); ctx.stroke(); }
+    }
+    // start heading arrow
+    if(n>1){ var p0=S.pts[0], ph=heading(0); var X=sx(p0.x),Y=sy(p0.y);
+      ctx.strokeStyle=cssVar('--ink'); ctx.lineWidth=1.5; ctx.beginPath(); ctx.moveTo(X,Y);
+      ctx.lineTo(X+Math.cos(ph)*16, Y-Math.sin(ph)*16); ctx.stroke(); }
+    updateScaleBar();
+  }
+  function drawGrid(w,h){
+    // choose a world grid step ~ 60px on screen
+    var target=60/view.scale; var pow=Math.pow(10,Math.floor(Math.log10(target)));
+    var steps=[1,2,5,10], step=pow*10; for(var k=0;k<steps.length;k++){ if(pow*steps[k]>=target){ step=pow*steps[k]; break; } }
+    ctx.strokeStyle=cssVar('--grid'); ctx.lineWidth=1;
+    var x0=wx(0), x1=wx(w), y0=wy(h), y1=wy(0);
+    var startx=Math.ceil(x0/step)*step;
+    for(var gx=startx; gx<x1; gx+=step){ var X=sx(gx); ctx.beginPath(); ctx.moveTo(X,0); ctx.lineTo(X,h); ctx.stroke(); }
+    var starty=Math.ceil(y0/step)*step;
+    for(var gy=starty; gy<y1; gy+=step){ var Y=sy(gy); ctx.beginPath(); ctx.moveTo(0,Y); ctx.lineTo(w,Y); ctx.stroke(); }
+    window.__gridStep=step;
+  }
+  function updateScaleBar(){ var step=window.__gridStep||10; var px=step*view.scale;
+    document.getElementById('scaleBar').style.width=px+'px';
+    document.getElementById('scaleTxt').textContent=(step>=1?step:step.toFixed(1))+' m'; }
+
+  // ---------- hit testing ----------
+  function hitPoint(px,py){ var best=-1,bd=11; for(var i=0;i<S.pts.length;i++){ var d=Math.hypot(px-sx(S.pts[i].x),py-sy(S.pts[i].y)); if(d<bd){bd=d;best=i;} } return best; }
+  function nearestSeg(px,py){ var n=S.pts.length,best=-1,bd=1e9,bt=0;
+    for(var i=0;i<n;i++){ var a=S.pts[i],b=S.pts[(i+1)%n]; var ax=sx(a.x),ay=sy(a.y),bx=sx(b.x),by=sy(b.y);
+      var dx=bx-ax,dy=by-ay,L2=dx*dx+dy*dy||1; var t=Math.max(0,Math.min(1,((px-ax)*dx+(py-ay)*dy)/L2));
+      var cx=ax+dx*t,cy=ay+dy*t,d=Math.hypot(px-cx,py-cy); if(d<bd){bd=d;best=i;bt=t;} }
+    return {seg:best,t:bt,d:bd}; }
+
+  // ---------- history ----------
+  function snapshot(){ S.hist.push(JSON.stringify(S.pts)); if(S.hist.length>60) S.hist.shift(); }
+  function undo(){ if(!S.hist.length) return; S.pts=JSON.parse(S.hist.pop()); if(S.selected>=S.pts.length) S.selected=null; refresh(); }
+
+  // ---------- interaction ----------
+  var drag=null, panning=null;
+  cv.addEventListener('pointerdown', function(e){ cv.setPointerCapture(e.pointerId);
+    var r=cv.getBoundingClientRect(), px=e.clientX-r.left, py=e.clientY-r.top;
+    var hit=hitPoint(px,py);
+    if(S.mode==='del'){ if(hit>=0){ snapshot(); S.pts.splice(hit,1); if(S.selected===hit)S.selected=null; else if(S.selected>hit)S.selected--; refresh(); } return; }
+    if(S.mode==='add'){ var ns=nearestSeg(px,py); if(ns.seg>=0){ snapshot(); var a=S.pts[ns.seg],b=S.pts[(ns.seg+1)%S.pts.length];
+        var np={x:wx(px),y:wy(py),v:(a.v+b.v)/2}; S.pts.splice(ns.seg+1,0,np); S.selected=ns.seg+1; refresh(); } return; }
+    // move mode
+    if(hit>=0){ S.selected=hit; snapshot(); drag={i:hit}; refresh(); }
+    else { panning={px:px,py:py,tx:view.tx,ty:view.ty}; }
+  });
+  cv.addEventListener('pointermove', function(e){ var r=cv.getBoundingClientRect(), px=e.clientX-r.left, py=e.clientY-r.top;
+    if(drag){ S.pts[drag.i].x=wx(px); S.pts[drag.i].y=wy(py); draw(); syncSel(); }
+    else if(panning){ view.tx=panning.tx+(px-panning.px); view.ty=panning.ty+(py-panning.py); draw(); }
+    else { var h=hitPoint(px,py); cv.style.cursor = S.mode==='del'?(h>=0?'not-allowed':'crosshair') : S.mode==='add'?'copy' : (h>=0?'grab':'default'); }
+    document.getElementById('hud').innerHTML='x <b>'+wx(px).toFixed(2)+'</b>  y <b>'+wy(py).toFixed(2)+'</b>';
+  });
+  function endDrag(e){ if(drag){ drag=null; refresh(); } panning=null; if(e&&e.pointerId!=null){ try{cv.releasePointerCapture(e.pointerId);}catch(_){} } }
+  cv.addEventListener('pointerup', endDrag); cv.addEventListener('pointercancel', endDrag);
+  cv.addEventListener('wheel', function(e){ e.preventDefault(); var r=cv.getBoundingClientRect(), px=e.clientX-r.left, py=e.clientY-r.top;
+    var f=Math.pow(1.0015, -e.deltaY); var worldX=wx(px), worldY=wy(py);
+    view.scale*=f; view.tx=px-worldX*view.scale; view.ty=py+worldY*view.scale; draw(); }, {passive:false});
+
+  window.addEventListener('keydown', function(e){
+    if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='z'){ e.preventDefault(); undo(); }
+    else if((e.key==='Delete'||e.key==='Backspace')&&S.selected!=null&&document.activeElement.tagName!=='INPUT'){ e.preventDefault();
+      snapshot(); S.pts.splice(S.selected,1); S.selected=null; refresh(); }
+    else if(e.key.toLowerCase()==='f'&&document.activeElement.tagName!=='INPUT'){ fit(); }
+  });
+
+  // ---------- panel sync ----------
+  function fmtT(t){ var m=Math.floor(t/60), s=t-m*60; return (m>0? m+'m ':'')+s.toFixed(1)+'s'; }
+  function syncSel(){ if(S.selected==null){ return; } var p=S.pts[S.selected];
+    document.getElementById('pX').textContent=p.x.toFixed(2);
+    document.getElementById('pY').textContent=p.y.toFixed(2); }
+  function refresh(){ draw(); renderPanel(); }
+  function renderPanel(){
+    var has=S.selected!=null && S.pts[S.selected];
+    document.getElementById('selNone').hidden=has; document.getElementById('selBody').hidden=!has;
+    if(has){ var p=S.pts[S.selected];
+      document.getElementById('pIdx').textContent=S.selected;
+      document.getElementById('pX').textContent=p.x.toFixed(2);
+      document.getElementById('pY').textContent=p.y.toFixed(2);
+      document.getElementById('pV').value=p.v.toFixed(2);
+      document.getElementById('pVr').value=Math.min(12,p.v);
+      document.getElementById('pVk').textContent=(p.v*3.6).toFixed(1)+' km/h';
+    }
+    var sp=speeds(), lo=sp.length?Math.min.apply(null,sp):0, hi=sp.length?Math.max.apply(null,sp):0;
+    var avg=sp.length? sp.reduce(function(a,b){return a+b;},0)/sp.length:0;
+    var over=sp.filter(function(v){return v>CAP+1e-6;}).length;
+    document.getElementById('sN').textContent=S.pts.length;
+    document.getElementById('sLen').textContent=loopLen().toFixed(1)+' m';
+    document.getElementById('sSpd').textContent=lo.toFixed(1)+' / '+hi.toFixed(1)+' m/s';
+    var ov=document.getElementById('sOver'); ov.textContent=over+' pt'+(over===1?'':'s'); ov.className='v'+(over?' warn':'');
+    document.getElementById('sLap').textContent=S.pts.length? fmtT(lapTime()):'–';
+    document.getElementById('rampLo').textContent=lo.toFixed(1);
+    document.getElementById('rampHi').textContent=hi.toFixed(1);
+    document.getElementById('fmtName').textContent=S.format;
+  }
+
+  // speed inputs
+  document.getElementById('pV').addEventListener('input', function(){ if(S.selected==null)return; var v=parseFloat(this.value); if(isNaN(v))return;
+    S.pts[S.selected].v=Math.max(0,v); document.getElementById('pVr').value=Math.min(12,v); document.getElementById('pVk').textContent=(v*3.6).toFixed(1)+' km/h'; draw(); renderPanel(); });
+  document.getElementById('pV').addEventListener('change', snapshot);
+  document.getElementById('pVr').addEventListener('input', function(){ if(S.selected==null)return; var v=parseFloat(this.value);
+    S.pts[S.selected].v=v; document.getElementById('pV').value=v.toFixed(2); document.getElementById('pVk').textContent=(v*3.6).toFixed(1)+' km/h'; draw(); });
+  document.getElementById('pVr').addEventListener('change', function(){ snapshot(); renderPanel(); });
+  document.getElementById('pDel').addEventListener('click', function(){ if(S.selected==null)return; snapshot(); S.pts.splice(S.selected,1); S.selected=null; refresh(); });
+
+  document.getElementById('applyAll').addEventListener('click', function(){ var v=parseFloat(document.getElementById('allV').value); if(isNaN(v))return; snapshot(); S.pts.forEach(function(p){p.v=Math.max(0,v);}); refresh(); });
+  document.getElementById('scaleUp').addEventListener('click', function(){ snapshot(); S.pts.forEach(function(p){p.v*=1.05;}); refresh(); });
+  document.getElementById('scaleDn').addEventListener('click', function(){ snapshot(); S.pts.forEach(function(p){p.v*=0.95;}); refresh(); });
+  document.getElementById('clampRule').addEventListener('click', function(){ snapshot(); S.pts.forEach(function(p){p.v=Math.min(p.v,CAP);}); refresh(); });
+
+  // modes
+  document.getElementById('modes').addEventListener('click', function(e){ var b=e.target.closest('button'); if(!b)return;
+    S.mode=b.dataset.mode; [].forEach.call(this.children,function(c){c.classList.toggle('on',c===b);}); });
+  document.getElementById('fit').addEventListener('click', fit);
+  document.getElementById('undo').addEventListener('click', undo);
+
+  // ---------- import / export ----------
+  function detectFormat(header){ var h=header.toLowerCase();
+    if(h.indexOf('x_quat')>=0) return {fmt:'raceline', xi:0, yi:1, vi:7};
+    if(h.indexOf('s_m')>=0 || h.indexOf('kappa')>=0) return {fmt:'mincurv', xi:1, yi:2, vi:5};
+    return {fmt:'raceline', xi:0, yi:1, vi:-1}; }
+  function parseCSV(text){ var lines=text.replace(/^﻿/,'').trim().split(/\r?\n/); if(lines.length<2) throw new Error('empty');
+    var d=detectFormat(lines[0]); var pts=[];
+    for(var i=1;i<lines.length;i++){ var a=lines[i].split(','); if(a.length<3) continue;
+      var vi=d.vi<0?a.length-1:d.vi;
+      var x=parseFloat(a[d.xi]),y=parseFloat(a[d.yi]),v=parseFloat(a[vi]);
+      if(isNaN(x)||isNaN(y))continue; pts.push({x:x,y:y,v:isNaN(v)?0:v}); }
+    return {pts:pts, fmt:d.fmt}; }
+
+  document.getElementById('file').addEventListener('change', function(e){ var f=e.target.files[0]; if(!f)return;
+    var rd=new FileReader(); rd.onload=function(){ try{ var r=parseCSV(rd.result); if(!r.pts.length)throw new Error('no points');
+      S.pts=r.pts; S.format=r.fmt; S.selected=null; S.hist=[]; fit(); refresh(); }
+      catch(err){ alert('Could not parse CSV: '+err.message); } }; rd.readAsText(f); e.target.value=''; });
+
+  function num(x){ return (Math.round(x*1e7)/1e7); }
+  function buildCSV(){
+    var n=S.pts.length, out;
+    if(S.format==='mincurv'){
+      out=['s_m,x_m,y_m,psi_rad,kappa_radpm,vx_mps,ax_mps2']; var s=0;
+      for(var i=0;i<n;i++){ var p=S.pts[i]; if(i>0) s+=dist(S.pts[i-1],p);
+        out.push([num(s),num(p.x),num(p.y),num(heading(i)),num(curvature(i)),num(p.v),0].join(',')); }
+    } else {
+      out=['x,y,z,x_quat,y_quat,z_quat,w_quat,speed'];
+      for(var j=0;j<n;j++){ var q=S.pts[j], ps=heading(j), zc=Math.sin(ps/2), wc=Math.cos(ps/2);
+        out.push([num(q.x),num(q.y),0,0,0,num(zc),num(wc),num(q.v)].join(',')); }
+    }
+    return out.join('\n')+'\n';
+  }
+  document.getElementById('export').addEventListener('click', function(){ var blob=new Blob([buildCSV()],{type:'text/csv'});
+    var url=URL.createObjectURL(blob), a=document.createElement('a');
+    a.href=url; a.download=(S.format==='mincurv'?'traj_mincurv':'raceline')+'_edited.csv'; a.click();
+    setTimeout(function(){URL.revokeObjectURL(url);},1000); });
+
+  var SEED_TEXT=document.getElementById('seed').textContent;
+  document.getElementById('reset').addEventListener('click', function(){ if(!confirm('Reload the sample raceline? Unsaved edits are lost.'))return;
+    S.pts=JSON.parse(SEED_TEXT).map(function(a){return {x:a[0],y:a[1],v:a[2]};}); S.format='raceline'; S.selected=null; S.hist=[]; fit(); refresh(); });
+
+  // ---------- ramp legend ----------
+  (function(){ var c=[]; for(var i=0;i<=10;i++){ var col=ramp(i/10); c.push('rgb('+col[0]+','+col[1]+','+col[2]+') '+(i*10)+'%'); }
+    document.getElementById('ramp').style.background='linear-gradient(90deg,'+c.join(',')+')'; })();
+
+  // ---------- boot ----------
+  window.addEventListener('resize', resize);
+  var mq=window.matchMedia('(prefers-color-scheme:dark)'); if(mq.addEventListener) mq.addEventListener('change',draw);
+  new MutationObserver(draw).observe(document.documentElement,{attributes:true,attributeFilter:['data-theme']});
+  resize(); fit(); refresh();
+})();
+</script>

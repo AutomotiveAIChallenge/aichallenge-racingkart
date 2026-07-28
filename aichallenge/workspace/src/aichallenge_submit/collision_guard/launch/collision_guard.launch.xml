@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<launch>
+  <arg name="use_sim_time" default="true"/>
+  <arg name="param_file" default="$(find-pkg-share collision_guard)/config/collision_guard.param.yaml"/>
+
+  <!-- Topic wiring: the controller publishes to input_cmd_topic, the guard
+       republishes the (possibly braked) command to output_cmd_topic. -->
+  <arg name="input_cmd_topic" default="/control/command/control_cmd_mpc"/>
+  <arg name="output_cmd_topic" default="/control/command/control_cmd"/>
+
+  <!-- Wall avoidance needs a LaserScan of the track walls. It is generated here
+       from the wall CSV. Set false to disable wall (scan) guarding entirely. -->
+  <arg name="use_scan_wall" default="false"/>
+
+  <node pkg="collision_guard" exec="collision_guard_node" name="collision_guard" output="screen">
+    <param from="$(var param_file)"/>
+    <param name="use_sim_time" value="$(var use_sim_time)"/>
+    <param name="use_scan_guard" value="$(var use_scan_wall)"/>
+    <remap from="~/input/control_cmd" to="$(var input_cmd_topic)"/>
+    <remap from="~/output/control_cmd" to="$(var output_cmd_topic)"/>
+  </node>
+
+  <!-- Provide /scan from the track walls (base_link-following LaserScan). -->
+  <group if="$(var use_scan_wall)">
+    <include file="$(find-pkg-share laserscan_generator)/launch/laserscan_generator.launch.xml">
+      <arg name="use_sim_time" value="$(var use_sim_time)"/>
+      <arg name="pose_topic" value="/localization/pose_with_covariance"/>
+      <arg name="scan_topic" value="/scan"/>
+    </include>
+  </group>
+</launch>

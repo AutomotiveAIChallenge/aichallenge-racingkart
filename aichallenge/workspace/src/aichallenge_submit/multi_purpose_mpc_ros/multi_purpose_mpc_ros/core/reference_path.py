@@ -445,6 +445,73 @@ class ReferencePath:
 
         return min_width, min_cell
 
+    def compute_speed_profile_forward_backward(self, Constraints, kappa_smoothing=0):
+        """
+        Compute a speed profile for the path with a forward-backward pass on
+        v^2, i.e. the classic racing speed profile. Each waypoint gets the
+        highest velocity that satisfies, at the same time, the lateral limit
+        ay_max on its own curvature, the ability to reach it from the previous
+        waypoint with at most a_max, and the ability to brake from it down to
+        every later corner with at most |a_min|.
+
+        Unlike compute_speed_profile(), the longitudinal constraint is written
+        on v^2 (a = (v_{i+1}^2 - v_i^2) / 2 ds), so the resulting profile is
+        actually feasible for the car and the braking points land where they
+        belong instead of at the corner entry.
+        :param Constraints: constraints on acceleration and velocity
+        :param kappa_smoothing: half-width of a moving average applied to the
+        curvature before the limit is computed, to reject discretization noise
+        :return: True on success
+        """
+
+        n = self.n_waypoints
+        if n < 3:
+            print("Path too short for speed profile computation!")
+            return False
+
+        a_acc = abs(Constraints['a_max'])
+        a_dec = abs(Constraints['a_min'])
+        v_max = Constraints['v_max']
+        v_min = Constraints['v_min']
+        ay_max = Constraints['ay_max']
+
+        kappa = np.abs(np.array([wp.kappa for wp in self.waypoints]))
+        if kappa_smoothing > 0:
+            w = 2 * kappa_smoothing + 1
+            padded = np.concatenate(
+                (kappa[-kappa_smoothing:], kappa, kappa[:kappa_smoothing]))
+            kappa = np.convolve(padded, np.ones(w) / w, mode='same')[kappa_smoothing:-kappa_smoothing]
+
+        # Distance from waypoint i to waypoint i+1. segment_lengths[i] holds the
+        # distance from i-1 to i, so shift it by one and close the loop.
+        ds = np.array(self.segment_lengths[1:] + [self.waypoints[0] - self.waypoints[-1]])
+        ds = np.maximum(ds, self.eps)
+
+        # Lateral limit
+        v = np.minimum(v_max, np.sqrt(ay_max / (kappa + self.eps)))
+
+        # Forward (traction) and backward (braking) passes. On a circular path
+        # the limit of a corner has to be able to propagate across the start /
+        # finish line, so the passes are repeated until the profile settles.
+        n_sweeps = 3 if self.circular else 1
+        for _ in range(n_sweeps):
+            v_before = v.copy()
+            for i in range(n if self.circular else n - 1):
+                j = (i + 1) % n
+                v[j] = min(v[j], np.sqrt(v[i] ** 2 + 2 * a_acc * ds[i]))
+            for i in range(n - 1, -1 if self.circular else 0, -1):
+                j = (i - 1) % n
+                v[j] = min(v[j], np.sqrt(v[i] ** 2 + 2 * a_dec * ds[j]))
+            if np.allclose(v, v_before):
+                break
+
+        v = np.maximum(v, v_min)
+
+        for wp, v_wp in zip(self.waypoints, v):
+            wp.v_ref = v_wp
+
+        return True
+
     def compute_speed_profile(self, Constraints):
         """
         Compute a speed profile for the path. Assign a reference velocity

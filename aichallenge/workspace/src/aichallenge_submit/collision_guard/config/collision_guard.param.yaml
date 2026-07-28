@@ -1,0 +1,30 @@
+/**:
+  ros__parameters:
+    # Sensor sources
+    use_v2x_guard: true      # avoid karts ahead (from /v2x/vehicle_positions)
+    # Wall guard is OFF by default: the only available /scan source
+    # (laserscan_generator over the MPC stack) emits spurious near-zero center
+    # readings that false-trigger the AEB. Enable only with a clean scan source.
+    use_scan_guard: false    # avoid walls ahead (from /scan); last-resort AEB only
+
+    # Longitudinal safety
+    brake_decel: 2.0         # [m/s^2] deceleration assumed when computing the safe speed
+    emergency_decel: 3.0     # [m/s^2] commanded on emergency stop (vehicle model clamps actual)
+
+    # Ahead-corridor geometry
+    corridor_half_width: 1.2 # [m] half-width of the travel corridor for karts
+    other_vehicle_radius: 1.0 # [m] kart footprint radius
+    ego_front_offset: 0.5    # [m] base_link -> front bumper
+    standstill_gap: 3.0      # [m] target gap where speed reaches 0
+    emergency_gap: 1.5       # [m] below this clearance -> full emergency stop
+
+    # V2X handling
+    v2x_max_range: 25.0      # [m] ignore karts farther than this
+    self_ignore_radius: 1.5  # [m] ignore V2X points within this of ego (that's us)
+    sensor_stale_sec: 0.5    # [s] drop sensor data older than this
+
+    # Wall (scan) handling — narrow, dead-ahead, short range so it does NOT
+    # false-trigger on corner walls during normal cornering.
+    scan_cone_half_deg: 6.0  # [deg] half-cone around straight-ahead
+    scan_trigger_distance: 3.0  # [m] only react to walls closer than this
+    scan_min_range: 0.5      # [m] ignore ranges below this (self-hits / scan artifacts)

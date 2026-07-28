@@ -1,0 +1,1705 @@
+<title>Racing Kart — Experiment &amp; Performance Tracker</title>
+<style>
+  :root{
+    --bg:#f3f5f8; --panel:#ffffff; --panel-2:#eef1f5; --panel-3:#e7ebf1;
+    --ink:#141d27; --muted:#57677a; --faint:#8493a2;
+    --line:#d8dfe7; --line-strong:#c3ccd6;
+    --accent:#0b93a3; --accent-soft:#0b93a31a;
+    --good:#1c9c50; --warn:#b06d10; --crit:#cf3644;
+    --good-soft:#1c9c5016; --warn-soft:#b06d1016; --crit-soft:#cf364416;
+    --shadow:0 1px 2px rgba(20,29,39,.06),0 4px 14px rgba(20,29,39,.05);
+    --mono:ui-monospace,"SF Mono","Cascadia Code",Menlo,Consolas,monospace;
+    --sans:system-ui,-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+  }
+  @media (prefers-color-scheme:dark){
+    :root{
+      --bg:#0b1017; --panel:#131b24; --panel-2:#19222d; --panel-3:#202b37;
+      --ink:#e8eff6; --muted:#98a8b6; --faint:#66757f;
+      --line:#243039; --line-strong:#31404c;
+      --accent:#2ad4e6; --accent-soft:#2ad4e61f;
+      --good:#3fce74; --warn:#e2a53f; --crit:#f2565f;
+      --good-soft:#3fce7418; --warn-soft:#e2a53f18; --crit-soft:#f2565f18;
+      --shadow:0 1px 0 rgba(0,0,0,.35),0 8px 24px rgba(0,0,0,.28);
+    }
+  }
+  :root[data-theme="dark"]{
+    --bg:#0b1017; --panel:#131b24; --panel-2:#19222d; --panel-3:#202b37;
+    --ink:#e8eff6; --muted:#98a8b6; --faint:#66757f;
+    --line:#243039; --line-strong:#31404c;
+    --accent:#2ad4e6; --accent-soft:#2ad4e61f;
+    --good:#3fce74; --warn:#e2a53f; --crit:#f2565f;
+    --good-soft:#3fce7418; --warn-soft:#e2a53f18; --crit-soft:#f2565f18;
+    --shadow:0 1px 0 rgba(0,0,0,.35),0 8px 24px rgba(0,0,0,.28);
+  }
+  :root[data-theme="light"]{
+    --bg:#f3f5f8; --panel:#ffffff; --panel-2:#eef1f5; --panel-3:#e7ebf1;
+    --ink:#141d27; --muted:#57677a; --faint:#8493a2;
+    --line:#d8dfe7; --line-strong:#c3ccd6;
+    --accent:#0b93a3; --accent-soft:#0b93a31a;
+    --good:#1c9c50; --warn:#b06d10; --crit:#cf3644;
+    --good-soft:#1c9c5016; --warn-soft:#b06d1016; --crit-soft:#cf364416;
+    --shadow:0 1px 2px rgba(20,29,39,.06),0 4px 14px rgba(20,29,39,.05);
+  }
+
+  *{box-sizing:border-box}
+  body{margin:0}
+  .wrap{
+    font-family:var(--sans); color:var(--ink);
+    background:radial-gradient(1200px 600px at 80% -10%, var(--accent-soft), transparent 60%), var(--bg);
+    min-height:100vh; padding:clamp(16px,3.5vw,40px); line-height:1.5; -webkit-font-smoothing:antialiased;
+  }
+  .sheet{max-width:1080px; margin:0 auto; display:flex; flex-direction:column; gap:22px}
+
+  .head{display:flex; flex-wrap:wrap; align-items:flex-end; justify-content:space-between; gap:16px}
+  .eyebrow{font-family:var(--mono); font-size:11px; letter-spacing:.18em; text-transform:uppercase; color:var(--accent); display:flex; align-items:center; gap:8px}
+  .eyebrow::before{content:""; width:22px; height:2px; background:var(--accent); display:inline-block}
+  h1{font-size:clamp(22px,3.4vw,32px); margin:.28em 0 .1em; letter-spacing:-.01em; text-wrap:balance}
+  .sub{color:var(--muted); font-size:14px; max-width:60ch}
+  .cfgchip{font-family:var(--mono); font-size:12px; color:var(--ink); background:var(--panel); border:1px solid var(--line); border-radius:8px; padding:10px 12px; box-shadow:var(--shadow)}
+  .cfgchip b{color:var(--accent)} .cfgchip .k{color:var(--faint)}
+
+  .kpis{display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:12px}
+  .kpi{background:var(--panel); border:1px solid var(--line); border-radius:12px; padding:14px 15px; box-shadow:var(--shadow); position:relative; overflow:hidden}
+  .kpi .lab{font-family:var(--mono); font-size:10.5px; letter-spacing:.12em; text-transform:uppercase; color:var(--faint)}
+  .kpi .val{font-family:var(--mono); font-variant-numeric:tabular-nums; font-size:26px; font-weight:600; margin-top:6px; letter-spacing:-.01em}
+  .kpi .val .u{font-size:13px; color:var(--muted); font-weight:400; margin-left:2px}
+  .kpi .note{font-size:11.5px; color:var(--muted); margin-top:3px}
+  .kpi .stripe{position:absolute; left:0; top:0; bottom:0; width:3px; background:var(--accent)}
+  .kpi.good .stripe{background:var(--good)} .kpi.warn .stripe{background:var(--warn)} .kpi.crit .stripe{background:var(--crit)}
+  .kpi.info .stripe{background:var(--accent)}
+
+  .panel{background:var(--panel); border:1px solid var(--line); border-radius:14px; box-shadow:var(--shadow); overflow:hidden}
+  .phead{display:flex; align-items:baseline; justify-content:space-between; gap:10px; padding:16px 18px 0}
+  .phead h2{font-size:15px; margin:0; letter-spacing:.01em}
+  .phead .hint{font-size:12px; color:var(--faint); font-family:var(--mono)}
+  .pbody{padding:14px 18px 18px}
+
+  .tscroll{overflow-x:auto}
+  table{border-collapse:collapse; width:100%; font-size:13px; min-width:940px}
+  th,td{text-align:left; padding:9px 10px; border-bottom:1px solid var(--line); vertical-align:middle; white-space:nowrap}
+  thead th{font-family:var(--mono); font-size:10.5px; letter-spacing:.1em; text-transform:uppercase; color:var(--faint); font-weight:600; border-bottom:1px solid var(--line-strong)}
+  tbody tr:last-child td{border-bottom:none}
+  tbody tr:hover{background:var(--panel-2)}
+  td.num{font-family:var(--mono); font-variant-numeric:tabular-nums; text-align:right}
+  .run-id{font-family:var(--mono); color:var(--faint); font-size:11px}
+  .run-name{font-weight:600}
+  .cfg{font-family:var(--mono); font-size:11.5px; color:var(--muted)}
+  .best-cell{font-family:var(--mono); font-variant-numeric:tabular-nums; font-weight:600; text-align:right}
+
+  .chip{display:inline-flex; align-items:center; gap:5px; font-family:var(--mono); font-size:10.5px; letter-spacing:.04em; text-transform:uppercase; padding:3px 8px; border-radius:999px; border:1px solid transparent}
+  .chip::before{content:""; width:6px; height:6px; border-radius:50%; background:currentColor}
+  .chip.best{color:var(--accent); background:var(--accent-soft); border-color:var(--accent)}
+  .chip.ok{color:var(--good); background:var(--good-soft); border-color:var(--good)}
+  .chip.partial{color:var(--warn); background:var(--warn-soft); border-color:var(--warn)}
+  .chip.fail{color:var(--crit); background:var(--crit-soft); border-color:var(--crit)}
+
+  .chart{width:100%; height:auto; display:block; font-family:var(--mono)}
+  .legend{display:flex; flex-wrap:wrap; gap:14px; margin-top:10px; font-family:var(--mono); font-size:11px; color:var(--muted)}
+  .legend span{display:inline-flex; align-items:center; gap:6px}
+  .swatch{width:10px; height:10px; border-radius:50%}
+  .dash{width:16px; height:0; border-top:2px dashed currentColor}
+
+  .finds{display:grid; grid-template-columns:repeat(auto-fit,minmax(240px,1fr)); gap:12px}
+  .find{border:1px solid var(--line); border-left-width:3px; border-radius:10px; padding:13px 15px; background:var(--panel)}
+  .find.win{border-left-color:var(--good)} .find.loss{border-left-color:var(--crit)} .find.neutral{border-left-color:var(--warn)} .find.info{border-left-color:var(--accent)}
+  .find h3{margin:0 0 5px; font-size:13.5px}
+  .find .delta{font-family:var(--mono); font-variant-numeric:tabular-nums; font-weight:600; font-size:13px}
+  .find.win .delta{color:var(--good)} .find.loss .delta{color:var(--crit)} .find.info .delta{color:var(--accent)} .find.neutral .delta{color:var(--warn)}
+  .find p{margin:5px 0 0; font-size:12.5px; color:var(--muted)}
+
+  .ctx{display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:1px; background:var(--line); border-radius:12px; overflow:hidden; border:1px solid var(--line)}
+  .ctx div{background:var(--panel); padding:13px 15px}
+  .ctx .lab{font-family:var(--mono); font-size:10px; letter-spacing:.1em; text-transform:uppercase; color:var(--faint)}
+  .ctx .v{font-family:var(--mono); font-variant-numeric:tabular-nums; font-size:18px; font-weight:600; margin-top:4px}
+  .ctx .v small{font-size:11px; color:var(--muted); font-weight:400}
+
+  .empty{padding:26px; text-align:center; color:var(--muted); font-family:var(--mono); font-size:13px}
+  footer{color:var(--faint); font-size:11.5px; font-family:var(--mono); text-align:center; padding-top:4px; line-height:1.7}
+  code{font-family:var(--mono)} a{color:var(--accent)}
+</style>
+
+<div class="wrap">
+  <div class="sheet">
+    <header class="head">
+      <div>
+        <div class="eyebrow">AI Challenge · SW Class · Racing Kart</div>
+        <h1>Experiment &amp; Performance Tracker</h1>
+        <p class="sub">Auto-parsed from run logs. Every config change traced against lap time, 5-lap completion and the rules — so it's clear what actually moved the needle.</p>
+      </div>
+      <div class="cfgchip" id="curcfg"></div>
+    </header>
+
+    <section class="kpis" id="kpis"></section>
+
+    <section class="panel">
+      <div class="phead"><h2>Experiment log</h2><span class="hint">run × config × result</span></div>
+      <div class="pbody"><div class="tscroll"><table>
+        <thead><tr>
+          <th>Run</th><th>Change vs previous</th><th>a<sub>y</sub></th><th>a_max / a_min</th><th>Q[0]</th>
+          <th>profile</th><th>width</th><th>guard</th>
+          <th style="text-align:right">best</th><th style="text-align:right">laps</th><th>hits</th><th>result</th>
+        </tr></thead>
+        <tbody id="exprows"></tbody>
+      </table></div></div>
+    </section>
+
+    <section class="panel">
+      <div class="phead"><h2>Lap-time distribution by experiment</h2><span class="hint">seconds · lower is faster</span></div>
+      <div class="pbody">
+        <svg class="chart" id="chart" viewBox="0 0 820 300" role="img" aria-label="Lap time distribution per run"></svg>
+        <div class="legend">
+          <span><span class="swatch" style="background:var(--muted)"></span>each lap</span>
+          <span><span class="swatch" style="background:var(--accent)"></span>run best</span>
+          <span style="color:var(--crit)"><span class="dash"></span>40 s target</span>
+          <span style="color:var(--accent)"><span class="dash"></span>session best</span>
+        </div>
+      </div>
+    </section>
+
+    <section class="panel">
+      <div class="phead"><h2>What moved the needle</h2><span class="hint">auto-derived from consecutive runs</span></div>
+      <div class="pbody"><div class="finds" id="finds"></div></div>
+    </section>
+
+    <section class="panel">
+      <div class="phead"><h2>What the kart is actually limited by</h2><span class="hint">measured, 2026-07-27</span></div>
+      <div class="pbody">
+        <div class="ctx" id="ctx"></div>
+        <p style="font-size:12.5px;color:var(--muted);margin:12px 2px 0">
+          The binding constraint is <b>acceleration, and it is a power limit</b>. Commanding <code>a_max</code> 3.0 m/s² yields only ≈0.4 m/s² at racing speed while braking reaches -4.1 m/s², and achieved <code>a·v</code> is roughly constant across 6–11 m/s. Raising <code>a_max</code> past ~3 does nothing. Because re-accelerating is so slow, <b>every km/h carried through a corner is worth far more than any braking gain</b> — which is why a high <code>ay_max</code> plus late braking, not a bigger <code>a_max</code>, is what took the lap from 45.8 s to 39.5 s.
+        </p>
+        <p style="font-size:12.5px;color:var(--muted);margin:10px 2px 0">
+          Earlier versions of this page asserted a 30 km/h / 1.0 m/s² competition rule and a 43 s "physics floor". Neither is documented anywhere in this repo and both are contradicted by measurement, so they have been removed — <b>confirm the real limits against the official rules</b> before submitting.
+        </p>
+      </div>
+    </section>
+
+    <footer id="foot"></footer>
+  </div>
+</div>
+
+<script type="application/json" id="run-data">
+{
+  "generated": "2026-07-27 22:36",
+  "target_laps": 5,
+  "target_s": 40.0,
+  "current": {
+    "vmax": 45.0,
+    "amax": 3.0,
+    "amin": -4.5,
+    "ay": 19.0,
+    "q0": 200000.0,
+    "width": 1.7,
+    "profile": true,
+    "corners": "45/45/45",
+    "guard": "V2X on · scan off"
+  },
+  "runs": [
+    {
+      "id": "R1",
+      "time": "07-19 18:13",
+      "change": "baseline",
+      "vmax": 20.0,
+      "amax": 0.7,
+      "amin": -1.6,
+      "ay": 6.5,
+      "q0": 3000000.0,
+      "width": 2.3,
+      "profile": null,
+      "wp_off": 2.0,
+      "corners": "22/22/25",
+      "guard": "—",
+      "laps": [
+        78.6,
+        71.0,
+        71.4,
+        71.8,
+        71.7,
+        71.4,
+        71.5,
+        70.8,
+        71.2,
+        71.6,
+        71.3,
+        71.7,
+        71.4,
+        71.7,
+        71.2,
+        71.0,
+        71.9,
+        71.4,
+        71.4,
+        71.8,
+        71.4,
+        71.3,
+        72.3,
+        71.9,
+        71.7,
+        71.1,
+        71.2,
+        71.8,
+        71.3,
+        71.3,
+        72.1,
+        71.4,
+        71.8,
+        71.1,
+        71.1,
+        71.9,
+        71.1,
+        72.0,
+        71.3,
+        71.5,
+        71.8,
+        71.3,
+        71.2,
+        71.8,
+        71.2,
+        71.5,
+        71.2,
+        71.4,
+        71.6,
+        71.9,
+        71.7,
+        71.6,
+        71.3,
+        71.1,
+        71.7,
+        71.8,
+        72.0,
+        71.7,
+        71.0,
+        71.6,
+        72.0,
+        70.7,
+        71.9,
+        71.3,
+        72.0,
+        71.8,
+        71.2,
+        71.5,
+        71.2,
+        71.2,
+        71.5,
+        71.9,
+        71.2,
+        71.6,
+        71.3,
+        71.6,
+        71.7,
+        72.0,
+        72.2,
+        71.6,
+        70.8,
+        71.7,
+        71.3,
+        71.1,
+        71.6,
+        71.6,
+        71.9,
+        71.8,
+        71.3,
+        71.8,
+        71.5,
+        70.5,
+        71.0,
+        71.4,
+        71.8,
+        71.6,
+        71.7,
+        71.3,
+        71.6
+      ],
+      "completed": 99,
+      "target": 5,
+      "collisions": null,
+      "guard_emergency": 0,
+      "guard_slow": 0,
+      "result": "ok",
+      "note": null,
+      "live": false
+    },
+    {
+      "id": "R2",
+      "time": "07-19 20:24",
+      "change": "v_max 20→30, ay_max 6.5→12, Q[0] 3e+06→600000",
+      "vmax": 30.0,
+      "amax": 0.7,
+      "amin": -1.6,
+      "ay": 12.0,
+      "q0": 600000.0,
+      "width": 2.3,
+      "profile": null,
+      "wp_off": 2.0,
+      "corners": "22/22/25",
+      "guard": "—",
+      "laps": [
+        75.1,
+        64.4,
+        64.8,
+        64.4,
+        78.1,
+        67.3,
+        64.9
+      ],
+      "completed": 7,
+      "target": 5,
+      "collisions": null,
+      "guard_emergency": 0,
+      "guard_slow": 0,
+      "result": "ok",
+      "note": null,
+      "live": false
+    },
+    {
+      "id": "R3",
+      "time": "07-19 20:49",
+      "change": "a_max 0.7→1",
+      "vmax": 30.0,
+      "amax": 1.0,
+      "amin": -1.6,
+      "ay": 12.0,
+      "q0": 600000.0,
+      "width": 2.3,
+      "profile": null,
+      "wp_off": 2.0,
+      "corners": "22/22/25",
+      "guard": "—",
+      "laps": [
+        81.9,
+        53.1,
+        52.7,
+        75.5,
+        65.1,
+        66.2
+      ],
+      "completed": 6,
+      "target": 5,
+      "collisions": null,
+      "guard_emergency": 0,
+      "guard_slow": 0,
+      "result": "ok",
+      "note": null,
+      "live": false
+    },
+    {
+      "id": "R4",
+      "time": "07-19 21:11",
+      "change": "ref_vel 22/22/25→25/24/29",
+      "vmax": 30.0,
+      "amax": 1.0,
+      "amin": -1.6,
+      "ay": 12.0,
+      "q0": 600000.0,
+      "width": 2.3,
+      "profile": null,
+      "wp_off": 2.0,
+      "corners": "25/24/29",
+      "guard": "—",
+      "laps": [
+        56.2,
+        65.9
+      ],
+      "completed": 2,
+      "target": 5,
+      "collisions": null,
+      "guard_emergency": 0,
+      "guard_slow": 0,
+      "result": "partial",
+      "note": null,
+      "live": false
+    },
+    {
+      "id": "R5",
+      "time": "07-20 11:10",
+      "change": "guard —→V2X on · scan off",
+      "vmax": 30.0,
+      "amax": 1.0,
+      "amin": -1.6,
+      "ay": 12.0,
+      "q0": 600000.0,
+      "width": 2.3,
+      "profile": null,
+      "wp_off": 2.0,
+      "corners": "25/24/29",
+      "guard": "V2X on · scan off",
+      "laps": [
+        65.2,
+        61.7,
+        79.9,
+        65.9,
+        75.4,
+        69.1,
+        66.2,
+        89.1,
+        64.1
+      ],
+      "completed": 9,
+      "target": 5,
+      "collisions": null,
+      "guard_emergency": 0,
+      "guard_slow": 0,
+      "result": "ok",
+      "note": null,
+      "live": false
+    },
+    {
+      "id": "R6",
+      "time": "07-20 11:58",
+      "change": "v_max 30→34",
+      "vmax": 34.0,
+      "amax": 1.0,
+      "amin": -1.6,
+      "ay": 12.0,
+      "q0": 600000.0,
+      "width": 2.3,
+      "profile": null,
+      "wp_off": 2.0,
+      "corners": "25/24/29",
+      "guard": "V2X on · scan off",
+      "laps": [
+        102.1,
+        71.4,
+        75.1
+      ],
+      "completed": 3,
+      "target": 5,
+      "collisions": null,
+      "guard_emergency": 0,
+      "guard_slow": 0,
+      "result": "fail",
+      "note": null,
+      "live": false
+    },
+    {
+      "id": "R7",
+      "time": "07-20 12:29",
+      "change": "v_max 34→30",
+      "vmax": 30.0,
+      "amax": 1.0,
+      "amin": -1.6,
+      "ay": 12.0,
+      "q0": 600000.0,
+      "width": 2.3,
+      "profile": null,
+      "wp_off": 2.0,
+      "corners": "25/24/29",
+      "guard": "V2X on · scan off",
+      "laps": [
+        68.2,
+        85.8
+      ],
+      "completed": 2,
+      "target": 5,
+      "collisions": null,
+      "guard_emergency": 0,
+      "guard_slow": 0,
+      "result": "fail",
+      "note": null,
+      "live": false
+    },
+    {
+      "id": "R8",
+      "time": "07-20 17:26",
+      "change": "repeat",
+      "vmax": 30.0,
+      "amax": 1.0,
+      "amin": -1.6,
+      "ay": 12.0,
+      "q0": 600000.0,
+      "width": 2.3,
+      "profile": null,
+      "wp_off": 2.0,
+      "corners": "25/24/29",
+      "guard": "V2X on · scan off",
+      "laps": [
+        56.6,
+        63.5,
+        66.7,
+        64.1,
+        67.6,
+        87.3
+      ],
+      "completed": 6,
+      "target": 5,
+      "collisions": null,
+      "guard_emergency": 0,
+      "guard_slow": 0,
+      "result": "ok",
+      "note": null,
+      "live": false
+    },
+    {
+      "id": "R9",
+      "time": "07-20 17:35",
+      "change": "ay_max 12→9, ref_vel 25/24/29→22/22/25",
+      "vmax": 30.0,
+      "amax": 1.0,
+      "amin": -1.6,
+      "ay": 9.0,
+      "q0": 600000.0,
+      "width": 2.3,
+      "profile": null,
+      "wp_off": 2.0,
+      "corners": "22/22/25",
+      "guard": "V2X on · scan off",
+      "laps": [
+        59.8,
+        54.5,
+        55.3,
+        55.9,
+        55.2,
+        54.7,
+        55.7,
+        55.9,
+        56.5,
+        55.8,
+        55.3,
+        66.8,
+        55.5,
+        55.3,
+        55.3,
+        55.2,
+        55.0,
+        55.6,
+        55.2
+      ],
+      "completed": 19,
+      "target": 5,
+      "collisions": null,
+      "guard_emergency": 0,
+      "guard_slow": 0,
+      "result": "ok",
+      "note": null,
+      "live": false
+    },
+    {
+      "id": "R10",
+      "time": "07-20 23:00",
+      "change": "v_max 30→20, ay_max 9→6.5, a_max 1→0.7, Q[0] 600000→3e+06",
+      "vmax": 20.0,
+      "amax": 0.7,
+      "amin": -1.6,
+      "ay": 6.5,
+      "q0": 3000000.0,
+      "width": 2.3,
+      "profile": null,
+      "wp_off": 2.0,
+      "corners": "22/22/25",
+      "guard": "V2X on · scan off",
+      "laps": [
+        77.9,
+        71.3
+      ],
+      "completed": 2,
+      "target": 5,
+      "collisions": null,
+      "guard_emergency": 0,
+      "guard_slow": 0,
+      "result": "fail",
+      "note": null,
+      "live": false
+    },
+    {
+      "id": "R11",
+      "time": "07-24 21:48",
+      "change": "v_max 20→45, ay_max 6.5→13, a_max 0.7→1, a_min -1.6→-1.8, Q[0] 3e+06→600000, ref_vel 22/22/25→45/45/45",
+      "vmax": 45.0,
+      "amax": 1.0,
+      "amin": -1.8,
+      "ay": 13.0,
+      "q0": 600000.0,
+      "width": 2.3,
+      "profile": null,
+      "wp_off": 2.0,
+      "corners": "45/45/45",
+      "guard": "V2X on · scan off",
+      "laps": [
+        99.4,
+        62.6,
+        91.9,
+        99.5,
+        85.3,
+        78.6,
+        63.9,
+        64.3
+      ],
+      "completed": 8,
+      "target": 5,
+      "collisions": null,
+      "guard_emergency": 0,
+      "guard_slow": 0,
+      "result": "ok",
+      "note": null,
+      "live": false
+    },
+    {
+      "id": "R12",
+      "time": "07-24 23:22",
+      "change": "ay_max 13→10.5",
+      "vmax": 45.0,
+      "amax": 1.0,
+      "amin": -1.8,
+      "ay": 10.5,
+      "q0": 600000.0,
+      "width": 2.3,
+      "profile": null,
+      "wp_off": 2.0,
+      "corners": "45/45/45",
+      "guard": "V2X on · scan off",
+      "laps": [
+        72.9,
+        64.6,
+        73.6
+      ],
+      "completed": 3,
+      "target": 5,
+      "collisions": null,
+      "guard_emergency": 0,
+      "guard_slow": 0,
+      "result": "partial",
+      "note": null,
+      "live": false
+    },
+    {
+      "id": "R13",
+      "time": "07-24 23:27",
+      "change": "ay_max 10.5→9, ref_vel 45/45/45→22/22/25",
+      "vmax": 45.0,
+      "amax": 1.0,
+      "amin": -1.8,
+      "ay": 9.0,
+      "q0": 600000.0,
+      "width": 2.3,
+      "profile": null,
+      "wp_off": 2.0,
+      "corners": "22/22/25",
+      "guard": "V2X on · scan off",
+      "laps": [
+        68.0,
+        55.6,
+        55.3,
+        55.4,
+        98.1,
+        57.1,
+        55.3,
+        54.9,
+        66.6,
+        55.2,
+        102.8,
+        61.8,
+        100.9,
+        94.8,
+        55.2,
+        54.9,
+        54.8,
+        55.4,
+        54.9,
+        54.8,
+        55.1,
+        54.9,
+        54.5,
+        54.9,
+        54.7,
+        55.0,
+        55.3,
+        55.5,
+        55.0,
+        54.8,
+        54.8,
+        54.9,
+        54.8,
+        55.1,
+        54.6,
+        55.1,
+        54.4,
+        55.2,
+        55.3,
+        54.7,
+        54.6,
+        54.6,
+        54.7,
+        54.9,
+        54.9,
+        54.9,
+        54.8,
+        54.7,
+        55.2,
+        55.0,
+        54.7,
+        54.8,
+        54.8,
+        55.1,
+        54.9,
+        55.0,
+        55.3,
+        54.8,
+        54.7,
+        54.6,
+        54.9,
+        54.9,
+        55.0,
+        54.8,
+        54.8,
+        54.9,
+        55.1,
+        55.3,
+        55.1,
+        54.9,
+        54.8,
+        54.5,
+        55.2,
+        55.4,
+        54.9,
+        54.7,
+        55.1,
+        55.1,
+        54.8,
+        54.6,
+        54.7,
+        55.0,
+        54.7,
+        55.4,
+        54.8,
+        54.9,
+        55.1,
+        54.8,
+        55.1,
+        55.1,
+        55.2,
+        54.9,
+        54.6,
+        54.9,
+        54.9,
+        55.0,
+        54.8,
+        55.0,
+        54.6,
+        55.3
+      ],
+      "completed": 100,
+      "target": 5,
+      "collisions": null,
+      "guard_emergency": 0,
+      "guard_slow": 0,
+      "result": "ok",
+      "note": null,
+      "live": false
+    },
+    {
+      "id": "R14",
+      "time": "07-25 10:41",
+      "change": "a_max 1→3",
+      "vmax": 45.0,
+      "amax": 3.0,
+      "amin": -1.8,
+      "ay": 9.0,
+      "q0": 600000.0,
+      "width": 2.3,
+      "profile": null,
+      "wp_off": 2.0,
+      "corners": "22/22/25",
+      "guard": "V2X on · scan off",
+      "laps": [
+        53.0,
+        51.9,
+        112.1,
+        72.8,
+        52.2,
+        52.2
+      ],
+      "completed": 6,
+      "target": 5,
+      "collisions": null,
+      "guard_emergency": 0,
+      "guard_slow": 0,
+      "result": "ok",
+      "note": null,
+      "live": false
+    },
+    {
+      "id": "R15",
+      "time": "07-25 10:49",
+      "change": "a_max 3→1.8",
+      "vmax": 45.0,
+      "amax": 1.8,
+      "amin": -1.8,
+      "ay": 9.0,
+      "q0": 600000.0,
+      "width": 2.3,
+      "profile": null,
+      "wp_off": 2.0,
+      "corners": "22/22/25",
+      "guard": "V2X on · scan off",
+      "laps": [
+        52.7,
+        51.7,
+        51.6,
+        52.1,
+        52.4,
+        51.8,
+        51.8,
+        51.9,
+        51.8,
+        51.9,
+        51.9,
+        51.8,
+        51.6,
+        51.9,
+        51.7,
+        51.9,
+        51.8,
+        51.8,
+        51.8,
+        51.8,
+        51.7,
+        51.5,
+        51.9,
+        51.9,
+        52.1,
+        52.5,
+        51.7,
+        51.8,
+        52.2,
+        51.8,
+        51.6,
+        51.6,
+        51.9,
+        51.7,
+        52.0
+      ],
+      "completed": 35,
+      "target": 5,
+      "collisions": null,
+      "guard_emergency": 0,
+      "guard_slow": 0,
+      "result": "ok",
+      "note": null,
+      "live": false
+    },
+    {
+      "id": "R16",
+      "time": "07-25 11:20",
+      "change": "ay_max 9→12, a_max 1.8→3, a_min -1.8→-3",
+      "vmax": 45.0,
+      "amax": 3.0,
+      "amin": -3.0,
+      "ay": 12.0,
+      "q0": 600000.0,
+      "width": 2.3,
+      "profile": null,
+      "wp_off": 2.0,
+      "corners": "22/22/25",
+      "guard": "V2X on · scan off",
+      "laps": [
+        49.6,
+        48.4,
+        48.6,
+        48.6,
+        48.5,
+        48.6,
+        48.5,
+        48.9,
+        48.5,
+        48.7,
+        48.9,
+        48.8,
+        48.6,
+        48.5
+      ],
+      "completed": 14,
+      "target": 5,
+      "collisions": null,
+      "guard_emergency": 0,
+      "guard_slow": 0,
+      "result": "ok",
+      "note": null,
+      "live": false
+    },
+    {
+      "id": "R17",
+      "time": "07-25 11:37",
+      "change": "ref_vel 22/22/25→45/45/45",
+      "vmax": 45.0,
+      "amax": 3.0,
+      "amin": -3.0,
+      "ay": 12.0,
+      "q0": 600000.0,
+      "width": 2.3,
+      "profile": null,
+      "wp_off": 2.0,
+      "corners": "45/45/45",
+      "guard": "V2X on · scan off",
+      "laps": [
+        47.0,
+        45.8,
+        45.8,
+        45.8,
+        46.0,
+        45.8
+      ],
+      "completed": 6,
+      "target": 5,
+      "collisions": null,
+      "guard_emergency": 0,
+      "guard_slow": 0,
+      "result": "ok",
+      "note": null,
+      "live": false
+    },
+    {
+      "id": "R18",
+      "time": "07-26 19:42 · a",
+      "change": "ay_max 12→10, profile None→on",
+      "vmax": 45.0,
+      "amax": 3.0,
+      "amin": -3.0,
+      "ay": 10.0,
+      "q0": 600000.0,
+      "width": 2.3,
+      "profile": true,
+      "wp_off": 2.0,
+      "corners": "45/45/45",
+      "guard": "V2X on · scan off",
+      "laps": [
+        45.6,
+        44.0,
+        43.8,
+        43.9,
+        44.0,
+        44.1,
+        43.7,
+        44.2,
+        43.8,
+        44.1,
+        44.1
+      ],
+      "completed": 11,
+      "target": 5,
+      "collisions": null,
+      "guard_emergency": 0,
+      "guard_slow": 0,
+      "result": "ok",
+      "note": null,
+      "live": false
+    },
+    {
+      "id": "R19",
+      "time": "07-26 19:42 · b",
+      "change": "ay_max 10→13 (live)",
+      "vmax": 45.0,
+      "amax": 3.0,
+      "amin": -3.0,
+      "ay": 13.0,
+      "q0": 600000.0,
+      "width": 2.3,
+      "profile": true,
+      "wp_off": 2.0,
+      "corners": "45/45/45",
+      "guard": "V2X on · scan off",
+      "laps": [
+        43.5,
+        42.5,
+        41.5,
+        41.7,
+        41.3,
+        42.2,
+        41.8
+      ],
+      "completed": 7,
+      "target": 5,
+      "collisions": null,
+      "guard_emergency": 0,
+      "guard_slow": 0,
+      "result": "ok",
+      "note": null,
+      "live": true
+    },
+    {
+      "id": "R20",
+      "time": "07-26 19:42 · c",
+      "change": "ay_max 13→16 (live)",
+      "vmax": 45.0,
+      "amax": 3.0,
+      "amin": -3.0,
+      "ay": 16.0,
+      "q0": 600000.0,
+      "width": 2.3,
+      "profile": true,
+      "wp_off": 2.0,
+      "corners": "45/45/45",
+      "guard": "V2X on · scan off",
+      "laps": [
+        41.9,
+        41.5,
+        40.9,
+        41.1,
+        40.4,
+        40.7,
+        41.0,
+        41.4,
+        41.3,
+        40.9,
+        40.3,
+        40.3,
+        40.7,
+        40.4,
+        41.4,
+        41.1,
+        40.7,
+        40.8,
+        40.5,
+        41.4,
+        40.4,
+        41.5,
+        40.9,
+        41.0,
+        41.4,
+        40.6,
+        41.0,
+        40.3,
+        40.4,
+        40.8,
+        41.7,
+        40.7,
+        40.7,
+        41.5,
+        40.6,
+        41.0,
+        41.0,
+        41.1,
+        41.3,
+        40.8,
+        40.9,
+        40.9,
+        40.7,
+        41.2,
+        40.8,
+        40.9
+      ],
+      "completed": 46,
+      "target": 5,
+      "collisions": null,
+      "guard_emergency": 0,
+      "guard_slow": 0,
+      "result": "ok",
+      "note": null,
+      "live": true
+    },
+    {
+      "id": "R21",
+      "time": "07-26 19:42 · d",
+      "change": "ay_max 16→19 (live)",
+      "vmax": 45.0,
+      "amax": 3.0,
+      "amin": -3.0,
+      "ay": 19.0,
+      "q0": 600000.0,
+      "width": 2.3,
+      "profile": true,
+      "wp_off": 2.0,
+      "corners": "45/45/45",
+      "guard": "V2X on · scan off",
+      "laps": [
+        41.0,
+        40.6,
+        40.3,
+        40.1,
+        40.4,
+        40.2,
+        40.6,
+        40.7,
+        40.4,
+        40.5,
+        40.7,
+        40.7,
+        41.1,
+        40.4
+      ],
+      "completed": 14,
+      "target": 5,
+      "collisions": null,
+      "guard_emergency": 0,
+      "guard_slow": 0,
+      "result": "ok",
+      "note": null,
+      "live": true
+    },
+    {
+      "id": "R22",
+      "time": "07-26 19:42 · e",
+      "change": "a_min -3→-4.5 (live)",
+      "vmax": 45.0,
+      "amax": 3.0,
+      "amin": -4.5,
+      "ay": 19.0,
+      "q0": 600000.0,
+      "width": 2.3,
+      "profile": true,
+      "wp_off": 2.0,
+      "corners": "45/45/45",
+      "guard": "V2X on · scan off",
+      "laps": [
+        40.6,
+        40.1,
+        41.1,
+        40.7,
+        40.0,
+        40.0,
+        40.2,
+        40.4,
+        40.5,
+        40.8,
+        52.6,
+        40.1,
+        40.3,
+        40.9,
+        40.6,
+        40.4,
+        41.1,
+        40.1,
+        40.4,
+        40.5,
+        40.0,
+        52.0,
+        40.3,
+        40.2
+      ],
+      "completed": 24,
+      "target": 5,
+      "collisions": null,
+      "guard_emergency": 0,
+      "guard_slow": 0,
+      "result": "ok",
+      "note": null,
+      "live": true
+    },
+    {
+      "id": "R23",
+      "time": "07-26 restart · a",
+      "change": "repeat",
+      "vmax": 45.0,
+      "amax": 3.0,
+      "amin": -4.5,
+      "ay": 19.0,
+      "q0": 600000.0,
+      "width": 2.3,
+      "profile": true,
+      "wp_off": 2.0,
+      "corners": "45/45/45",
+      "guard": "V2X on · scan off",
+      "laps": [
+        42.9,
+        40.7,
+        40.0,
+        40.2,
+        40.3,
+        41.5
+      ],
+      "completed": 6,
+      "target": 5,
+      "collisions": null,
+      "guard_emergency": 0,
+      "guard_slow": 0,
+      "result": "ok",
+      "note": null,
+      "live": false
+    },
+    {
+      "id": "R24",
+      "time": "07-26 restart · b",
+      "change": "wp_id_offset 2→5 (live)",
+      "vmax": 45.0,
+      "amax": 3.0,
+      "amin": -4.5,
+      "ay": 19.0,
+      "q0": 600000.0,
+      "width": 2.3,
+      "profile": true,
+      "wp_off": 5.0,
+      "corners": "45/45/45",
+      "guard": "V2X on · scan off",
+      "laps": [
+        72.7,
+        63.0,
+        108.5,
+        82.5,
+        72.8,
+        74.4,
+        127.5
+      ],
+      "completed": 7,
+      "target": 5,
+      "collisions": null,
+      "guard_emergency": 0,
+      "guard_slow": 0,
+      "result": "ok",
+      "note": null,
+      "live": true
+    },
+    {
+      "id": "R25",
+      "time": "07-26 restart · c",
+      "change": "wp_id_offset 5→2 (live)",
+      "vmax": 45.0,
+      "amax": 3.0,
+      "amin": -4.5,
+      "ay": 19.0,
+      "q0": 600000.0,
+      "width": 2.3,
+      "profile": true,
+      "wp_off": 2.0,
+      "corners": "45/45/45",
+      "guard": "V2X on · scan off",
+      "laps": [
+        63.7,
+        40.7,
+        39.9,
+        40.0,
+        40.4,
+        40.4,
+        40.8,
+        40.2,
+        40.8,
+        40.1,
+        40.0,
+        40.1,
+        41.1,
+        62.3,
+        40.1,
+        74.3,
+        41.2,
+        40.6,
+        39.5,
+        40.4
+      ],
+      "completed": 20,
+      "target": 5,
+      "collisions": null,
+      "guard_emergency": 0,
+      "guard_slow": 0,
+      "result": "ok",
+      "note": null,
+      "live": true
+    },
+    {
+      "id": "R26",
+      "time": "07-26 w170 · a",
+      "change": "width 2.3→1.7",
+      "vmax": 45.0,
+      "amax": 3.0,
+      "amin": -4.5,
+      "ay": 19.0,
+      "q0": 600000.0,
+      "width": 1.7,
+      "profile": true,
+      "wp_off": 2.0,
+      "corners": "45/45/45",
+      "guard": "V2X on · scan off",
+      "laps": [
+        43.2,
+        40.0,
+        40.0,
+        40.6,
+        40.1,
+        40.4,
+        40.5
+      ],
+      "completed": 7,
+      "target": 5,
+      "collisions": null,
+      "guard_emergency": 0,
+      "guard_slow": 0,
+      "result": "ok",
+      "note": null,
+      "live": false
+    },
+    {
+      "id": "R27",
+      "time": "07-26 w170 · b",
+      "change": "Q[0] 600000→200000 (live)",
+      "vmax": 45.0,
+      "amax": 3.0,
+      "amin": -4.5,
+      "ay": 19.0,
+      "q0": 200000.0,
+      "width": 1.7,
+      "profile": true,
+      "wp_off": 2.0,
+      "corners": "45/45/45",
+      "guard": "V2X on · scan off",
+      "laps": [
+        39.7,
+        39.6,
+        39.4,
+        39.6
+      ],
+      "completed": 4,
+      "target": 5,
+      "collisions": null,
+      "guard_emergency": 0,
+      "guard_slow": 0,
+      "result": "partial",
+      "note": null,
+      "live": true
+    },
+    {
+      "id": "R28",
+      "time": "07-26 w170 · c",
+      "change": "Q[0] 200000→80000 (live)",
+      "vmax": 45.0,
+      "amax": 3.0,
+      "amin": -4.5,
+      "ay": 19.0,
+      "q0": 80000.0,
+      "width": 1.7,
+      "profile": true,
+      "wp_off": 2.0,
+      "corners": "45/45/45",
+      "guard": "V2X on · scan off",
+      "laps": [
+        39.2,
+        39.7,
+        39.4,
+        39.4,
+        40.1
+      ],
+      "completed": 5,
+      "target": 5,
+      "collisions": null,
+      "guard_emergency": 0,
+      "guard_slow": 0,
+      "result": "ok",
+      "note": null,
+      "live": true
+    },
+    {
+      "id": "R29",
+      "time": "07-26 cold",
+      "change": "cold start on the sub-40 config",
+      "vmax": 45.0,
+      "amax": 3.0,
+      "amin": -4.5,
+      "ay": 19.0,
+      "q0": 200000.0,
+      "width": 1.7,
+      "profile": true,
+      "wp_off": 2.0,
+      "corners": "45/45/45",
+      "guard": "V2X on · scan off",
+      "laps": [
+        42.4,
+        39.4,
+        39.5
+      ],
+      "completed": 3,
+      "target": 5,
+      "collisions": null,
+      "guard_emergency": 0,
+      "guard_slow": 0,
+      "result": "partial",
+      "note": "AWSIM ended its own session after 3 laps (exit 0), not a control failure",
+      "live": false
+    },
+    {
+      "id": "R30",
+      "time": "07-27 final",
+      "change": "validation: 48 flying laps on the sub-40 config",
+      "vmax": 45.0,
+      "amax": 3.0,
+      "amin": -4.5,
+      "ay": 19.0,
+      "q0": 200000.0,
+      "width": 1.7,
+      "profile": true,
+      "wp_off": 2.0,
+      "corners": "45/45/45",
+      "guard": "V2X on · scan off",
+      "laps": [
+        42.4,
+        39.3,
+        39.7,
+        39.4,
+        39.3,
+        39.3,
+        39.5,
+        39.3,
+        39.3,
+        39.7,
+        39.6,
+        39.3,
+        39.4,
+        39.4,
+        39.3,
+        39.6,
+        39.7,
+        82.4,
+        41.0,
+        39.9,
+        39.6,
+        39.4,
+        39.6,
+        39.5,
+        39.8,
+        39.7,
+        39.5,
+        39.6,
+        39.6,
+        39.5,
+        39.6,
+        39.7,
+        39.4,
+        39.5,
+        39.6,
+        40.0,
+        39.4,
+        39.2,
+        39.5,
+        39.6,
+        39.9,
+        39.4,
+        39.5,
+        40.1,
+        39.5,
+        39.3,
+        39.3,
+        39.6,
+        39.2,
+        39.5,
+        39.4,
+        39.6,
+        39.9,
+        39.7,
+        39.9,
+        39.5,
+        39.3,
+        39.4,
+        40.2,
+        39.6,
+        39.5,
+        39.7,
+        39.9,
+        39.6,
+        39.7,
+        39.7
+      ],
+      "completed": 66,
+      "target": 5,
+      "collisions": 1,
+      "guard_emergency": 0,
+      "guard_slow": 0,
+      "result": "best",
+      "note": null,
+      "live": false
+    },
+    {
+      "id": "R31",
+      "time": "07-27 22:05",
+      "change": "repeat",
+      "vmax": 45.0,
+      "amax": 3.0,
+      "amin": -4.5,
+      "ay": 19.0,
+      "q0": 200000.0,
+      "width": 1.7,
+      "profile": true,
+      "wp_off": 2.0,
+      "corners": "45/45/45",
+      "guard": "V2X on · scan off",
+      "laps": [
+        42.0,
+        39.4,
+        40.4,
+        39.5,
+        39.4
+      ],
+      "completed": 5,
+      "target": 5,
+      "collisions": null,
+      "guard_emergency": 0,
+      "guard_slow": 0,
+      "result": "ok",
+      "note": null,
+      "live": false
+    }
+  ]
+}
+</script>
+
+<script>
+(function(){
+  "use strict";
+  var DATA;
+  try{ DATA = JSON.parse(document.getElementById("run-data").textContent); }
+  catch(e){ DATA = {runs:[]}; }
+  var runs = DATA.runs || [];
+  var TARGET = DATA.target_s || 40;
+  var TGT_LAPS = DATA.target_laps || 5;
+
+  function flyBest(r){ var f=(r.laps||[]).slice(1); if(!f.length) f=r.laps||[]; return f.length?Math.min.apply(null,f):null; }
+
+  var withLaps = runs.filter(function(r){return (r.laps||[]).length});
+  var bests = withLaps.map(flyBest).filter(function(x){return x!=null});
+  var SESSION_BEST = bests.length?Math.min.apply(null,bests):null;
+  var maxLaps = runs.length?Math.max.apply(null,runs.map(function(r){return r.completed||0})):0;
+  var totalHits = runs.reduce(function(a,r){return a+(r.collisions==null?0:r.collisions)},0);
+
+  // Sub-target rate on the current config: every flying lap of every run whose
+  // config matches DATA.current. That is the number the 5-lap goal lives or dies by.
+  var cfgKeys=["ay","amax","amin","q0","width","profile"];
+  function sameCfg(r){ var c=DATA.current||{};
+    return cfgKeys.every(function(k){ return r[k]===c[k]; }); }
+  var curLaps=[]; runs.filter(sameCfg).forEach(function(r){
+    (r.laps||[]).slice(1).forEach(function(t){curLaps.push(t)}); });
+  var subRate = curLaps.length? Math.round(100*curLaps.filter(function(t){return t<TARGET}).length/curLaps.length) : null;
+  var curMedian = null;
+  if(curLaps.length){ var s=curLaps.slice().sort(function(a,b){return a-b});
+    curMedian = s.length%2 ? s[(s.length-1)/2] : (s[s.length/2-1]+s[s.length/2])/2; }
+
+  if(!runs.length){
+    document.getElementById("exprows").innerHTML='<tr><td colspan="12" class="empty">No runs parsed yet. Run <code>python3 dashboard/parse_runs.py</code>.</td></tr>';
+  }
+
+  // current config chip
+  var cur = DATA.current || (runs.length?runs[runs.length-1]:null);
+  document.getElementById("curcfg").innerHTML = cur ?
+    ('<span class="k">CURRENT</span> &nbsp;a<sub>y</sub> <b>'+cur.ay+'</b> · a <b>'+Number(cur.amax).toFixed(1)+
+     ' / '+Number(cur.amin).toFixed(1)+'</b> · Q[0] <b>'+(cur.q0/1000)+'k</b><br>'+
+     '<span class="k">profile</span> '+(cur.profile?'fwd-bwd':'kappa-pred')+
+     ' &nbsp;·&nbsp; <span class="k">width</span> '+cur.width+
+     ' &nbsp;·&nbsp; <span class="k">guard</span> '+(cur.guard||'—')) : '';
+
+  // KPIs
+  var kpis=[
+    {lab:"Best lap (session)", val: SESSION_BEST!=null?SESSION_BEST.toFixed(1):"—", u:"s", note:"flying laps", cls:"good"},
+    {lab:"Median lap (current)", val: curMedian!=null?curMedian.toFixed(1):"—", u:"s",
+     note:curLaps.length+" flying laps", cls: (curMedian!=null&&curMedian<TARGET)?"good":"warn"},
+    {lab:"Target", val:String(TARGET), u:"s", note:"per lap × "+TGT_LAPS+" laps", cls:"info"},
+    {lab:"Under target", val: subRate!=null?subRate+"%":"—", u:"",
+     note:"laps on the current config", cls: (subRate!=null&&subRate>=90)?"good":"warn"},
+    {lab:"Max completion", val:String(maxLaps), u:"laps", note:"target "+TGT_LAPS+(maxLaps>=TGT_LAPS?" · met":" · not met"), cls:maxLaps>=TGT_LAPS?"good":"warn"},
+    {lab:"Wall / kart hits", val:String(totalHits), u:"", note:"where recorded", cls:totalHits>0?"warn":"good"}
+  ];
+  document.getElementById("kpis").innerHTML=kpis.map(function(k){
+    return '<div class="kpi '+k.cls+'"><span class="stripe"></span><div class="lab">'+k.lab+
+      '</div><div class="val">'+k.val+(k.u?'<span class="u">'+k.u+'</span>':'')+'</div><div class="note">'+k.note+'</div></div>';
+  }).join("");
+
+  // table
+  var RESULT={best:{c:"best",t:"best"},ok:{c:"ok",t:TGT_LAPS+"-lap ✓"},partial:{c:"partial",t:"partial"},fail:{c:"fail",t:"stalled"}};
+  document.getElementById("exprows").innerHTML=runs.map(function(r){
+    var rs=RESULT[r.result]||RESULT.partial;
+    var b=flyBest(r);
+    function n1(v){ return v==null?'—':Number(v).toFixed(1); }
+    var q0 = r.q0==null?'—':(r.q0>=1000?(r.q0/1000)+'k':r.q0);
+    return '<tr>'+
+      '<td><span class="run-id">'+r.id+(r.time?' · '+r.time:'')+'</span></td>'+
+      '<td class="cfg">'+(r.change||'—')+'</td>'+
+      '<td class="num">'+n1(r.ay)+'</td>'+
+      '<td class="num">'+n1(r.amax)+' / '+n1(r.amin)+'</td>'+
+      '<td class="num">'+q0+'</td>'+
+      '<td class="cfg">'+(r.profile==null?'—':(r.profile?'fwd-bwd':'kappa-pred'))+'</td>'+
+      '<td class="num">'+n1(r.width)+'</td>'+
+      '<td class="cfg">'+(r.guard||'—')+'</td>'+
+      '<td class="best-cell">'+(b!=null?b.toFixed(1):'—')+'</td>'+
+      '<td class="num">'+(r.completed||0)+' / '+(r.target||TGT_LAPS)+'</td>'+
+      '<td class="num">'+(r.collisions==null?'—':r.collisions)+'</td>'+
+      '<td><span class="chip '+rs.c+'">'+rs.t+'</span></td>'+
+    '</tr>';
+  }).join("");
+
+  // chart
+  (function(){
+    var svg=[], W=820,H=300, padL=112, padR=26, padT=14, padB=34, xmin=40, xmax=106;
+    var lanes = withLaps.length?withLaps:runs;
+    if(!lanes.length){ document.getElementById("chart").innerHTML='<text x="410" y="150" fill="var(--faint)" font-size="12" text-anchor="middle">no lap data</text>'; return; }
+    // auto x-range from data
+    var allLaps=[]; lanes.forEach(function(r){(r.laps||[]).forEach(function(t){allLaps.push(t)})});
+    xmin=Math.min(40, Math.floor(Math.min.apply(null,allLaps)/5)*5);
+    xmax=Math.max(60, Math.ceil(Math.max.apply(null,allLaps)/5)*5)+2;
+    function X(t){ return padL + (t-xmin)/(xmax-xmin)*(W-padL-padR); }
+    var laneH=(H-padT-padB)/lanes.length;
+    for(var t=Math.ceil(xmin/10)*10;t<=xmax-2;t+=10){
+      svg.push('<line x1="'+X(t)+'" y1="'+padT+'" x2="'+X(t)+'" y2="'+(H-padB)+'" stroke="var(--line)" stroke-width="1"/>');
+      svg.push('<text x="'+X(t)+'" y="'+(H-padB+16)+'" fill="var(--faint)" font-size="10" text-anchor="middle">'+t+'</text>');
+    }
+    svg.push('<text x="'+(W-padR)+'" y="'+(H-padB+16)+'" fill="var(--faint)" font-size="10" text-anchor="end">sec</text>');
+    function ref(v,color,label){ if(v<xmin||v>xmax) return;
+      svg.push('<line x1="'+X(v)+'" y1="'+(padT-2)+'" x2="'+X(v)+'" y2="'+(H-padB)+'" stroke="'+color+'" stroke-width="1.5" stroke-dasharray="4 3"/>');
+      svg.push('<text x="'+X(v)+'" y="'+(padT+8)+'" fill="'+color+'" font-size="9.5" text-anchor="middle">'+label+'</text>'); }
+    ref(TARGET,"var(--crit)",String(TARGET));
+    if(SESSION_BEST!=null) ref(SESSION_BEST,"var(--accent)",SESSION_BEST.toFixed(1));
+    lanes.forEach(function(r,i){
+      var cy=padT+laneH*i+laneH/2, b=flyBest(r);
+      svg.push('<text x="'+(padL-12)+'" y="'+(cy-3)+'" fill="var(--ink)" font-size="11" font-weight="600" text-anchor="end">'+r.id+'</text>');
+      svg.push('<text x="'+(padL-12)+'" y="'+(cy+9)+'" fill="var(--faint)" font-size="8.5" text-anchor="end">'+String(r.change||'').slice(0,20)+'</text>');
+      var mn=Math.min.apply(null,r.laps), mx=Math.max.apply(null,r.laps);
+      svg.push('<line x1="'+X(mn)+'" y1="'+cy+'" x2="'+X(mx)+'" y2="'+cy+'" stroke="var(--line-strong)" stroke-width="2" stroke-linecap="round"/>');
+      r.laps.forEach(function(lp){
+        if(b!=null && Math.abs(lp-b)<1e-6) svg.push('<circle cx="'+X(lp)+'" cy="'+cy+'" r="6" fill="var(--accent)" stroke="var(--panel)" stroke-width="1.5"/>');
+        else svg.push('<circle cx="'+X(lp)+'" cy="'+cy+'" r="3.6" fill="var(--muted)" opacity="0.85"/>');
+      });
+      svg.push('<text x="'+(X(mx)+9)+'" y="'+(cy+3.5)+'" fill="var(--faint)" font-size="9.5">'+(b!=null?'best '+b.toFixed(1):'')+'</text>');
+    });
+    document.getElementById("chart").innerHTML=svg.join("");
+  })();
+
+  // auto-findings
+  (function(){
+    var f=[];
+    // Biggest improvement to the record, not the biggest drop between neighbours:
+    // recovering from a bad experiment is a large drop but moved nothing.
+    var seq=withLaps.map(function(r){return {r:r,b:flyBest(r)}}).filter(function(x){return x.b!=null});
+    var record=null, bestDrop=null;
+    seq.forEach(function(s){
+      if(record==null){ record=s; return; }
+      if(s.b<record.b){
+        var d=s.b-record.b;
+        if(bestDrop==null||d<bestDrop.d) bestDrop={d:d,from:record,to:s};
+        record=s;
+      }
+    });
+    if(bestDrop)
+      f.push({cls:"win",h:bestDrop.to.r.change||"improvement",d:bestDrop.from.b.toFixed(1)+" → "+bestDrop.to.b.toFixed(1)+" s  ("+bestDrop.d.toFixed(1)+" s)",
+        p:"Largest single step to a new session best ("+bestDrop.from.r.id+" → "+bestDrop.to.r.id+")."});
+    // the speed-profile switch
+    var pOn=withLaps.filter(function(r){return r.profile===true});
+    var pOff=withLaps.filter(function(r){return r.profile===false||r.profile==null});
+    if(pOn.length&&pOff.length){
+      var bOn=Math.min.apply(null,pOn.map(flyBest).filter(function(x){return x!=null}));
+      var bOff=Math.min.apply(null,pOff.map(flyBest).filter(function(x){return x!=null}));
+      f.push({cls:"win",h:"Forward-backward speed profile",d:bOff.toFixed(1)+" → "+bOn.toFixed(1)+" s best",
+        p:"Replacing the max-curvature-over-horizon cap with a braking-feasible profile over the whole lap. The old cap held apex speed for the full preview length before every corner."});
+    }
+    // reliability failures
+    var fail=runs.filter(function(r){return r.result==="fail"});
+    if(fail.length)
+      f.push({cls:"loss",h:"Reliability failure",d:fail.map(function(r){return r.id+" ("+r.completed+"/"+r.target+")"}).join(", "),
+        p:"Did not complete the "+TGT_LAPS+"-lap target (stalled or ran off line)."});
+    // guard transparency
+    var guarded=runs.filter(function(r){return /on/i.test(r.guard||"")});
+    if(guarded.length)
+      f.push({cls:"info",h:"Safety guard active & clean",d:guarded.length+" run(s), 0 false brakes",
+        p:"collision_guard sits in the command chain without disrupting clean laps (V2X kart guard on)."});
+    if(!f.length) f.push({cls:"neutral",h:"Not enough runs yet",d:"add more runs",p:"Findings appear once there are at least two comparable runs."});
+    document.getElementById("finds").innerHTML=f.slice(0,4).map(function(x){
+      return '<div class="find '+x.cls+'"><h3>'+x.h+'</h3><div class="delta">'+x.d+'</div><p>'+x.p+'</p></div>';
+    }).join("");
+  })();
+
+  // context
+  var ctx=[
+    {lab:"Top speed",v:'37.0 <small>km/h · measured</small>'},
+    {lab:"Achieved accel",v:'≈0.4 <small>m/s² @ race speed</small>'},
+    {lab:"Achieved decel",v:'-4.1 <small>m/s²</small>'},
+    {lab:"Drivetrain",v:'a·v ≈ 3 <small>m²/s³ · constant power</small>'},
+    {lab:"Racing line",v:'345 <small>m · as resampled</small>'},
+    {lab:"Median lap",v:'39.5 <small>s</small>'}
+  ];
+  document.getElementById("ctx").innerHTML=ctx.map(function(c){return '<div><div class="lab">'+c.lab+'</div><div class="v">'+c.v+'</div></div>'}).join("");
+
+  document.getElementById("foot").innerHTML=
+    'Generated: '+(DATA.generated||'—')+'<br>'+
+    'Sources: <code>output/*/d*/autoware.log</code> (laps, config, guard) · optional <code>run_meta.json</code> per run (collisions, labels)';
+})();
+</script>

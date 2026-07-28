@@ -41,7 +41,7 @@ from multi_purpose_mpc_ros.core.map import Map, Obstacle
 from multi_purpose_mpc_ros.core.reference_path import ReferencePath
 from multi_purpose_mpc_ros.core.spatial_bicycle_models import BicycleModel
 from multi_purpose_mpc_ros.core.MPC import MPC
-from multi_purpose_mpc_ros.core.utils import load_waypoints, kmh_to_m_per_sec, load_ref_path
+from multi_purpose_mpc_ros.core.utils import load_waypoints, kmh_to_m_per_sec, m_per_sec_to_kmh, load_ref_path
 
 # Project
 from multi_purpose_mpc_ros.common import convert_to_namedtuple, file_exists
@@ -111,6 +111,8 @@ class MPCConfig:
     steer_low_pass_gain: float
     wp_id_offset: int
     use_max_kappa_pred: bool
+    use_speed_profile: bool
+    kappa_smoothing: int
 
 
 class MPCController(Node):
@@ -235,6 +237,8 @@ class MPCController(Node):
 
             mpc_cfg = self._mpc_cfg
             self.declare_parameter("ay_max", mpc_cfg.ay_max)
+            self.declare_parameter("a_max", mpc_cfg.a_max)
+            self.declare_parameter("a_min", mpc_cfg.a_min)
             self.declare_parameter("accel_low_pass_gain", mpc_cfg.accel_low_pass_gain)
             self.declare_parameter("steer_low_pass_gain", mpc_cfg.steer_low_pass_gain)
             self.declare_parameter("wp_id_offset", mpc_cfg.wp_id_offset)
@@ -263,10 +267,13 @@ class MPCController(Node):
 
             for param in parameters:
                 if param.name == "v_max" and param.type_ == Parameter.Type.DOUBLE:
-                    mpc_cfg.v_max = param.value
-                    self._mpc.update_v_max(kmh_to_m_per_sec(param.value))
-                    v_ref: List[float] = [kmh_to_m_per_sec(param.value)] * len(self._reference_path.waypoints)
-                    self._reference_path.set_v_ref(v_ref)
+                    mpc_cfg.v_max = kmh_to_m_per_sec(param.value)
+                    self._mpc.update_v_max(mpc_cfg.v_max)
+                    if mpc_cfg.use_speed_profile:
+                        self._compute_speed_profile()
+                    else:
+                        v_ref: List[float] = [kmh_to_m_per_sec(param.value)] * len(self._reference_path.waypoints)
+                        self._reference_path.set_v_ref(v_ref)
 
                     self.get_logger().warn(f"v_max was updated to '{param.value}' [km/h]")
 
@@ -297,7 +304,21 @@ class MPCController(Node):
                 elif param.name == "ay_max" and param.type_ == Parameter.Type.DOUBLE:
                     mpc_cfg.ay_max = param.value
                     self._mpc.update_ay_max(param.value)
+                    if mpc_cfg.use_speed_profile:
+                        self._compute_speed_profile()
                     self.get_logger().warn(f"ay_max was updated to '{param.value}'")
+
+                elif param.name == "a_max" and param.type_ == Parameter.Type.DOUBLE:
+                    mpc_cfg.a_max = param.value
+                    if mpc_cfg.use_speed_profile:
+                        self._compute_speed_profile()
+                    self.get_logger().warn(f"a_max was updated to '{param.value}'")
+
+                elif param.name == "a_min" and param.type_ == Parameter.Type.DOUBLE:
+                    mpc_cfg.a_min = param.value
+                    if mpc_cfg.use_speed_profile:
+                        self._compute_speed_profile()
+                    self.get_logger().warn(f"a_min was updated to '{param.value}'")
 
                 elif param.name == "accel_low_pass_gain" and param.type_ == Parameter.Type.DOUBLE:
                     mpc_cfg.accel_low_pass_gain = param.value
@@ -392,7 +413,9 @@ class MPCController(Node):
                 cfg_mpc.accel_low_pass_gain,
                 cfg_mpc.steer_low_pass_gain,
                 cfg_mpc.wp_id_offset,
-                cfg_mpc.use_max_kappa_pred)
+                cfg_mpc.use_max_kappa_pred,
+                getattr(cfg_mpc, "use_speed_profile", False),
+                getattr(cfg_mpc, "kappa_smoothing", 0))
 
             state_constraints = {
                 "xmin": np.array([-np.inf, -np.inf, -np.inf]),
@@ -418,15 +441,10 @@ class MPCController(Node):
                 mpc_cfg.wp_id_offset,
                 self.USE_OBSTACLE_AVOIDANCE,
                 self._cfg.reference_path.use_path_constraints_topic,
-                mpc_cfg.use_max_kappa_pred)
+                mpc_cfg.use_max_kappa_pred,
+                mpc_cfg.use_speed_profile)
 
             return mpc_cfg, mpc
-
-        def compute_speed_profile(car: BicycleModel, mpc_config: MPCConfig) -> None:
-            speed_profile_constraints = {
-                "a_min": mpc_config.a_min, "a_max": mpc_config.a_max,
-                "v_min": 0.0, "v_max": mpc_config.v_max, "ay_max": mpc_config.ay_max}
-            car.reference_path.compute_speed_profile(speed_profile_constraints)
 
         def create_ref_vel_configulator() -> Optional[ReferenceVelocityConfigulator]:
             if self._ref_vel_config_path is None:
@@ -437,9 +455,9 @@ class MPCController(Node):
         self._reference_path = create_ref_path(self._map)
         self._car = create_car(self._reference_path)
         self._mpc_cfg, self._mpc = create_mpc(self._car)
-        compute_speed_profile(self._car, self._mpc_cfg)
 
         self._ref_vel_configulator: Optional[ReferenceVelocityConfigulator] = create_ref_vel_configulator()
+        self._compute_speed_profile()
 
         self._trajectory: Optional[Trajectory] = None
         self._path_constraints = None
@@ -486,6 +504,36 @@ class MPCController(Node):
         # save config
         if self._cfg.common.save_config:
             self._save_config()
+
+    def _compute_speed_profile(self) -> None:
+        """
+        (Re)compute the reference velocity of every waypoint from the current
+        limits. In speed-profile mode the per-section caps of ref_vel.yaml are
+        folded in as a per-waypoint velocity ceiling *before* the passes, so the
+        car brakes into a capped section instead of stepping down at its border.
+        """
+        mpc_cfg = self._mpc_cfg
+
+        v_max = mpc_cfg.v_max
+        if mpc_cfg.use_speed_profile and self._ref_vel_configulator is not None:
+            v_max = np.minimum(v_max, np.array([
+                kmh_to_m_per_sec(self._ref_vel_configulator.get_ref_vel(wp_id))
+                for wp_id in range(self._reference_path.n_waypoints)]))
+
+        constraints = {
+            "a_min": mpc_cfg.a_min, "a_max": mpc_cfg.a_max,
+            "v_min": 0.0, "v_max": v_max, "ay_max": mpc_cfg.ay_max}
+
+        if mpc_cfg.use_speed_profile:
+            self._reference_path.compute_speed_profile_forward_backward(
+                constraints, mpc_cfg.kappa_smoothing)
+            v_ref = np.array([wp.v_ref for wp in self._reference_path.waypoints])
+            self.get_logger().info(
+                f"speed profile: {m_per_sec_to_kmh(v_ref.min()):.1f} - "
+                f"{m_per_sec_to_kmh(v_ref.max()):.1f} km/h "
+                f"(ay_max {mpc_cfg.ay_max}, a {mpc_cfg.a_max}/{mpc_cfg.a_min})")
+        else:
+            self._reference_path.compute_speed_profile(constraints)
 
     def _save_config(self) -> None:
         now = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -574,12 +622,16 @@ class MPCController(Node):
         cmd = self._create_ackerman_control_command(stamp, u, acc, bug_acc_enabled)
 
         # publish raw control command
-        self._command_raw_pub.publish(cmd)
+        # NOTE: boost 経路では cmd は AckermannControlBoostCommand で、素の
+        # AckermannControlCommand を期待する raw トピックとは型が合わないため送らない
+        if not self.USE_BUG_ACC:
+            self._command_raw_pub.publish(cmd)
 
         # compensate steering angle for the real vehicle
         # AWSIMにおいても後段のactuation_cmd_converter でgainを考慮した指令を生成するため、実機/sim問わず
         # gain を掛ける
-        cmd.lateral.steering_tire_angle *= self._mpc_cfg.steering_tire_angle_gain_var
+        lateral = cmd.command.lateral if self.USE_BUG_ACC else cmd.lateral
+        lateral.steering_tire_angle *= self._mpc_cfg.steering_tire_angle_gain_var
         self._command_pub.publish(cmd)
 
 
@@ -807,7 +859,7 @@ class MPCController(Node):
             u, max_delta = self._mpc.get_control()
             # self.get_logger().info(f"u: {u}")
 
-        if self._ref_vel_configulator is not None:
+        if self._ref_vel_configulator is not None and not self._mpc_cfg.use_speed_profile:
             ref_vel_mps = self._ref_vel_configulator.get_ref_vel(self._mpc.model.wp_id)
             ref_vel_kmph = min(
                 kmh_to_m_per_sec(ref_vel_mps),
