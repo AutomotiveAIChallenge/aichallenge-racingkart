@@ -305,10 +305,13 @@ pre-commit run --files vehicle/run_driver.bash vehicle/setup_check.sh vehicle/ve
 | #1 | スタブ chain テスト（実イメージ・実 `run_driver.bash`・PID 1 構成 + `/entrypoint.sh` 差し替え） | リーフが SIGINT 受信 / graceful shutdown 完了後に親が終了 / **停止前 `0:0` → 停止後 出力 18 件すべて `1000:1000`** |
 | #1 | pgid 分離 | チェーン 3 プロセスが `pgid=13`（PID 1 の pgid=1 と別）→ group 宛送信が届いた |
 | #2 | セクション番号 | preflight 1-5 / runtime 1-4 / all 1-9、いずれも連番・重複なし（修正前 all は `1,2,3,1,3,4,5,6,7`） |
+| #2 | ドキュメント同期 | `setup_check.md` の出力例のセクション見出しが実出力と完全一致（preflight 5 件 / runtime 4 件を機械的に diff） |
+| #4 | リトライ回数 | `docker` を PATH shim にして `compose exec` の呼び出し回数を計測。`ROS_TOPIC_RETRY=1/2/3` で 13 トピック × RETRY = 13/26/39 回に正確に一致（off-by-one なし） |
+| #4 | リトライの効果 | 1 回目失敗・2 回目成功のモックで 13/13 トピックが pass。対照として `RETRY=1` では同条件で 7 件が fail に落ちる → リトライが false fail を救っていることを確認 |
 | #3 | `vehicle_ports.sh` | A1-A8 全 ID が元の `run_zenoh.bash` と同一ポートを返す / 不正 ID と空文字で `rc=1` / hostname 4 種を解決 |
 | #3 | コンテナ内 source | `aichallenge-2025-dev` 内で `/vehicle/vehicle_ports.sh` を source して `A6 -> 7450` |
 | #3 | `run_zenoh.bash` | 不正 ID で `Invalid VEHICLE_ID: A4 (valid: ...)` + exit 1 |
-| #5 | エラー分岐の区別 | サービス未起動 → `not running` / `docker compose` 失敗（PATH shim）→ `Cannot inspect` |
+| #5 | エラー分岐の区別 | サービス未起動 → `not running` / `docker compose` 失敗（PATH shim）→ `Cannot inspect` / `docker ps` 失敗 → `Docker daemon not accessible` |
 | #7 | `read_env_value` | `KEY=value` / `export KEY=value` / 先頭空白 / 引用符 / コメント行無視 / 前方一致除外 / 重複時は最後が勝つ の 12 ケース |
 | 全体 | pre-commit（shellcheck / shfmt / end-of-file-fixer / mixed-line-ending） | 全 hook pass |
 | 全体 | exit code | `--phase all` で fail あり → 1、不正 phase → 1 |
