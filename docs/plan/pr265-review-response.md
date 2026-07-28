@@ -296,6 +296,23 @@ pre-commit run --files vehicle/run_driver.bash vehicle/setup_check.sh vehicle/ve
 
 既存の `SC2329`（`log_only`）は本 PR 以前からの警告なので対象外。
 
+## dev PC 検証結果
+
+実装後に dev PC で実施した検証。すべて pass。
+
+| 対象 | 内容 | 結果 |
+| --- | --- | --- |
+| #1 | スタブ chain テスト（実イメージ・実 `run_driver.bash`・PID 1 構成 + `/entrypoint.sh` 差し替え） | リーフが SIGINT 受信 / graceful shutdown 完了後に親が終了 / **停止前 `0:0` → 停止後 出力 18 件すべて `1000:1000`** |
+| #1 | pgid 分離 | チェーン 3 プロセスが `pgid=13`（PID 1 の pgid=1 と別）→ group 宛送信が届いた |
+| #2 | セクション番号 | preflight 1-5 / runtime 1-4 / all 1-9、いずれも連番・重複なし（修正前 all は `1,2,3,1,3,4,5,6,7`） |
+| #3 | `vehicle_ports.sh` | A1-A8 全 ID が元の `run_zenoh.bash` と同一ポートを返す / 不正 ID と空文字で `rc=1` / hostname 4 種を解決 |
+| #3 | コンテナ内 source | `aichallenge-2025-dev` 内で `/vehicle/vehicle_ports.sh` を source して `A6 -> 7450` |
+| #3 | `run_zenoh.bash` | 不正 ID で `Invalid VEHICLE_ID: A4 (valid: ...)` + exit 1 |
+| #5 | エラー分岐の区別 | サービス未起動 → `not running` / `docker compose` 失敗（PATH shim）→ `Cannot inspect` |
+| #7 | `read_env_value` | `KEY=value` / `export KEY=value` / 先頭空白 / 引用符 / コメント行無視 / 前方一致除外 / 重複時は最後が勝つ の 12 ケース |
+| 全体 | pre-commit（shellcheck / shfmt / end-of-file-fixer / mixed-line-ending） | 全 hook pass |
+| 全体 | exit code | `--phase all` で fail あり → 1、不正 phase → 1 |
+
 ## 実車での確認チェックリスト
 
 dev PC で検証できず、実車でのみ確認できる項目。
