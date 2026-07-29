@@ -318,10 +318,34 @@ pre-commit run --files vehicle/run_driver.bash vehicle/setup_check.sh vehicle/ve
 
 ## 実車での確認チェックリスト
 
-dev PC で検証できず、実車でのみ確認できる項目。
+dev PC で検証できず、実車でのみ確認できる項目。**すべて検証完了**（2026-07-29、A6 / ECU-RK-06、`06555e4`）。
 
-- [ ] **#1** `make autoware-driver-zenoh-rosbag` → `make down` → `output/<ts>/d1/ros/log` がホストユーザー所有
-- [ ] **#1** `driver.log` に ROS 側の shutdown ログが残る / 停止後に再起動できる
-- [ ] **#4** runtime トピックチェックが安定 pass（特に `/control/command/control_cmd` / `actuation_cmd`）
-- [ ] **#3** `make zenoh` で Zenoh が正しいポートに接続し、setup_check の疎通が pass
-- [ ] **#8** 実 NavPVT で GNSS チェックが従来どおり pass（ビットマスク化を入れた場合のみ）
+- [x] **#1** `make autoware-driver-zenoh-rosbag` → `make down` → `output/<ts>/d1/ros/log` がホストユーザー所有
+- [x] **#1** `driver.log` に ROS 側の shutdown ログが残る / 停止後に再起動できる
+- [x] **#4** runtime トピックチェックが安定 pass（特に `/control/command/control_cmd` / `actuation_cmd`）
+- [x] **#3** `make zenoh` で Zenoh が正しいポートに接続し、setup_check の疎通が pass
+- [ ] **#8** 実 NavPVT で GNSS チェックが従来どおり pass（ビットマスク化を入れた場合のみ）→ 本 PR ではビットマスク化を入れていないため対象外
+
+## 実車検証結果
+
+2026-07-29 に A6（ECU-RK-06）で実施。対象コミットは `06555e4`。すべて pass。
+
+| 対象 | 内容 | 結果 |
+| --- | --- | --- |
+| #1 | `make down` 後のログ所有者 | `output/<ts>` 配下 43/44 が `1000:1000`。2 回の up/down で同一結果（再現性あり） |
+| #1 | 修正前との対比 | 同一実車の旧ブランチ実行分（09:00 / 09:02）は root 所有ファイルが **261 件**残存 → PR ブランチでは **0 件** |
+| #1 | `driver.log` の shutdown ログ | `signal_handler(SIGINT/SIGTERM)` / `process has finished cleanly` を 18 行検出。`ntrip_ros.py` は `exit code -2`（SIGINT）で、INT がリーフまで到達していることを確認 |
+| #1 | 停止後の再起動 | `make down` → `make autoware-driver-zenoh-rosbag` が rc=0 で成功 |
+| #2 | セクション番号 | preflight 1-5 / runtime 1-4 が連番・重複なし |
+| #2 | ドキュメント同期 | 実出力のセクション見出しが `setup_check.md` と完全一致 |
+| #4 | runtime トピック | 4 回連続実行で 0 fail。13 トピック全 pass（`/control/command/control_cmd` / `actuation_cmd` を含む） |
+| #3 | Zenoh 接続先 | `zenoh-bridge-ros2dds` が `13.231.141.103:7450` に ESTABLISHED（A6 → 7450） |
+| #3 | `vehicle_ports.sh` | 実車上で `A6 -> 7450` / `ECU-RK-06 -> A6` / 不正 ID・空文字で `rc=1` |
+| #5 | preflight | 18 checks / 16 pass / 2 warn / 0 fail、exit 0 |
+| #8 | GNSS チェック | 実 NavPVT で `flags=67`（float → warn）と `flags=131`（fixed → pass）の両分岐を確認 |
+
+### 残課題（本 PR のスコープ外）
+
+`output/<ts>` の**トップディレクトリのみ `root:root drwxr-xr-x` のまま**残る。`fix_ownership` の対象が `out_dir=${3}/d${id}`（= `/output/<ts>/d1`）で、親はコンテナが root で `mkdir` するため対象外になるのが原因。
+
+実害はホストユーザーが `output/<ts>` 配下に書き込めず、`rm -rf output/<ts>` に sudo が必要になる点（`touch` が `Permission denied` になることを実測）。レビュー指摘の対象（`output/<ts>/d1/ros/log`）は満たしているため本 PR では対応しない。
