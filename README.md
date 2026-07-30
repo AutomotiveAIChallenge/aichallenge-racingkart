@@ -17,7 +17,7 @@ Toward the competition, we will update the following pages to provide informatio
 ## リポジトリ構成（トップレベル）
 
 - `aichallenge/`: シミュレータ/Autoware/評価の起動・操作スクリプト群
-- `vehicle/`: 実車環境向け（セットアップ確認、Zenoh、rosbag など）
+- `vehicle/`: 実車環境向け（[ECU 初期構築](vehicle/ecu-setup.md)、セットアップ確認、Zenoh、rosbag など）
 - `remote/`: 実車/遠隔接続の補助（SSH/Zenoh/RViz/joy）
 - `docs/`: ガイド・スライドは [`docs/guide/`](docs/guide/)、仕様は [`docs/spec/`](docs/spec/)、インターフェイス契約は [`docs/interface/`](docs/interface/)
 - `submit/`: 提出物（tar.gz）置き場

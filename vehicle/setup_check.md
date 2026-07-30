@@ -2,7 +2,7 @@
 
 ## 概要
 
-このドキュメントは、racing_kart_interface実行前およびrun-full-system実行前の確認項目をまとめています。
+このドキュメントは、`make autoware-driver-zenoh-rosbag` で実車を起動する前後の確認項目をまとめています。
 過去の実験記録から抽出した問題点を予防的にチェックできます。
 
 ## 自動チェックスクリプト

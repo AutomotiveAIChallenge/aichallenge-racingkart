@@ -1,5 +1,7 @@
 # AI Challenge - Vehicle Setup
 
+ECU（MiniPC）自体の初期構築（OS / udev / ネットワーク / ROS 2 / Tailscale）は [ecu-setup.md](./ecu-setup.md) を参照。本書は構築済みの ECU で走らせるための手順。
+
 ## 実車両で走らせる場合の注意点
 
 シミュレータと違い、実車両では以下を走行前に必ず確認する。

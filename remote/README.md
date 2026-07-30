@@ -169,7 +169,7 @@ cd ~/aichallenge-racingkart/remote
 
 ### 3-2. 車両側 ECU の起動
 
-車両側 ECU では別途 `make autoware-driver-zenoh-rosbag` で driver/autoware/rosbag/zenoh を起動する。`.env` の設定や IMU バイアスの調整を含む実車側の手順は [vehicle/README.md](../vehicle/README.md) にまとまっている。
+車両側 ECU では別途 `make autoware-driver-zenoh-rosbag` で driver/autoware/rosbag/zenoh を起動する。`.env` の設定や IMU バイアスの調整を含む実車側の手順は [vehicle/README.md](../vehicle/README.md)、ECU 自体の初期構築（OS / udev / ネットワーク / Tailscale）は [vehicle/ecu-setup.md](../vehicle/ecu-setup.md) にまとまっている。
 
 ### 3-3. 終了手順
 
