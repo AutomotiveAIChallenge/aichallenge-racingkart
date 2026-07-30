@@ -137,12 +137,17 @@ pgrep -af zenoh-bridge-ros2dds     # 何も出ないこと
 # 第3部 実機構成（実車両＋遠隔PC）
 
 実車両と遠隔PC を EC2 経由でつなぐ本番の遠隔操作。
+遠隔PC は EC2 経由で車両側と zenoh 接続するため、**遠隔PC 側にインターネット接続が必須**。
 
-### 3-1. 遠隔操作の流れ（遠隔PC 側）
+### 3-1. ゲームコントローラの接続
+
+USBケーブルでゲームコントローラ（ロジクールF310）を遠隔PCに接続する。
+
+### 3-2. 遠隔操作の流れ（遠隔PC 側）
 
 ターミナルウィンドウを3つ用意する。
 
-遠隔PC では `.env` の `ROS_DOMAIN_ID` を `0` に設定しておく。端末A・端末B はホスト上で動くため ROS の既定ドメイン（環境変数未設定なら 0）を使う一方、端末C の rviz2 はコンテナなので `.env` の値を読む（`docker-compose.yml`）。ここが揃っていないと rviz2 に何も表示されない。
+遠隔PC では `.env` の `ROS_DOMAIN_ID` を `0` に設定しておく。
 
 ```diff
 - ROS_DOMAIN_ID=1
@@ -154,11 +159,11 @@ pgrep -af zenoh-bridge-ros2dds     # 何も出ないこと
 ```shell
 # 端末A: joy_node（コントローラ入力 → /racing_kart/joy）
 cd ~/aichallenge-racingkart/remote
-./joy.bash
+ROS_DOMAIN_ID=0 ./joy.bash
 
 # 端末B: 車両と zenoh 接続（EC2 A6:7450 へ client 接続 / TLS）
 cd ~/aichallenge-racingkart/remote
-./connect_zenoh.bash A6
+ROS_DOMAIN_ID=0 ./connect_zenoh.bash A6
 
 # 端末C: RViz（遠隔可視化スタック）
 cd ~/aichallenge-racingkart/remote
@@ -167,11 +172,11 @@ cd ~/aichallenge-racingkart/remote
 
 `rviz.bash` は `make rviz2` のラッパで、rviz2 をコンテナとして起動する（`./rviz.bash restart` で開き直し、`./rviz.bash down` で停止）。
 
-### 3-2. 車両側 ECU の起動
+### 3-3. 車両側 ECU の起動
 
 車両側 ECU では別途 `make autoware-driver-zenoh-rosbag` で driver/autoware/rosbag/zenoh を起動する。`.env` の設定や IMU バイアスの調整を含む実車側の手順は [vehicle/README.md](../vehicle/README.md)、ECU 自体の初期構築（OS / udev / ネットワーク / Tailscale）は [vehicle/ecu-setup.md](../vehicle/ecu-setup.md) にまとまっている。
 
-### 3-3. 終了手順
+### 3-4. 終了手順
 
 端末A の `joy.bash`（joy_node）と端末B の `connect_zenoh.bash`（zenoh bridge）はホスト上のフォアグラウンドプロセスであり、`make down` は Docker Compose のサービスしか停止しない。逆に端末C の rviz2 はコンテナなので Ctrl+C では止まらず、`make down`（または `./rviz.bash down`）が必要。
 

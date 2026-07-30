@@ -88,3 +88,14 @@ make down    # 全コンテナ停止（rosbag もここで finalize される）
 4. **ROS トピック出力確認** - VCU status / command、Autoware vehicle status
 
 各項目の期待される結果・手動確認コマンド・トラブルシューティング・走行前最終チェックリストは [setup_check.md](./setup_check.md) にまとまっている。
+
+---
+
+## ECUがモーターやVCUと通信できない場合
+
+以下の順で対処してから、`make autoware-driver-zenoh-rosbag` を再実行する。
+
+1. `make down_all` で全コンテナを停止する
+2. USBケーブルを挿し直す
+3. 車両バッテリーの電源を入れ直す
+4. `make autoware-driver-zenoh-rosbag` を実行する
