@@ -2,37 +2,9 @@
 
 実車に載せる ECU（MiniPC）を、更地の状態から `./setup_check.sh --phase preflight` が通る状態まで仕立てる手順。
 
-> 最終確認: 2026-07-30。Confluence「ECU 初期設定」を現行リポジトリに合わせて再構成したもの。以降は本書が正とする。
+対象機材は GMKtec M4 MiniPC。ビルド待ちを含めて半日程度かかる。作業中は `sudo` とインターネット接続が必要。
 
-対象機材は GMKtec M4 MiniPC（Intel Core i9-11900 / 16GB DDR4 / 500GB M.2 NVMe SSD）。ビルド待ちを含めて半日程度かかる。作業中は `sudo` とインターネット接続が必要。
-
-`./setup_check.sh` が fail / warn を出す項目のうち **`/dev/vcu/usb`・`/dev/gnss/usb`・`can0`・driver イメージ・`dialout` グループ**は、リポジトリ内に「作り方」が書かれていない。本書がその唯一の正になる。
-
----
-
-## このドキュメントの範囲
-
-本書は第1部から第8部まで、上から順に実行すれば ECU が構築できる runbook。走行前の準備（`.env` 確認、IMU バイアス、車両起動、preflight / runtime チェック）は本書の範囲外で、[README.md](./README.md) と [setup_check.md](./setup_check.md) を参照する。
-
-### 関連ドキュメントと分担
-
-> **本書が持つのは「一度だけ・リポジトリの外側（OS / udev / systemd / NetworkManager）に触る作業」だけ。リポジトリの中で完結する作業は既存ドキュメントに委譲する。**
-
-| 領域 | 正 | 本書での扱い |
-| --- | --- | --- |
-| OS インストール / 管理ユーザー作成 | 本書 | 書き切る |
-| git / Docker / DDS チューニング / clone / `.env` 生成 / イメージビルド / `make autoware-build` | `./setup.bash bootstrap` | 1 コマンド ＋ ECU 用の回答差分だけ |
-| bootstrap の内訳 / `COMPOSE_FILE` / `doctor` | [../docs/spec/how-to-setup.md](../docs/spec/how-to-setup.md) | リンクのみ（表を再掲しない） |
-| `dialout` グループ追加・再ログイン | 本書 | 書き切る（`setup.bash` は未対応） |
-| udev ルール（vcu / gnss / 内蔵 Wi-Fi） | 本書 | ルール全文 |
-| NetworkManager（unmanaged） | 本書 | 書き切る |
-| ホストの ROS 2 / `/opt/autoware/cyclonedds.xml` / `~/.bashrc` | 本書 | 書き切る（遠隔 PC 側は [../remote/README.md](../remote/README.md) 1-7） |
-| Tailscale（headscale）参加 | 本書 | コマンド全文 |
-| driver イメージ pull / `RACING_KART_INTERFACE_DIR` の配置 | 本書 | 書き切る |
-| `.env` の手編集 4 項目 / IMU バイアス / 車両起動 / 停止 | [README.md](./README.md) | `VEHICLE_ID` だけ触れて残りはリンク |
-| preflight / runtime チェックの実行・期待結果・トラブルシュート | [setup_check.md](./setup_check.md) | 本書には登場させずリンクのみ |
-| 遠隔 PC 側（joy / TLS 証明書 / `connect_zenoh.bash` / rviz） | [../remote/README.md](../remote/README.md) | ECU 側では不要 |
-| `HOST_UID` / `group_add` の設計理由 | [../docs/spec/host-uid-containers.md](../docs/spec/host-uid-containers.md) | udev の `GROUP="dialout"` 説明から参照 |
+本書は第1部から第8部まで、上から順に実行すれば ECU が構築できる runbook。
 
 ---
 
@@ -42,16 +14,16 @@
 
 作業前に、担当する号機の行をメモしてから始める。
 
-| ECU ホスト名 | `VEHICLE_ID` | zenoh ポート | 探索用 MAC |
-| --- | --- | --- | --- |
-| `ECU-RK-00` | `A7` | 7451 | `54:07:7d:85:a4:e8` |
-| `ECU-RK-01` | `A2` | 7448 | `c0:4b:24:02:6e:87` |
-| `ECU-RK-02` | `A3` | 7449 | `c0:4b:24:02:a2:97` |
-| `ECU-RK-06` | `A6` | 7450 | `c0:4b:24:02:5d:55` |
-| 要確認 | `A1` | 7452 | `c0:4b:24:02:a8:9b` |
-| 要確認 | `A5` | 7453 | `c0:4b:24:c0:fc:fc` |
-| 要確認 | `A8` | 7454 | `c8:8a:d8:1e:b3:81` |
-| 要確認 | `A4` | 未割当 | `a8:43:a4:54:aa:63` |
+| ECU ホスト名 | `VEHICLE_ID` | zenoh ポート |
+| --- | --- | --- |
+| `ECU-RK-00` | `A7` | 7451 |
+| `ECU-RK-01` | `A2` | 7448 |
+| `ECU-RK-02` | `A3` | 7449 |
+| `ECU-RK-06` | `A6` | 7450 |
+| 要確認 | `A1` | 7452  |
+| 要確認 | `A5` | 7453 |
+| 要確認 | `A8` | 7454 |
+| 要確認 | `A4` | 未割当 |
 
 「要確認」はホスト名の対応が未記録という意味、「未割当」はそもそも割り当てが存在しないという意味。区別すること。ホスト名が「要確認」の号機を触る場合は、ECU 上で `hostname` を実行してこの表を埋めてから作業する。10 台の内訳や `ECU-RK-03`〜`05` の有無など、資産管理としての全体像は運営のみが把握しており本書では特定できない。
 
