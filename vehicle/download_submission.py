@@ -165,7 +165,7 @@ class SubmissionLister:
         else:
             print()
         print("="*140)
-        print(f"{'#':<3} {'Submission ID':<24} {'Date':<20} {'User ID':<15} {'Comment':<50}")
+        print(f"{'#':<3} {'Submission ID':<36} {'Date':<20} {'User ID':<15} {'Comment':<50}")
         print("-"*140)
 
         for i, submission in enumerate(submissions, 1):
@@ -183,7 +183,7 @@ class SubmissionLister:
             if len(comment) > 50:
                 comment = comment[:50] + "..."
 
-            print(f"{i:<3} {submission_id:24} {submission_time:<20} {user_id:<15} {comment:<50}")
+            print(f"{i:<3} {submission_id:36} {submission_time:<20} {user_id:<15} {comment:<50}")
 
         print("-"*140)
         print(f"Total: {len(submissions)} submissions")
