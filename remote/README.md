@@ -72,35 +72,35 @@ grep -i NetworkInterface ${CYCLONEDDS_URI#file://}
 
 ### 1-8. `.env` に車両番号を設定
 
-リポジトリ直下の `.env` を開き、`VEHICLE_ID` の行を対象車両に合わせて書き換える（今回は A6）：
+リポジトリ直下の `.env` を開き、`VEHICLE_ID` の行を対象車両に合わせて書き換える(以降Axと記載の部分は、A3, A6など対象車両に合わせて変更する)：
 
 ```diff
 - VEHICLE_ID=A0
-+ VEHICLE_ID=A6
++ VEHICLE_ID=Ax
 ```
 
 ---
 
 # 第2部 ノートPC1台で遠隔操作動作確認
 
-**目的**：PC 1台の中に「A6車両側」「遠隔側」を両方立て、両者を実EC2(A6:7450) に client 接続し、joy 操作が EC2 経由で車両側（A6）に届くことを確認する。
+**目的**：PC 1台の中に「車両側」「遠隔側」を両方立て、両者を実EC2に client 接続し、joy 操作が EC2 経由で車両側に届くことを確認する。
 
 ### 2-1. 手順
 
 ターミナルウィンドウを5つ（端末A〜E）用意する。
 
 ```shell
-# 端末A: 車両側 zenoh bridge（domain1 → EC2 A6）
+# 端末A: 車両側 zenoh bridge（domain1 → EC2）
 cd ~/aichallenge-racingkart
 make zenoh
 
-# 端末B: 車両側(A6)の joy 受け手（domain1）。echo 自体が subscriber になり bridge が転送を開始
+# 端末B: 車両側の joy 受け手（domain1）。echo 自体が subscriber になり bridge が転送を開始
 source /opt/ros/humble/setup.bash
 ROS_DOMAIN_ID=1 ros2 topic echo /racing_kart/joy
 
-# 端末C: 遠隔側 zenoh bridge（domain0 → EC2 A6）
+# 端末C: 遠隔側 zenoh bridge（domain0 → EC2）
 cd ~/aichallenge-racingkart/remote
-ROS_DOMAIN_ID=0 ./connect_zenoh.bash A6
+ROS_DOMAIN_ID=0 ./connect_zenoh.bash Ax
 
 # 端末D: 遠隔側で joy を流す（domain0）
 source /opt/ros/humble/setup.bash
@@ -161,9 +161,9 @@ USBケーブルでゲームコントローラ（ロジクールF310）を遠隔P
 cd ~/aichallenge-racingkart/remote
 ROS_DOMAIN_ID=0 ./joy.bash
 
-# 端末B: 車両と zenoh 接続（EC2 A6:7450 へ client 接続 / TLS）
+# 端末B: 車両と zenoh 接続（EC2 へ client 接続 / TLS）
 cd ~/aichallenge-racingkart/remote
-ROS_DOMAIN_ID=0 ./connect_zenoh.bash A6
+ROS_DOMAIN_ID=0 ./connect_zenoh.bash Ax
 
 # 端末C: RViz（遠隔可視化スタック）
 cd ~/aichallenge-racingkart/remote
