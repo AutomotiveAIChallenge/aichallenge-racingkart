@@ -1,0 +1,6 @@
+numpy==2.0.1
+pandas==2.2.2
+matplotlib==3.9.0
+osqp==0.6.7.post1
+scikit-image==0.24.0
+PyYAML==6.0.1

@@ -21,8 +21,8 @@
   <log message="echo launch param use_sim_time: $(var use_sim_time) launch_vehicle_interface: $(var launch_vehicle_interface) sensor_model: $(var sensor_model)"/>
 
   <!-- Control method -->
-  <arg name="control_method" default="mpc"
-      description="Select control: mpc, pure_pursuit, tiny_lidar_net, pilot_net, joycon, rl_train"/>
+  <arg name="control_method" default="mpc_custom"
+      description="Select control: mpc, mpc_custom, pure_pursuit, tiny_lidar_net, pilot_net, joycon, rl_train"/>
 
   <!-- Global parameters -->
   <group scoped="false">
@@ -48,6 +48,11 @@
       <arg name="input_vehicle_velocity_topic" value="/vehicle/status/velocity_status"/>
       <arg name="output_twist_with_covariance" value="/sensing/vehicle_velocity_converter/twist_with_covariance"/>
       <arg name="config_file" value="$(find-pkg-share aichallenge_submit_launch)/config/vehicle_velocity_converter.param.yaml"/>
+    </include>
+    <!-- LaserScan Generator for LiDAR obstacle / wall detection -->
+    <include file="$(find-pkg-share laserscan_generator)/launch/laserscan_generator.launch.xml">
+      <arg name="use_sim_time" value="$(var use_sim_time)"/>
+      <arg name="scan_topic" value="/sensing/lidar/scan"/>
     </include>
     <group>
       <push-ros-namespace namespace="imu"/>
@@ -146,6 +151,13 @@
 
   <group if="$(eval &quot;'$(var control_method)' == 'mpc'&quot;)">
     <include file="$(find-pkg-share aichallenge_submit_launch)/launch/control/mpc.launch.xml">
+      <arg name="use_sim_time" value="$(var use_sim_time)"/>
+      <arg name="track" value="$(var track)"/>
+    </include>
+  </group>
+
+  <group if="$(eval &quot;'$(var control_method)' == 'mpc_custom'&quot;)">
+    <include file="$(find-pkg-share aichallenge_submit_launch)/launch/control/mpc_custom.launch.xml">
       <arg name="use_sim_time" value="$(var use_sim_time)"/>
       <arg name="track" value="$(var track)"/>
     </include>

@@ -3,11 +3,14 @@
   <Domain Id="any">
     <General>
       <Interfaces>
-        <NetworkInterface autodetermine="false" name="lo" priority="default" multicast="default" />
+        <NetworkInterface autodetermine="false" name="lo" priority="default" multicast="true" />
       </Interfaces>
-      <AllowMulticast>default</AllowMulticast>
+      <AllowMulticast>true</AllowMulticast>
       <MaxMessageSize>65500B</MaxMessageSize>
     </General>
+    <Discovery>
+      <MaxAutoParticipantIndex>256</MaxAutoParticipantIndex>
+    </Discovery>
     <Internal>
       <SocketReceiveBufferSize min="10MB"/>
       <Watermarks>

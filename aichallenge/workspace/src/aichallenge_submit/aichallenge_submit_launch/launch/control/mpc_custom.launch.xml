@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<launch>
+  <arg name="use_sim_time" default="true"/>
+  <arg name="use_obstacle_avoidance" default="true"/>
+  <!-- Track selection: citycircuit uses config.yaml/ref_vel.yaml; other tracks use config_<track>.yaml/ref_vel_<track>.yaml -->
+  <arg name="track" default="citycircuit"/>
+  <arg name="config_file" default="$(eval &quot;'config.yaml' if '$(var track)' == 'citycircuit' else 'config_' + '$(var track)' + '.yaml'&quot;)"/>
+  <arg name="ref_vel_file" default="$(eval &quot;'ref_vel.yaml' if '$(var track)' == 'citycircuit' else 'ref_vel_' + '$(var track)' + '.yaml'&quot;)"/>
+
+  <node pkg="multi_purpose_mpc_ros_with_dynamic_param" exec="run_mpc_controller.bash"
+        name="mpc_controller" output="screen"
+        args="--config_path $(find-pkg-share multi_purpose_mpc_ros_with_dynamic_param)/config/$(var config_file)
+              --ref_vel_path $(find-pkg-share multi_purpose_mpc_ros_with_dynamic_param)/config/$(var ref_vel_file)">
+    <param name="use_sim_time" value="$(var use_sim_time)"/>
+    <param name="use_boost_acceleration" value="false"/>
+    <param name="use_obstacle_avoidance" value="$(var use_obstacle_avoidance)"/>
+    <param name="use_stats" value="false"/>
+  </node>
+</launch>
