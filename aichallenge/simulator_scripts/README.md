@@ -35,6 +35,8 @@ make eval → run_evaluation.bash → evaluation.launch.xml
 | `e2e.sh` | E2E 1人練習 | - | 1台 / 6 laps / 300s / count開始 / start-random on / handicap・ranking off / camera・lidar cpu |
 | `e2e-submit.sh` | E2E 提出参考 | - | 1台 + NPC 2体 / 6 laps / 420s / count開始 / handicap・ranking off / camera・lidar cpu |
 | `e2e-final.sh` | E2E 決勝 | - | 4台 / 6 laps / 420s / sync開始 / handicap・ranking on / camera・lidar cpu |
+| `s2r.sh` | S2R 1人練習 | - | 1台 / 6 laps / 300s / count開始 / start-random on / handicap・ranking off / camera・lidar off |
+| `s2r-final.sh` | S2R 決勝 | - | 4台 / 6 laps / 420s / sync開始 / handicap・ranking on / camera・lidar off |
 | `gate.sh` | Safety Gate テスト | テスト番号 1/2/3/all（既定 all） | 1台。all は test1〜3 を順次実行 |
 | `sample-scenario.sh` | シナリオ指定起動 | - | `StreamingAssets/Race/official.yaml` を `--scenario` で読み込む |
 | `multiplay-server.sh` | Multiplay 専用サーバー | - | `-batchmode -nographics`、port 7777 |
@@ -46,7 +48,30 @@ make eval → run_evaluation.bash → evaluation.launch.xml
   `eval.sh` / `parallel.sh` は sync（`/admin/awsim/start` 待ち。評価では awsim_state_manager が
   自動送信、手動で送るなら `make awsim-request-start`）。
 - センサー（camera/LiDAR）は off が既定（E2E 系 3 モードのみ cpu）。GPU 描画への切り替えは各ファイル末尾のコメント参照。
-- 引数の完全な仕様は AWSIM リポジトリの `docs/AIChallenge/specs/CLI.md` を参照。
+- 引数の完全な仕様は AWSIM リポジトリの `internal-docs/specs/CLI.md`、
+  または `AWSIM.x86_64 --help` を参照。
+
+## 競技モード（E2E / S2R）
+
+競技課題ごとに 1 系統。系統内は **練習 → 提出 → 決勝** で、handicap / ranking / 車両数だけが変わる。
+
+| | E2E 系 | S2R 系 |
+|---|---|---|
+| 課題 | End-to-End（カメラ・LiDAR から直接制御） | Sim-to-Real（実車移行前提） |
+| camera / lidar | `cpu` | `off` |
+| imu / gnss / v2x | `off`（明示指定） | 既定の `on`（指定しない） |
+| 練習 | `e2e.sh` | `s2r.sh` |
+| 提出参考 | `e2e-submit.sh`（NPC 2体） | - |
+| 決勝 | `e2e-final.sh` | `s2r-final.sh` |
+
+- センサーの on/off がそのまま系統の定義。`--imu` / `--gnss` / `--v2x` は AWSIM 側の既定が
+  `on` なので、E2E 系だけが明示的に `off` を書いている（S2R 系は書かないことで on）。
+- 練習モードは `--start-random on`。開始位置が毎回変わるので、特定のスタート位置に
+  依存しない挙動を確認できる。決勝は `off`（公平性のため固定）。
+- 練習は count 開始（接地後に自動カウントダウン）、決勝は sync 開始
+  （`/admin/awsim/start` 待ち = 全車の準備完了を待って一斉スタート）。
+- 複合ターゲットは `make e2e` のみ（= `e2e-submit`）。他は
+  `make simulator-<mode>` で AWSIM だけ起動し、`make autoware-simulator` を別途叩く。
 
 ## 設計方針
 
