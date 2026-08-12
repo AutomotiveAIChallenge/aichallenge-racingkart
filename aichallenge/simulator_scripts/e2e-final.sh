@@ -1,25 +1,25 @@
 #!/bin/bash
-# E2E の1人練習用（handicap / ranking なし）
+# E2E の決勝用（4台 / handicap・ranking あり）
 
 AWSIM_DIRECTORY=/aichallenge/simulator/AWSIM
 export ROS_DOMAIN_ID=0
 
 exec $AWSIM_DIRECTORY/AWSIM.x86_64 \
     --venue citycircuit \
-    --start-mode count \
-    --start-count-seconds 5 \
-    --vehicles 1 \
+    --start-mode sync \
+    --start-count-seconds 10 \
+    --vehicles 4 \
     --npcs 0 \
     --boosts 2 \
     --laps 6 \
-    --timeout 300.0 \
+    --timeout 420.0 \
     --steer-source ackermann \
     --sound off \
     --collisions on \
-    --handicap off \
+    --handicap on \
     --wall-recovery off \
-    --start-random on \
-    --ranking off \
+    --start-random off \
+    --ranking on \
     --camera cpu \
     --lidar cpu \
     --imu off \
