@@ -260,3 +260,4 @@ cd ~/aichallenge-racingkart/vehicle
 ./setup_check.sh --phase preflight
 ```
 
+ここまででECUの構築は完了。実車両を走らせる手順は [README.md](./README.md) を参照。
