@@ -10,6 +10,7 @@ import pytest
 from hypothesis import given, settings
 
 from conftest import (
+    VEHICLES,
     JOY_FULL,
     all_mode,
     all_stopped,
@@ -19,7 +20,6 @@ from conftest import (
 )
 from test_status import _observations
 from racing_kart_manager_core import (
-    VEHICLES,
     AlertCode,
     BlockerCode,
     Level,
@@ -70,7 +70,7 @@ def test_f03_blocked_actions_always_have_a_reason(observations):
     理由の出ない不許可を作らない。オペレータが「なぜ押せないのか」を
     画面から判断できなくなるため。
     """
-    result = status(park(), observations, fresh_joy())
+    result = status(park(), observations, fresh_joy(), VEHICLES)
     messages = render_messages(result)
 
     if not result.can_enter_all_mode:
@@ -87,7 +87,7 @@ def test_f04_allowed_actions_have_no_reason(observations):
 
     押せるのに「できません」と出ていたら、オペレータは押さない。
     """
-    result = status(park(), observations, fresh_joy())
+    result = status(park(), observations, fresh_joy(), VEHICLES)
     messages = render_messages(result)
 
     if result.can_enter_all_mode:
@@ -99,7 +99,7 @@ def test_f04_allowed_actions_have_no_reason(observations):
 
 def test_f05_healthy_state_shows_nothing():
     """F-05: 全部正常なら何も出さない。常時警告が出ていると誰も読まなくなる。"""
-    result = status(park(), all_stopped(), fresh_joy())
+    result = status(park(), all_stopped(), fresh_joy(), VEHICLES)
 
     assert render_messages(result) == ()
 
@@ -114,13 +114,13 @@ def test_f06_unknown_is_never_shown_as_stopped():
 
     停止と誤表示すると、動いているかもしれない車両を停止扱いして操作に入る。
     """
-    result = status(park(), all_stopped(A6=dict(velocity_age=5.0)), fresh_joy())
+    result = status(park(), all_stopped(A7=dict(velocity_age=5.0)), fresh_joy(), VEHICLES)
     messages = render_messages(result)
     joined = " ".join(m.text for m in messages)
 
-    assert "A6" in joined
+    assert "A7" in joined
     assert "不明" in joined
-    assert "A6 が停止しています" not in joined
+    assert "A7 が停止しています" not in joined
 
 
 def test_f07_confirm_timeout_names_the_vehicles():
@@ -130,21 +130,22 @@ def test_f07_confirm_timeout_names_the_vehicles():
     """
     result = status(
         stopping(elapsed_s=6.0),
-        all_stopped(A3=dict(emergency=False), A6=dict(emergency=False)),
+        all_stopped(A3=dict(emergency=False), A7=dict(emergency=False)),
         fresh_joy(),
-    )
+    VEHICLES,
+)
     messages = render_messages(result)
     errors = [m.text for m in messages if m.level is Level.ERROR]
 
-    assert any("A3" in t and "A6" in t for t in errors), errors
+    assert any("A3" in t and "A7" in t for t in errors), errors
 
 
 def test_f08_message_clears_once_the_cause_is_gone():
     """F-08: 条件が解消したら文言は消える。解消していないのに消えない。"""
-    blocked = status(park(), all_stopped(A3=dict(velocity=0.5)), fresh_joy())
+    blocked = status(park(), all_stopped(A3=dict(velocity=0.5)), fresh_joy(), VEHICLES)
     assert texts_for(render_messages(blocked), "all")
 
-    cleared = status(park(), all_stopped(), fresh_joy())
+    cleared = status(park(), all_stopped(), fresh_joy(), VEHICLES)
     assert not texts_for(render_messages(cleared), "all")
 
 
@@ -156,20 +157,20 @@ def test_f08_message_clears_once_the_cause_is_gone():
 def test_f09_shared_reason_appears_once_with_multiple_targets():
     """F-09: 同じ理由は1件にまとめ、対象を並べる。
 
-    「A3 が停止していません」は一斉発進と A2/A6/A7 の選択を同時に塞ぐ。
-    操作ごとに1件ずつ作るとメッセージ表示エリアに同じ文が4回並ぶ。
+    「A3 が停止していません」は一斉発進と A2/A7 の選択を同時に塞ぐ。
+    操作ごとに1件ずつ作るとメッセージ表示エリアに同じ文が何度も並ぶ。
     """
-    result = status(park(), all_stopped(A3=dict(velocity=0.5)), fresh_joy())
+    result = status(park(), all_stopped(A3=dict(velocity=0.5)), fresh_joy(), VEHICLES)
     messages = render_messages(result)
 
     moving = [m for m in messages if "A3" in m.text and "停止していません" in m.text]
     assert len(moving) == 1, [m.text for m in messages]
-    assert set(moving[0].targets) == {"all", "A2", "A6", "A7"}
+    assert set(moving[0].targets) == {"all", "A2", "A7"}
 
 
 def test_f10_stick_in_use_is_reported_for_single_mode_only():
     """F-10: スティック操作中は単車操作だけが塞がれ、一斉発進は塞がれない。"""
-    result = status(all_stopped_park := park(), all_stopped(), fresh_joy(JOY_FULL))
+    result = status(all_stopped_park := park(), all_stopped(), fresh_joy(JOY_FULL), VEHICLES)
     messages = render_messages(result)
 
     assert not texts_for(messages, "all")
@@ -179,7 +180,7 @@ def test_f10_stick_in_use_is_reported_for_single_mode_only():
 
 def test_f11_not_in_park_is_reported_for_every_action():
     """F-11: パーク以外では、全操作に対して理由が出る。"""
-    result = status(all_mode(), all_stopped(), fresh_joy())
+    result = status(all_mode(), all_stopped(), fresh_joy(), VEHICLES)
     messages = render_messages(result)
 
     assert texts_for(messages, "all")

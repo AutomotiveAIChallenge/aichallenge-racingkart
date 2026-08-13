@@ -11,11 +11,10 @@ import json
 import pytest
 from hypothesis import given, settings
 
-from conftest import all_stopped, fresh_joy, park, single_mode, stopping
+from conftest import VEHICLES, all_stopped, fresh_joy, park, single_mode, stopping
 from test_status import _observations
 from racing_kart_manager_core import (
     SCHEMA_VERSION,
-    VEHICLES,
     EventKind,
     parse_command,
     status,
@@ -29,7 +28,7 @@ def dump(state=None, observations=None, joy=None):
     state = state or park()
     observations = observations if observations is not None else all_stopped()
     joy = joy or fresh_joy()
-    return json.loads(status_to_json(status(state, observations, joy), STAMP))
+    return json.loads(status_to_json(status(state, observations, joy, VEHICLES), STAMP))
 
 
 # ==========================================================================
@@ -43,13 +42,13 @@ def test_j01_tri_is_serialized_as_a_string():
     真偽値にすると UNKNOWN が表現できず、テレメトリ途絶を「停止」と
     誤表示する事故に直結する。ここが崩れると観点 F-5 が成立しない。
     """
-    payload = dump(observations=all_stopped(A6=dict(velocity_age=5.0)))
+    payload = dump(observations=all_stopped(A7=dict(velocity_age=5.0)))
     by_id = {v["vehicle_id"]: v for v in payload["vehicles"]}
 
     assert by_id["A2"]["stopped"] == "TRUE"
-    assert by_id["A6"]["stopped"] == "UNKNOWN"
-    assert isinstance(by_id["A6"]["stopped"], str)
-    assert by_id["A6"]["stopped"] is not False
+    assert by_id["A7"]["stopped"] == "UNKNOWN"
+    assert isinstance(by_id["A7"]["stopped"], str)
+    assert by_id["A7"]["stopped"] is not False
 
 
 def test_j02_required_keys_are_present():
@@ -114,7 +113,7 @@ def test_j06_messages_carry_level_and_targets():
 def test_j07_any_status_serializes_to_valid_json(observations):
     """J-07: どんな観測でも JSON として出力でき、スキーマを満たす。"""
     payload = json.loads(
-        status_to_json(status(park(), observations, fresh_joy()), STAMP)
+        status_to_json(status(park(), observations, fresh_joy(), VEHICLES), STAMP)
     )
 
     assert set(payload["can_enter_single_mode"]) == set(VEHICLES)

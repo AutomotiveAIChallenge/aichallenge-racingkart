@@ -16,9 +16,30 @@ from typing import Mapping, Optional
 
 # --------------------------------------------------------------------------
 # 対象車両
+#
+# 台数も車両IDも固定しない。起動時に引数で渡す。使わない車両を固定リストに
+# 残すと、その車の停止確認が永久に取れず全操作が塞がれる。
 # --------------------------------------------------------------------------
 
-VEHICLES: tuple[str, ...] = ("A2", "A3", "A6", "A7")
+#: 運用に存在する車両ID。起動引数の検証にだけ使う。
+#: remote/connect_zenoh.bash のポート表と揃えること。
+KNOWN_VEHICLE_IDS: tuple[str, ...] = ("A1", "A2", "A3", "A5", "A6", "A7", "A8")
+
+
+def parse_vehicles(args) -> Optional[tuple[str, ...]]:
+    """起動引数から対象車両を決める。解釈できなければ None。
+
+    指定した順を保つ (GUI のボタン並びに効く)。空・未知のID・重複は拒否する。
+    重複を許すと、片方の観測がもう片方を上書きして判定が壊れる。
+    """
+    vehicles = tuple(args)
+    if not vehicles:
+        return None
+    if any(vehicle_id not in KNOWN_VEHICLE_IDS for vehicle_id in vehicles):
+        return None
+    if len(set(vehicles)) != len(vehicles):
+        return None
+    return vehicles
 
 
 # --------------------------------------------------------------------------
@@ -347,26 +368,26 @@ def _joy_is_stale(joy_observation: JoyObservation) -> bool:
 # --------------------------------------------------------------------------
 
 
-def spec_for(state: ManagerState) -> TransformSpec:
+def spec_for(state: ManagerState, vehicles: tuple[str, ...]) -> TransformSpec:
     """モードから joy 変換の仕様を決める。
 
-    軸を無操作値での上書きするかは宛先の数から決まる。スティック1本で複数台を
-    ステアリングすることはできないため、2台以上なら無操作値にする。
+    スティックで操縦するのは単車操作だけ。一斉と停止中は無操作値で上書きする。
+    送信先の台数では切り替えない。台数基準にすると、対象車両が1台のときだけ
+    一斉が単車操作と同じ挙動になり、モードの意味が崩れる。
     """
     if state.mode is Mode.PARK:
         destinations: frozenset[str] = frozenset()
     elif state.mode is Mode.ALL:
-        destinations = frozenset(VEHICLES)
+        destinations = frozenset(vehicles)
     elif state.mode is Mode.SINGLE:
         destinations = frozenset({state.selected}) if state.selected else frozenset()
     else:  # STOPPING
         destinations = state.stopping_destinations
 
-    force_emergency = state.mode is Mode.STOPPING
     return TransformSpec(
         destinations=destinations,
-        suppress_axes=force_emergency or len(destinations) >= 2,
-        force_emergency=force_emergency,
+        suppress_axes=state.mode is not Mode.SINGLE,
+        force_emergency=state.mode is Mode.STOPPING,
     )
 
 
@@ -466,6 +487,7 @@ def status(
     state: ManagerState,
     observations: Mapping[str, VehicleObservation],
     joy_observation: JoyObservation,
+    vehicles: tuple[str, ...],
 ) -> Status:
     """現在の状態と観測から Status を組み立てる。
 
@@ -474,9 +496,9 @@ def status(
     """
     stopped = {}
     emergency = {}
-    destinations = spec_for(state).destinations
+    destinations = spec_for(state, vehicles).destinations
     vehicle_statuses = []
-    for vehicle_id in VEHICLES:
+    for vehicle_id in vehicles:
         observation = _observation_of(observations, vehicle_id)
         stopped[vehicle_id] = stopped_of(observation)
         emergency[vehicle_id] = emergency_of(observation)
@@ -499,7 +521,7 @@ def status(
                 ),
             )
         )
-    vehicles = tuple(vehicle_statuses)
+    vehicle_statuses = tuple(vehicle_statuses)
 
     joy_stale = _joy_is_stale(joy_observation)
     common: list[Blocker] = []
@@ -509,15 +531,15 @@ def status(
         common.append(Blocker(BlockerCode.JOY_STALE))
 
     # 一斉モードへは4台すべての停止確認が要る
-    enter_all = tuple(common) + _vehicle_blockers(VEHICLES, stopped, emergency)
+    enter_all = tuple(common) + _vehicle_blockers(vehicles, stopped, emergency)
 
     # 単車操作へは対象以外の3台の停止確認が要る。対象車自身は含めない
     enter_single: dict[str, tuple[Blocker, ...]] = {}
-    for target in VEHICLES:
+    for target in vehicles:
         blockers = list(common)
         if joy_observation.joy is not None and not stick_no_input(joy_observation.joy):
             blockers.append(Blocker(BlockerCode.STICK_IN_USE))
-        others = tuple(v for v in VEHICLES if v != target)
+        others = tuple(v for v in vehicles if v != target)
         blockers.extend(_vehicle_blockers(others, stopped, emergency))
         enter_single[target] = tuple(blockers)
 
@@ -526,7 +548,7 @@ def status(
         alerts.append(Alert(AlertCode.JOY_STALE))
     lost = tuple(
         v
-        for v in VEHICLES
+        for v in vehicles
         if stopped[v] is Tri.UNKNOWN or emergency[v] is Tri.UNKNOWN
     )
     if lost:
@@ -538,7 +560,7 @@ def status(
     ):
         unconfirmed = tuple(
             v
-            for v in VEHICLES
+            for v in vehicles
             if v in state.stopping_destinations and emergency[v] is not Tri.TRUE
         )
         if unconfirmed:
@@ -547,7 +569,7 @@ def status(
     return Status(
         mode=state.mode,
         selected=state.selected,
-        vehicles=vehicles,
+        vehicles=vehicle_statuses,
         alerts=tuple(alerts),
         stopping_elapsed_s=state.stopping_elapsed_s,
         enter_all_mode_blockers=enter_all,
@@ -560,7 +582,7 @@ def status(
 # --------------------------------------------------------------------------
 
 
-def _enter_stopping(state: ManagerState) -> ManagerState:
+def _enter_stopping(state: ManagerState, vehicles: tuple[str, ...]) -> ManagerState:
     """縮める前の宛先を保ったまま停止中へ移る。
 
     宛先を先に狭めてはならない。publish を止めた車両は最後に届いた joy の
@@ -569,7 +591,7 @@ def _enter_stopping(state: ManagerState) -> ManagerState:
     return ManagerState(
         mode=Mode.STOPPING,
         selected=state.selected,
-        stopping_destinations=spec_for(state).destinations,
+        stopping_destinations=spec_for(state, vehicles).destinations,
         stopping_elapsed_s=0.0,
     )
 
@@ -579,15 +601,16 @@ def next_state(
     event: Event,
     observations: Mapping[str, VehicleObservation],
     joy_observation: JoyObservation,
+    vehicles: tuple[str, ...],
 ) -> ManagerState:
     """遷移。表に無い組み合わせは現状維持する。"""
     emergency = {
         vehicle_id: emergency_of(_observation_of(observations, vehicle_id))
-        for vehicle_id in VEHICLES
+        for vehicle_id in vehicles
     }
     stopped = {
         vehicle_id: stopped_of(_observation_of(observations, vehicle_id))
-        for vehicle_id in VEHICLES
+        for vehicle_id in vehicles
     }
 
     # 停止プロトコル中は、全車の emergency を確認できるまで留まる。
@@ -604,26 +627,26 @@ def next_state(
     joy = joy_observation.joy
     if joy is not None and emergency_pressed(joy):
         if state.mode in (Mode.ALL, Mode.SINGLE):
-            return _enter_stopping(state)
+            return _enter_stopping(state, vehicles)
         return state
 
     # 自発フォールバック。監視対象は単車操作のときの他3台だけ。
     # 一斉は4台とも走ってよく、パークは joy を送っていないので介入できない。
     if state.mode is Mode.SINGLE:
-        others = [v for v in VEHICLES if v != state.selected]
+        others = [v for v in vehicles if v != state.selected]
         if any(
             stopped[v] is not Tri.TRUE or emergency[v] is not Tri.TRUE for v in others
         ):
-            return _enter_stopping(state)
+            return _enter_stopping(state, vehicles)
 
-    current = status(state, observations, joy_observation)
+    current = status(state, observations, joy_observation, vehicles)
 
     if event.kind is EventKind.ENTER_ALL_MODE and current.can_enter_all_mode:
         return ManagerState(mode=Mode.ALL)
 
     if (
         event.kind is EventKind.ENTER_SINGLE_MODE
-        and event.vehicle_id in VEHICLES
+        and event.vehicle_id in vehicles
         and current.can_enter_single_mode(event.vehicle_id)
     ):
         return ManagerState(mode=Mode.SINGLE, selected=event.vehicle_id)
@@ -733,11 +756,12 @@ def render_messages(status_value: Status) -> tuple[Message, ...]:
 
     for blocker in status_value.enter_all_mode_blockers:
         collect(blocker, TARGET_ALL)
-    for vehicle_id in VEHICLES:
+    vehicle_ids = tuple(v.vehicle_id for v in status_value.vehicles)
+    for vehicle_id in vehicle_ids:
         for blocker in status_value.enter_single_mode_blockers.get(vehicle_id, ()):
             collect(blocker, vehicle_id)
 
-    ordered_targets = (TARGET_ALL,) + VEHICLES
+    ordered_targets = (TARGET_ALL,) + vehicle_ids
     messages = [
         Message(
             level=_BLOCKER_LEVEL[code],
@@ -803,8 +827,8 @@ def status_to_json(status_value: Status, stamp_ns: int) -> str:
         ],
         "can_enter_all_mode": status_value.can_enter_all_mode,
         "can_enter_single_mode": {
-            vehicle_id: status_value.can_enter_single_mode(vehicle_id)
-            for vehicle_id in VEHICLES
+            vehicle.vehicle_id: status_value.can_enter_single_mode(vehicle.vehicle_id)
+            for vehicle in status_value.vehicles
         },
         "messages": [
             {
@@ -838,7 +862,8 @@ def parse_command(payload: str) -> Optional[Event]:
         return Event(kind=EventKind.ENTER_ALL_MODE)
     if command == "enter_single_mode":
         vehicle_id = data.get("vehicle_id")
-        if vehicle_id in VEHICLES:
+        # ここでは既知のIDかだけを見る。対象車両に入っているかは next_state が判定する
+        if vehicle_id in KNOWN_VEHICLE_IDS:
             return Event(kind=EventKind.ENTER_SINGLE_MODE, vehicle_id=vehicle_id)
     return None
 

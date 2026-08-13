@@ -14,6 +14,7 @@ from hypothesis import given, settings
 from hypothesis import strategies as st
 
 from conftest import (
+    VEHICLES,
     ENTER_ALL,
     JOY_EVENT,
     JOY_FULL,
@@ -31,7 +32,6 @@ from racing_kart_manager_core import (
     EMERGENCY_BUTTONS,
     EMERGENCY_CONFIRM_TIMEOUT_S,
     INITIAL_STATE,
-    VEHICLES,
     Mode,
     next_state,
 )
@@ -51,7 +51,7 @@ def test_n01_starts_in_park():
 
 def test_n02_park_to_all_mode_when_allowed():
     """N-02: 前提を満たしていれば一斉モードへ入る。"""
-    result = next_state(park(), ENTER_ALL, all_stopped(), fresh_joy())
+    result = next_state(park(), ENTER_ALL, all_stopped(), fresh_joy(), VEHICLES)
 
     assert result.mode is Mode.ALL
 
@@ -60,14 +60,15 @@ def test_n03_park_stays_when_all_mode_is_blocked():
     """N-03: 前提を満たさなければ入らない。GUI の押下だけでは広がらない。"""
     result = next_state(
         park(), ENTER_ALL, all_stopped(A3=dict(velocity=0.5)), fresh_joy()
-    )
+    ,
+        VEHICLES)
 
     assert result.mode is Mode.PARK
 
 
 def test_n04_park_to_single_mode_when_allowed():
     """N-04: 車両選択で単車操作へ入り、対象が記録される。"""
-    result = next_state(park(), enter_single("A2"), all_stopped(), fresh_joy())
+    result = next_state(park(), enter_single("A2"), all_stopped(), fresh_joy(), VEHICLES)
 
     assert result.mode is Mode.SINGLE
     assert result.selected == "A2"
@@ -80,7 +81,7 @@ def test_n04_park_to_single_mode_when_allowed():
 
 def test_n05_all_mode_ignores_vehicle_selection():
     """N-05: 一斉モードから単車操作へは直接行けない。"""
-    result = next_state(all_mode(), enter_single("A2"), all_stopped(), fresh_joy())
+    result = next_state(all_mode(), enter_single("A2"), all_stopped(), fresh_joy(), VEHICLES)
 
     assert result.mode is Mode.ALL
 
@@ -93,7 +94,8 @@ def test_n06_single_mode_ignores_switching_to_another_vehicle():
     """
     result = next_state(
         single_mode("A2"), enter_single("A3"), all_stopped(), fresh_joy()
-    )
+    ,
+        VEHICLES)
 
     assert result.mode is Mode.SINGLE
     assert result.selected == "A2"
@@ -109,7 +111,8 @@ def test_n07_all_mode_to_stopping_on_emergency_button(button):
     """N-07: 一斉モード中に緊急停止ボタンを押したら停止中へ。"""
     result = next_state(
         all_mode(), JOY_EVENT, all_stopped(), fresh_joy(joy_with_buttons(button))
-    )
+    ,
+        VEHICLES)
 
     assert result.mode is Mode.STOPPING
     assert result.stopping_destinations == frozenset(VEHICLES)
@@ -117,7 +120,7 @@ def test_n07_all_mode_to_stopping_on_emergency_button(button):
 
 def test_n08_single_mode_to_stopping_on_emergency_button():
     """N-08: 単車操作中も同じ。送信先は縮める前のまま保つ。"""
-    result = next_state(single_mode("A2"), JOY_EVENT, all_stopped(), EMERGENCY_JOY)
+    result = next_state(single_mode("A2"), JOY_EVENT, all_stopped(), EMERGENCY_JOY, VEHICLES)
 
     assert result.mode is Mode.STOPPING
     assert result.stopping_destinations == frozenset({"A2"})
@@ -129,15 +132,16 @@ def test_n09_stopping_stays_until_every_vehicle_confirms():
     publish を止めると、その車は最後の joy のまま最大5秒走り続ける。
     """
     result = next_state(
-        stopping(), TICK, all_stopped(A6=dict(emergency=False)), EMERGENCY_JOY
-    )
+        stopping(), TICK, all_stopped(A7=dict(emergency=False)), EMERGENCY_JOY
+    ,
+        VEHICLES)
 
     assert result.mode is Mode.STOPPING
 
 
 def test_n10_stopping_to_park_once_all_confirmed():
     """N-10: 全車の emergency を確認できたらパークへ落とす。"""
-    result = next_state(stopping(), TICK, all_stopped(), EMERGENCY_JOY)
+    result = next_state(stopping(), TICK, all_stopped(), EMERGENCY_JOY, VEHICLES)
 
     assert result.mode is Mode.PARK
     assert result.stopping_destinations == frozenset()
@@ -147,8 +151,9 @@ def test_n11_stopping_ignores_gui_interruptions():
     """N-11: 停止プロトコル中の GUI 操作は無視する。先に停止を通し切る。"""
     for event in (ENTER_ALL, enter_single("A2")):
         result = next_state(
-            stopping(), event, all_stopped(A6=dict(emergency=False)), EMERGENCY_JOY
-        )
+            stopping(), event, all_stopped(A7=dict(emergency=False)), EMERGENCY_JOY
+        ,
+        VEHICLES)
         assert result.mode is Mode.STOPPING, event
 
 
@@ -160,9 +165,10 @@ def test_n12_stopping_persists_past_the_confirm_timeout():
     result = next_state(
         stopping(elapsed_s=EMERGENCY_CONFIRM_TIMEOUT_S + 1.0),
         TICK,
-        all_stopped(A6=dict(emergency=False)),
+        all_stopped(A7=dict(emergency=False)),
         EMERGENCY_JOY,
-    )
+    VEHICLES,
+)
 
     assert result.mode is Mode.STOPPING
 
@@ -176,7 +182,8 @@ def test_n13_single_mode_falls_back_when_another_vehicle_moves():
     """N-13: 対象以外が動き出したら停止プロトコルへ。"""
     result = next_state(
         single_mode("A2"), TICK, all_stopped(A3=dict(velocity=0.5)), fresh_joy()
-    )
+    ,
+        VEHICLES)
 
     assert result.mode is Mode.STOPPING
 
@@ -185,7 +192,8 @@ def test_n14_single_mode_falls_back_when_another_vehicle_is_unknown():
     """N-14: 確認できない場合も安全側に倒す。無音を停止扱いしない。"""
     result = next_state(
         single_mode("A2"), TICK, all_stopped(A3=dict(velocity_age=5.0)), fresh_joy()
-    )
+    ,
+        VEHICLES)
 
     assert result.mode is Mode.STOPPING
 
@@ -194,7 +202,8 @@ def test_n15_single_mode_falls_back_when_another_emergency_is_cleared():
     """N-15: 止まっていても emergency が解除されていたら落とす。"""
     result = next_state(
         single_mode("A2"), TICK, all_stopped(A3=dict(emergency=False)), fresh_joy()
-    )
+    ,
+        VEHICLES)
 
     assert result.mode is Mode.STOPPING
 
@@ -203,7 +212,8 @@ def test_n16_single_mode_tolerates_the_target_moving():
     """N-16: 対象車自身は監視対象に含めない。操縦中なので動いてよい。"""
     result = next_state(
         single_mode("A2"), TICK, all_stopped(A2=dict(velocity=3.0)), fresh_joy()
-    )
+    ,
+        VEHICLES)
 
     assert result.mode is Mode.SINGLE
 
@@ -215,7 +225,8 @@ def test_n17_single_mode_tolerates_the_target_being_unknown():
         TICK,
         all_stopped(A2=dict(velocity_age=5.0, debug_age=5.0)),
         fresh_joy(),
-    )
+    VEHICLES,
+)
 
     assert result.mode is Mode.SINGLE
 
@@ -227,7 +238,8 @@ def test_n18_all_mode_tolerates_moving_vehicles():
         TICK,
         all_stopped(**{v: dict(velocity=8.0, emergency=False) for v in VEHICLES}),
         fresh_joy(),
-    )
+    VEHICLES,
+)
 
     assert result.mode is Mode.ALL
 
@@ -243,7 +255,8 @@ def test_n19_all_mode_tolerates_lost_telemetry():
         TICK,
         all_stopped(**{v: dict(velocity_age=9.0, debug_age=9.0) for v in VEHICLES}),
         fresh_joy(),
-    )
+    VEHICLES,
+)
 
     assert result.mode is Mode.ALL
 
@@ -255,14 +268,15 @@ def test_n20_park_stays_even_when_a_vehicle_moves():
     """
     result = next_state(
         park(), TICK, all_stopped(A3=dict(velocity=2.0, emergency=False)), fresh_joy()
-    )
+    ,
+        VEHICLES)
 
     assert result.mode is Mode.PARK
 
 
 def test_n21_park_does_not_widen_without_gui_action():
     """N-21: テレメトリ更新だけでは宛先が広がらない。"""
-    result = next_state(park(), TICK, all_stopped(), fresh_joy())
+    result = next_state(park(), TICK, all_stopped(), fresh_joy(), VEHICLES)
 
     assert result.mode is Mode.PARK
     assert result.selected is None
@@ -287,7 +301,7 @@ def test_n22_unlisted_transitions_are_no_ops(state, event):
 
     joy に緊急停止が入っていない前提での確認。
     """
-    result = next_state(state, event, all_stopped(), fresh_joy(JOY_FULL))
+    result = next_state(state, event, all_stopped(), fresh_joy(JOY_FULL), VEHICLES)
 
     allowed = {state.mode}
     if state.mode is Mode.PARK:
@@ -303,7 +317,7 @@ def test_n23_park_ignores_emergency_button():
 
     joy を送っていないので停止プロトコルを始めても送り先が無い。
     """
-    result = next_state(park(), JOY_EVENT, all_stopped(), EMERGENCY_JOY)
+    result = next_state(park(), JOY_EVENT, all_stopped(), EMERGENCY_JOY, VEHICLES)
 
     assert result.mode is Mode.PARK
     assert result.stopping_destinations == frozenset()

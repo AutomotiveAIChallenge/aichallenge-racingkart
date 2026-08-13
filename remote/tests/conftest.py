@@ -16,7 +16,6 @@ sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1]))
 from racing_kart_manager_core import (  # noqa: E402
     NO_INPUT_AXES,
     NUM_BUTTONS,
-    VEHICLES,
     Event,
     EventKind,
     JoyObservation,
@@ -25,6 +24,10 @@ from racing_kart_manager_core import (  # noqa: E402
     Mode,
     VehicleObservation,
 )
+
+#: テスト既定の対象車両。台数依存のケースだけ明示的に別の並びを渡す。
+VEHICLES: tuple[str, ...] = ("A2", "A3", "A7")
+
 
 # --------------------------------------------------------------------------
 # joy のテストデータ
@@ -84,13 +87,14 @@ def obs(
     )
 
 
-def all_stopped(**per_vehicle) -> dict[str, VehicleObservation]:
-    """4台とも正常停止。per_vehicle で個別に上書きする。
+def all_stopped(vehicles=VEHICLES, **per_vehicle) -> dict[str, VehicleObservation]:
+    """対象車両すべてが正常停止。per_vehicle で個別に上書きする。
 
-        all_stopped(A3=dict(velocity=0.5))   # A3 だけ動いている
+        all_stopped(A3=dict(velocity=0.5))        # A3 だけ動いている
+        all_stopped(("A2", "A3"))                 # 2台だけを対象にする
     """
     result = {}
-    for vehicle_id in VEHICLES:
+    for vehicle_id in vehicles:
         overrides = per_vehicle.get(vehicle_id, {})
         result[vehicle_id] = obs(vehicle_id, **overrides)
     return result

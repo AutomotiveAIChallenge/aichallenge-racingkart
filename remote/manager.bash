@@ -1,8 +1,8 @@
 #!/bin/bash
 # racing_kart_manager と操作 GUI の起動。
 #
-#   manager.bash            # manager ノード
-#   manager.bash gui        # 操作 GUI
+#   manager.bash manager A2 A3 A7   # manager ノード（対象車両を指定）
+#   manager.bash gui                # 操作 GUI（対象車両は status から知る）
 #
 # manager と GUI は別プロセス。GUI が落ちても manager は joy を流し続ける。
 set -eo pipefail
@@ -28,13 +28,15 @@ cd "${SCRIPT_DIR}"
 
 case "${1:-manager}" in
 manager)
-    exec python3 racing_kart_manager.py
+    shift || true
+    exec python3 racing_kart_manager.py "$@"
     ;;
 gui)
     exec python3 racing_kart_manager_gui.py
     ;;
 *)
-    echo "Usage: $0 {manager|gui}" >&2
+    echo "Usage: $0 manager <VEHICLE_ID> [VEHICLE_ID ...]" >&2
+    echo "       $0 gui" >&2
     exit 1
     ;;
 esac

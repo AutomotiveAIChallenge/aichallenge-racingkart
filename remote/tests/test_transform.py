@@ -10,7 +10,7 @@ import pytest
 from hypothesis import given
 from hypothesis import strategies as st
 
-from conftest import JOY_FULL, JOY_NO_INPUT, NO_BUTTONS, joy_with_buttons
+from conftest import VEHICLES, JOY_FULL, JOY_NO_INPUT, NO_BUTTONS, joy_with_buttons
 from racing_kart_manager_core import (
     AXIS_ACCEL,
     AXIS_BRAKE,
@@ -21,7 +21,6 @@ from racing_kart_manager_core import (
     NO_INPUT_AXES,
     NUM_AXES,
     NUM_BUTTONS,
-    VEHICLES,
     JoyValue,
     TransformSpec,
     transform,
