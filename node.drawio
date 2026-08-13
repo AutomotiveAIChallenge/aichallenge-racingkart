@@ -1,0 +1,215 @@
+<mxfile host="65bd71144e">
+    <diagram id="sMtrIzVqIi3vjL5B-O4V" name="Page-1">
+        <mxGraphModel dx="3197" dy="920" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="827" pageHeight="1169" math="0" shadow="0">
+            <root>
+                <mxCell id="0"/>
+                <mxCell id="1" parent="0"/>
+                <mxCell id="3" value="" style="rounded=0;whiteSpace=wrap;html=1;strokeWidth=4;strokeColor=#FF3333;fillColor=none;" vertex="1" parent="1">
+                    <mxGeometry x="-2230" y="720" width="1080" height="450" as="geometry"/>
+                </mxCell>
+                <mxCell id="4" value="racing_kart_driver" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;" vertex="1" parent="1">
+                    <mxGeometry x="-700" y="750" width="120" height="40" as="geometry"/>
+                </mxCell>
+                <mxCell id="5" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" edge="1" parent="1" source="6" target="13">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="6" value="joy_node" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;" vertex="1" parent="1">
+                    <mxGeometry x="-2130" y="930" width="120" height="40" as="geometry"/>
+                </mxCell>
+                <mxCell id="7" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;startArrow=classic;startFill=1;" edge="1" parent="1" source="8" target="17">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <UserObject label="zenoh_bridge" tooltip="Joy&#xa;&#xa;std_msgs/Header header&#xa;float32[] axes&#xa;int32[] buttons" id="8">
+                    <mxCell style="rounded=0;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;" vertex="1" parent="1">
+                        <mxGeometry x="-1280" y="750" width="120" height="40" as="geometry"/>
+                    </mxCell>
+                </UserObject>
+                <mxCell id="9" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" edge="1" parent="1" source="13" target="8">
+                    <mxGeometry relative="1" as="geometry">
+                        <Array as="points">
+                            <mxPoint x="-1489.97" y="950"/>
+                            <mxPoint x="-1489.97" y="770"/>
+                        </Array>
+                    </mxGeometry>
+                </mxCell>
+                <mxCell id="10" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" edge="1" parent="1" source="13" target="42">
+                    <mxGeometry relative="1" as="geometry">
+                        <Array as="points">
+                            <mxPoint x="-1489.97" y="950"/>
+                            <mxPoint x="-1489.97" y="895.03"/>
+                        </Array>
+                    </mxGeometry>
+                </mxCell>
+                <mxCell id="11" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" edge="1" parent="1" source="48" target="44">
+                    <mxGeometry relative="1" as="geometry">
+                        <Array as="points">
+                            <mxPoint x="-1489.97" y="950"/>
+                            <mxPoint x="-1489.97" y="1010"/>
+                        </Array>
+                    </mxGeometry>
+                </mxCell>
+                <mxCell id="12" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;entryX=0;entryY=0.5;entryDx=0;entryDy=0;startArrow=classic;startFill=1;" edge="1" parent="1" source="48" target="46">
+                    <mxGeometry relative="1" as="geometry">
+                        <Array as="points">
+                            <mxPoint x="-1489.97" y="950"/>
+                            <mxPoint x="-1489.97" y="1125.03"/>
+                        </Array>
+                    </mxGeometry>
+                </mxCell>
+                <UserObject label="/racingkart/joy" tooltip="std_msgs/Header header&#xa;uint32 id&#xa;bool is_rtr&#xa;bool is_extended&#xa;bool is_error&#xa;uint8 dlc&#xa;uint8[8] data" id="13">
+                    <mxCell style="rounded=0;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=10;" vertex="1" parent="1">
+                        <mxGeometry x="-1950" y="930" width="120" height="40" as="geometry"/>
+                    </mxCell>
+                </UserObject>
+                <mxCell id="14" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;" edge="1" parent="1" source="15" target="4">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <UserObject label="zenoh_bridge" tooltip="Joy&#xa;&#xa;std_msgs/Header header&#xa;float32[] axes&#xa;int32[] buttons" id="15">
+                    <mxCell style="rounded=0;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;" vertex="1" parent="1">
+                        <mxGeometry x="-910" y="750" width="120" height="40" as="geometry"/>
+                    </mxCell>
+                </UserObject>
+                <mxCell id="16" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;" edge="1" parent="1" source="17" target="15">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="17" value="zenoh router" style="ellipse;shape=cloud;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+                    <mxGeometry x="-1110" y="730" width="120" height="80" as="geometry"/>
+                </mxCell>
+                <mxCell id="18" value="" style="rounded=0;whiteSpace=wrap;html=1;fillColor=none;strokeColor=#0000FF;strokeWidth=4;" vertex="1" parent="1">
+                    <mxGeometry x="-940" y="730" width="370" height="80" as="geometry"/>
+                </mxCell>
+                <mxCell id="19" value="A2" style="text;html=1;whiteSpace=wrap;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;rounded=0;" vertex="1" parent="1">
+                    <mxGeometry x="-570" y="760" width="60" height="30" as="geometry"/>
+                </mxCell>
+                <mxCell id="20" value="racing_kart_driver" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;" vertex="1" parent="1">
+                    <mxGeometry x="-700" y="870" width="120" height="40" as="geometry"/>
+                </mxCell>
+                <mxCell id="21" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;" edge="1" parent="1" source="22" target="20">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <UserObject label="zenoh_bridge" tooltip="Joy&#xa;&#xa;std_msgs/Header header&#xa;float32[] axes&#xa;int32[] buttons" id="22">
+                    <mxCell style="rounded=0;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;" vertex="1" parent="1">
+                        <mxGeometry x="-910" y="870" width="120" height="40" as="geometry"/>
+                    </mxCell>
+                </UserObject>
+                <mxCell id="23" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;startArrow=classic;startFill=1;" edge="1" parent="1" source="24" target="22">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="24" value="zenoh router" style="ellipse;shape=cloud;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+                    <mxGeometry x="-1110" y="850" width="120" height="80" as="geometry"/>
+                </mxCell>
+                <mxCell id="25" value="" style="rounded=0;whiteSpace=wrap;html=1;fillColor=none;strokeColor=#0000FF;strokeWidth=4;" vertex="1" parent="1">
+                    <mxGeometry x="-940" y="850" width="370" height="80" as="geometry"/>
+                </mxCell>
+                <mxCell id="26" value="A3" style="text;html=1;whiteSpace=wrap;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;rounded=0;" vertex="1" parent="1">
+                    <mxGeometry x="-570" y="880" width="60" height="30" as="geometry"/>
+                </mxCell>
+                <mxCell id="27" value="racing_kart_driver" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;" vertex="1" parent="1">
+                    <mxGeometry x="-700" y="990" width="120" height="40" as="geometry"/>
+                </mxCell>
+                <mxCell id="28" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;" edge="1" parent="1" source="29" target="27">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <UserObject label="zenoh_bridge" tooltip="Joy&#xa;&#xa;std_msgs/Header header&#xa;float32[] axes&#xa;int32[] buttons" id="29">
+                    <mxCell style="rounded=0;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;" vertex="1" parent="1">
+                        <mxGeometry x="-910" y="990" width="120" height="40" as="geometry"/>
+                    </mxCell>
+                </UserObject>
+                <mxCell id="30" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;startArrow=classic;startFill=1;" edge="1" parent="1" source="31" target="29">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="31" value="zenoh router" style="ellipse;shape=cloud;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+                    <mxGeometry x="-1110" y="970" width="120" height="80" as="geometry"/>
+                </mxCell>
+                <mxCell id="32" value="" style="rounded=0;whiteSpace=wrap;html=1;fillColor=none;strokeColor=#0000FF;strokeWidth=4;" vertex="1" parent="1">
+                    <mxGeometry x="-940" y="970" width="370" height="80" as="geometry"/>
+                </mxCell>
+                <mxCell id="33" value="A6" style="text;html=1;whiteSpace=wrap;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;rounded=0;" vertex="1" parent="1">
+                    <mxGeometry x="-570" y="1000" width="60" height="30" as="geometry"/>
+                </mxCell>
+                <mxCell id="34" value="racing_kart_driver" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;" vertex="1" parent="1">
+                    <mxGeometry x="-700" y="1110" width="120" height="40" as="geometry"/>
+                </mxCell>
+                <mxCell id="35" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;" edge="1" parent="1" source="36" target="34">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <UserObject label="zenoh_bridge" tooltip="Joy&#xa;&#xa;std_msgs/Header header&#xa;float32[] axes&#xa;int32[] buttons" id="36">
+                    <mxCell style="rounded=0;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;" vertex="1" parent="1">
+                        <mxGeometry x="-910" y="1110" width="120" height="40" as="geometry"/>
+                    </mxCell>
+                </UserObject>
+                <mxCell id="37" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;" edge="1" parent="1" source="38" target="36">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="38" value="zenoh router" style="ellipse;shape=cloud;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+                    <mxGeometry x="-1110" y="1090" width="120" height="80" as="geometry"/>
+                </mxCell>
+                <mxCell id="39" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;" edge="1" parent="1" source="40" target="38">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="40" value="" style="rounded=0;whiteSpace=wrap;html=1;fillColor=none;strokeColor=#0000FF;strokeWidth=4;" vertex="1" parent="1">
+                    <mxGeometry x="-940" y="1090" width="370" height="80" as="geometry"/>
+                </mxCell>
+                <mxCell id="41" value="A7" style="text;html=1;whiteSpace=wrap;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;rounded=0;" vertex="1" parent="1">
+                    <mxGeometry x="-570" y="1120" width="60" height="30" as="geometry"/>
+                </mxCell>
+                <UserObject label="zenoh_bridge" tooltip="Joy&#xa;&#xa;std_msgs/Header header&#xa;float32[] axes&#xa;int32[] buttons" id="42">
+                    <mxCell style="rounded=0;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;" vertex="1" parent="1">
+                        <mxGeometry x="-1280" y="875" width="120" height="40" as="geometry"/>
+                    </mxCell>
+                </UserObject>
+                <mxCell id="43" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;startArrow=classic;startFill=1;" edge="1" parent="1" source="44" target="31">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <UserObject label="zenoh_bridge" tooltip="Joy&#xa;&#xa;std_msgs/Header header&#xa;float32[] axes&#xa;int32[] buttons" id="44">
+                    <mxCell style="rounded=0;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;" vertex="1" parent="1">
+                        <mxGeometry x="-1280" y="990" width="120" height="40" as="geometry"/>
+                    </mxCell>
+                </UserObject>
+                <mxCell id="45" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;startArrow=classic;startFill=1;" edge="1" parent="1" source="46" target="38">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <UserObject label="zenoh_bridge" tooltip="Joy&#xa;&#xa;std_msgs/Header header&#xa;float32[] axes&#xa;int32[] buttons" id="46">
+                    <mxCell style="rounded=0;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;" vertex="1" parent="1">
+                        <mxGeometry x="-1280" y="1105" width="120" height="40" as="geometry"/>
+                    </mxCell>
+                </UserObject>
+                <mxCell id="47" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" edge="1" parent="1" source="13" target="48">
+                    <mxGeometry relative="1" as="geometry">
+                        <Array as="points"/>
+                        <mxPoint x="-1830" y="950" as="sourcePoint"/>
+                        <mxPoint x="-1430" y="1125" as="targetPoint"/>
+                    </mxGeometry>
+                </mxCell>
+                <UserObject label="racingkarts_manager" tooltip="Joy&#xa;&#xa;std_msgs/Header header&#xa;float32[] axes&#xa;int32[] buttons" id="48">
+                    <mxCell style="rounded=0;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;" vertex="1" parent="1">
+                        <mxGeometry x="-1760" y="930" width="120" height="40" as="geometry"/>
+                    </mxCell>
+                </UserObject>
+                <mxCell id="49" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;entryX=0.08;entryY=0.614;entryDx=0;entryDy=0;entryPerimeter=0;startArrow=classic;startFill=1;" edge="1" parent="1" source="42" target="24">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <UserObject label="/A2/racingkart/joy&lt;br&gt;/A2//vehicle/status/velocity_status&lt;br&gt;&lt;div&gt;&lt;span style=&quot;background-color: transparent; color: light-dark(rgb(0, 0, 0), rgb(255, 255, 255));&quot;&gt;/A2/&lt;/span&gt;/racing_kart/debug/status&lt;/div&gt;" tooltip="std_msgs/Header header&#xa;uint32 id&#xa;bool is_rtr&#xa;bool is_extended&#xa;bool is_error&#xa;uint8 dlc&#xa;uint8[8] data" id="50">
+                    <mxCell style="rounded=0;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=10;" vertex="1" parent="1">
+                        <mxGeometry x="-1460" y="740" width="150" height="50" as="geometry"/>
+                    </mxCell>
+                </UserObject>
+                <UserObject label="/A3/racingkart/joy&lt;br&gt;/A3/vehicle/status/velocity_status&lt;br&gt;&lt;div&gt;&lt;span style=&quot;background-color: transparent; color: light-dark(rgb(0, 0, 0), rgb(255, 255, 255));&quot;&gt;/A3&lt;/span&gt;/racing_kart/debug/status&lt;/div&gt;" tooltip="std_msgs/Header header&#xa;uint32 id&#xa;bool is_rtr&#xa;bool is_extended&#xa;bool is_error&#xa;uint8 dlc&#xa;uint8[8] data" id="51">
+                    <mxCell style="rounded=0;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=10;" vertex="1" parent="1">
+                        <mxGeometry x="-1460" y="875" width="150" height="40" as="geometry"/>
+                    </mxCell>
+                </UserObject>
+                <UserObject label="/A6/racingkart/joy&lt;br&gt;/A6/vehicle/status/velocity_status&lt;br&gt;&lt;div&gt;&lt;span style=&quot;background-color: transparent; color: light-dark(rgb(0, 0, 0), rgb(255, 255, 255));&quot;&gt;/A6&lt;/span&gt;/racing_kart/debug/status&lt;/div&gt;" tooltip="std_msgs/Header header&#xa;uint32 id&#xa;bool is_rtr&#xa;bool is_extended&#xa;bool is_error&#xa;uint8 dlc&#xa;uint8[8] data" id="52">
+                    <mxCell style="rounded=0;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=10;" vertex="1" parent="1">
+                        <mxGeometry x="-1470" y="990" width="160" height="40" as="geometry"/>
+                    </mxCell>
+                </UserObject>
+                <UserObject label="/A7/racingkart/joy&lt;br&gt;/A7/vehicle/status/velocity_status&lt;br&gt;&lt;div&gt;&lt;span style=&quot;background-color: transparent; color: light-dark(rgb(0, 0, 0), rgb(255, 255, 255));&quot;&gt;/A7&lt;/span&gt;/racing_kart/debug/status&lt;/div&gt;" tooltip="std_msgs/Header header&#xa;uint32 id&#xa;bool is_rtr&#xa;bool is_extended&#xa;bool is_error&#xa;uint8 dlc&#xa;uint8[8] data" id="53">
+                    <mxCell style="rounded=0;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=10;" vertex="1" parent="1">
+                        <mxGeometry x="-1470" y="1105" width="160" height="40" as="geometry"/>
+                    </mxCell>
+                </UserObject>
+            </root>
+        </mxGraphModel>
+    </diagram>
+</mxfile>

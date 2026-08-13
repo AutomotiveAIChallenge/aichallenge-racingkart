@@ -1,0 +1,37 @@
+<mxfile host="65bd71144e">
+    <diagram id="AngHJuRih5xTURt7nEnj" name="Page-1">
+        <mxGraphModel dx="4024" dy="920" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="827" pageHeight="1169" math="0" shadow="0">
+            <root>
+                <mxCell id="0"/>
+                <mxCell id="1" parent="0"/>
+                <mxCell id="3" value="" style="rounded=0;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+                    <mxGeometry x="-2990" y="1190" width="610" height="390" as="geometry"/>
+                </mxCell>
+                <mxCell id="4" value="メッセージ表示エリア" style="rounded=1;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+                    <mxGeometry x="-2960" y="1440" width="570" height="120" as="geometry"/>
+                </mxCell>
+                <mxCell id="5" value="GUIアプリ（racing_kart_managerと連携）" style="text;html=1;whiteSpace=wrap;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;rounded=0;" vertex="1" parent="1">
+                    <mxGeometry x="-3000" y="1150" width="170" height="30" as="geometry"/>
+                </mxCell>
+                <mxCell id="6" value="" style="rounded=1;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+                    <mxGeometry x="-2960" y="1220" width="275" height="200" as="geometry"/>
+                </mxCell>
+                <mxCell id="7" value="&lt;p data-local-id=&quot;fc6240f6db97&quot; data-prosemirror-content-type=&quot;node&quot; data-prosemirror-node-name=&quot;paragraph&quot; data-prosemirror-node-block=&quot;true&quot; data-pm-slice=&quot;1 1 [&amp;quot;orderedList&amp;quot;,{&amp;quot;order&amp;quot;:1,&amp;quot;localId&amp;quot;:&amp;quot;32b4a026-2b65-4492-b339-07267b71067e&amp;quot;},&amp;quot;listItem&amp;quot;,{&amp;quot;localId&amp;quot;:&amp;quot;fa4e02db-7a2a-4dd7-b971-06d90a8b47b6&amp;quot;},&amp;quot;orderedList&amp;quot;,{&amp;quot;order&amp;quot;:1,&amp;quot;localId&amp;quot;:&amp;quot;9f40dc74331e&amp;quot;},&amp;quot;listItem&amp;quot;,{&amp;quot;localId&amp;quot;:&amp;quot;356f897f2bc7&amp;quot;}]&quot;&gt;一斉発進準備完了&lt;/p&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;" vertex="1" parent="1">
+                    <mxGeometry x="-2665" y="1220" width="275" height="200" as="geometry"/>
+                </mxCell>
+                <mxCell id="8" value="A2" style="rounded=1;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+                    <mxGeometry x="-2950" y="1230" width="120" height="60" as="geometry"/>
+                </mxCell>
+                <mxCell id="9" value="A6" style="rounded=1;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+                    <mxGeometry x="-2950" y="1330" width="120" height="60" as="geometry"/>
+                </mxCell>
+                <mxCell id="10" value="A3" style="rounded=1;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+                    <mxGeometry x="-2820" y="1230" width="120" height="60" as="geometry"/>
+                </mxCell>
+                <mxCell id="11" value="A7" style="rounded=1;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+                    <mxGeometry x="-2820" y="1330" width="120" height="60" as="geometry"/>
+                </mxCell>
+            </root>
+        </mxGraphModel>
+    </diagram>
+</mxfile>
