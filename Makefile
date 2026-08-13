@@ -2,7 +2,8 @@
 SHELL := /bin/bash
 
 .PHONY: autoware-build autoware-vehicle autoware-simulator autoware-request-initialpose autoware-request-control  awsim-request-start awsim-request-reset autoware-driver-zenoh autoware-driver-zenoh-rosbag setup-vehicle \
-	simulator dev dev2 dev3 dev4 driver zenoh download rviz2 down down_all ps autoware-attach autoware-bash eval e2e vehicle-tui
+	simulator dev dev2 dev3 dev4 driver zenoh download rviz2 down down_all ps autoware-attach autoware-bash eval e2e vehicle-tui \
+	prestage-build prestage-stage prestage-unstage prestage-test
 
 # Used by docker-compose.yml for build/eval artifact ownership.
 HOST_UID ?= $(shell id -u)
@@ -170,3 +171,29 @@ download:
 # 再接続して同じターゲットを叩けば -A で同じセッションへアタッチする。
 vehicle-tui:
 	tmux new -A -s aic-vehicle "vehicle/tui.py"
+
+# Prestage submissions into an encrypted vault (organiser machine).
+# Usage: make prestage-build VAULT=<cipherdir> TEAMS=<teams.tsv>
+prestage-build:
+	@[ -n "$(VAULT)" ] || { echo "VAULT=<cipherdir> is required"; exit 2; }
+	@[ -n "$(TEAMS)" ] || { echo "TEAMS=<teams.tsv> is required"; exit 2; }
+	vehicle/prestage/prestage_all.sh --vault $(VAULT) --teams $(TEAMS)
+
+# Stage one team's prebuilt workspace (vehicle PC, organiser only).
+# Usage: make prestage-stage VAULT=<cipherdir> TEAM=<team_id>
+prestage-stage:
+	@[ -n "$(VAULT)" ] || { echo "VAULT=<cipherdir> is required"; exit 2; }
+	@[ -n "$(TEAM)" ] || { echo "TEAM=<team_id> is required"; exit 2; }
+	vehicle/prestage/stage_team.sh --vault $(VAULT) $(TEAM)
+
+# Wipe the staged submission after a slot.
+# Usage: make prestage-unstage [KEEP_OUTPUT=<dir>]
+prestage-unstage:
+	@if [ -n "$(KEEP_OUTPUT)" ]; then \
+		vehicle/prestage/unstage_team.sh --keep-output $(KEEP_OUTPUT); \
+	else \
+		vehicle/prestage/unstage_team.sh; \
+	fi
+
+prestage-test:
+	vehicle/prestage/tests/run_all.sh

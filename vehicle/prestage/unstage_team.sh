@@ -26,7 +26,7 @@ Deletes the staged team's plaintext and build artefacts:
   the eval image, and the staging marker.
 
 Options:
-  --keep-output <dir>  Move output/* here (per team_id) instead of deleting
+  --keep-output <dir>  Move output/* here (per team_id); otherwise left in place
   --yes                Do not prompt for confirmation
 EOF
 }
