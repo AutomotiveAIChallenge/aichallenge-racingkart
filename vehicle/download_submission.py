@@ -189,6 +189,20 @@ class SubmissionLister:
         print(f"Total: {len(submissions)} submissions")
         print("="*140)
 
+    def select_latest(self, submissions: List[Dict]) -> Optional[Dict]:
+        """
+        Pick the newest submission without prompting.
+
+        Args:
+            submissions (List[Dict]): List of submission data
+
+        Returns:
+            Dict: Newest submission by submission_time, or None if the list is empty
+        """
+        if not submissions:
+            return None
+        return max(submissions, key=lambda s: s.get('submission_time') or 0)
+
     def get_user_selection(self, submissions: List[Dict]) -> Optional[Dict]:
         """
         Get user selection for which submission to download
@@ -242,7 +256,7 @@ class SubmissionLister:
                 print("\n👋 Goodbye!")
                 return None
 
-    def download_submission(self, access_token: str, submission: Dict, output_dir: str = './downloads/', user_id: str = None) -> bool:
+    def download_submission(self, access_token: str, submission: Dict, output_dir: str = './downloads/', user_id: str = None, dest_file: str = None) -> bool:
         """
         Download a specific submission file
 
@@ -250,6 +264,7 @@ class SubmissionLister:
             access_token (str): Valid access token from Cognito
             submission (Dict): Submission data containing source_file_path
             output_dir (str): Directory to save the downloaded file
+            dest_file (str): Optional exact path to write the file to
 
         Returns:
             bool: True if successful, False otherwise
@@ -294,14 +309,17 @@ class SubmissionLister:
             if data.get('comment'):
                 logger.info(f"Comment: {data['comment']}")
 
-            # Create download directory inside vehicle folder
-            script_dir = os.path.dirname(os.path.abspath(__file__))
-            download_dir = os.path.join(script_dir, 'download')
-            os.makedirs(download_dir, exist_ok=True)
-
-            # Download the file using the pre-signed URL to download folder
             download_url = data['download_url']
-            output_path = os.path.join(download_dir, data['filename'])
+            if dest_file:
+                # Explicit destination (used by prestage_all.sh) — deterministic path.
+                output_path = dest_file
+                os.makedirs(os.path.dirname(os.path.abspath(output_path)), exist_ok=True)
+            else:
+                # Default (unchanged): download into vehicle/download/
+                script_dir = os.path.dirname(os.path.abspath(__file__))
+                download_dir = os.path.join(script_dir, 'download')
+                os.makedirs(download_dir, exist_ok=True)
+                output_path = os.path.join(download_dir, data['filename'])
 
             logger.info(f"Downloading file to: {output_path}")
 
@@ -338,7 +356,7 @@ class SubmissionLister:
             logger.error(f"Download error: {str(e)}")
             return False
 
-    def download_by_id(self, access_token: str, submission_id: str, output_dir: str = './downloads/', user_id: str = None) -> bool:
+    def download_by_id(self, access_token: str, submission_id: str, output_dir: str = './downloads/', user_id: str = None, dest_file: str = None) -> bool:
         """
         Download a submission by its ID directly
 
@@ -346,6 +364,7 @@ class SubmissionLister:
             access_token (str): Valid access token from Cognito
             submission_id (str): Submission ID to download
             output_dir (str): Directory to save downloaded files
+            dest_file (str): Optional exact path to write the file to
 
         Returns:
             bool: True if successful, False otherwise
@@ -383,14 +402,17 @@ class SubmissionLister:
             if data.get('comment'):
                 logger.info(f"Comment: {data['comment']}")
 
-            # Create download directory inside vehicle folder
-            script_dir = os.path.dirname(os.path.abspath(__file__))
-            download_dir = os.path.join(script_dir, 'download')
-            os.makedirs(download_dir, exist_ok=True)
-
-            # Download the file using the pre-signed URL to download folder
             download_url = data['download_url']
-            output_path = os.path.join(download_dir, data['filename'])
+            if dest_file:
+                # Explicit destination (used by prestage_all.sh) — deterministic path.
+                output_path = dest_file
+                os.makedirs(os.path.dirname(os.path.abspath(output_path)), exist_ok=True)
+            else:
+                # Default (unchanged): download into vehicle/download/
+                script_dir = os.path.dirname(os.path.abspath(__file__))
+                download_dir = os.path.join(script_dir, 'download')
+                os.makedirs(download_dir, exist_ok=True)
+                output_path = os.path.join(download_dir, data['filename'])
 
             logger.info(f"Downloading file to: {output_path}")
 
@@ -427,7 +449,7 @@ class SubmissionLister:
             logger.error(f"Download error: {str(e)}")
             return False
 
-    def run(self, username: str, password: str, output_dir: str = './downloads/', submission_id: str = None, user_id: str = None) -> bool:
+    def run(self, username: str, password: str, output_dir: str = './downloads/', submission_id: str = None, user_id: str = None, latest: bool = False, dest_file: str = None) -> bool:
         """
         Main execution method
 
@@ -437,6 +459,8 @@ class SubmissionLister:
             output_dir (str): Directory to save downloaded files
             submission_id (str): Optional submission ID to download directly
             user_id (str): Optional user ID to download submissions for
+            latest (bool): If True and submission_id is not given, download the newest submission without prompting
+            dest_file (str): Optional exact path to write the downloaded file to
         Returns:
             bool: True if successful, False otherwise
         """
@@ -450,13 +474,21 @@ class SubmissionLister:
             # If submission_id is provided, download directly
             if submission_id:
                 logger.info(f"Downloading submission by ID: {submission_id}")
-                return self.download_by_id(access_token, submission_id, output_dir, user_id)
+                return self.download_by_id(access_token, submission_id, output_dir, user_id, dest_file)
 
             # List submissions
             submissions = self.list_recent_submissions(access_token, user_id)
             if not submissions:
                 logger.error("Failed to fetch submissions")
                 return False
+
+            if latest:
+                selected = self.select_latest(submissions)
+                if not selected:
+                    logger.error("No submissions found")
+                    return False
+                logger.info(f"Selected latest submission: {selected.get('sourceFilePath')}")
+                return self.download_submission(access_token, selected, output_dir, user_id, dest_file)
 
             # Display submissions
             self.display_submissions(submissions, user_id)
@@ -469,10 +501,10 @@ class SubmissionLister:
             # Check if this is a direct download by ID
             if selected_submission.get('direct_download'):
                 # Download directly by ID (bypasses the submissions array)
-                success = self.download_by_id(access_token, selected_submission['submission_id'], output_dir)
+                success = self.download_by_id(access_token, selected_submission['submission_id'], output_dir, None, dest_file)
             else:
                 # Download from the submissions array
-                success = self.download_submission(access_token, selected_submission, output_dir, user_id)
+                success = self.download_submission(access_token, selected_submission, output_dir, user_id, dest_file)
             return success
 
         except KeyboardInterrupt:
@@ -532,6 +564,17 @@ Examples:
     )
 
     parser.add_argument(
+        '--latest',
+        action='store_true',
+        help='Download the newest submission without prompting (non-interactive)'
+    )
+
+    parser.add_argument(
+        '--dest-file',
+        help='Exact path to write the downloaded tar.gz to (default: vehicle/download/<filename>)'
+    )
+
+    parser.add_argument(
         '--verbose',
         action='store_true',
         help='Enable verbose logging'
@@ -545,7 +588,7 @@ Examples:
 
     # Create and run the submission lister
     lister = SubmissionLister()
-    success = lister.run(args.username, args.password, args.output, args.submission_id, args.user_id)
+    success = lister.run(args.username, args.password, args.output, args.submission_id, args.user_id, args.latest, args.dest_file)
 
     if success:
         logger.info("🎉 Operation completed successfully!")
