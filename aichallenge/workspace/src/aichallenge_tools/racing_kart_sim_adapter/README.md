@@ -52,16 +52,52 @@ include/racing_kart_sim_adapter/
   keybind.hpp      racing_kart_interfaceのjoystick.hpp/mapping.hppの複製(別リポジトリなのでビルド依存にできない)
   arbiter_core.hpp  ROS非依存の状態機械。JoyFrame+AutowareCommand -> ArbiterOutput
 src/arbiter_core.cpp
+src/adapter_node.cpp  rclcppラッパー。joy購読 -> arbiter_core -> control_cmd/gear_cmd発行
+launch/racing_kart_sim_adapter.launch.xml  aichallenge_system.launch.xmlを包んでremapする起動口
 test/test_arbiter_core.cpp  gtest。ロジックのみ検証、AWSIM結合テストは意図的にやらない(重いため)
 ```
 
-`adapter_node`(rclcppラッパー、`/racing_kart/joy`購読・`/control/command/control_cmd`+`gear_cmd`発行・既存control_methodの出力remap)は未実装。
+### 既存control_methodの横取り方
+
+`aichallenge_submit_launch`配下のファイルは**一切変更しない**。launchファイル側で
+`aichallenge_system.launch.xml`を`<group>`で包み、`<set_remap>`で
+`/control/command/control_cmd` -> `/ackermann_cmd`、`/control/command/gear_cmd` -> `/ackermann_gear_cmd`
+へ退避させる。`adapter_node`はその`<group>`の外に置くので、本来のトピック名を専有できる。
+AWSIMは別プロセス(このlaunchツリーの外)なので購読側は影響を受けない。
+
+XML launchの`<group>`直下で`<remap>`は使えない(`Unrecognized entity of the type: remap`)。
+`launch_ros`の`<set_remap>`を使うこと。
+
+### 比率と物理単位の変換
+
+`arbiter_core`は正規化比率のまま扱い、`adapter_node`が`max_accel_mps2`/`max_decel_mps2`/`max_steer_rad`
+パラメータで実単位へ変換する。**この3つの値は暫定**(実車スケール未調査、シムでの操作感が目的なので厳密である必要がない)。
 
 ## 現状(2026-08-13時点)
 
 - [x] `arbiter_core`のインターフェース確定、gtest 19ケース作成
 - [x] ビルド・実行確認(スタブ実装に対して赤信号を確認)
 - [x] `arbiter_core.cpp`の本実装(19 tests, 0 failures)
-- [ ] `adapter_node`(ROSラッパー、remap配線)
-- [ ] 比率→AckermannControlCommand物理単位への変換定数
-- [ ] namespace付きzenoh設定・`dev4-remote`Makefileターゲット
+- [x] `adapter_node`(ROSラッパー、remap配線)
+- [x] 比率→AckermannControlCommand物理単位への変換(暫定値)
+- [x] 1台(domain 1)でのAWSIM実機e2e確認 → 下記
+- [ ] namespace付きzenoh設定・`dev4-remote`Makefileターゲット(4台化)
+
+### 1台でのe2e確認結果(2026-08-13)
+
+`make simulator SIM_MODE=dev` + このlaunchをdomain 1で起動し、joyを流して`/control/command/control_cmd`と車速を観測。
+
+| 操作 | 出力 | 判定 |
+| --- | --- | --- |
+| joy未送信 | accel -3.00 / gear NEUTRAL | 安全側デフォルト |
+| 中立+解除コード(LSB+RSB) | accel 0.00 / gear DRIVE | 緊急解除が効く |
+| 全開スロットル | accel +3.00、車速4.95 m/s | joy -> AWSIMで実際に走る |
+| 右ステア(手動) | steer +0.450 rad | 手動クランプ0.9 × max_steer_rad 0.5 と一致 |
+| 緊急停止(LB単独) | accel -3.00 / gear NEUTRAL | 緊急停止が効く |
+| 自動運転(ButtonY) | accel +0.70 / steer -0.400 rad | joyの全開を無視しmpcの値を通す。自動クランプ0.8 × 0.5と一致 |
+| joy途絶7秒 | accel -3.00 / gear NEUTRAL | 5秒しきい値で緊急停止(REQ-04相当) |
+
+注意点(アダプターの問題ではない):
+
+- 直進加速したまま放置すると壁に刺さって固着する(`dev.sh`が`--collisions on --wall-recovery off`)。以降の車速が0で張り付いたら`make awsim-request-reset`する
+- AWSIMは長時間動かすと落ちることがある(実際にexit 139=SIGSEGVを観測)。`/clock`が止まると`use_sim_time`のこのノードはタイマーごと止まり、「トピックは見えるがデータが来ない」状態になる。疑ったらまず`docker ps -a`でsimulatorコンテナの生死を見る
