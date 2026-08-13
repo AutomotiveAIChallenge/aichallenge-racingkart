@@ -1,0 +1,63 @@
+////
+//// Vehicle-side zenoh bridge config for the AWSIM-based remote-operation rehearsal
+//// (`make dev3-remote`). Same role as `vehicle/zenoh.json5` -- a client connecting to the EC2
+//// router over mTLS -- with two differences:
+////   - TLS paths are absolute (/remote/tls/...), because this runs from a container whose
+////     working directory is not the one holding the certificates
+////   - the ROS namespace is NOT set here; remote/sim_zenoh.bash injects it per vehicle with
+////     `-n /A2` so a single file serves every vehicle
+//// The allow lists are matched against the bridge's *local* interface names, i.e. without the
+//// namespace prefix, so they stay identical to the production file.
+////
+{
+  plugins: {
+    ros2dds: {
+      allow: {
+        publishers: [
+          "/control/command/control_cmd",
+          "/localization/kinematic_state",
+          "/planning/scenario_planning/trajectory",
+          "/tf",
+          "/tf_static",
+          "/vehicle/status/gear_status",
+          "/vehicle/status/steering_status",
+          "/vehicle/status/velocity_status",
+        ],
+        subscribers: [
+          "/racing_kart/joy",
+          "/initialpose",
+        ],
+        service_servers: [],
+        service_clients: [],
+        action_servers: [],
+        action_clients: [],
+      },
+      pub_max_frequencies: ["/*=10"],
+      queries_timeout: {
+        default: 2.0,
+      },
+    },
+  },
+  mode: "client",
+  transport: {
+    unicast: {
+      compression: {
+        enabled: true,
+      },
+    },
+    multicast: {
+      compression: {
+        enabled: true,
+      },
+    },
+    link: {
+      tls: {
+        root_ca_certificate: "/remote/tls/server/minica.pem",
+        connect_private_key: "/remote/tls/client/key.pem",
+        connect_certificate: "/remote/tls/client/cert.pem",
+        enable_mtls: true,
+        close_link_on_expiration: true,
+      },
+    },
+  },
+}

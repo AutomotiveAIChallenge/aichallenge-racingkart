@@ -1,0 +1,60 @@
+////
+//// Remote-side zenoh bridge config template for the AWSIM-based remote-operation rehearsal
+//// (`make dev3-remote`). remote/sim_zenoh.bash substitutes __VEHICLE_ID__ and writes the result
+//// to a temporary file, so one template serves every vehicle.
+////
+//// Unlike `remote/zenoh-user.json5`, the interface names here carry the vehicle namespace:
+//// racing_kart_manager publishes `/A2/racing_kart/joy` on the remote side, this bridge routes it
+//// to the zenoh key `A2/racing_kart/joy`, and the vehicle-side bridge (started with `-n /A2`)
+//// strips the prefix back to `/racing_kart/joy` inside the vehicle's own DDS domain.
+//// This bridge itself has NO namespace -- that is what makes the two halves line up.
+////
+{
+  plugins: {
+    ros2dds: {
+      allow: {
+        publishers: [
+          "/__VEHICLE_ID__/racing_kart/joy",
+          "/__VEHICLE_ID__/initialpose",
+        ],
+        subscribers: [
+          "/__VEHICLE_ID__/vehicle/status/velocity_status",
+        ],
+        service_servers: [],
+        service_clients: [],
+        action_servers: [],
+        action_clients: [],
+      },
+      pub_max_frequencies: ["/*=10"],
+      pub_priorities: [
+        "/__VEHICLE_ID__/racing_kart/joy=1:express",
+        "/__VEHICLE_ID__/initialpose=1:express",
+      ],
+      queries_timeout: {
+        default: 2.0,
+      },
+    },
+  },
+  mode: "client",
+  transport: {
+    unicast: {
+      compression: {
+        enabled: true,
+      },
+    },
+    multicast: {
+      compression: {
+        enabled: true,
+      },
+    },
+    link: {
+      tls: {
+        root_ca_certificate: "/remote/tls/server/minica.pem",
+        connect_private_key: "/remote/tls/client/key.pem",
+        connect_certificate: "/remote/tls/client/cert.pem",
+        enable_mtls: true,
+        close_link_on_expiration: true,
+      },
+    },
+  },
+}

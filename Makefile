@@ -2,7 +2,7 @@
 SHELL := /bin/bash
 
 .PHONY: autoware-build autoware-vehicle autoware-simulator autoware-request-initialpose autoware-request-control  awsim-request-start awsim-request-reset autoware-driver-zenoh autoware-driver-zenoh-rosbag \
-	simulator dev dev2 dev3 dev4 driver zenoh download rviz2 down down_all ps autoware-attach autoware-bash eval
+	simulator dev dev2 dev3 dev4 dev3-remote driver zenoh download rviz2 down down_all ps autoware-attach autoware-bash eval
 
 # Used by docker-compose.yml for build/eval artifact ownership.
 HOST_UID ?= $(shell id -u)
@@ -83,6 +83,21 @@ dev2 dev3 dev4: simulator
 	echo "Start $$N-vehicle dev (autoware on ROS_DOMAIN_ID 1..$$N via docker compose -p)"; \
 	for p in $$(seq 1 $$N); do LOG_DIR=$(LOG_DIR) ROS_DOMAIN_ID=$$p docker compose -p $$p up -d autoware; done; \
 	echo "To Stop: make down"
+
+# Remote-operation rehearsal: AWSIM vehicles behind the racing_kart joy adapter, reachable
+# through the real EC2 zenoh router exactly like the karts are. Vehicle count is 3 because A6's
+# router port is not running (2026-08-13); to go back to four, add A6 to SIM_VEHICLES in
+# remote/sim_zenoh.bash and add a dev4-remote target here.
+dev3-remote: SIM_MODE := dev3
+dev3-remote: simulator
+	@echo "Start 3-vehicle remote-operation rehearsal (adapter + zenoh via EC2)"; \
+	for p in 1 2 3; do \
+		LOG_DIR=$(LOG_DIR) ROS_DOMAIN_ID=$$p RUN_MODE=awsim-remote \
+			docker compose -p $$p up -d autoware zenoh-sim-vehicle zenoh-sim-remote; \
+	done; \
+	echo "domain1=A2(7448)  domain2=A3(7449)  domain3=A7(7451)"; \
+	echo "Remote side is ROS_DOMAIN_ID 0: publish /A2/racing_kart/joy etc."; \
+	echo "To stop: make down"
 
 gate1: SIM_MODE := gate1
 gate2: SIM_MODE := gate2

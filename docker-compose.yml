@@ -145,6 +145,19 @@ services:
     entrypoint: []
     command: ["bash", "-lc", "exec /vehicle/run_driver.bash vehicle ${ROS_DOMAIN_ID:-1} ${LOG_DIR:-}"]
 
+#### remote-operation rehearsal on AWSIM (make dev3-remote) ####
+  # Vehicle-side bridge: this vehicle's own DDS domain <-> EC2, namespaced with its vehicle id.
+  zenoh-sim-vehicle:
+    <<: *autoware-base
+    working_dir: /remote
+    command: ["bash", "-lc", "exec /remote/sim_zenoh.bash vehicle ${ROS_DOMAIN_ID:-1}"]
+
+  # Remote-side bridge: always ROS_DOMAIN_ID 0, one process per vehicle.
+  zenoh-sim-remote:
+    <<: *autoware-base
+    working_dir: /remote
+    command: ["bash", "-lc", "exec /remote/sim_zenoh.bash remote ${ROS_DOMAIN_ID:-1}"]
+
 #### remote visualization services ####
   rviz2:
     <<: *autoware-base 
