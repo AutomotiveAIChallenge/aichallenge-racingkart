@@ -22,6 +22,7 @@
 - `makefile-target-naming.md` — Makefile ターゲットの `<service>-<command>` 命名ガイドライン。
 - `mpc-integration.md` — `multi_purpose_mpc_ros` のインテグレーション設計。
 - `vehicle-tui.md` — 車両 PC 上の走行枠オペレーション（preflight → 提出物 → build → 起動 → runtime → 片付け）を 1 つの TUI に集約する設計。順序の強制と状態の実測のみを担い、既存の `make` / `setup_check.sh` / `prestage` は再実装しない。
+- `prestaged-submissions.md` — オフライン会場向けに提出物を事前ビルドし、gocryptfs ボールトへ暗号化配置して走行枠ごとに 1 チームだけ展開する設計。
 
 ## docs/guide/ 一覧
 
