@@ -84,8 +84,8 @@ dev2 dev3 dev4: simulator
 	for p in $$(seq 1 $$N); do LOG_DIR=$(LOG_DIR) ROS_DOMAIN_ID=$$p docker compose -p $$p up -d autoware; done; \
 	echo "To Stop: make down"
 
-# e2e は提出参考モード（e2e-submit.sh）。e2e.sh / e2e-final.sh は make simulator-e2e[-final]。
-e2e: SIM_MODE := e2e-submit
+# e2e は練習兼提出参考モード（e2e.sh）。e2e-final.sh は make simulator-e2e-final。
+e2e: SIM_MODE := e2e
 e2e: simulator autoware-simulator
 	@echo "Start e2e simulation (AWSIM + Autoware)"
 	@echo "To stop: make down  (docker compose down --remove-orphans)"
