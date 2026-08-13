@@ -20,6 +20,23 @@ fi
 HOST_UID="${1-}"
 HOST_GID="${2-}"
 
+# Build flags. SYMLINK_INSTALL=0 produces a relocatable install/ (real files instead of
+# symlinks into src/ and build/), required for prestaged submissions.
+# See docs/spec/prestaged-submissions.md
+SYMLINK_INSTALL="${SYMLINK_INSTALL:-1}"
+colcon_args=(build)
+if [ "${SYMLINK_INSTALL}" != "0" ]; then
+    colcon_args+=(--symlink-install)
+fi
+colcon_args+=(--allow-overriding gyro_odometer --cmake-args -DCMAKE_BUILD_TYPE=Release)
+
+# DRY_RUN prints the resolved command without sourcing ROS, so flag resolution can be
+# tested outside the container.
+if [ "${DRY_RUN:-0}" != "0" ]; then
+    echo "colcon ${colcon_args[*]}"
+    exit 0
+fi
+
 # shellcheck disable=SC1091
 source /opt/ros/humble/setup.bash
 # shellcheck disable=SC1091
@@ -28,7 +45,7 @@ source /autoware/install/setup.bash
 cd ./workspace
 
 # NOTE: gyro_odometer exists in the Autoware underlay, so allow overriding in this overlay workspace.
-colcon build --symlink-install --allow-overriding gyro_odometer --cmake-args -DCMAKE_BUILD_TYPE=Release
+colcon "${colcon_args[@]}"
 
 echo "[build_autoware] Build successful."
 
