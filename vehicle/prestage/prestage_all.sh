@@ -30,8 +30,8 @@ Options:
   -h, --help        Show this help
 
 Environment:
-  USERNAME / PASSWORD   aic-next credentials (prompted once if unset)
-  PRESTAGE_PASSFILE     vault passphrase file (allowed here; organiser machine)
+  PRESTAGE_USERNAME / PRESTAGE_PASSWORD   aic-next credentials (prompted once if unset)
+  PRESTAGE_PASSFILE                       vault passphrase file (allowed here; organiser machine)
 EOF
 }
 
@@ -78,15 +78,21 @@ cleanup() {
     umount_vault "${MNT}"
     rmdir "${MNT}" 2>/dev/null || true
 }
-trap cleanup EXIT INT TERM
+# Signals must EXIT, not just run the handler: bash resumes the script after a
+# handler returns, which would leave the loop writing plaintext into the
+# unmounted mountpoint. The explicit exit re-enters the EXIT trap, so the
+# unmount happens exactly once.
+trap cleanup EXIT
+trap 'exit 130' INT
+trap 'exit 143' TERM
 
 # Credentials: ask once, up front, so the loop is unattended.
 if [ -z "${PRESTAGE_DOWNLOAD_CMD-}" ]; then
-    if [ -z "${USERNAME-}" ]; then
-        read -r -p "aic-next username: " USERNAME
+    if [ -z "${PRESTAGE_USERNAME-}" ]; then
+        read -r -p "aic-next username: " PRESTAGE_USERNAME
     fi
-    if [ -z "${PASSWORD-}" ]; then
-        read -r -s -p "aic-next password: " PASSWORD
+    if [ -z "${PRESTAGE_PASSWORD-}" ]; then
+        read -r -s -p "aic-next password: " PRESTAGE_PASSWORD
         echo >&2
     fi
 fi
@@ -135,13 +141,14 @@ while IFS=$'\t' read -r team_id user_id submission_id || [ -n "${team_id}" ]; do
         dl_args=(--submission-id "${submission_id}" --dest-file "${tarball}" --user-id "${user_id}")
     fi
     if [ -z "${PRESTAGE_DOWNLOAD_CMD-}" ]; then
-        dl_args+=(--username "${USERNAME}" --password "${PASSWORD}")
+        dl_args+=(--username "${PRESTAGE_USERNAME}" --password "${PRESTAGE_PASSWORD}")
     fi
 
     if ! ${DOWNLOAD_CMD} "${dl_args[@]}" >>"${team_dir}/build.log" 2>&1; then
         warn "${team_id}: download failed (see ${team_dir}/build.log)"
         python3 "${MANIFEST_PY}" upsert "${MANIFEST}" --team-id "${team_id}" --user-id "${user_id}" \
-            --submission-id "${submission_id-}" --build-status failed
+            --submission-id "${submission_id-}" --build-status failed ||
+            warn "${team_id}: manifest update failed"
         fail_count=$((fail_count + 1))
         continue
     fi
@@ -152,7 +159,8 @@ while IFS=$'\t' read -r team_id user_id submission_id || [ -n "${team_id}" ]; do
         warn "${team_id}: submission tarball is not readable (see ${team_dir}/build.log)"
         python3 "${MANIFEST_PY}" upsert "${MANIFEST}" --team-id "${team_id}" --user-id "${user_id}" \
             --submission-id "${submission_id-}" --build-status failed \
-            --submission-sha256 "$(sha256_of "${tarball}")"
+            --submission-sha256 "$(sha256_of "${tarball}")" ||
+            warn "${team_id}: manifest update failed"
         clean_workspace
         fail_count=$((fail_count + 1))
         continue
@@ -162,20 +170,43 @@ while IFS=$'\t' read -r team_id user_id submission_id || [ -n "${team_id}" ]; do
         warn "${team_id}: build failed (see ${team_dir}/build.log)"
         python3 "${MANIFEST_PY}" upsert "${MANIFEST}" --team-id "${team_id}" --user-id "${user_id}" \
             --submission-id "${submission_id-}" --build-status failed \
-            --submission-sha256 "$(sha256_of "${tarball}")"
+            --submission-sha256 "$(sha256_of "${tarball}")" ||
+            warn "${team_id}: manifest update failed"
         clean_workspace
         fail_count=$((fail_count + 1))
         continue
     fi
 
-    [ -f "${WS}/install/setup.bash" ] || die "${team_id}: build produced no install/setup.bash"
+    # A build that exits 0 but produces no install/ must fail this team only,
+    # not abort the remaining teams.
+    if [ ! -f "${WS}/install/setup.bash" ]; then
+        warn "${team_id}: build produced no install/setup.bash (see ${team_dir}/build.log)"
+        python3 "${MANIFEST_PY}" upsert "${MANIFEST}" --team-id "${team_id}" --user-id "${user_id}" \
+            --submission-id "${submission_id-}" --build-status failed \
+            --submission-sha256 "$(sha256_of "${tarball}")" ||
+            warn "${team_id}: manifest update failed"
+        clean_workspace
+        fail_count=$((fail_count + 1))
+        continue
+    fi
 
     # Archive the CONTENTS of install/ so stage_team.sh can extract straight into it.
-    tar --zstd -cf "${team_dir}/install.tar.zst" -C "${WS}/install" .
+    # A vault-full or I/O error here must fail this team only, not abort the remaining teams.
+    if ! tar --zstd -cf "${team_dir}/install.tar.zst" -C "${WS}/install" . >>"${team_dir}/build.log" 2>&1; then
+        warn "${team_id}: archiving install/ failed (see ${team_dir}/build.log)"
+        python3 "${MANIFEST_PY}" upsert "${MANIFEST}" --team-id "${team_id}" --user-id "${user_id}" \
+            --submission-id "${submission_id-}" --build-status failed \
+            --submission-sha256 "$(sha256_of "${tarball}")" ||
+            warn "${team_id}: manifest update failed"
+        clean_workspace
+        fail_count=$((fail_count + 1))
+        continue
+    fi
     python3 "${MANIFEST_PY}" upsert "${MANIFEST}" --team-id "${team_id}" --user-id "${user_id}" \
         --submission-id "${submission_id-}" --build-status ok \
         --install-sha256 "$(sha256_of "${team_dir}/install.tar.zst")" \
-        --submission-sha256 "$(sha256_of "${tarball}")"
+        --submission-sha256 "$(sha256_of "${tarball}")" ||
+        warn "${team_id}: manifest update failed"
     log "${team_id}: ok ($(du -h "${team_dir}/install.tar.zst" | cut -f1))"
     ok_count=$((ok_count + 1))
     clean_workspace

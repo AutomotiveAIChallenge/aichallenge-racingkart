@@ -7,7 +7,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PRESTAGE="${SCRIPT_DIR}/../prestage_all.sh"
 MANIFEST_PY="${SCRIPT_DIR}/../manifest.py"
 WORK="$(mktemp -d)"
-trap 'fusermount -u "${WORK}/mnt" 2>/dev/null; rm -rf "${WORK}"' EXIT INT TERM
+trap 'fusermount -u "${WORK}/mnt" 2>/dev/null; fusermount -u "${WORK}/mnt2" 2>/dev/null; rm -rf "${WORK}"' EXIT INT TERM
 
 fails=0
 expect_eq() { # $1=label $2=expected $3=actual
@@ -98,6 +98,57 @@ expect_eq "workspace src cleaned" "no" \
     "$([ -e "${WS}/aichallenge/workspace/src/aichallenge_submit" ] && echo yes || echo no)"
 expect_eq "workspace install cleaned" "no" \
     "$([ -e "${WS}/aichallenge/workspace/install" ] && echo yes || echo no)"
+
+# --- 1チームのビルドが install/ を作らずに exit 0 しても、他チームは止まらないこと ---
+mkdir -p "${WORK}/vault2" "${WORK}/mnt2"
+printf 'tgood\tuser-good\ntbad\tuser-bad\n' >"${WORK}/teams2.tsv"
+
+cat >"${WORK}/fake_build_partial.sh" <<'STUB'
+#!/usr/bin/env bash
+# Emulates a build that exits 0 but, for one team, silently produces no
+# install/ at all (e.g. a swallowed cmake error). Used to prove that a single
+# team's build failure does not abort the remaining teams.
+set -eo pipefail
+ws="${FAKE_WS}/aichallenge/workspace"
+mkdir -p "${ws}/build/pkg"
+if [ -d "${ws}/src/aichallenge_submit/pkg_user-bad" ]; then
+    exit 0
+fi
+mkdir -p "${ws}/install/pkg/lib"
+echo "built artifact" >"${ws}/install/pkg/lib/libpkg.so"
+echo "setup" >"${ws}/install/setup.bash"
+STUB
+chmod +x "${WORK}/fake_build_partial.sh"
+
+gocryptfs -q -init -passfile "${WORK}/pw" "${WORK}/vault2" >/dev/null 2>&1
+
+partial_out=$(PRESTAGE_BUILD_CMD="FAKE_WS=${WS} ${WORK}/fake_build_partial.sh" \
+    "${PRESTAGE}" --vault "${WORK}/vault2" --teams "${WORK}/teams2.tsv" 2>&1)
+partial_rc=$?
+echo "    ${partial_out//$'\n'/$'\n    '}"
+expect_eq "partial run exits non-zero (one team failed)" "1" "${partial_rc}"
+
+gocryptfs -q -passfile "${WORK}/pw" "${WORK}/vault2" "${WORK}/mnt2"
+expect_eq "bad team marked failed" "failed" \
+    "$(python3 "${MANIFEST_PY}" get "${WORK}/mnt2/manifest.json" --team-id tbad --field build_status)"
+expect_eq "good team still ok despite bad team" "ok" \
+    "$(python3 "${MANIFEST_PY}" get "${WORK}/mnt2/manifest.json" --team-id tgood --field build_status)"
+expect_eq "good team install archive exists" "yes" \
+    "$([ -f "${WORK}/mnt2/team_tgood/install.tar.zst" ] && echo yes || echo no)"
+expect_eq "bad team has no install archive" "no" \
+    "$([ -f "${WORK}/mnt2/team_tbad/install.tar.zst" ] && echo yes || echo no)"
+fusermount -u "${WORK}/mnt2"
+
+# --- usage は PRESTAGE_USERNAME / PRESTAGE_PASSWORD を案内し、裸の USERNAME/PASSWORD は使わないこと ---
+usage_out=$("${PRESTAGE}" --help 2>&1 || true)
+expect_eq "usage mentions PRESTAGE_USERNAME" "yes" \
+    "$(printf '%s' "${usage_out}" | grep -q 'PRESTAGE_USERNAME' && echo yes || echo no)"
+expect_eq "usage mentions PRESTAGE_PASSWORD" "yes" \
+    "$(printf '%s' "${usage_out}" | grep -q 'PRESTAGE_PASSWORD' && echo yes || echo no)"
+expect_eq "usage does not mention bare USERNAME" "no" \
+    "$(printf '%s' "${usage_out}" | grep -qE '\bUSERNAME\b' && echo yes || echo no)"
+expect_eq "usage does not mention bare PASSWORD" "no" \
+    "$(printf '%s' "${usage_out}" | grep -qE '\bPASSWORD\b' && echo yes || echo no)"
 
 [ "${fails}" -eq 0 ] && echo "ALL PASS" || echo "${fails} FAILURE(S)"
 exit "${fails}"
