@@ -8,6 +8,11 @@ endif()
 find_package(ament_cmake_auto REQUIRED)
 ament_auto_find_build_dependencies()
 
+ament_auto_add_executable(racing_kart_sim_adapter_node
+  src/adapter_node.cpp
+  src/arbiter_core.cpp
+)
+
 if(BUILD_TESTING)
   find_package(ament_cmake_gtest REQUIRED)
   ament_add_gtest(test_arbiter_core

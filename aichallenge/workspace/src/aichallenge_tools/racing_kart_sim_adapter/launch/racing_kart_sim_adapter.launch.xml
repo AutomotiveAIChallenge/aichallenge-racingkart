@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<launch>
+  <!-- Wraps aichallenge_system.launch.xml (same entry point run_autoware.bash uses) so the
+       real control_method's output never reaches AWSIM directly: it's redirected to
+       /ackermann_cmd + /ackermann_gear_cmd, and racing_kart_sim_adapter_node (outside this
+       remap group) republishes the arbitrated result on the real topic names AWSIM subscribes
+       to. AWSIM itself is a separate process (not part of this launch tree), so its own
+       subscription is untouched. Does not modify any file under aichallenge_submit_launch. -->
+  <arg name="simulation" default="true"/>
+  <arg name="use_sim_time" default="true"/>
+  <arg name="run_rviz" default="false"/>
+  <arg name="domain_id" default="$(env ROS_DOMAIN_ID 1)"/>
+
+  <group>
+    <set_remap from="/control/command/control_cmd" to="/ackermann_cmd"/>
+    <set_remap from="/control/command/gear_cmd" to="/ackermann_gear_cmd"/>
+    <include file="$(find-pkg-share aichallenge_system_launch)/launch/aichallenge_system.launch.xml">
+      <arg name="simulation" value="$(var simulation)"/>
+      <arg name="use_sim_time" value="$(var use_sim_time)"/>
+      <arg name="run_rviz" value="$(var run_rviz)"/>
+      <arg name="domain_id" value="$(var domain_id)"/>
+    </include>
+  </group>
+
+  <node pkg="racing_kart_sim_adapter" exec="racing_kart_sim_adapter_node"
+        name="racing_kart_sim_adapter" output="screen">
+    <param name="joy_delay_threshold" value="5.0"/>
+    <param name="max_accel_mps2" value="3.0"/>
+    <param name="max_decel_mps2" value="3.0"/>
+    <param name="max_steer_rad" value="0.5"/>
+  </node>
+</launch>
