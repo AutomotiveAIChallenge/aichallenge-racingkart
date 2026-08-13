@@ -14,6 +14,7 @@ from hypothesis import given, settings
 from hypothesis import strategies as st
 
 from conftest import (
+    VEHICLES,
     JOY_FULL,
     all_stopped,
     alert_codes,
@@ -31,7 +32,6 @@ from racing_kart_manager_core import (
     EMERGENCY_CONFIRM_TIMEOUT_S,
     STOPPED_SPEED_THRESHOLD_MPS,
     TELEMETRY_TIMEOUT_S,
-    VEHICLES,
     AlertCode,
     BlockerCode,
     Tri,
@@ -55,7 +55,8 @@ def test_s01_stale_velocity_makes_state_unknown_and_blocks_all_mode():
         park(),
         all_stopped(A2=dict(velocity_age=2.0)),
         fresh_joy(),
-    )
+    VEHICLES,
+)
 
     assert vehicle_status(result, "A2").stopped is Tri.UNKNOWN
     assert result.can_enter_all_mode is False
@@ -73,7 +74,8 @@ def test_s02_stale_debug_status_makes_emergency_unknown():
         park(),
         all_stopped(A2=dict(debug_age=2.0)),
         fresh_joy(),
-    )
+    VEHICLES,
+)
 
     assert vehicle_status(result, "A2").emergency is Tri.UNKNOWN
     assert result.can_enter_all_mode is False
@@ -81,7 +83,7 @@ def test_s02_stale_debug_status_makes_emergency_unknown():
 
 def test_s03_all_healthy_and_parked_allows_every_transition():
     """S-03: 全車停止・emergency 済み・テレメトリ新鮮なら全部入れる。"""
-    result = status(park(), all_stopped(), fresh_joy())
+    result = status(park(), all_stopped(), fresh_joy(), VEHICLES)
 
     assert result.enter_all_mode_blockers == ()
     assert result.can_enter_all_mode is True
@@ -91,7 +93,7 @@ def test_s03_all_healthy_and_parked_allows_every_transition():
 
 def test_s04_moving_vehicle_blocks_selecting_the_others():
     """S-04: A3 が動いていると、A3 以外を選ぼうとしたときにブロックされる。"""
-    result = status(park(), all_stopped(A3=dict(velocity=0.5)), fresh_joy())
+    result = status(park(), all_stopped(A3=dict(velocity=0.5)), fresh_joy(), VEHICLES)
 
     assert result.can_enter_single_mode("A2") is False
     blockers = result.enter_single_mode_blockers["A2"]
@@ -104,7 +106,7 @@ def test_s05_cleared_emergency_blocks_selecting_the_others():
 
     いつ動いてもおかしくないため。
     """
-    result = status(park(), all_stopped(A3=dict(emergency=False)), fresh_joy())
+    result = status(park(), all_stopped(A3=dict(emergency=False)), fresh_joy(), VEHICLES)
 
     assert result.can_enter_single_mode("A2") is False
     blockers = result.enter_single_mode_blockers["A2"]
@@ -114,7 +116,7 @@ def test_s05_cleared_emergency_blocks_selecting_the_others():
 
 def test_s06_stick_in_use_blocks_single_mode():
     """S-06: スティックが無操作でなければ単車操作に入れない。"""
-    result = status(park(), all_stopped(), fresh_joy(JOY_FULL))
+    result = status(park(), all_stopped(), fresh_joy(JOY_FULL), VEHICLES)
 
     for vehicle_id in VEHICLES:
         assert result.can_enter_single_mode(vehicle_id) is False
@@ -125,7 +127,7 @@ def test_s06_stick_in_use_blocks_single_mode():
 
 def test_s07_stale_joy_blocks_and_alerts():
     """S-07: joy 入力が途絶したら遷移を止め、警告も出す。"""
-    result = status(park(), all_stopped(), stale_joy())
+    result = status(park(), all_stopped(), stale_joy(), VEHICLES)
 
     assert result.can_enter_all_mode is False
     assert BlockerCode.JOY_STALE in blocker_codes(result.enter_all_mode_blockers)
@@ -139,7 +141,7 @@ def test_s07_stale_joy_blocks_and_alerts():
 
 def test_s08_all_mode_blocks_everything_with_not_in_park():
     """S-08: 一斉モード中はどのモードにも入れない。"""
-    result = status(all_mode(), all_stopped(), fresh_joy())
+    result = status(all_mode(), all_stopped(), fresh_joy(), VEHICLES)
 
     assert result.can_enter_all_mode is False
     assert BlockerCode.NOT_IN_PARK in blocker_codes(result.enter_all_mode_blockers)
@@ -152,7 +154,7 @@ def test_s09_single_mode_cannot_switch_to_another_vehicle():
 
     前の車が最後に受け取った joy のまま最大5秒走り続けるため。
     """
-    result = status(single_mode("A2"), all_stopped(), fresh_joy())
+    result = status(single_mode("A2"), all_stopped(), fresh_joy(), VEHICLES)
 
     assert result.can_enter_single_mode("A3") is False
     assert BlockerCode.NOT_IN_PARK in blocker_codes(
@@ -162,7 +164,7 @@ def test_s09_single_mode_cannot_switch_to_another_vehicle():
 
 def test_s10_stopping_blocks_everything():
     """S-10: 停止プロトコル実行中はどのモードにも入れない。"""
-    result = status(stopping(), all_stopped(), fresh_joy())
+    result = status(stopping(), all_stopped(), fresh_joy(), VEHICLES)
 
     assert result.can_enter_all_mode is False
     for vehicle_id in VEHICLES:
@@ -178,28 +180,30 @@ def test_s11_emergency_confirm_timeout_names_the_vehicle():
     """S-11: 5秒たっても emergency を確認できない車両IDを警告に含める。"""
     result = status(
         stopping(elapsed_s=EMERGENCY_CONFIRM_TIMEOUT_S + 0.1),
-        all_stopped(A6=dict(emergency=False)),
+        all_stopped(A7=dict(emergency=False)),
         fresh_joy(),
-    )
+    VEHICLES,
+)
 
     assert AlertCode.EMERGENCY_CONFIRM_TIMEOUT in alert_codes(result.alerts)
-    assert vehicles_for(result.alerts, AlertCode.EMERGENCY_CONFIRM_TIMEOUT) == ("A6",)
+    assert vehicles_for(result.alerts, AlertCode.EMERGENCY_CONFIRM_TIMEOUT) == ("A7",)
 
 
 def test_s12_no_timeout_alert_before_the_threshold():
     """S-12: 5秒に達していなければ警告を出さない。"""
     result = status(
         stopping(elapsed_s=EMERGENCY_CONFIRM_TIMEOUT_S - 0.1),
-        all_stopped(A6=dict(emergency=False)),
+        all_stopped(A7=dict(emergency=False)),
         fresh_joy(),
-    )
+    VEHICLES,
+)
 
     assert AlertCode.EMERGENCY_CONFIRM_TIMEOUT not in alert_codes(result.alerts)
 
 
 def test_s13_timeout_alert_clears_once_all_confirmed():
     """S-13: 条件が解消したら警告は消える。"""
-    result = status(stopping(elapsed_s=6.0), all_stopped(), fresh_joy())
+    result = status(stopping(elapsed_s=6.0), all_stopped(), fresh_joy(), VEHICLES)
 
     assert AlertCode.EMERGENCY_CONFIRM_TIMEOUT not in alert_codes(result.alerts)
 
@@ -208,12 +212,13 @@ def test_s14_timeout_alert_lists_every_unconfirmed_vehicle():
     """S-14: 未確認の車両が複数あれば全部挙げる。1台だけにしない。"""
     result = status(
         stopping(elapsed_s=6.0),
-        all_stopped(A3=dict(emergency=False), A6=dict(emergency=None, debug_age=None)),
+        all_stopped(A3=dict(emergency=False), A7=dict(emergency=None, debug_age=None)),
         fresh_joy(),
-    )
+    VEHICLES,
+)
 
     named = vehicles_for(result.alerts, AlertCode.EMERGENCY_CONFIRM_TIMEOUT)
-    assert set(named) == {"A3", "A6"}
+    assert set(named) == {"A3", "A7"}
 
 
 # ==========================================================================
@@ -231,7 +236,7 @@ def test_s14_timeout_alert_lists_every_unconfirmed_vehicle():
 )
 def test_s15_speed_threshold_boundary(velocity, expected):
     """S-15: 停止判定の境界。後退も動いているとみなす。"""
-    result = status(park(), all_stopped(A2=dict(velocity=velocity)), fresh_joy())
+    result = status(park(), all_stopped(A2=dict(velocity=velocity)), fresh_joy(), VEHICLES)
 
     assert vehicle_status(result, "A2").stopped is expected
 
@@ -245,7 +250,7 @@ def test_s15_speed_threshold_boundary(velocity, expected):
 )
 def test_s16_telemetry_age_boundary(age, expected):
     """S-16: テレメトリの受信からの経過時間の境界。"""
-    result = status(park(), all_stopped(A2=dict(velocity_age=age)), fresh_joy())
+    result = status(park(), all_stopped(A2=dict(velocity_age=age)), fresh_joy(), VEHICLES)
 
     assert vehicle_status(result, "A2").stopped is expected
 
@@ -255,7 +260,7 @@ def test_s17_lost_telemetry_is_unknown_not_false():
 
     FALSE に倒すと「動いている」と誤って表示され、UNKNOWN の意味が失われる。
     """
-    result = status(park(), all_stopped(A2=dict(velocity_age=5.0)), fresh_joy())
+    result = status(park(), all_stopped(A2=dict(velocity_age=5.0)), fresh_joy(), VEHICLES)
 
     assert vehicle_status(result, "A2").stopped is Tri.UNKNOWN
     assert vehicle_status(result, "A2").stopped is not Tri.FALSE
@@ -267,7 +272,8 @@ def test_s18_never_received_is_unknown():
         park(),
         all_stopped(A2=dict(velocity=None, velocity_age=None)),
         fresh_joy(),
-    )
+    VEHICLES,
+)
 
     vs = vehicle_status(result, "A2")
     assert vs.velocity_age_s is None
@@ -301,7 +307,7 @@ def _observations(draw):
 @given(observations=_observations())
 def test_s19_any_unknown_blocks_all_mode(observations):
     """S-19 (INV-1): UNKNOWN が1台でもあれば一斉へ入れない。"""
-    result = status(park(), observations, fresh_joy())
+    result = status(park(), observations, fresh_joy(), VEHICLES)
 
     has_unknown = any(
         v.stopped is Tri.UNKNOWN or v.emergency is Tri.UNKNOWN for v in result.vehicles
@@ -317,7 +323,7 @@ def test_s20_non_stopped_vehicles_are_always_named(observations):
 
     理由の出ない不許可を作らない。
     """
-    result = status(park(), observations, fresh_joy())
+    result = status(park(), observations, fresh_joy(), VEHICLES)
 
     named = set()
     for blocker in result.enter_all_mode_blockers:
@@ -335,7 +341,7 @@ def test_s21_single_mode_requires_the_other_three_confirmed(observations):
 
     対象車自身は条件に含めない (動いている車をつかまえて操縦できるようにするため)。
     """
-    result = status(park(), observations, fresh_joy())
+    result = status(park(), observations, fresh_joy(), VEHICLES)
     by_id = {v.vehicle_id: v for v in result.vehicles}
 
     for target in VEHICLES:
@@ -351,7 +357,7 @@ def test_s21_single_mode_requires_the_other_three_confirmed(observations):
 @given(observations=_observations())
 def test_s22_vehicle_blockers_always_name_vehicles(observations):
     """S-22 (INV-6): VEHICLE_* 系の blocker は必ず車両を挙げる。"""
-    result = status(park(), observations, fresh_joy())
+    result = status(park(), observations, fresh_joy(), VEHICLES)
 
     vehicle_codes = {
         BlockerCode.VEHICLE_MOVING,
@@ -369,7 +375,7 @@ def test_s22_vehicle_blockers_always_name_vehicles(observations):
 @given(observations=_observations())
 def test_s23_can_enter_is_derived_from_blockers(observations):
     """S-23 (F-2): 可否は blocker から導出され、別に保持されていない。"""
-    result = status(park(), observations, fresh_joy())
+    result = status(park(), observations, fresh_joy(), VEHICLES)
 
     assert result.can_enter_all_mode == (len(result.enter_all_mode_blockers) == 0)
     for vehicle_id in VEHICLES:
@@ -413,7 +419,7 @@ def test_s25_joy_never_received_blocks_everything():
     """
     from racing_kart_manager_core import JoyObservation
 
-    result = status(park(), all_stopped(), JoyObservation(joy=None, age_s=None))
+    result = status(park(), all_stopped(), JoyObservation(joy=None, age_s=None), VEHICLES)
 
     assert result.can_enter_all_mode is False
     assert BlockerCode.JOY_STALE in blocker_codes(result.enter_all_mode_blockers)

@@ -25,7 +25,6 @@ from std_msgs.msg import String
 
 from racing_kart_manager_core import (
     INITIAL_STATE,
-    VEHICLES,
     Event,
     EventKind,
     JoyObservation,
@@ -35,6 +34,7 @@ from racing_kart_manager_core import (
     VehicleObservation,
     next_state,
     parse_command,
+    parse_vehicles,
     spec_for,
     status,
     status_to_json,
@@ -88,9 +88,10 @@ def to_ros_joy(value: JoyValue) -> Joy:
 
 
 class RacingKartManagerNode(Node):
-    def __init__(self) -> None:
+    def __init__(self, vehicles: tuple[str, ...]) -> None:
         super().__init__("racing_kart_manager")
 
+        self._vehicles = vehicles
         self._state: ManagerState = INITIAL_STATE
         self._stopping_since: float | None = None
 
@@ -104,12 +105,12 @@ class RacingKartManagerNode(Node):
             vehicle_id: self.create_publisher(
                 Joy, f"/{vehicle_id}/racing_kart/joy", 1
             )
-            for vehicle_id in VEHICLES
+            for vehicle_id in vehicles
         }
 
         self.create_subscription(Joy, "/racing_kart/joy", self._on_joy, 1)
 
-        for vehicle_id in VEHICLES:
+        for vehicle_id in vehicles:
             self.create_subscription(
                 VelocityReport,
                 f"/{vehicle_id}/vehicle/status/velocity_status",
@@ -144,7 +145,7 @@ class RacingKartManagerNode(Node):
                 "debug/status を購読できないため emergency は常に UNKNOWN になり、"
                 "すべての操作が塞がれます。遠隔PCのイメージに racing_kart_msgs を入れてください。"
             )
-        self.get_logger().info(f"racing_kart_manager started. vehicles={VEHICLES}")
+        self.get_logger().info(f"racing_kart_manager started. vehicles={vehicles}")
 
     # ------------------------------------------------------------------
     # 時刻と観測
@@ -158,7 +159,7 @@ class RacingKartManagerNode(Node):
 
     def _observations(self) -> dict[str, VehicleObservation]:
         result = {}
-        for vehicle_id in VEHICLES:
+        for vehicle_id in self._vehicles:
             velocity = self._velocity.get(vehicle_id)
             debug = self._debug.get(vehicle_id)
             mode = self._control_mode.get(vehicle_id)
@@ -191,7 +192,11 @@ class RacingKartManagerNode(Node):
     def _advance(self, event: Event) -> None:
         before = self._state_now()
         after = next_state(
-            before, event, self._observations(), self._joy_observation()
+            before,
+            event,
+            self._observations(),
+            self._joy_observation(),
+            self._vehicles,
         )
         if after.mode is Mode.STOPPING:
             if before.mode is not Mode.STOPPING:
@@ -220,7 +225,7 @@ class RacingKartManagerNode(Node):
         self._joy_at = self._now()
         self._advance(Event(kind=EventKind.JOY))
 
-        outgoing = transform(self._joy, spec_for(self._state))
+        outgoing = transform(self._joy, spec_for(self._state, self._vehicles))
         for vehicle_id, value in outgoing.items():
             self._joy_publishers[vehicle_id].publish(to_ros_joy(value))
 
@@ -252,15 +257,29 @@ class RacingKartManagerNode(Node):
     def _publish_status(self) -> None:
         """status だけはタイマーで出す。joy の送出経路ではないので生存チェーンに影響しない。"""
         state = self._state_now()
-        current = status(state, self._observations(), self._joy_observation())
+        current = status(
+            state, self._observations(), self._joy_observation(), self._vehicles
+        )
         message = String()
         message.data = status_to_json(current, self.get_clock().now().nanoseconds)
         self._status_publisher.publish(message)
 
 
 def main() -> None:
+    import sys
+
+    vehicles = parse_vehicles(sys.argv[1:])
+    if vehicles is None:
+        print(
+            "usage: racing_kart_manager.py <VEHICLE_ID> [VEHICLE_ID ...]\n"
+            "  例: racing_kart_manager.py A2 A3 A7\n"
+            "  対象車両を1台以上、重複なしで指定してください。",
+            file=sys.stderr,
+        )
+        raise SystemExit(1)
+
     rclpy.init()
-    node = RacingKartManagerNode()
+    node = RacingKartManagerNode(vehicles)
     try:
         rclpy.spin(node)  # 既定の SingleThreadedExecutor。到着順の処理を保証する
     except KeyboardInterrupt:

@@ -27,7 +27,7 @@ from rclpy.qos import (
 )
 from std_msgs.msg import String
 
-from racing_kart_manager_core import SCHEMA_VERSION, VEHICLES, gui_gate
+from racing_kart_manager_core import SCHEMA_VERSION, gui_gate
 
 STATUS_QOS = QoSProfile(
     depth=1,
@@ -112,26 +112,13 @@ class ManagerWindow:
         vehicles_frame = ttk.LabelFrame(controls, text="車両選択", padding=10)
         vehicles_frame.pack(side="left", fill="both", expand=True)
 
+        # 車両ボタンは status を受け取ってから作る。対象車両は manager の起動引数で
+        # 決まるので、GUI 側では台数も車両IDも知らない。
+        self.vehicles_frame = vehicles_frame
+        self.vehicle_ids: tuple[str, ...] = ()
         self.vehicle_buttons: dict[str, ttk.Button] = {}
         self.vehicle_states: dict[str, ttk.Label] = {}
         self.vehicle_reasons: dict[str, ttk.Label] = {}
-        for index, vehicle_id in enumerate(VEHICLES):
-            cell = ttk.Frame(vehicles_frame, padding=4)
-            cell.grid(row=index // 2, column=index % 2, sticky="nsew")
-            button = ttk.Button(
-                cell,
-                text=vehicle_id,
-                width=12,
-                command=lambda v=vehicle_id: self.bridge.send("enter_single_mode", v),
-            )
-            button.pack()
-            state = ttk.Label(cell, text="—", font=("", 8), wraplength=150)
-            state.pack()
-            reason = ttk.Label(cell, text="", font=("", 8), foreground="#B76E00", wraplength=150)
-            reason.pack()
-            self.vehicle_buttons[vehicle_id] = button
-            self.vehicle_states[vehicle_id] = state
-            self.vehicle_reasons[vehicle_id] = reason
 
         # 右: 一斉発進準備完了
         all_frame = ttk.LabelFrame(controls, text="一斉発進", padding=10)
@@ -160,6 +147,35 @@ class ManagerWindow:
     def _set_enabled(self, button: ttk.Button, enabled: bool) -> None:
         button.state(["!disabled"] if enabled else ["disabled"])
 
+    def _rebuild_vehicles(self, vehicle_ids: tuple[str, ...]) -> None:
+        """対象車両が変わったらボタンを作り直す。"""
+        for child in self.vehicles_frame.winfo_children():
+            child.destroy()
+        self.vehicle_buttons.clear()
+        self.vehicle_states.clear()
+        self.vehicle_reasons.clear()
+
+        for index, vehicle_id in enumerate(vehicle_ids):
+            cell = ttk.Frame(self.vehicles_frame, padding=4)
+            cell.grid(row=index // 2, column=index % 2, sticky="nsew")
+            button = ttk.Button(
+                cell,
+                text=vehicle_id,
+                width=12,
+                command=lambda v=vehicle_id: self.bridge.send("enter_single_mode", v),
+            )
+            button.pack()
+            state = ttk.Label(cell, text="—", font=("", 8), wraplength=150)
+            state.pack()
+            reason = ttk.Label(
+                cell, text="", font=("", 8), foreground="#B76E00", wraplength=150
+            )
+            reason.pack()
+            self.vehicle_buttons[vehicle_id] = button
+            self.vehicle_states[vehicle_id] = state
+            self.vehicle_reasons[vehicle_id] = reason
+        self.vehicle_ids = vehicle_ids
+
     def _refresh(self) -> None:
         payload, age = self.bridge.snapshot()
         gate = gui_gate(age, None if payload is None else payload.get("schema_version"))
@@ -168,7 +184,7 @@ class ManagerWindow:
             self.mode_label.config(text=gate.reason or "操作できません")
             self._set_enabled(self.all_button, False)
             self.all_reason.config(text="")
-            for vehicle_id in VEHICLES:
+            for vehicle_id in self.vehicle_ids:
                 self._set_enabled(self.vehicle_buttons[vehicle_id], False)
                 self.vehicle_states[vehicle_id].config(text="—")
                 self.vehicle_reasons[vehicle_id].config(text="")
@@ -191,8 +207,12 @@ class ManagerWindow:
         self.all_reason.config(text=reasons_for("all"))
 
         by_id = {v["vehicle_id"]: v for v in payload["vehicles"]}
-        for vehicle_id in VEHICLES:
-            vehicle = by_id.get(vehicle_id, {})
+        vehicle_ids = tuple(by_id)
+        if vehicle_ids != self.vehicle_ids:
+            self._rebuild_vehicles(vehicle_ids)
+
+        for vehicle_id in vehicle_ids:
+            vehicle = by_id[vehicle_id]
             self._set_enabled(
                 self.vehicle_buttons[vehicle_id],
                 bool(payload["can_enter_single_mode"].get(vehicle_id)),
