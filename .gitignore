@@ -32,3 +32,6 @@ doc/tmp/*
 
 docs/plan/
 result-*.json
+
+# pytest-cov のカバレッジデータ
+.coverage
