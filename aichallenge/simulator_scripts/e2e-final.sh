@@ -14,7 +14,7 @@ exec $AWSIM_DIRECTORY/AWSIM.x86_64 \
     --laps 6 \
     --timeout 420.0 \
     --steer-source ackermann \
-    --sound off \
+    --sound on \
     --collisions on \
     --handicap on \
     --wall-recovery off \
