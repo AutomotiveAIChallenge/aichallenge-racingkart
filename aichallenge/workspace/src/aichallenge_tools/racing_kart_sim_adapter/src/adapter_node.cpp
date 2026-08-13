@@ -4,6 +4,7 @@
 
 #include <autoware_auto_control_msgs/msg/ackermann_control_command.hpp>
 #include <autoware_auto_vehicle_msgs/msg/gear_command.hpp>
+#include <racing_kart_msgs/msg/vehicle_debug.hpp>
 #include <sensor_msgs/msg/joy.hpp>
 
 #include <algorithm>
@@ -21,6 +22,7 @@ class AdapterNode : public rclcpp::Node
 {
   using AckermannControlCommand = autoware_auto_control_msgs::msg::AckermannControlCommand;
   using GearCommand = autoware_auto_vehicle_msgs::msg::GearCommand;
+  using VehicleDebug = racing_kart_msgs::msg::VehicleDebug;
 
 public:
   AdapterNode()
@@ -52,6 +54,13 @@ public:
     control_cmd_pub_ =
       create_publisher<AckermannControlCommand>("/control/command/control_cmd", rclcpp::QoS(1));
     gear_cmd_pub_ = create_publisher<GearCommand>("/control/command/gear_cmd", rclcpp::QoS(1));
+
+    // racing_kart_manager は停止プロトコルでこの emergency を見て、緊急停止が効いたことを
+    // 確認してから joy の送信を止める。実車では racing_kart_driver が同じトピックへ出す
+    // (racing_kart_driver_node.cpp:50)。出さないと manager 側は emergency を永久に UNKNOWN と
+    // 判定し、全操作が塞がれる。
+    debug_status_pub_ =
+      create_publisher<VehicleDebug>("/racing_kart/debug/status", rclcpp::QoS(1));
 
     const auto period = rclcpp::Rate(20.0).period();
     timer_ = rclcpp::create_timer(this, get_clock(), period, [this]() { on_timer(); });
@@ -101,6 +110,16 @@ private:
     gear_cmd.stamp = stamp;
     gear_cmd.command = gear_char_to_command(out.gear);
     gear_cmd_pub_->publish(gear_cmd);
+
+    // VCU 固有のフィールド (throttle / brake_torque / steer_position / steer_original) は
+    // sim に対応する実体が無いので 0 のままにする。manager が見るのは emergency だけ。
+    VehicleDebug debug;
+    debug.stamp = stamp;
+    debug.accel_ratio = out.accel_ratio;
+    debug.brake_ratio = out.brake_ratio;
+    debug.steer_ratio = out.steer_ratio;
+    debug.emergency = out.is_emergency;
+    debug_status_pub_->publish(debug);
   }
 
   static uint8_t gear_char_to_command(char gear)
@@ -130,6 +149,7 @@ private:
   rclcpp::Subscription<GearCommand>::SharedPtr autoware_gear_sub_;
   rclcpp::Publisher<AckermannControlCommand>::SharedPtr control_cmd_pub_;
   rclcpp::Publisher<GearCommand>::SharedPtr gear_cmd_pub_;
+  rclcpp::Publisher<VehicleDebug>::SharedPtr debug_status_pub_;
   rclcpp::TimerBase::SharedPtr timer_;
 };
 
