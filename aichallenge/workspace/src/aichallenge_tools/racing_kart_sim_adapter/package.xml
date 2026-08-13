@@ -1,0 +1,25 @@
+<?xml version="1.0"?>
+<package format="3">
+  <name>racing_kart_sim_adapter</name>
+  <version>0.0.1</version>
+  <description>
+    Reimplements racing_kart_driver's joystick mode-arbitration state machine on top of AWSIM,
+    so racing_kart_manager can be tested against simulated vehicles without real hardware.
+  </description>
+
+  <maintainer email="masams07b3custom@gmail.com">masa</maintainer>
+  <license>Apache-2.0</license>
+
+  <buildtool_depend>ament_cmake_auto</buildtool_depend>
+
+  <depend>rclcpp</depend>
+  <depend>sensor_msgs</depend>
+  <depend>autoware_auto_control_msgs</depend>
+  <depend>autoware_auto_vehicle_msgs</depend>
+
+  <test_depend>ament_cmake_gtest</test_depend>
+
+  <export>
+    <build_type>ament_cmake</build_type>
+  </export>
+</package>
