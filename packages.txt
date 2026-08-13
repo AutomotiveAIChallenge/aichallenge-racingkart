@@ -13,3 +13,4 @@ ros-humble-rtcm-msgs
 zstd
 python3-tomli
 qt5ct
+fonts-noto-cjk
