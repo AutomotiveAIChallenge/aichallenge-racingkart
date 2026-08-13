@@ -33,8 +33,8 @@ make eval → run_evaluation.bash → evaluation.launch.xml
 | `dev.sh` | 開発 / S2R 練習 | 車両数 N（既定 1） | unlimited laps・timeout / count開始 / handicap・wall-recovery・ranking off / camera・lidar off |
 | `parallel.sh` | 複数台レース | - | 3台 / 6 laps / 600s / sync開始 / handicap・ranking・start-random off / wall-recovery off |
 | `e2e.sh` | E2E 練習兼提出参考 | - | 1台 + NPC 2体 / 6 laps / timeout 実質なし / count開始（0秒） / start-random on / handicap・ranking off / camera・lidar cpu |
-| `e2e-final.sh` | E2E 決勝 | - | 4台 / 6 laps / 420s / sync開始 / handicap・ranking on / camera・lidar cpu |
-| `s2r-final.sh` | S2R 決勝 | - | 4台 / 6 laps / 420s / sync開始 / handicap・ranking on / camera・lidar off |
+| `e2e-final.sh` | E2E 決勝 | - | 4台 / 6 laps / 420s / sync開始 / handicap・ranking on / camera・lidar cpu / sound on |
+| `s2r-final.sh` | S2R 決勝 | - | 4台 / 6 laps / 420s / sync開始 / handicap・ranking on / camera・lidar off / sound on |
 | `gate.sh` | Safety Gate テスト | テスト番号 1/2/3/all（既定 all） | 1台。all は test1〜3 を順次実行 |
 | `sample-scenario.sh` | シナリオ指定起動 | - | `StreamingAssets/Race/official.yaml` を `--scenario` で読み込む |
 | `multiplay-server.sh` | Multiplay 専用サーバー | - | `-batchmode -nographics`、port 7777 |
@@ -73,6 +73,7 @@ handicap / ranking / 車両数だけが変わる。
   決勝は sync 開始（`/admin/awsim/start` 待ち = 全車の準備完了を待って一斉スタート）。
 - `e2e.sh` は `--start-random on`。開始位置が毎回変わるので、特定のスタート位置に
   依存しない挙動を確認できる。決勝は `off`（公平性のため固定）。
+- エンジン音（`--sound`）は決勝の 2 モードのみ on。練習・評価・開発モードは off。
 - 複合ターゲットは `make dev` / `make e2e` の 2 つ（AWSIM + Autoware）。決勝モードは
   `make simulator-<mode>` で AWSIM だけ起動し、`make autoware-simulator` を別途叩く。
 
