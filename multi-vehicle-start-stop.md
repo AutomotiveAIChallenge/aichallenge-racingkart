@@ -5,7 +5,7 @@
 
 ## 要件
 
-- **REQ-01** レース開始時の4台の同時発進を遠隔操作PCによってトリガーできること
+- **REQ-01** レース開始時の4台の同時発進を遠隔操作PCによってトリガーできること（実装は台数を固定せず、起動時に指定した対象車両すべてを同時発進させる）
 - **REQ-02** いつでも遠隔操作PCの操作で全車両を同時に緊急停止できること
 - **REQ-03** 操作する車両以外が停止していれば、いつでも遠隔操作PCの操作で任意の車両を遠隔手動操作できること
 - **REQ-04** 遠隔操作PCとどれかの車両の通信が5秒以上途絶した場合、車両が緊急停止すること（従来通り）
@@ -38,7 +38,7 @@
 
 ## racing_kart_manager 概要設計
 
-遠隔操作PC上に置く単一ノード。4台のカートに対する走行許可と操縦権を、GUIでの選択に従って joy の宛先と内容だけで表現する。
+遠隔操作PC上に置く単一ノード。起動時に指定した対象車両に対する走行許可と操縦権を、GUIでの選択に従って joy の宛先と内容だけで表現する。
 
 > 図: ノード構成図 → [`node.drawio`](node.drawio)
 >
@@ -48,27 +48,54 @@
 
 ### 設計
 
-対象車両は `A2` / `A3` / `A6` / `A7` の4台。
+**対象車両は起動時に引数で渡す。** 台数も車両IDも固定しない。
+
+```bash
+manager.bash manager A2 A3 A7      # 3台で動かす
+manager.bash manager A2 A3 A6 A7   # 4台
+```
+
+常に4台を使うとは限らない。A6 の EC2 ルータのポートが動いていない期間があり、2台だけで
+試したい場面もある。固定にすると、使わない車両が永久に `UNKNOWN` のままになって
+**全操作が塞がれる**（停止確認が取れないため）。
+
+車両リストは安全側の判定（単車操作に入るとき「対象以外が停止しているか」）の入力なので、
+純関数には**引数で明示的に渡す**。`observations` のキーから暗黙に導くと、呼び出し側が
+一部の車両だけ渡したときに黙って対象台数が減り、少ない台数で判定が成立してしまう。
+
+| 関数 | シグネチャ |
+| --- | --- |
+| `spec_for` | `(state, vehicles) -> TransformSpec` |
+| `status` | `(state, observations, joy, vehicles) -> Status` |
+| `next_state` | `(state, event, observations, joy, vehicles) -> ManagerState` |
+
+GUI は引数を取らない。status の `vehicles[]` からボタンを作るので、台数に自動で追随する。
 
 1. racing_kart_manager ノードは、joy_node の `/racing_kart/joy` を購読し、サブスクリプションコールバック内で（タイマー駆動しない）、走行を許可する車両の名前空間 `/<VEHICLE_ID>/racing_kart/joy` へ rename して publish する。
    - **前提: `joy_node` の `autorepeat_rate` を launch で明示的に設定すること。** タイマー駆動しない設計なので、joy が自動再送されないとオペレータが手を止めた瞬間に送信が止まり、5秒後に全車が緊急停止する。現在の `racing_kart_launch/launch/racing_kart_manager.launch.xml` は `deadzone` しか設定しておらず、上流の既定値に依存している（ヘッダのメンバ初期値は `0.0`、同梱の `joy-params.yaml` は `20.0`）。`20.0` を明示する。
-2. **モードは「joy をどう変換するか」だけで定義する。** manager が持つ状態は「joy を送る車両の集合（送信先）」ひとつだけ。軸を無操作値で上書きするか実値のまま通すかは **送信先の台数**から決まる。ボタンはどのモードでも常に素通しする。
+2. **モードは「joy をどう変換するか」だけで定義する。** 軸を無操作値で上書きするか実値のまま通すかは**モードから決まる**。ボタンはどのモードでも常に素通しする。
 
-   | 送信先の台数 | 軸の扱い |
-   | --- | --- |
-   | 0台 | publish しない |
-   | 1台 | スティックの実値をそのまま通す |
-   | 2台以上 | 無操作値で上書きし、スティック入力を捨てる |
+   | モード | 送信先 | 軸の扱い |
+   | --- | --- | --- |
+   | パーク | なし | publish しない |
+   | 一斉 | 対象車両全部 | 無操作値で上書きし、スティック入力を捨てる |
+   | 単車操作 | 対象1台 | スティックの実値をそのまま通す |
+   | 停止中 | 縮める前のまま | 無操作値で上書き |
 
-   2台以上で無操作値にするのは、スティック1本で複数台を同時にステアリングできないため。同じ舵角を4台へ送っても全車が同じ方向に曲がるだけで操縦にならない。
-3. 一斉発進で manager がやることは 送信先を4台にすることだけ。車両は emergency 状態なので止まったままで、あとはジョイスティックの緊急停止解除（`LSB+RSB`、左右スティックの押し込み同時押し）と自動走行ボタン（`ButtonY`）を素通しすれば、各車が自力で MANUAL → AUTONOMOUS に入って発進する。**manager はこの2操作を解釈しない。**
-4. 緊急停止は既存の緊急停止ボタン（`ButtonLB` / `ButtonRB` / `ButtonStart` / `ButtonBack`）をそのまま使い、joy を送っている全車へこのボタンを通す。1台だけ止める場面はないため宛先は絞らない。joy を送っていない車両は既に emergency 状態なので、結果として4台すべてが停止状態になる。送信先を縮めるのは後述の停止プロトコルに従う。
-5. 手動操縦は GUI で車両を指定すると 送信先が対象1台になり、他3台への送信は止まる。`LSB+RSB` を素通しすると対象車が MANUAL になり、以降スティック値を通す。前提条件の判定は後述。
+   スティックで操縦するのは単車操作だけ。一斉モードで無操作値にするのは、スティック1本で
+   複数台を同時にステアリングできないため。同じ舵角を全車へ送っても全部が同じ方向に曲がる
+   だけで操縦にならない。
+
+   **対象車両が1台のときも一斉モードでは無操作値にする。** 送信先の台数で切り替えると、
+   1台構成のときだけ一斉モードが単車操作と同じ挙動になり、モードの意味が崩れる。
+3. 一斉発進で manager がやることは 送信先を対象車両全部にすることだけ。車両は emergency 状態なので止まったままで、あとはジョイスティックの緊急停止解除（`LSB+RSB`、左右スティックの押し込み同時押し）と自動走行ボタン（`ButtonY`）を素通しすれば、各車が自力で MANUAL → AUTONOMOUS に入って発進する。**manager はこの2操作を解釈しない。**
+4. 緊急停止は既存の緊急停止ボタン（`ButtonLB` / `ButtonRB` / `ButtonStart` / `ButtonBack`）をそのまま使い、joy を送っている全車へこのボタンを通す。1台だけ止める場面はないため宛先は絞らない。joy を送っていない車両は既に emergency 状態なので、結果として対象車両すべてが停止状態になる。送信先を縮めるのは後述の停止プロトコルに従う。
+5. 手動操縦は GUI で車両を指定すると 送信先が対象1台になり、他の車両への送信は止まる。`LSB+RSB` を素通しすると対象車が MANUAL になり、以降スティック値を通す。前提条件の判定は後述。
 6. 停止しているべき車両の停止が確認できなくなった場合は、manager が自発的にパークへ落とす。これも停止プロトコルに従う。「停止しているべき車両」の範囲はモードごとに異なる（後述のフォールバック条件）。
 
 `racing_kart_driver` は AUTONOMOUS 中も joy の鮮度を要求するため、自動走行中の車両にも joy を送り続ける。
 
-「自動走行発進待機」と「4台自動走行」は joy 変換が同一（4台へ、軸無操作、ボタン素通し）なので、manager から見て区別しない。両者をまとめて「一斉」モードとする。
+「自動走行発進待機」と「全車自動走行」は joy 変換が同一（対象車両全部へ、軸無操作、ボタン素通し）なので、manager から見て区別しない。両者をまとめて「一斉」モードとする。
 
 `ButtonY` を押しっぱなしのまま一斉モードに入り `LSB+RSB` を押すと、解除の次サイクルで即 AUTONOMOUS に入る（`racing_kart_driver_node.cpp:247`）。manager 側でのマスクはしない。「joy を解釈しない」方針を優先する。
 
@@ -98,14 +125,14 @@
 | --- | --- | --- | --- |
 | パーク | — | なし | — |
 | 一斉 | — | なし | — |
-| 単車操作（対象 `v`） | `v` 以外の3台 | いずれかで `stopped != TRUE` または `emergency != TRUE` | 停止中 |
+| 単車操作（対象 `v`） | `v` 以外の全車 | いずれかで `stopped != TRUE` または `emergency != TRUE` | 停止中 |
 | 停止中 | 送信中の全車 | （逆向き）全車で `emergency == TRUE` になったらパークへ | パーク |
 
 各モードでこう決めた理由。
 
-- **一斉モードでは速度でもテレメトリ途絶でもフォールバックしない。** 4台とも自動走行してよいので「停止しているべき車両」が存在しない。テレメトリだけが途絶して joy は届いている状況で自動フォールバックすると、正常なレース中に全車を止めることになり REQ-05 に反する。逆に joy も届いていないなら driver 側が5秒で緊急停止するので放置してよい（REQ-04）。この場合は警告だけ出し、止めるかどうかはオペレータが緊急停止ボタンで判断する
+- **一斉モードでは速度でもテレメトリ途絶でもフォールバックしない。** 対象車両すべてが自動走行してよいので「停止しているべき車両」が存在しない。テレメトリだけが途絶して joy は届いている状況で自動フォールバックすると、正常なレース中に全車を止めることになり REQ-05 に反する。逆に joy も届いていないなら driver 側が5秒で緊急停止するので放置してよい（REQ-04）。この場合は警告だけ出し、止めるかどうかはオペレータが緊急停止ボタンで判断する
 - **単車操作では対象車 `v` 自身を条件に含めない。** `v` は操縦中なので動くのが正常。`v` のテレメトリが途絶しても警告だけにする
-- **他3台は `stopped` だけでなく `emergency` も見る。** 止まってはいるが emergency が解除されている状態は、いつ動いてもおかしくないため危険。joy を送っていない車両は5秒で emergency に落ちるはずなので、`emergency == FALSE` が続くこと自体が異常
+- **対象車以外は `stopped` だけでなく `emergency` も見る。** 止まってはいるが emergency が解除されている状態は、いつ動いてもおかしくないため危険。joy を送っていない車両は5秒で emergency に落ちるはずなので、`emergency == FALSE` が続くこと自体が異常
 - **パークでは何もしない。** manager は joy を送っていないので介入手段がない。動いている車両があっても、それは joy で止められない異常（VCU 異常、外力）であり、joy を送り始めることは「パーク = joy 送信なし」の定義を壊す。警告を出し、実車側の物理的な非常停止に委ねる
 
 なお、停止中モードで `emergency == UNKNOWN` を「確認できた」扱いにしてはならない。`TRUE` を確認できるまでパークへ行かない。
@@ -144,9 +171,9 @@ uv run --with pytest --with hypothesis python -m pytest remote/tests -q
 
 | モード | joy 送信先 | スティック軸 | ボタン | 車両側の状態 |
 | --- | --- | --- | --- | --- |
-| パーク（全車停止） | なし | publish しない | publish しない | 4台とも emergency 状態 |
-| 一斉 | 4台 | 受け付けない（無操作値で上書き） | 素通し | 直後は4台とも emergency 状態。`LSB+RSB` でブレーキを踏んでいない MANUAL、`ButtonY` で AUTONOMOUS |
-| 単車操作 | 対象1台のみ | 実値 | 素通し | 車両選択直後は emergency 状態。`LSB+RSB` を受けると MANUAL。他3台は emergency 状態 |
+| パーク（全車停止） | なし | publish しない | publish しない | 対象車両すべてが emergency 状態 |
+| 一斉 | 対象車両全部 | 受け付けない（無操作値で上書き） | 素通し | 直後は対象車両すべてが emergency 状態。`LSB+RSB` でブレーキを踏んでいない MANUAL、`ButtonY` で AUTONOMOUS |
+| 単車操作 | 対象1台のみ | 実値 | 素通し | 車両選択直後は emergency 状態。`LSB+RSB` を受けると MANUAL。他の車両は emergency 状態 |
 | 停止中 | 縮める前のまま | 無操作値で上書き | **緊急停止ボタンを強制的に押された状態にする** | emergency 確認待ち |
 
 「停止中」は停止プロトコルの実行中を表す。joy 変換が他と異なる（緊急停止ボタンを押された状態にする）ので、「モード = joy 変換」の定義に従い独立したモードとして扱う。自発フォールバックではオペレータがボタンを押していないため、manager 側で押された状態にする必要がある。緊急停止ボタン起因の場合は既に押されているので、強制しても結果は変わらない（冪等）。
@@ -156,7 +183,7 @@ uv run --with pytest --with hypothesis python -m pytest remote/tests -q
 | 項目 | 決まり方 |
 | --- | --- |
 | `destinations` | モードから |
-| `suppress_axes` | 送信先が2台以上、または停止中なら真 |
+| `suppress_axes` | 単車操作以外なら真（一斉と停止中で上書きする） |
 | `force_emergency` | 停止中なら真 |
 
 単車操作中は、去年同様 `ButtonA`（MANUAL）/ `ButtonX`（AUTONOMOUS_STEER_ONLY）/ `ButtonY`（AUTONOMOUS）を任意に切り替えて1台を操作できる。ボタンを素通しするだけなので manager 側の対応は不要。
@@ -191,10 +218,10 @@ uv run --with pytest --with hypothesis python -m pytest remote/tests -q
 
 | 遷移 | 操作 | 前提条件 | manager がやること |
 | --- | --- | --- | --- |
-| パーク → 一斉 | GUIの一斉発進準備完了ボタン | 4台の emergency 状態と停止 | 送信先を4台にする |
-| パーク → 単車操作 | GUIで車両選択 | 他3台の emergency 状態と停止、スティック無操作 | 送信先を対象1台にする |
+| パーク → 一斉 | GUIの一斉発進準備完了ボタン | 対象車両すべての emergency 状態と停止 | 送信先を対象車両全部にする |
+| パーク → 単車操作 | GUIで車両選択 | 対象車以外すべての emergency 状態と停止、スティック無操作 | 送信先を対象1台にする |
 | 任意 → パーク | ジョイスティックの緊急停止ボタン（`ButtonLB` / `ButtonRB` / `ButtonStart` / `ButtonBack`） | なし（いつでも可） | 停止プロトコルに従う |
-| 単車操作 → パーク | 他3台のいずれかで `stopped != TRUE` または `emergency != TRUE` | なし（manager が自発的に判定） | 停止プロトコルに従う |
+| 単車操作 → パーク | 対象車以外のいずれかで `stopped != TRUE` または `emergency != TRUE` | なし（manager が自発的に判定） | 停止プロトコルに従う |
 | 一斉 ↔ 単車操作 | 直接は不可 | パークを経由する必要あり | — |
 | 単車操作 → 別の単車操作 | 直接は不可 | パークを経由する必要あり | — |
 
@@ -204,7 +231,7 @@ uv run --with pytest --with hypothesis python -m pytest remote/tests -q
 
 `racing_kart_driver` 側の既存挙動で担保されるため、manager 側では実装しない。
 
-- **「4台とも緊急停止が解除済み」の確認**：解除し忘れた車は `is_emergency_` が立ったままなので、`ButtonY` を受けても `MANUAL` のまま停止し続ける（`racing_kart_driver_node.cpp:241`）。安全側に倒れる
+- **「対象車両すべての緊急停止が解除済み」の確認**：解除し忘れた車は `is_emergency_` が立ったままなので、`ButtonY` を受けても `MANUAL` のまま停止し続ける（`racing_kart_driver_node.cpp:241`）。安全側に倒れる
 - **`/control/command/actuation_cmd` が publish されていることの確認**：車両ローカルの話で manager からは見えない。車両側の責務とする
 - **joy 途絶時の緊急停止**：`joy_delay_threshold` 超過で driver 自身が `is_emergency_ = true` かつ `input_` を空にし、以降 `is_joystick_available()` が false になって停止指令を出し続ける（`racing_kart_driver_node.cpp:192-199`）
 
@@ -231,7 +258,7 @@ class Tri(Enum):
 
 class Mode(Enum):
     PARK = auto()      # 送信先なし
-    ALL = auto()       # 送信先4台、軸は無操作値
+    ALL = auto()       # 送信先は対象車両全部、軸は無操作値
     SINGLE = auto()    # 送信先1台、軸は実値
     STOPPING = auto()  # D は縮める前のまま、軸無操作 + 緊急停止ボタン強制
 
@@ -307,7 +334,7 @@ status.can_enter_all_mode  # False
 
 GUI はこの1つのデータから、ボタンを押せなくすることと「A3 が停止していません / A6 の状態が不明です」と理由を出すことの両方をやる。
 
-単車操作だけ車両ごとの辞書になっているのは、前提条件が「**対象車以外の3台**が停止していること」で、どの車を選ぶかによって見る相手が変わるため。A2 だけが動いている状況ではこうなる。
+単車操作だけ車両ごとの辞書になっているのは、前提条件が「**対象車以外がすべて**停止していること」で、どの車を選ぶかによって見る相手が変わるため。A2 だけが動いている状況ではこうなる。
 
 ```python
 status.enter_single_mode_blockers == {
@@ -318,7 +345,7 @@ status.enter_single_mode_blockers == {
 }
 ```
 
-GUI では A2 のボタンだけが押せて、他3台はグレーアウトし「A2 が停止していません」と表示される。これは設計上の意図どおりで、**動いてしまっている車をつかまえて操縦する**のが正しい操作になる。対象車自身も前提条件に含めていたら、暴走している A2 を誰も操作できなくなる。
+GUI では A2 のボタンだけが押せて、他はグレーアウトし「A2 が停止していません」と表示される。これは設計上の意図どおりで、**動いてしまっている車をつかまえて操縦する**のが正しい操作になる。対象車自身も前提条件に含めていたら、暴走している A2 を誰も操作できなくなる。
 
 #### Status が満たすべき不変条件
 
@@ -328,7 +355,7 @@ GUI では A2 のボタンだけが押せて、他3台はグレーアウトし�
 | --- | --- |
 | INV-1 | `Tri.UNKNOWN` の車両が1台でもあれば `can_enter_all_mode` は偽 |
 | INV-2 | `stopped` が `TRUE` でない車両は、必ずいずれかの blocker の `vehicles` に現れる |
-| INV-3 | `can_enter_single_mode(v)` が真なら、`v` 以外の3台すべてが `stopped == TRUE` かつ `emergency == TRUE` |
+| INV-3 | `can_enter_single_mode(v)` が真なら、`v` 以外のすべてが `stopped == TRUE` かつ `emergency == TRUE` |
 | INV-4 | `mode != PARK` なら `can_enter_all_mode` は偽で、全車の `can_enter_single_mode` も偽 |
 | INV-5 | `mode == STOPPING` かつ `stopping_elapsed_s >= 5.0` なら、emergency 未確認車両IDを含む `EMERGENCY_CONFIRM_TIMEOUT` が `alerts` にある |
 | INV-6 | `blocker.code` が `VEHICLE_*` のとき `vehicles` は非空 |
@@ -546,14 +573,43 @@ vehicle 側の bridge に `namespace: "/<VEHICLE_ID>"` を設定する。
 
 観点の一覧は [`multi-vehicle-start-stop-test.md`](multi-vehicle-start-stop-test.md) の付録に、ハザード分析・具体的なテストケース・トレーサビリティ・出口基準は同ドキュメント本体にまとめた。
 
+## zenoh 設定を sim と実機で分けない
+
+`make dev3-remote`（AWSIM を実車に見立てたリハーサル）と実機で、**zenoh の設定ファイルを共有する**。
+
+以前は sim 専用に `vehicle/zenoh-sim.json5` と `remote/zenoh-user-sim.json5.template` があったが、
+**リハーサルの目的は実機テストのトラブルを減らすこと**であり、リハーサルで通る設定と実機で使う
+設定が違えば目的を達成できない。実際、許可リストに `racing_kart/debug/status` と
+`vehicle/status/control_mode` を追加したとき、実機側だけ直して sim 側が漏れるという乖離が
+1日で発生した。`pub_priorities` も実機側にしか無く、輻輳時の挙動が違っていた。
+
+sim と実機で本当に違うのは次の3つだけで、いずれも設定ファイルの外で渡せる。
+
+| 違い | 渡し方 |
+| --- | --- |
+| 接続先ポート | CLI の `-e tls/<host>:<port>` |
+| ROS ドメインID | 環境変数 |
+| 車両の名前空間 | CLI の `-n /<VEHICLE_ID>`（車両側のみ） |
+
+したがって設定ファイルは各側1本で足りる。
+
+| ファイル | 使う側 |
+| --- | --- |
+| `vehicle/zenoh.json5` | `vehicle/run_zenoh.bash`（実機）と `remote/sim_zenoh.bash`（sim） |
+| `remote/zenoh-user.json5.template` | `remote/connect_zenoh.bash`（実機）と `remote/sim_zenoh.bash`（sim） |
+
+遠隔側の bridge には名前空間を付けず、車両側を `-n /<VEHICLE_ID>` で起動する。この非対称性が
+両者を噛み合わせている。遠隔側はトピック名にあらかじめ車両IDが入っており、車両側の bridge が
+それを剥がして車両ローカルの `/racing_kart/joy` に戻す。
+
 ## racing_kart_manager 以外の変更
 
 ### aichallenge-racingkart/remote
 
-- `remote/zenoh-user.json5`: ローカル名が名前空間付きになるので、`publishers` を `/<VEHICLE_ID>/racing_kart/joy` に書き換える。`subscribers` には `/<VEHICLE_ID>/vehicle/status/velocity_status` に加えて **`/<VEHICLE_ID>/racing_kart/debug/status` と `/<VEHICLE_ID>/vehicle/status/control_mode` を追加する**（現在はどちらも入っていない）。車両ごとに別ファイル（またはテンプレート生成）にして自車の名前空間だけを許可する。
-- `remote/connect_zenoh.bash`: 4台分の bridge を並列起動し、それぞれに自車用の config を渡す。
+- `remote/zenoh-user.json5.template`: 遠隔側の設定を**テンプレート1本**にまとめる。`__VEHICLE_ID__` を車両IDで置換して使う。トピック名は名前空間付き（`/<VEHICLE_ID>/racing_kart/joy` など）で、`subscribers` に `racing_kart/debug/status` と `vehicle/status/control_mode` を含める。
+- `remote/connect_zenoh.bash`: 対象車両の数だけこのスクリプトを起動する。1回の起動が1台分の bridge に対応し、テンプレートから自車用の config を生成する。
 - GUI（`remote/racing_kart_manager_gui.py`）: 操作対象車両の選択と一斉発進準備完了のボタン。manager とは別プロセスで、接続は「GUI インタフェース」節を参照。準備完了かどうかと前提条件の判定結果を表示して、許可されない理由が分かるようにする。レイアウト案は [`gui.drawio`](gui.drawio)。左に車両選択ボタン（`A2` `A3` / `A6` `A7`）、右に「一斉発進準備完了」ボタン、下にメッセージ表示エリア。
 
 ### aichallenge-racingkart/vehicle
 
-- `vehicle/zenoh.json5`: `namespace: "/<VEHICLE_ID>"` を設定する。`run_zenoh.bash` が既に `vehicle_id` を引数で受けているので、そこから注入する。`allow` リストは bridge のローカル側から見た名前で照合されるため既存の記述は変更不要だが、`publishers` へ **`/racing_kart/debug/status` と `/vehicle/status/control_mode` を追加する**（現在はどちらも入っていない）。
+- `vehicle/zenoh.json5`: 名前空間は設定ファイルに書かず、`run_zenoh.bash` から **`-n "/<VEHICLE_ID>"` で渡す**。こうすると設定ファイルに車両固有の内容が無くなり、全車で1ファイルを共有できる。`allow` リストは bridge のローカル側から見た名前で照合されるため名前空間なしのままでよいが、`publishers` へ `/racing_kart/debug/status` と `/vehicle/status/control_mode` を追加する。
