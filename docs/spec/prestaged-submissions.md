@@ -48,7 +48,7 @@ prestage_all.sh
   src/aichallenge_submit/ へ展開               v
       |                                    gocryptfs マウント (-ro)
       v                                        |
-  SYMLINK_INSTALL=0                        イメージダイジェスト照合
+  SYMLINK_INSTALL=0                        イメージ ID 照合
   make autoware-build  (コンテナ内)             |
       |  install/                          install.tar.zst の sha256 照合
       v                                        |
@@ -91,7 +91,7 @@ team_<team_id>/
 {
   "schema": 1,
   "created_at": "2026-08-13T10:00:00+09:00",
-  "image": { "tag": "aichallenge-2025-dev", "digest": "sha256:..." },
+  "image": { "tag": "aichallenge-2025-dev", "id": "sha256:..." },
   "teams": [
     {
       "team_id": "t01",
@@ -114,12 +114,17 @@ team_<team_id>/
 
 - 事前ビルドは既存の `autoware-build` サービス（`docker-compose.yml`、
   `command` は `/aichallenge/build_autoware.bash` を実行）内で行う。
-- 使用イメージのダイジェストを `manifest.json` に記録し、
-  `stage_team.sh` が車両 PC 側の `docker image inspect` 結果と照合する。不一致なら**中断**する。
+- 使用イメージの **ID**（`docker image inspect --format '{{.Id}}'`、config のダイジェスト）を
+  `manifest.json` の `image.id` に記録し、`stage_team.sh` が車両 PC 側で同じコマンドを実行した
+  結果と照合する。不一致なら**中断**する。
+  `aichallenge-2025-dev` は `docker_build.sh` でローカルビルドするイメージであり
+  **`RepoDigests` を持たない**（レジストリに push していない）ため、レジストリ由来の
+  「イメージダイジェスト」は使えない。`.Id`（ローカルの config ダイジェスト）だけが
+  ローカルビルドイメージに対して安定して取得できる識別子である。
 
 ### `--symlink-install` を外す必要がある
 
-現状 `aichallenge/build_autoware.bash:31` は `colcon build --symlink-install` を固定で使っており、
+`aichallenge/build_autoware.bash` は既定（`SYMLINK_INSTALL=1`）で `colcon build --symlink-install` を実行し、
 `install/` 内に **1045 個のシンボリックリンク**が生成され、
 `/aichallenge/workspace/src/...` と `/aichallenge/workspace/build/...` を**絶対パスで**指している。
 
@@ -134,7 +139,11 @@ install/rl_train_controller/lib/.../rl_train_controller_node.py
 通常の開発ループでは `--symlink-install` が有用なのでグローバルには外さず、
 `build_autoware.bash` に環境変数 `SYMLINK_INSTALL`（既定 `1`）の分岐を追加し、
 事前ビルド時のみ `SYMLINK_INSTALL=0` で呼ぶ。
-`autoware-build` サービスに `SYMLINK_INSTALL: ${SYMLINK_INSTALL:-1}` の環境変数受け渡しを追加する。
+
+`docker-compose.yml` の変更は**不要**だった。
+`docker compose run --rm --no-deps -e SYMLINK_INSTALL=0 autoware-build` のように
+呼び出しごとに `-e` で環境変数を注入できるため、`autoware-build` サービス定義に
+`SYMLINK_INSTALL` を追加する必要はない。
 
 ## スクリプト仕様
 
@@ -145,10 +154,23 @@ install/rl_train_controller/lib/.../rl_train_controller_node.py
 | `vehicle/prestage/unstage_team.sh` | 車両 PC | 平文・ビルド成果物・eval イメージのクリーンアップ |
 | `vehicle/prestage/teams.tsv.example` | — | チーム一覧の書式例（コミットするのは example のみ） |
 
+**シグナルハンドリング**: ボールトをマウントするスクリプト（`prestage_all.sh` / `stage_team.sh`）は
+`trap cleanup EXIT` と `trap 'exit 130' INT` / `trap 'exit 143' TERM` を**別々に**張る。
+`trap cleanup EXIT INT TERM` のように 1 つの trap にまとめると、
+シグナル受信時にハンドラを実行した**あと bash がスクリプトの続きを再開してしまう**ため、
+アンマウント済みのマウントポイントが素の `/tmp` ディレクトリとしてループ内で再作成され、
+以降のチームの提出物がそこへ平文で書き込まれる。レビュー中に実際に再現した不具合であり、
+本機能の秘匿という目的そのものを無効化するため、EXIT と INT/TERM の trap は分離を必須とする。
+
 ### prestage_all.sh
 
 - 入力: `teams.tsv`（TSV: `team_id`, `user_id`, 任意で `submission_id`）
-- 認証は環境変数 `USERNAME` / `PASSWORD`、無ければ**開始時に 1 回だけ**対話入力
+- 認証は環境変数 `PRESTAGE_USERNAME` / `PRESTAGE_PASSWORD`、無ければ**開始時に 1 回だけ**対話入力。
+  素の `USERNAME` / `PASSWORD` ではなく意図的にこの名前にしている —
+  ログインシェルは `USERNAME` を既に export していることがあり（このホストでは `USERNAME=taikitanaka`）、
+  素の名前を使うと `[ -z "${USERNAME-}" ]` が偽になってプロンプトが出ず、
+  全チームが誤ったユーザーとしてダウンロードされ `failed` になる。
+  `vehicle/download_submission.sh` が文書化する裸の `USERNAME` / `PASSWORD` とは別の名前である。
 - ボールトのパスフレーズも開始時に 1 回だけ対話入力（運営 PC 上なので passfile も許容）
 - チームごとに: 取得 → `src/aichallenge_submit/` へ展開 → `SYMLINK_INSTALL=0` でビルド →
   `install/` を zstd で固める → ボールトへ → `src/` `install/` `build/` を削除
@@ -161,8 +183,9 @@ install/rl_train_controller/lib/.../rl_train_controller_node.py
 2. 既にステージ済み（`aichallenge/workspace/.staged_team` が存在）なら拒否し、`unstage_team.sh` を促す
 3. パスフレーズを対話入力する。**車両 PC 上に passfile を置かない**
    （無人運用が要る場合のみ `PRESTAGE_PASSFILE` を受けるが、秘匿が崩れることを警告として出す）
-4. gocryptfs を `-ro` でマウント。`trap ... EXIT INT TERM` で必ず `fusermount -u` する
-5. `manifest.json` のイメージダイジェストと車両 PC の `aichallenge-2025-dev` を照合、不一致で中断
+4. gocryptfs を `-ro` でマウント。`trap cleanup EXIT` + `trap 'exit 130' INT` + `trap 'exit 143' TERM`
+   （分離した trap。理由は「スクリプト仕様」節の注記）で必ず `fusermount -u` する
+5. `manifest.json` のイメージ ID と車両 PC の `aichallenge-2025-dev` を照合、不一致で中断
 6. 対象チームの `build_status` が `ok` であることを確認
 7. `install.tar.zst` の sha256 を照合し `/aichallenge/workspace/install/` へ展開
 8. `.staged_team` に `team_id` と時刻を記録
@@ -182,9 +205,16 @@ install/rl_train_controller/lib/.../rl_train_controller_node.py
 ### download_submission.py への追加
 
 `--latest` フラグを追加する。現状 `--submission-id` を省略すると
-`run()`（`vehicle/download_submission.py:430`）が `get_user_selection()`（同 `:192`）で**対話選択に落ちる**ため、
-32 チームのループが組めない。`--latest` 指定時は `list_recent_submissions()`（同 `:78`）の結果から
-最新（`submissionTime` 最大）を選び `download_by_id()` に渡す。
+`run()`（`vehicle/download_submission.py:452`）が `get_user_selection()`（同 `:206`）で**対話選択に落ちる**ため、
+32 チームのループが組めない。`--latest` 指定時は `select_latest()`（同 `:192`、`list_recent_submissions()`
+の結果から `submission_time` 最大を選ぶ）の結果を既存の `download_submission()`（`--submission-id` 指定時に
+使う `download_by_id()` とは別経路）に渡す。
+
+`--dest-file <path>` も追加した。既存の `--output`（既定 `./downloads/`）には**既知の挙動**があり、
+`download_submission()` / `download_by_id()` の実装（`:313`, `:406` 付近の `if dest_file: ... else: ...`）は
+`output_dir` 引数を実質使わず、`--dest-file` 未指定時は常にスクリプトと同じディレクトリの
+`vehicle/download/<filename>` に書く。本設計ではこの既存挙動には触れず、
+`prestage_all.sh` が確定パスへ書き出せるように `--dest-file` を新設するだけに留めた。
 
 ## ディスク見積り
 
@@ -197,23 +227,23 @@ install/rl_train_controller/lib/.../rl_train_controller_node.py
 | `build/` | 113 MB |
 
 `--symlink-install` を外すと実体コピーのぶん増える。MPC を使うチームが多い場合、
-32 チームで最大 20 GB 程度。zstd 圧縮後のボールトは venv が高圧縮なので数 GB に収まる見込み。
+32 チームで最大 20 GB 程度（見込み）。zstd 圧縮後のボールトは venv が高圧縮なので
+数 GB に収まる見込みだが、**zstd 圧縮後のボールト実サイズとチームあたりのビルド時間は
+実イメージでの E2E（未実施、下記「検証方法」参照）が済んでおらず未計測**である。
+上記はいずれも見込み値であり、実測値として扱わないこと。
 `.venv` の重複排除は効果が大きいが、まずは実測してから判断する（本 spec の対象外）。
 
 ## 運用手順
 
-**会場前（運営 PC）**
+`Makefile` の `prestage-build` / `prestage-stage` / `prestage-unstage` / `prestage-test` の
+4 ターゲットから呼ぶ。コマンド例・環境変数・注意事項の手順は `vehicle/prestage/README.md` に
+まとめてある（本 spec は「なぜ」、README は「どうやって」を担当する）。ここでは概要のみ示す。
 
-1. `teams.tsv` を用意（`user_id` は aic-next 管理画面 / DB から取得）
-2. `vehicle/prestage/prestage_all.sh --vault <path> --teams teams.tsv`
-3. サマリで `failed` のチームを確認し、必要なら個別に再実行
-4. ボールトを車両 PC の所定パスへコピー（または USB で搬入）
-
-**走行枠ごと（車両 PC・運営が実行）**
-
-1. チームがログアウトしている状態で `vehicle/prestage/stage_team.sh <team_id>`
-2. チームに引き渡し、チームは通常どおり `make dev` / `make autoware-vehicle` を使う
-3. 枠終了後 `vehicle/prestage/unstage_team.sh --keep-output <保管先>`
+- **会場前（運営 PC）**: `teams.tsv` を用意し `make prestage-build VAULT=<path> TEAMS=teams.tsv`
+  でボールトを構築、サマリで `failed` のチームを確認、ボールトを車両 PC へ搬入する。
+- **走行枠ごと（車両 PC・運営が実行）**: 枠の頭にチームがログアウトしている状態で
+  `make prestage-stage VAULT=<path> TEAM=<team_id>`、枠の終わりに
+  `make prestage-unstage [KEEP_OUTPUT=<保管先>]`。
 
 ## 非対象（やらないこと）
 
@@ -226,6 +256,24 @@ install/rl_train_controller/lib/.../rl_train_controller_node.py
 - **チーム自身によるステージング** — パスフレーズがチームに渡れば他チームの復号も可能になるため設計外。
 - **`.venv` の重複排除**。
 
+## テスト用の環境変数フック
+
+`vehicle/prestage/tests/` のスタブ差し替え、および運用時の設定変更に使う環境変数。
+
+| 変数 | 既定値 | 用途 |
+|------|--------|------|
+| `PRESTAGE_DOWNLOAD_CMD` | `python3 <repo>/vehicle/download_submission.py` | ダウンロードコマンドの差し替え（テストでは偽コマンドに置換） |
+| `PRESTAGE_BUILD_CMD` | `docker compose run --rm --no-deps -e SYMLINK_INSTALL=0 autoware-build` | ビルドコマンドの差し替え（テストでは偽コマンドに置換） |
+| `PRESTAGE_IMAGE` | `aichallenge-2025-dev` | `image_id()` が問い合わせるイメージタグ |
+| `PRESTAGE_IMAGE_ID_CMD` | 未設定（既定は `docker image inspect --format '{{.Id}}'`） | イメージ ID 解決コマンドの差し替え（テスト用） |
+| `PRESTAGE_WORKSPACE_ROOT` | リポジトリルート | `aichallenge/workspace` の親ディレクトリ（テストでは一時ディレクトリに向ける） |
+| `PRESTAGE_VAULT` | 未設定 | `stage_team.sh` で `--vault` を省略したときの既定 cipherdir |
+| `PRESTAGE_PASSFILE` | 未設定 | gocryptfs のパスフレーズファイル（運営 PC / テスト専用。車両 PC では非推奨、警告を出す） |
+| `PRESTAGE_DOCKER_CMD` | `docker` | `unstage_team.sh` が呼ぶ docker コマンドの差し替え（テスト用） |
+| `PRESTAGE_EVAL_IMAGE` | `aichallenge-2025-eval` | `unstage_team.sh` が削除する eval イメージ名 |
+
+認証用の `PRESTAGE_USERNAME` / `PRESTAGE_PASSWORD` は上記とは別枠（「スクリプト仕様」節を参照）。
+
 ## 検証方法
 
 擬似提出 tar 2 チーム分で end-to-end を確認する。
@@ -235,4 +283,10 @@ install/rl_train_controller/lib/.../rl_train_controller_node.py
 3. `stage_team.sh t01` 後に `make dev` が起動し、t01 のノードが上がること
 4. ステージ中に `find` して t02 の平文がどこにも存在しないこと
 5. `unstage_team.sh` 後に平文・`install/`・eval イメージが残っていないこと
-6. イメージダイジェストを意図的に不一致にすると `stage_team.sh` が中断すること
+6. イメージ ID を意図的に不一致にすると `stage_team.sh` が中断すること
+
+上記のうち 1・2 は `vehicle/prestage/tests/prestage_test.sh`、4・6 は `stage_test.sh`、
+5 は `unstage_test.sh` で検証済み（ダウンロード・ビルド・docker をスタブに差し替え、
+ネットワークも docker も使わない。`make prestage-test` でまとめて実行できる）。
+3 の**実イメージでの `make dev` E2E のみ未実施**（作業中の未コミット差分を消してしまう
+おそれがあり保留中）。
