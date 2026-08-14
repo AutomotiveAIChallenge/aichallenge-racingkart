@@ -1,7 +1,7 @@
 # make file inspired by https://roborovsky-racers.github.io/RoborovskyNote/
 SHELL := /bin/bash
 
-.PHONY: autoware-build autoware-vehicle autoware-simulator autoware-request-initialpose autoware-request-control  awsim-request-start awsim-request-reset autoware-driver-zenoh autoware-driver-zenoh-rosbag \
+.PHONY: autoware-build autoware-vehicle autoware-simulator autoware-request-initialpose autoware-request-control  awsim-request-start awsim-request-reset autoware-driver-zenoh autoware-driver-zenoh-rosbag setup-vehicle \
 	simulator dev dev2 dev3 dev4 dev3-remote driver zenoh download rviz2 down down_all ps autoware-attach autoware-bash eval
 
 # Used by docker-compose.yml for build/eval artifact ownership.
@@ -123,11 +123,19 @@ autoware-driver-zenoh:
 	sleep 15
 	LOG_DIR=$(LOG_DIR) docker compose up -d zenoh
 
+setup-vehicle:
+	@echo "Run vehicle setup check"
+	@cd vehicle && ./setup_check.sh
+
 # driver + autoware + all-topic rosbag + zenoh
 autoware-driver-zenoh-rosbag:
+	@echo "Run vehicle setup preflight check"
+	@cd vehicle && ./setup_check.sh --phase preflight
 	LOG_DIR=$(LOG_DIR) RUN_MODE=vehicle docker compose up -d driver autoware rosbag
 	sleep 15
 	LOG_DIR=$(LOG_DIR) docker compose up -d zenoh
+	@echo "Run vehicle setup runtime check"
+	@cd vehicle && ./setup_check.sh --phase runtime
 
 down:
 	@for p in 1 2 3 4; do docker compose -p $$p down --remove-orphans; done

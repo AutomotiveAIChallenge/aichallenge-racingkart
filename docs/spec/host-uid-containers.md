@@ -2,7 +2,8 @@
 
 ## 実装状況 (2026-06-14)
 
-- DONE: 設計どおり実装済み — `docker-compose.yml` の両 base アンカーに `user:` / `HOME=/tmp` / `group_add` を追加。Makefile がホスト GID を export。コンテナはホスト UID/GID で実行される。
+- DONE: 設計どおり実装済み — `docker-compose.yml` の両 base アンカーに `user:` / `HOME=/tmp` / `group_add` を追加。Makefile がホスト GID を export。コンテナは原則ホスト UID/GID で実行される。
+- DEVIATION: `driver` サービスのみ CAN/DDS のホスト初期化が必要なため root で実行する。ただし `/vehicle/run_driver.bash` が開始時と終了時に `HOST_UID:HOST_GID` へログディレクトリの所有者を直すため、`/output` 配下の成果物はホストユーザーが扱える。
 - DEVIATION: `docker-compose.sound.yml` は `simulator` サービスのみパッチ済み（`autoware` サービスへの適用なし）。設計本文の YAML 例には `autoware:` と `simulator:` 両方が記載されている。
 - DEVIATION: `group_add` にはグループ名（`render`/`video`/`input`）ではなく数値 GID（`${HOST_GID_RENDER:-110}` 等）を使用。「既知のリスクと対処」に記載した切替策を当初から採用している。
 - NOT DONE: `docker-entrypoint.sh` の 2 行目に `for rocker sessions` というコメントが残存（`# Used as ENTRYPOINT in Dockerfile and sourced from .bashrc for rocker sessions.`）。設計の「変更不要」扱いと矛盾しないが、repo-cruft-cleanup 計画の Task 3 Step 4 で予定していたコメント更新は未適用。
@@ -19,10 +20,11 @@ compose の `user:` 指定のみで実現する（entrypoint でのユーザー�
 
 ### 既存コードとの互換性
 
-compose の全サービスが `user:` で非 root 実行されるため、`/output` への書き込みは常にホストユーザー所有になり、root → ホストユーザーの chown 自体が不要になった。
+compose のサービスは原則 `user:` で非 root 実行されるため、`/output` への書き込みはホストユーザー所有になり、root → ホストユーザーの chown 自体が不要になった。例外として `driver` は root で実行するが、ログディレクトリの所有者を `HOST_UID:HOST_GID` に直す。
 
 - `aichallenge/build_autoware.bash` — `if [ "$(id -u)" -eq 0 ]` でガードされ、非 root 時は chown をスキップ（こちらは残置）。
-- `aichallenge/run_autoware.bash` / `run_evaluation.bash` / `vehicle/run_{driver,zenoh}.bash` / `utils/record_all_rosbag.bash` — 以前は EXIT trap で `fix_ownership.bash` を呼んでいたが、非 root 実行では常に no-op のため、`fix_ownership.bash` 本体ごと削除した。
+- `aichallenge/run_autoware.bash` / `run_evaluation.bash` / `vehicle/run_zenoh.bash` / `utils/record_all_rosbag.bash` — 以前は EXIT trap で `fix_ownership.bash` を呼んでいたが、非 root 実行では常に no-op のため、`fix_ownership.bash` 本体ごと削除した。
+- `vehicle/run_driver.bash` — `driver` だけは root 実行のため、開始時と終了時にログディレクトリを `HOST_UID:HOST_GID` にする。`/entrypoint.sh` の CAN/DDS 初期化と ROS 起動順は変更しない。
 
 なお AWS Batch 上の eval ジョブは docker compose を使わず root で動くが、`aichallenge-aws/base_image/aichallenge/` 配下に独自コピーのスクリプトを持つため、本リポジトリの削除の影響は受けない（AWS 側で chown が必要なら、そちらのコピーで個別に維持する）。
 
