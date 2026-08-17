@@ -4,20 +4,15 @@ vehicle_id="${1}"
 id="${2:-${ROS_DOMAIN_ID:-0}}"
 out_dir="${3:+${3}/d${id}}"
 out_dir="${out_dir:-/output/$(date +%Y%m%d-%H%M%S)/d${id}}"
+script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
-case "${vehicle_id}" in
-A2) PORT=7448 ;;
-A3) PORT=7449 ;;
-A6) PORT=7450 ;;
-A7) PORT=7451 ;;
-A1) PORT=7452 ;;
-A5) PORT=7453 ;;
-A8) PORT=7454 ;;
-*)
-    echo "Invalid VEHICLE_ID"
+# shellcheck source-path=SCRIPTDIR source=vehicle_ports.sh
+source "${script_dir}/vehicle_ports.sh"
+
+if ! PORT="$(zenoh_port_for_vehicle_id "${vehicle_id}")"; then
+    echo "Invalid VEHICLE_ID: ${vehicle_id:-(empty)} (valid: ${VEHICLE_ID_VALID_LIST})"
     exit 1
-    ;;
-esac
+fi
 
 export ROS_DOMAIN_ID=$id
 
