@@ -51,8 +51,10 @@ cd "$HOME"
 git clone https://github.com/AutomotiveAIChallenge/aichallenge-racingkart.git
 cd aichallenge-racingkart
 ./setup.bash bootstrap
-# 必要であれば実験用ブランチに切り替える
+# 必要であれば実験用ブランチに切り替えてビルドし直す。
 # git checkout experiment
+# ./docker_build.sh dev
+# make autoware-build
 ```
 
 `bootstrap`は以下以外のステップで全てyを選択。
