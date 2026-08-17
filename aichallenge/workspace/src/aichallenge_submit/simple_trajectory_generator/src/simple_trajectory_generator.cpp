@@ -83,22 +83,33 @@ private:
         values.push_back(std::stod(token));
       }
       
-      if (values.size() != 8) {
-        RCLCPP_WARN(get_logger(), "Invalid CSV line format, expected 8 values");
+      // MPC has 7, while default raceline has 8
+      if (values.size() != 7) {
+        RCLCPP_WARN(get_logger(), "Invalid CSV line format, expected 7 values");
         continue;
       }
       
+      // Note: in mpc
+      // x: values[1]
+      // y: values[2]
+      // psi: values[3]
+      // x_quat, y_quat = 0 (no pitch and roll)
+      // z_quat = sin(psi/2)
+      // w_quat = cos(psi/2)
+      // v = values[5]
+
       TrajectoryPoint point;
-      point.pose.position.x = values[0];
-      point.pose.position.y = values[1];
+      point.pose.position.x = values[1];
+      point.pose.position.y = values[2];
       point.pose.position.z = z_;
 
-      point.pose.orientation.x = values[3];
-      point.pose.orientation.y = values[4];
-      point.pose.orientation.z = values[5];
-      point.pose.orientation.w = values[6];
-      
-      point.longitudinal_velocity_mps = values[7];
+      point.pose.orientation.x = 0.0;
+      point.pose.orientation.y = 0.0;
+      const auto &psi = values[3];
+      point.pose.orientation.z = std::sin(psi/2);
+      point.pose.orientation.w = std::cos(psi/2);
+
+      point.longitudinal_velocity_mps = values[5];
       
       point.lateral_velocity_mps = 0.0;
       point.acceleration_mps2 = 0.0;

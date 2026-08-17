@@ -127,9 +127,13 @@
     <group>
       <push-ros-namespace namespace="scenario_planning"/>
 
-      <!-- Customizable -->
+      <!-- get mpc config and ref path inside -->
+      <arg name="mpc_config_file" default="$(eval &quot;'config.yaml' if '$(var track)' == 'citycircuit' else 'config_' + '$(var track)' + '.yaml'&quot;)"/>
+      <arg name="mpc_ref_csv" default="$(command python3 -c 'import yaml; print(yaml.safe_load(open(&quot;$(find-pkg-share multi_purpose_mpc_ros)/config/$(var mpc_config_file)&quot;))[&quot;reference_path&quot;][&quot;csv_path&quot;])')"/>
+      
+      <!-- link the trajectory generator to use mpc reference line -->
       <node pkg="simple_trajectory_generator" exec="simple_trajectory_generator_node" name="simple_trajectory_generator" output="screen">
-            <param name="csv_path" value="$(find-pkg-share simple_trajectory_generator)/data/$(var track_subdir)raceline_awsim_30km_from_garage.csv"/>
+            <param name="csv_path" value="$(find-pkg-share multi_purpose_mpc_ros)/$(var mpc_ref_csv)"/>
             <param name="z" value="6.5"/>
       </node>
       
