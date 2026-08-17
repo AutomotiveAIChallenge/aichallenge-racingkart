@@ -51,6 +51,8 @@ cd "$HOME"
 git clone https://github.com/AutomotiveAIChallenge/aichallenge-racingkart.git
 cd aichallenge-racingkart
 ./setup.bash bootstrap
+# 必要であれば実験用ブランチに切り替える
+# git checkout experiment
 ```
 
 `bootstrap`は以下以外のステップで全てyを選択。
