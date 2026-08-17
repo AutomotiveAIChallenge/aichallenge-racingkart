@@ -89,6 +89,13 @@ ip route get 8.8.8.8
 getent hosts zenoh.dev.aichallenge-board.jsae.or.jp
 ```
 
+#### リバースSSH
+```bash
+# 手動確認コマンド
+systemctl is-active --quiet reverse-ssh.service
+sudo systemctl status reverse-ssh.service
+```
+
 #### Zenohサーバー疎通
 ```bash
 # 手動確認コマンド
@@ -102,6 +109,8 @@ nc -zv zenoh.dev.aichallenge-board.jsae.or.jp 7450
 - ✅ `Internet route available`
 - ✅ `DNS resolution works`
 - ✅ `Zenoh endpoint connectivity (A6: zenoh.dev.aichallenge-board.jsae.or.jp:7450)`
+- ✅ `reverse-ssh.service is active (running)`
+- ⚠️ `reverse-ssh.service is not active`
 
 ---
 
@@ -269,6 +278,8 @@ Time: 2025年  8月 25日 月曜日 22:54:19 JST
    Route: 8.8.8.8 via 192.168.x.x dev wlan0 src 192.168.x.x uid 1000
 ✅ DNS resolution works
 ℹ️ Active NetworkManager connections: ...
+⚠️ reverse-ssh.service is not active
+   Fix: sudo systemctl start reverse-ssh.service
 ✅ Zenoh endpoint connectivity (A6: zenoh.dev.aichallenge-board.jsae.or.jp:7450)
 
 ℹ️ 3. Docker & Environment Check
@@ -293,9 +304,9 @@ Time: 2025年  8月 25日 月曜日 22:54:19 JST
 ========================================
 📊 Check Results Summary
 ========================================
-Total checks: 15
+Total checks: 16
 ✅ Passed: 10
-⚠️ Warnings: 2
+⚠️ Warnings: 3
 ❌ Failed: 3
 
 ❌ Critical issues found! Fix failures before running vehicle mode.
