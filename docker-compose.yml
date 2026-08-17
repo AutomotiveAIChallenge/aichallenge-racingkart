@@ -7,7 +7,7 @@ x-autoware-base: &autoware-base
   user: "${HOST_UID:-1000}:${HOST_GID:-1000}"
   environment:
     - HOME=/tmp
-    - DISPLAY=${DISPLAY:-}
+    - DISPLAY=${DISPLAY}
     - USER=${USER}
     - ROS_DISTRO=humble
     - XAUTHORITY=${XAUTHORITY:-}
@@ -69,7 +69,7 @@ x-racing_kart_interface-base: &racing_kart_interface-base
   user: "${HOST_UID:-1000}:${HOST_GID:-1000}"
   environment:
     - HOME=/tmp
-    - DISPLAY=${DISPLAY:-}
+    - DISPLAY=${DISPLAY}
     - USER=${USER}
     - TZ=Asia/Tokyo
     - ROS_DISTRO=humble
@@ -142,9 +142,6 @@ services:
   # Driver service
   driver:
     <<: *racing_kart_interface-base
-    # Start as root for CAN/DDS host setup; /vehicle/run_driver.bash
-    # fixes log ownership back to HOST_UID:HOST_GID.
-    user: "root"
     entrypoint: []
     command: ["bash", "-lc", "exec /vehicle/run_driver.bash vehicle ${ROS_DOMAIN_ID:-1} ${LOG_DIR:-}"]
 

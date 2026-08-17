@@ -2,7 +2,7 @@
 
 ## 概要
 
-このドキュメントは、`make autoware-driver-zenoh-rosbag` で実車を起動する前後の確認項目をまとめています。
+このドキュメントは、racing_kart_interface実行前およびrun-full-system実行前の確認項目をまとめています。
 過去の実験記録から抽出した問題点を予防的にチェックできます。
 
 ## 自動チェックスクリプト
@@ -18,7 +18,7 @@
 ./setup_check.sh --help
 ```
 
-## チェック項目（5段階）
+## チェック項目（6段階）
 
 ### 1. ハードウェアデバイス確認
 
@@ -32,7 +32,7 @@ ip -details link show can0
 **期待する結果:**
 - ✅ `CAN interface can0 is UP`
 - ❌ `CAN interface can0 not found` → ハードウェア接続確認
-- ❌ `CAN interface can0 exists but not UP` → `sudo ip link set can0 up type can bitrate 1000000`
+- ⚠️ `CAN interface can0 exists but not UP` → `sudo ip link set can0 up type can bitrate 500000`
 
 #### VCU（Vehicle Control Unit）
 ```bash
@@ -66,8 +66,6 @@ ls -la /dev/gnss/usb
 ```bash
 # 手動確認コマンド
 ping -c 3 8.8.8.8
-ip route get 8.8.8.8
-getent hosts zenoh.dev.aichallenge-board.jsae.or.jp
 ```
 
 #### リバースSSH
@@ -80,36 +78,44 @@ sudo systemctl status reverse-ssh.service
 #### Zenohサーバー疎通
 ```bash
 # 手動確認コマンド
-export VEHICLE_ID=A6  # ECU-RK-06 の例
-timeout 5 bash -c "echo >/dev/tcp/zenoh.dev.aichallenge-board.jsae.or.jp/7450"
-nc -zv zenoh.dev.aichallenge-board.jsae.or.jp 7450
+timeout 5 bash -c "echo >/dev/tcp/57.180.63.135/7447"
+nc -zv 57.180.63.135 7447
 ```
 
 **期待する結果:**
 - ✅ `Internet connectivity (8.8.8.8)`
-- ✅ `Internet route available`
-- ✅ `DNS resolution works`
-- ✅ `Zenoh endpoint connectivity (A6: zenoh.dev.aichallenge-board.jsae.or.jp:7450)`
+- ✅ `Zenoh server connectivity (57.180.63.135:7447)`
 - ✅ `reverse-ssh.service is active (running)`
 - ⚠️ `reverse-ssh.service is not active`
 
 ---
 
-### 3. Docker・環境確認
+### 3. システムサービス確認
+
+#### RTK関連サービス（optional）
+```bash
+# 手動確認コマンド
+systemctl status rtk_str2str.service
+```
+
+**期待する結果:**
+- ⚠️ `Service rtk_str2str.service is not active (optional)`
+
+---
+
+### 4. Docker・環境確認
 
 #### Docker基本確認
 ```bash
 # 手動確認コマンド
 docker ps
 docker images
-docker compose -f ../docker-compose.yml ps
 ```
 
 #### Dockerイメージ確認
 **期待する結果:**
 - ✅ `Racing kart interface image: ghcr.io/tier4/racing_kart_interface:latest-experiment (2025-08-25 10:30:45 +0900 JST)`
 - ✅ `Aichallenge dev image: aichallenge-2025-dev-t4tanaka:latest (2025-08-24 15:22:11 +0900 JST)`
-- ✅ `Required compose services are running: driver autoware rosbag zenoh`
 
 #### 環境変数・権限
 ```bash
@@ -124,7 +130,7 @@ groups $USER
 
 ---
 
-### 4. 既知問題予防チェック
+### 5. 既知問題予防チェック
 
 #### past_log.mdからの予防項目
 
@@ -138,17 +144,17 @@ groups $USER
 
 ---
 
-### 5. 実行準備確認
+### 6. 実行準備確認
 
-#### リポジトリ状態
+#### Docker Compose環境
 ```bash
 # 手動確認コマンド
-git rev-parse --show-toplevel
+ls -la docker-compose.yml
 git branch --show-current
 ```
 
 **期待する結果:**
-- ✅ `docker-compose.yml exists at repo root: ...`（存在する場合のみ）
+- ✅ `docker-compose.yml exists`
 - ℹ️ `Current git branch: experiment`
 
 ---
@@ -176,15 +182,15 @@ Time: 2025年  8月 25日 月曜日 22:54:19 JST
 ℹ️ 2. Network & Communication Check
 ----------------------------------------
 ✅ Internet connectivity (8.8.8.8)
-✅ Internet route available
-   Route: 8.8.8.8 via 192.168.x.x dev wlan0 src 192.168.x.x uid 1000
-✅ DNS resolution works
-ℹ️ Active NetworkManager connections: ...
 ⚠️ reverse-ssh.service is not active
    Fix: sudo systemctl start reverse-ssh.service
-✅ Zenoh endpoint connectivity (A6: zenoh.dev.aichallenge-board.jsae.or.jp:7450)
+✅ Zenoh server connectivity (57.180.63.135:7447)
 
-ℹ️ 3. Docker & Environment Check
+ℹ️ 3. System Services Check
+----------------------------------------
+⚠️ Service rtk_str2str.service is not active (optional)
+
+ℹ️ 4. Docker & Environment Check
 ----------------------------------------
 ✅ Docker command available
 ✅ Docker daemon is running
@@ -193,24 +199,24 @@ Time: 2025年  8月 25日 月曜日 22:54:19 JST
 ✅ XAUTHORITY is set: $USER/.Xauthority
 ✅ User t4tanaka in dialout group
 
-ℹ️ 4. Known Issues Prevention Check
+ℹ️ 5. Known Issues Prevention Check
 ----------------------------------------
 ⚠️ Remember: Check battery level manually (display values unreliable)
 ⚠️ Remember: Avoid direct sunlight exposure for batteries
 ℹ️ Recommendation: Wait outside for GNSS Fix before driving
 ℹ️ Recommendation: Check Fix status reaches ~80% before starting
 
-ℹ️ 5. Execution Readiness Check (Vehicle Mode)
+ℹ️ 6. Execution Readiness Check (Vehicle Mode)
 ----------------------------------------
-✅ docker-compose.yml exists at repo root: /path/to/aichallenge-racingkart/docker-compose.yml
+✅ docker-compose.yml exists
 ℹ️ Current git branch: experiment
 
 ========================================
 📊 Check Results Summary
 ========================================
-Total checks: 18
-✅ Passed: 12
-⚠️ Warnings: 3
+Total checks: 15
+✅ Passed: 10
+⚠️ Warnings: 5
 ❌ Failed: 3
 
 ❌ Critical issues found! Fix failures before running vehicle mode.
