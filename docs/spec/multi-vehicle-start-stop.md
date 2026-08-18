@@ -573,17 +573,22 @@ vehicle 側の bridge に `namespace: "/<VEHICLE_ID>"` を設定する。
 
 観点の一覧は [`multi-vehicle-start-stop-test.md`](multi-vehicle-start-stop-test.md) の付録に、ハザード分析・具体的なテストケース・トレーサビリティ・出口基準は同ドキュメント本体にまとめた。
 
-## zenoh 設定を sim と実機で分けない
+## zenoh 設定を各側1本にまとめる
 
-`make dev3-remote`（AWSIM を実車に見立てたリハーサル）と実機で、**zenoh の設定ファイルを共有する**。
+遠隔側・車両側それぞれ**設定ファイルを1本だけ持ち、全車で共有する**。車両ごとに違う値は
+設定ファイルの外から渡す。
 
-以前は sim 専用に `vehicle/zenoh-sim.json5` と `remote/zenoh-user-sim.json5.template` があったが、
-**リハーサルの目的は実機テストのトラブルを減らすこと**であり、リハーサルで通る設定と実機で使う
-設定が違えば目的を達成できない。実際、許可リストに `racing_kart/debug/status` と
-`vehicle/status/control_mode` を追加したとき、実機側だけ直して sim 側が漏れるという乖離が
-1日で発生した。`pub_priorities` も実機側にしか無く、輻輳時の挙動が違っていた。
+> **本ドキュメントの AWSIM リハーサル（`make dev3-remote`）に関する記述は、まだこのリポジトリに
+> 入っていない。** リハーサル環境と `racing_kart_sim_adapter` は `feat/racing-kart-sim-adapter`
+> ブランチで進行中で、ここでは実機側の設定統一だけを扱う。
 
-sim と実機で本当に違うのは次の3つだけで、いずれも設定ファイルの外で渡せる。
+設定を分ける動機は元々リハーサルにあった。**リハーサルの目的は実機テストのトラブルを減らすこと**
+であり、リハーサルで通る設定と実機で使う設定が違えば目的を達成できない。実際、許可リストに
+`racing_kart/debug/status` と `vehicle/status/control_mode` を追加したとき、実機側だけ直して
+sim 側が漏れるという乖離が1日で発生した。`pub_priorities` も実機側にしか無く、輻輳時の挙動が
+違っていた。そこで sim 専用の設定を別に持たず、リハーサル側も実機と同じ設定を使う方針にした。
+
+車両ごと・環境ごとに本当に違うのは次の3つだけで、いずれも設定ファイルの外で渡せる。
 
 | 違い | 渡し方 |
 | --- | --- |
@@ -595,8 +600,8 @@ sim と実機で本当に違うのは次の3つだけで、いずれも設定フ
 
 | ファイル | 使う側 |
 | --- | --- |
-| `vehicle/zenoh.json5` | `vehicle/run_zenoh.bash`（実機）と `remote/sim_zenoh.bash`（sim） |
-| `remote/zenoh-user.json5.template` | `remote/connect_zenoh.bash`（実機）と `remote/sim_zenoh.bash`（sim） |
+| `vehicle/zenoh.json5` | `vehicle/run_zenoh.bash` |
+| `remote/zenoh-user.json5.template` | `remote/connect_zenoh.bash`（車両IDを置換して生成） |
 
 遠隔側の bridge には名前空間を付けず、車両側を `-n /<VEHICLE_ID>` で起動する。この非対称性が
 両者を噛み合わせている。遠隔側はトピック名にあらかじめ車両IDが入っており、車両側の bridge が
