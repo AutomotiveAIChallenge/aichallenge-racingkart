@@ -13,5 +13,6 @@ ros-humble-nmea-msgs
 ros-humble-rtcm-msgs
 zstd
 python3-tomli
+python3-hypothesis
 qt5ct
 fonts-noto-cjk

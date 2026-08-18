@@ -56,6 +56,17 @@ manager は3つの純関数と、それを繋ぐ薄い ROS 層に分割する。
 
 **自動化するのは L1 だけ。** ROS を起動するテストと実機 driver を使うテストは自動化せず人力で行う（第13章）。
 
+L1 の実行方法。プロパティテスト（第7.5節ほか、`@given` を付けた11本）が hypothesis を使うため、
+pytest だけでは `ModuleNotFoundError` になる。
+
+```bash
+# ホスト。システムを汚さずに実行する
+uv run --with pytest --with hypothesis python -m pytest remote/tests
+
+# コンテナ内。pytest と python3-hypothesis はイメージに入っている
+python3 -m pytest remote/tests
+```
+
 ## 5. 共通のテストデータ
 
 `remote/tests/conftest.py` に置く。ROS 型ではなく core の `JoyValue` を使う。
