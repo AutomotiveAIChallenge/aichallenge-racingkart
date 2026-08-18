@@ -31,6 +31,12 @@ CAN_MIN_FRAMES="${CAN_MIN_FRAMES:-100}"
 GNSS_NAVPVT_TIMEOUT_SEC="${GNSS_NAVPVT_TIMEOUT_SEC:-8}"
 ROS_TOPIC_TIMEOUT_SEC="${ROS_TOPIC_TIMEOUT_SEC:-4}"
 ROS_TOPIC_RETRY="${ROS_TOPIC_RETRY:-2}"
+IMU_BIAS_DURATION_SEC="${IMU_BIAS_DURATION_SEC:-5}"
+IMU_BIAS_WARMUP_SEC="${IMU_BIAS_WARMUP_SEC:-2}"
+# 暫定値（imu_corrector.param.yaml の想定ノイズ既定値に合わせている）。実測を踏まえて後で絞り込む。
+IMU_BIAS_STD_THRESHOLD="${IMU_BIAS_STD_THRESHOLD:-0.03}"
+IMU_BIAS_VELOCITY_THRESHOLD="${IMU_BIAS_VELOCITY_THRESHOLD:-0.05}"
+IMU_BIAS_PROMPT_TIMEOUT_SEC="${IMU_BIAS_PROMPT_TIMEOUT_SEC:-5}"
 TOTAL_CHECKS=0
 PASSED_CHECKS=0
 FAILED_CHECKS=0
@@ -80,6 +86,26 @@ ENVIRONMENT:
                    seconds to wait for each runtime ROS topic [default: 4]
   ROS_TOPIC_RETRY  attempts per runtime ROS topic before reporting a failure
                    [default: 2]
+  IMU_BIAS_DURATION_SEC
+                   IMU gyro bias sampling seconds [default: 5]
+  IMU_BIAS_WARMUP_SEC
+                   seconds discarded before sampling (IMU warmup) [default: 2]
+  IMU_BIAS_STD_THRESHOLD
+                   warn if stationary gyro stddev exceeds this [rad/s, default: 0.03
+                   (provisional, matches imu_corrector's assumed noise; to be
+                   tightened after real measurements)]
+  IMU_BIAS_VELOCITY_THRESHOLD
+                   treat as moving if |velocity| exceeds this [m/s, default: 0.05]
+  IMU_BIAS_ASSUME_STATIONARY
+                   answer (y) to the stationary prompt without asking; also used
+                   in interactive terminals so the check can run unattended. On
+                   a noisy (unreliable) measurement, an unattended run does not
+                   retry (no one to ask); an interactive run instead asks to
+                   re-measure, with no limit on how many times, as long as the
+                   operator keeps answering y [default: unset]
+  IMU_BIAS_PROMPT_TIMEOUT_SEC
+                   seconds to wait for the stationary/re-measure prompts before
+                   skipping/stopping as warn [default: 5]
 
 MODE:
   vehicle         Real vehicle mode (CAN + VCU required) [default]
@@ -90,6 +116,10 @@ Examples:
   $0 --phase runtime
   $0 --log
   CAN_SAMPLE_SEC=5 CAN_MIN_FRAMES=200 $0 --log
+  # runtime phase without the stationary prompt (vehicle is known to be parked)
+  IMU_BIAS_ASSUME_STATIONARY=y $0 --phase runtime
+  # same, through the Makefile startup flow (make does not stop for the prompt)
+  IMU_BIAS_ASSUME_STATIONARY=y make autoware-driver-zenoh-rosbag
 EOF
 }
 
@@ -697,6 +727,121 @@ check_runtime_ros_topics() {
     log ""
 }
 
+# IMUジャイロバイアス計測 (runtime)
+check_imu_bias() {
+    print_section "IMU Gyro Bias Check (stationary)"
+
+    if ! is_compose_service_running "autoware"; then
+        log "${FAIL} IMU bias check: autoware service is not running"
+        record_result "fail"
+        log ""
+        return 0
+    fi
+
+    # 静止確認。バイアス推定は車両が完全に静止していることが前提なので、
+    # 対話端末では y/N で明示確認する。
+    # IMU_BIAS_ASSUME_STATIONARY が設定されていれば対話端末でもそれを優先する
+    # （make 経由の無人実行用: IMU_BIAS_ASSUME_STATIONARY=y make ...）。
+    # 無応答で起動フローが止まり続けないよう、プロンプトにはタイムアウトを付ける。
+    local answer=""
+    if [ -n "${IMU_BIAS_ASSUME_STATIONARY-}" ]; then
+        answer="${IMU_BIAS_ASSUME_STATIONARY}"
+        log "${INFO} IMU bias check: stationary confirmation from IMU_BIAS_ASSUME_STATIONARY=${answer}"
+    elif [ -t 0 ]; then
+        if ! read -r -t "${IMU_BIAS_PROMPT_TIMEOUT_SEC}" \
+            -p "$(echo -e "${WARN} Vehicle must be COMPLETELY stationary for IMU bias check. Proceed? [y/N] (${IMU_BIAS_PROMPT_TIMEOUT_SEC}s timeout): ")" answer; then
+            answer=""
+            echo ""
+        fi
+    fi
+
+    case "${answer}" in
+    y | Y | yes | YES) ;;
+    *)
+        log "${WARN} IMU bias check skipped (vehicle not confirmed stationary)"
+        record_result "warn"
+        log ""
+        return 0
+        ;;
+    esac
+
+    local setup_cmd
+    if ! setup_cmd="$(ros_setup_command_for_service autoware)"; then
+        log "${FAIL} IMU bias check: unknown compose service 'autoware'"
+        record_result "fail"
+        log ""
+        return 0
+    fi
+
+    # check_imu_bias.py は ./vehicle:/vehicle マウント経由でコンテナから見える。
+    # rc=4 は「静止時ノイズが大きく、バイアス推定値が信用できない」の意味で、
+    # ここ（bash 側）で人間に再計測してよいか毎回確認してから再実行する。
+    # python 側では自動リトライしない。
+    # IMU_BIAS_ASSUME_STATIONARY による無人実行では、確認する相手がいないので
+    # 1回計測してノイズが大きければリトライせずそのまま諦める（無限ループ防止）。
+    # 対話実行では、y と答え続ける限り上限なく再計測する。
+    local output
+    local rc
+    local attempt=1
+    output="$(docker compose -f "${REPO_ROOT}/docker-compose.yml" exec -T autoware bash -lc "
+        ${setup_cmd}
+        python3 /vehicle/check_imu_bias.py \
+            --duration '${IMU_BIAS_DURATION_SEC}' \
+            --warmup '${IMU_BIAS_WARMUP_SEC}' \
+            --velocity-threshold '${IMU_BIAS_VELOCITY_THRESHOLD}' \
+            --std-threshold '${IMU_BIAS_STD_THRESHOLD}'
+    " 2>&1)"
+    rc=$?
+    log "${output}"
+
+    if [ "${rc}" = "4" ] && [ -n "${IMU_BIAS_ASSUME_STATIONARY-}" ]; then
+        log "${WARN} IMU bias check: noisy on an unattended run (IMU_BIAS_ASSUME_STATIONARY set); not retrying"
+    fi
+
+    while [ "${rc}" = "4" ] && [ -z "${IMU_BIAS_ASSUME_STATIONARY-}" ] && [ -t 0 ]; do
+        local retry_answer=""
+        if ! read -r -t "${IMU_BIAS_PROMPT_TIMEOUT_SEC}" \
+            -p "$(echo -e "${WARN} Do not touch the vehicle. Re-measure? [y/N] (${IMU_BIAS_PROMPT_TIMEOUT_SEC}s timeout, attempt $((attempt + 1))): ")" retry_answer; then
+            retry_answer=""
+            echo ""
+        fi
+
+        case "${retry_answer}" in
+        y | Y | yes | YES) ;;
+        *) break ;;
+        esac
+
+        attempt=$((attempt + 1))
+        output="$(docker compose -f "${REPO_ROOT}/docker-compose.yml" exec -T autoware bash -lc "
+            ${setup_cmd}
+            python3 /vehicle/check_imu_bias.py \
+                --duration '${IMU_BIAS_DURATION_SEC}' \
+                --warmup '${IMU_BIAS_WARMUP_SEC}' \
+                --velocity-threshold '${IMU_BIAS_VELOCITY_THRESHOLD}' \
+                --std-threshold '${IMU_BIAS_STD_THRESHOLD}'
+        " 2>&1)"
+        rc=$?
+        log "${output}"
+    done
+
+    case "${rc}" in
+    0)
+        log "${OK} IMU gyro bias measured and imu_corrector.param.yaml updated (restart autoware to apply)"
+        record_result "pass"
+        ;;
+    4)
+        log "${WARN} IMU gyro bias check: gave up on noisy measurement (see above; not written)"
+        record_result "warn"
+        ;;
+    *)
+        log "${FAIL} IMU gyro bias check failed (rc=${rc}; measurement not completed, not written)"
+        record_result "fail"
+        ;;
+    esac
+
+    log ""
+}
+
 # past_log.md既知問題チェック (preflight)
 check_known_issues() {
     print_section "Known Issues Prevention Check"
@@ -782,6 +927,7 @@ main() {
         check_runtime_docker_services
         check_gnss_rtk_status
         check_runtime_ros_topics
+        check_imu_bias
         ;;
     all)
         check_hardware
@@ -791,6 +937,7 @@ main() {
         check_runtime_docker_services
         check_gnss_rtk_status
         check_runtime_ros_topics
+        check_imu_bias
         check_known_issues
         check_execution_readiness
         ;;
