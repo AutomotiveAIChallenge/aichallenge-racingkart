@@ -152,6 +152,31 @@ services:
     # Left unquoted on purpose so that multiple arguments split into separate words.
     command: ["bash", "-lc", 'exec /vehicle/run_driver.bash vehicle "${ROS_DOMAIN_ID:-1}" "${LOG_DIR:-}" ${DRIVER_LAUNCH_ARGS:-}']
 
+#### remote operation PC (make remote VEHICLES="A2 A3 A7") ####
+  # 遠隔側は常に ROS_DOMAIN_ID 0。全車両が /<VEHICLE_ID>/... の下にまとめて見える。
+  # VEHICLES は make remote が必須チェックしたうえで渡す。既定値を置かないのは、使わない
+  # 車両が UNKNOWN のまま残ると停止確認が取れず全操作が塞がるため。
+  zenoh-remote:
+    <<: *autoware-base
+    working_dir: /remote
+    command: ["bash", "-lc", 'exec /remote/run_zenoh.bash "${VEHICLES:-}" "${LOG_DIR:-}"']
+
+  joy:
+    <<: *autoware-base
+    working_dir: /remote
+    command: ["bash", "-lc", "exec /remote/joy.bash"]
+
+  manager:
+    <<: *autoware-base
+    working_dir: /remote
+    command: ["bash", "-lc", 'exec /remote/manager.bash manager ${VEHICLES:-}']
+
+  # manager とは別プロセス。GUI が落ちても manager は joy を流し続ける。
+  manager-gui:
+    <<: *autoware-base
+    working_dir: /remote
+    command: ["bash", "-lc", "exec /remote/manager.bash gui"]
+
 #### remote visualization services ####
   rviz2:
     <<: *autoware-base 

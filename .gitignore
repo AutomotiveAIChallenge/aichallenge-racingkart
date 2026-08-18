@@ -7,6 +7,13 @@
 rosbag2*/
 *.pyc
 *pem
+
+# zenoh mTLS material (distributed separately as a zip; never commit)
+remote/tls/
+vehicle/tls/
+tls*.zip
+*tls*.zip
+
 *.zstd
 .env
 vehicle/.env
@@ -25,3 +32,6 @@ doc/tmp/*
 
 docs/plan/
 result-*.json
+
+# pytest-cov のカバレッジデータ
+.coverage

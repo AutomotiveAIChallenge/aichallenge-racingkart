@@ -1,6 +1,14 @@
 ////
-//// This file presents the default configuration used by both the `zenoh-plugin-ros2dds` plugin and the `zenoh-bridge-ros2dds` standalone executable.
-//// The "ros2" JSON5 object below can be used as such in the "plugins" part of a config file for the zenoh router (zenohd).
+//// Remote-side zenoh bridge config TEMPLATE. 車両ごとに __VEHICLE_ID__ を置換して使う。
+////
+//// 車両ごとに違うのは接続先ポート・ROS ドメインID・車両の名前空間の3つだけで、いずれも
+//// 設定ファイルの外で渡せる。車両固有の内容を設定から追い出したので、1ファイルを全車で
+//// 共有できる。許可リストは車両側の vehicle/zenoh.json5 と揃えること。
+////
+//// 名前空間の付き方: racing_kart_manager は遠隔側で `/A2/racing_kart/joy` を publish し、
+//// このブリッジが zenoh キー `A2/racing_kart/joy` へ流す。車両側のブリッジは `-n /A2` で
+//// 起動しているので、車両の DDS ドメイン内では `/racing_kart/joy` に戻る。
+//// このブリッジ自身には名前空間を付けない。それが両者を噛み合わせている。
 ////
 {
   plugins: {
@@ -20,7 +28,7 @@
       ////             - is used for the "zenoh_bridge_ros2dds" node itself
       ////             - is added to all discovered interfaces when routed to Zenoh
       ////               (i.e. a "cmd_vel" topic in the robot will be seen as "namespace/cmd_vel" outside the robot)
-      ////               Note that this also applies to topics with absolute path such as "/rosout", "/tf" and "/tf_static".
+      ////               Note that this also applies to topics with absolute path such as "/rosout", "/__VEHICLE_ID__/tf" and "/__VEHICLE_ID__/tf_static".
       ////            Default: "/"
       ////
       // namespace: "/",
@@ -54,18 +62,20 @@
       ////               or is not specified at all, it means that ALL such interface are allowed.
       allow: {
         publishers: [
-          "/initialpose",
-          "/racing_kart/joy"
+          "/__VEHICLE_ID__/initialpose",
+          "/__VEHICLE_ID__/racing_kart/joy"
         ],
         subscribers: [
-          "/control/command/control_cmd",
-          "/localization/kinematic_state",
-          "/planning/scenario_planning/trajectory",
-          "/tf",
-          "/tf_static",
-          "/vehicle/status/gear_status",
-          "/vehicle/status/steering_status",
-          "/vehicle/status/velocity_status"
+          "/__VEHICLE_ID__/control/command/control_cmd",
+          "/__VEHICLE_ID__/localization/kinematic_state",
+          "/__VEHICLE_ID__/planning/scenario_planning/trajectory",
+          "/__VEHICLE_ID__/racing_kart/debug/status",
+          "/__VEHICLE_ID__/tf",
+          "/__VEHICLE_ID__/tf_static",
+          "/__VEHICLE_ID__/vehicle/status/control_mode",
+          "/__VEHICLE_ID__/vehicle/status/gear_status",
+          "/__VEHICLE_ID__/vehicle/status/steering_status",
+          "/__VEHICLE_ID__/vehicle/status/velocity_status"
         ],
         service_servers: [],
         service_clients: [],
@@ -102,8 +112,8 @@
       ////                   to create a bigger batch of messages. This usually has a positive impact on latency for the topic
       ////                   but a negative impact on the general throughput, as more overhead is used for those topics.
       pub_priorities: [
-        "/racing_kart/joy=1:express",
-        "/initialpose=1:express",
+        "/__VEHICLE_ID__/racing_kart/joy=1:express",
+        "/__VEHICLE_ID__/initialpose=1:express",
       ],
 
       ////
@@ -199,9 +209,12 @@
     },
     "link": {
       "tls": {
-        "root_ca_certificate": "./tls/server/minica.pem",
-        "connect_private_key": "./tls/client/key.pem",
-        "connect_certificate": "./tls/client/cert.pem",
+        //// __TLS_DIR__ は起動側が埋める。コンテナ内 (run_zenoh.bash) では /remote、
+        //// ホスト (connect_zenoh.bash) ではリポジトリの remote/ になる。相対パスにすると
+        //// zenoh が cwd 基準で解決するため、起動ディレクトリ次第で mTLS が黙って壊れる。
+        "root_ca_certificate": "__TLS_DIR__/tls/server/minica.pem",
+        "connect_private_key": "__TLS_DIR__/tls/client/key.pem",
+        "connect_certificate": "__TLS_DIR__/tls/client/cert.pem",
         "enable_mtls": true,
         "close_link_on_expiration": true
       }

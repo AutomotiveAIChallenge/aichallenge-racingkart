@@ -25,6 +25,7 @@
 - `driver`
 - `zenoh`
 - `rviz2`
+- `zenoh-remote` / `joy` / `manager` / `manager-gui`（遠隔操作PC）
 
 ターゲット名の例（compose サービス名に対応）:
 
@@ -58,6 +59,7 @@ service は「操作対象のまとまり」を表します（docker compose の
 - `rviz2` : 可視化（RViz2）
 - `driver` : racing_kart_interface
 - `zenoh` : Zenoh bridge
+- `remote` : 遠隔操作PC一式（`zenoh-remote` + `joy` + `manager` + `manager-gui` をまとめて起動）
 - `compose` : docker compose の直操作（`compose-ps` / `compose-down` など）
 - `system` : 実車/フル構成など一括起動（`system-up-*` など）
 
@@ -96,6 +98,7 @@ Good:
 - `eval`（`DOMAIN_ID` / `DOMAIN_IDS` などは変数で）
 - `dev` / `dev2` / `dev3` / `dev4`
 - `compose-ps` / `compose-down`
+- `remote`（対象車両は `VEHICLES="A2 A3 A7"` で渡す。既定値を置かず、未指定はエラー）
 
 Bad（語順が逆・曖昧・存在しない）:
 - `build-autoware`（→ `autoware-build`）

@@ -1,0 +1,98 @@
+<mxfile host="65bd71144e">
+    <diagram id="gL29k6abqtADxQC6USVh" name="Page-1">
+        <mxGraphModel dx="5925" dy="1131" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="827" pageHeight="1169" math="0" shadow="0">
+            <root>
+                <mxCell id="0"/>
+                <mxCell id="1" parent="0"/>
+                <mxCell id="3" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;" edge="1" parent="1" source="5" target="13">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="4" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" edge="1" parent="1" source="5" target="7">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="5" value="パーク&lt;br&gt;&amp;nbsp;4台ともjoy送信なし" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;fontSize=12;verticalAlign=middle;" vertex="1" parent="1">
+                    <mxGeometry x="-3205" y="2160" width="240" height="80" as="geometry"/>
+                </mxCell>
+                <mxCell id="6" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" edge="1" parent="1" source="7" target="10">
+                    <mxGeometry relative="1" as="geometry">
+                        <mxPoint x="-2340.000000000007" y="2200" as="targetPoint"/>
+                    </mxGeometry>
+                </mxCell>
+                <mxCell id="7" value="GUIで「一斉発進準備完了」&lt;br&gt;ボタンを押す" style="ellipse;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=11;" vertex="1" parent="1">
+                    <mxGeometry x="-2570" y="2165" width="170" height="70" as="geometry"/>
+                </mxCell>
+                <mxCell id="8" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;" edge="1" parent="1" source="10" target="18">
+                    <mxGeometry relative="1" as="geometry">
+                        <Array as="points">
+                            <mxPoint x="-1999.94" y="2280"/>
+                            <mxPoint x="-2449.94" y="2280"/>
+                        </Array>
+                    </mxGeometry>
+                </mxCell>
+                <mxCell id="9" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;entryX=1;entryY=0.5;entryDx=0;entryDy=0;" edge="1" parent="1" source="10" target="12">
+                    <mxGeometry relative="1" as="geometry">
+                        <Array as="points">
+                            <mxPoint x="-1965" y="2085.06"/>
+                        </Array>
+                    </mxGeometry>
+                </mxCell>
+                <mxCell id="10" value="&lt;div&gt;自動走行発進待機&lt;/div&gt;&lt;div&gt;全車両joy送信&lt;/div&gt;&lt;div&gt;（アクセル・ブレーキ・ステアは操作は中立でオーバーライド）&lt;br&gt;&lt;/div&gt;" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;fontSize=12;verticalAlign=middle;" vertex="1" parent="1">
+                    <mxGeometry x="-2090" y="2160" width="250" height="80" as="geometry"/>
+                </mxCell>
+                <mxCell id="11" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;" edge="1" parent="1" source="12" target="5">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="12" value="10秒経過" style="ellipse;whiteSpace=wrap;html=1;fillColor=none;strokeColor=#000000;fontColor=#000000;fontSize=11;" vertex="1" parent="1">
+                    <mxGeometry x="-2570" y="2060" width="170" height="50" as="geometry"/>
+                </mxCell>
+                <mxCell id="13" value="GUI で車両選択" style="ellipse;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=11;" vertex="1" parent="1">
+                    <mxGeometry x="-3170" y="2440" width="170" height="70" as="geometry"/>
+                </mxCell>
+                <mxCell id="14" value="前提: 他3台がemergencyラッチ・停止" style="text;html=1;strokeColor=none;fillColor=none;align=center;verticalAlign=top;fontSize=10;fontColor=#000000;" vertex="1" parent="1">
+                    <mxGeometry x="-3190" y="2790" width="210" height="30" as="geometry"/>
+                </mxCell>
+                <mxCell id="15" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;" edge="1" parent="1" source="16" target="18">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="16" value="1台操作&lt;br&gt;対象車両のみjoy送信" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;fontSize=12;verticalAlign=middle;" vertex="1" parent="1">
+                    <mxGeometry x="-3190" y="2695" width="210" height="80" as="geometry"/>
+                </mxCell>
+                <mxCell id="17" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;entryX=0.75;entryY=1;entryDx=0;entryDy=0;strokeWidth=4;" edge="1" parent="1" source="18" target="5">
+                    <mxGeometry relative="1" as="geometry">
+                        <Array as="points">
+                            <mxPoint x="-2509.97" y="2280"/>
+                            <mxPoint x="-3025" y="2280"/>
+                        </Array>
+                    </mxGeometry>
+                </mxCell>
+                <mxCell id="18" value="緊急停止ボタン&lt;br&gt;or&lt;br&gt;停止しているべき車両の停止が&lt;br&gt;確認できない" style="ellipse;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=11;" vertex="1" parent="1">
+                    <mxGeometry x="-2570" y="2250" width="170" height="70" as="geometry"/>
+                </mxCell>
+                <mxCell id="19" value="基本この状態" style="shape=callout;whiteSpace=wrap;html=1;perimeter=calloutPerimeter;fillColor=#fff2cc;strokeColor=#d6b656;position2=1;" vertex="1" parent="1">
+                    <mxGeometry x="-3280" y="2080" width="120" height="80" as="geometry"/>
+                </mxCell>
+                <mxCell id="20" value="意図せず自動走行発進待機に入ってしまった時用" style="shape=callout;whiteSpace=wrap;html=1;perimeter=calloutPerimeter;fillColor=#fff2cc;strokeColor=#d6b656;position2=1;" vertex="1" parent="1">
+                    <mxGeometry x="-2715" y="1990" width="170" height="80" as="geometry"/>
+                </mxCell>
+                <mxCell id="21" value="いらないかもしれない" style="shape=callout;whiteSpace=wrap;html=1;perimeter=calloutPerimeter;fillColor=#fff2cc;strokeColor=#d6b656;position2=0.18;" vertex="1" parent="1">
+                    <mxGeometry x="-2490" y="1980" width="170" height="80" as="geometry"/>
+                </mxCell>
+                <mxCell id="22" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;" edge="1" parent="1" source="13" target="16">
+                    <mxGeometry relative="1" as="geometry">
+                        <mxPoint x="-3085" y="2400" as="sourcePoint"/>
+                        <mxPoint x="-3085" y="2550" as="targetPoint"/>
+                    </mxGeometry>
+                </mxCell>
+                <mxCell id="23" value="この状態では、去年同様steer only, manual, autnomousを任意に切り替えて1台を操作できる。" style="shape=callout;whiteSpace=wrap;html=1;perimeter=calloutPerimeter;fillColor=#fff2cc;strokeColor=#d6b656;position2=1;" vertex="1" parent="1">
+                    <mxGeometry x="-3390" y="2580" width="230" height="130" as="geometry"/>
+                </mxCell>
+                <mxCell id="24" value="&lt;b&gt;&lt;u&gt;オレンジ四角は、遠隔PCからのjoy疎通のモードを表す&lt;/u&gt;&lt;/b&gt;" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;fontSize=12;verticalAlign=middle;" vertex="1" parent="1">
+                    <mxGeometry x="-3170" y="1970" width="390" height="70" as="geometry"/>
+                </mxCell>
+                <mxCell id="25" value="&lt;span style=&quot;font-size: 11px;&quot;&gt;LSB+RSB同時押しで&lt;/span&gt;&lt;span style=&quot;font-size: 11px;&quot;&gt;緊急停止解除したあとに、&lt;br&gt;Button Yで全車両AUTONOMOUSにいれることで全車両自動走行開始&lt;/span&gt;" style="shape=callout;whiteSpace=wrap;html=1;perimeter=calloutPerimeter;fillColor=#fff2cc;strokeColor=#d6b656;position2=0.18;" vertex="1" parent="1">
+                    <mxGeometry x="-1910" y="2035" width="240" height="130" as="geometry"/>
+                </mxCell>
+            </root>
+        </mxGraphModel>
+    </diagram>
+</mxfile>

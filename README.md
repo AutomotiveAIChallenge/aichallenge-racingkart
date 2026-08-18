@@ -18,7 +18,7 @@ Toward the competition, we will update the following pages to provide informatio
 
 - `aichallenge/`: シミュレータ/Autoware/評価の起動・操作スクリプト群
 - `vehicle/`: 実車環境向け（セットアップ確認、Zenoh、rosbag など）
-- `remote/`: 実車/遠隔接続の補助（SSH/Zenoh/RViz/joy）
+- `remote/`: 実車/遠隔接続の補助（SSH/Zenoh/RViz/joy）と遠隔操作 manager（`make remote VEHICLES="A2 A3 A7"`）
 - `docs/`: ガイド・スライドは [`docs/guide/`](docs/guide/)、仕様は [`docs/spec/`](docs/spec/)、インターフェイス契約は [`docs/interface/`](docs/interface/)
 - `submit/`: 提出物（tar.gz）置き場
 - `output/`: 実行結果・ログ出力先（生成物）
