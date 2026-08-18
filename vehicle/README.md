@@ -22,6 +22,18 @@
 4. **既知問題予防チェック** - 過去の実験から抽出した予防項目
 5. **実行準備確認** - リポジトリルート、gitブランチ確認
 
+`--phase runtime`（autoware 起動後）では、静止状態の IMU ジャイロバイアスを推定して
+`imu_corrector` の現行 `angular_velocity_offset_*` と比較する read-only 診断も走ります。
+対話端末では静止確認の `y/N` プロンプトが出るため、無人で通したい場合は
+`IMU_BIAS_ASSUME_STATIONARY=y` を渡してください（未回答のまま 60 秒経過した場合も
+skip(warn) として先に進みます）。
+
+```bash
+# 静止プロンプトを出さずに runtime チェックまで通す
+IMU_BIAS_ASSUME_STATIONARY=y ./setup_check.sh --phase runtime
+IMU_BIAS_ASSUME_STATIONARY=y make autoware-driver-zenoh-rosbag
+```
+
 詳細な確認項目と手動コマンドについては [setup_check.md](./setup_check.md) を参照してください。
 
 ## 起動/停止（Makefile / docker compose）

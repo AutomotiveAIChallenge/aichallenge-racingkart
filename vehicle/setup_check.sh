@@ -35,6 +35,7 @@ IMU_BIAS_WARMUP_SEC="${IMU_BIAS_WARMUP_SEC:-2}"
 IMU_BIAS_WARN_THRESHOLD="${IMU_BIAS_WARN_THRESHOLD:-0.005}"
 IMU_BIAS_STD_THRESHOLD="${IMU_BIAS_STD_THRESHOLD:-0.01}"
 IMU_BIAS_VELOCITY_THRESHOLD="${IMU_BIAS_VELOCITY_THRESHOLD:-0.05}"
+IMU_BIAS_PROMPT_TIMEOUT_SEC="${IMU_BIAS_PROMPT_TIMEOUT_SEC:-60}"
 TOTAL_CHECKS=0
 PASSED_CHECKS=0
 FAILED_CHECKS=0
@@ -89,7 +90,12 @@ ENVIRONMENT:
   IMU_BIAS_VELOCITY_THRESHOLD
                    treat as moving if |velocity| exceeds this [m/s, default: 0.05]
   IMU_BIAS_ASSUME_STATIONARY
-                   non-interactive answer (y) to the stationary prompt [default: unset]
+                   answer (y) to the stationary prompt without asking; also used
+                   in interactive terminals so the check can run unattended
+                   [default: unset]
+  IMU_BIAS_PROMPT_TIMEOUT_SEC
+                   seconds to wait for the stationary prompt before skipping it
+                   as warn [default: 60]
 
 MODE:
   vehicle         Real vehicle mode (CAN + VCU required) [default]
@@ -100,6 +106,10 @@ Examples:
   $0 --phase runtime
   $0 --log
   CAN_SAMPLE_SEC=5 CAN_MIN_FRAMES=200 $0 --log
+  # runtime phase without the stationary prompt (vehicle is known to be parked)
+  IMU_BIAS_ASSUME_STATIONARY=y $0 --phase runtime
+  # same, through the Makefile startup flow (make does not stop for the prompt)
+  IMU_BIAS_ASSUME_STATIONARY=y make autoware-driver-zenoh-rosbag
 EOF
 }
 
@@ -727,12 +737,20 @@ check_imu_bias() {
     fi
 
     # 静止確認。バイアス推定は車両が完全に静止していることが前提なので、
-    # 対話端末では y/N で明示確認する。非対話時は IMU_BIAS_ASSUME_STATIONARY を見る。
+    # 対話端末では y/N で明示確認する。
+    # IMU_BIAS_ASSUME_STATIONARY が設定されていれば対話端末でもそれを優先する
+    # （make 経由の無人実行用: IMU_BIAS_ASSUME_STATIONARY=y make ...）。
+    # 無応答で起動フローが止まり続けないよう、プロンプトにはタイムアウトを付ける。
     local answer=""
-    if [ -t 0 ]; then
-        read -r -p "$(echo -e "${WARN} Vehicle must be COMPLETELY stationary for IMU bias check. Proceed? [y/N]: ")" answer
-    else
-        answer="${IMU_BIAS_ASSUME_STATIONARY-}"
+    if [ -n "${IMU_BIAS_ASSUME_STATIONARY-}" ]; then
+        answer="${IMU_BIAS_ASSUME_STATIONARY}"
+        log "${INFO} IMU bias check: stationary confirmation from IMU_BIAS_ASSUME_STATIONARY=${answer}"
+    elif [ -t 0 ]; then
+        if ! read -r -t "${IMU_BIAS_PROMPT_TIMEOUT_SEC}" \
+            -p "$(echo -e "${WARN} Vehicle must be COMPLETELY stationary for IMU bias check. Proceed? [y/N] (${IMU_BIAS_PROMPT_TIMEOUT_SEC}s timeout): ")" answer; then
+            answer=""
+            echo ""
+        fi
     fi
 
     case "${answer}" in

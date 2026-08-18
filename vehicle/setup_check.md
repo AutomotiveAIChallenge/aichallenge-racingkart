@@ -18,7 +18,7 @@
 ./setup_check.sh --help
 ```
 
-## チェック項目（5段階）
+## チェック項目
 
 ### 1. ハードウェアデバイス確認
 
@@ -150,6 +150,85 @@ git branch --show-current
 **期待する結果:**
 - ✅ `docker-compose.yml exists at repo root: ...`（存在する場合のみ）
 - ℹ️ `Current git branch: experiment`
+
+---
+
+### 6. IMUジャイロバイアス確認（runtime フェーズ）
+
+`--phase runtime` / `--phase all` で、autoware 起動後に **車両が静止している状態の**
+ジャイロバイアスを推定し、`imu_corrector` の現行 `angular_velocity_offset_*` と比較します。
+値の自動書き換えはせず、乖離が大きい場合に「param.yaml へどう書けばよいか」を出力するだけの
+read-only 診断です。
+
+```bash
+# runtime フェーズの一部として実行される
+./setup_check.sh --phase runtime
+
+# 静止プロンプトを出さずに実行（無人実行 / make 経由）
+IMU_BIAS_ASSUME_STATIONARY=y ./setup_check.sh --phase runtime
+IMU_BIAS_ASSUME_STATIONARY=y make autoware-driver-zenoh-rosbag
+
+# 単体実行（コンテナ内）
+docker compose exec autoware bash -lc \
+  "source /opt/ros/humble/setup.bash; source /aichallenge/workspace/install/setup.bash; \
+   python3 /vehicle/check_imu_bias.py"
+```
+
+対話端末では静止確認の `y/N` プロンプトが出ます。
+`IMU_BIAS_ASSUME_STATIONARY` が設定されていればプロンプトを出さずにその値を使い、
+無回答のまま `IMU_BIAS_PROMPT_TIMEOUT_SEC`（既定 60 秒）が経過した場合は
+skip（warn）として先へ進むので、起動フローが止まり続けることはありません。
+
+**閾値（環境変数で調整可能）:**
+
+| 環境変数 | 既定値 | 意味 |
+| --- | --- | --- |
+| `IMU_BIAS_DURATION_SEC` | 5 | サンプリング秒数（warmup を除く） |
+| `IMU_BIAS_WARMUP_SEC` | 2 | 開始直後に捨てる秒数 |
+| `IMU_BIAS_WARN_THRESHOLD` | 0.005 rad/s | 推定バイアスと現行 offset の乖離の警告閾値 |
+| `IMU_BIAS_STD_THRESHOLD` | 0.01 rad/s | 静止時ジャイロ std の警告閾値 |
+| `IMU_BIAS_VELOCITY_THRESHOLD` | 0.05 m/s | これを超えたら「動いた」と判定して測定中止 |
+| `IMU_BIAS_ASSUME_STATIONARY` | 未設定 | 静止確認プロンプトの回答（`y` で実行） |
+| `IMU_BIAS_PROMPT_TIMEOUT_SEC` | 60 | プロンプトの無回答タイムアウト秒数 |
+
+**期待する結果（許容範囲内）:**
+
+```text
+axis    bias[rad/s]   offset[rad/s]          diff         std  status
+---------------------------------------------------------------------
+x     +0.000329       +0.000000     +0.000329  0.002042  OK
+y     -0.000762       +0.000000     -0.000762  0.002062  OK
+z     +0.001286       +0.000000     +0.001286  0.002076  OK
+
+✅ IMU gyro bias is within tolerance of the current imu_corrector offsets.
+```
+
+**乖離が大きい場合（警告 / 終了コード 2）:**
+
+```text
+axis    bias[rad/s]   offset[rad/s]          diff         std  status
+---------------------------------------------------------------------
+x     +0.000399       +0.000000     +0.000399  0.002070  OK
+y     -0.000780       +0.000000     -0.000780  0.002056  OK
+z     +0.018103       +0.000000     +0.018103  0.002097  WARN(offset)
+
+⚠️  IMU gyro bias check raised a warning.
+    How to fix — edit the param file and set the measured bias as-is:
+      file: aichallenge/workspace/src/aichallenge_submit/imu_corrector/config/imu_corrector.param.yaml
+      angular_velocity_offset_z: 0.018103
+    Note: imu_corrector computes (raw - offset), so write the
+          measured bias value with its sign unchanged (+ stays +).
+    Restart autoware after editing so the new offset takes effect.
+```
+
+`imu_corrector` は `output = raw - angular_velocity_offset` で補正するため、
+**測定値を符号そのまま** param.yaml に書きます（+ にずれていれば + を書く）。
+書き換え後は autoware を再起動してください。
+
+その他の終了コード:
+
+- `2`: 静止時ノイズが大きい（`WARN(noisy)`）／`imu_corrector` から現行 offset を取得できず比較できなかった（`WARN(no-offset)`）
+- `3`: 測定不能（サンプリング中に車両が動いた／`/sensing/imu/imu_raw` が来ない）
 
 ---
 
