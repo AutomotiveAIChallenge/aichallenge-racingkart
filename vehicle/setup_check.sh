@@ -30,6 +30,7 @@ CAN_SAMPLE_SEC="${CAN_SAMPLE_SEC:-3}"
 CAN_MIN_FRAMES="${CAN_MIN_FRAMES:-100}"
 GNSS_NAVPVT_TIMEOUT_SEC="${GNSS_NAVPVT_TIMEOUT_SEC:-8}"
 ROS_TOPIC_TIMEOUT_SEC="${ROS_TOPIC_TIMEOUT_SEC:-4}"
+ROS_TOPIC_RETRY="${ROS_TOPIC_RETRY:-2}"
 IMU_BIAS_DURATION_SEC="${IMU_BIAS_DURATION_SEC:-5}"
 IMU_BIAS_WARMUP_SEC="${IMU_BIAS_WARMUP_SEC:-2}"
 # 暫定値（imu_corrector.param.yaml の想定ノイズ既定値に合わせている）。実測を踏まえて後で絞り込む。
@@ -41,11 +42,15 @@ TOTAL_CHECKS=0
 PASSED_CHECKS=0
 FAILED_CHECKS=0
 WARNING_CHECKS=0
+SECTION_INDEX=0
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(git -C "${SCRIPT_DIR}" rev-parse --show-toplevel 2>/dev/null || true)"
 if [ -z "${REPO_ROOT}" ]; then
     REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 fi
+
+# shellcheck source-path=SCRIPTDIR source=vehicle_ports.sh
+source "${SCRIPT_DIR}/vehicle_ports.sh"
 
 # ログ関数
 log() {
@@ -80,6 +85,8 @@ ENVIRONMENT:
                    seconds to wait for /sensing/gnss/navpvt [default: 8]
   ROS_TOPIC_TIMEOUT_SEC
                    seconds to wait for each runtime ROS topic [default: 4]
+  ROS_TOPIC_RETRY  attempts per runtime ROS topic before reporting a failure
+                   [default: 2]
   IMU_BIAS_DURATION_SEC
                    IMU gyro bias sampling seconds [default: 5]
   IMU_BIAS_WARMUP_SEC
@@ -159,6 +166,13 @@ record_result() {
     esac
 }
 
+# セクション番号は表示順に振るため、どのphaseでも1から連番になる
+print_section() {
+    SECTION_INDEX=$((SECTION_INDEX + 1))
+    log "${INFO} ${SECTION_INDEX}. $1"
+    log "----------------------------------------"
+}
+
 # チェック関数
 check_command() {
     local cmd=$1
@@ -195,10 +209,13 @@ check_file_exists() {
     fi
 }
 
+compose_running_services() {
+    docker compose -f "${REPO_ROOT}/docker-compose.yml" ps --services --filter status=running 2>/dev/null
+}
+
 is_compose_service_running() {
     local service=$1
-    docker compose -f "${REPO_ROOT}/docker-compose.yml" ps --services --filter status=running 2>/dev/null |
-        grep -Fxq "${service}"
+    compose_running_services | grep -Fxq "${service}"
 }
 
 ros_setup_command_for_service() {
@@ -246,16 +263,23 @@ check_ros_topic_once() {
         return 0
     fi
 
-    if docker compose -f "${REPO_ROOT}/docker-compose.yml" exec -T "${service}" bash -lc "
-        ${setup_cmd}
-        timeout '${ROS_TOPIC_TIMEOUT_SEC}' ros2 topic echo '${topic}' --once >/dev/null
-    " >/dev/null 2>&1; then
-        log "${OK} ${label}: ${topic}"
-        record_result "pass"
-    else
-        log "${FAIL} ${label}: no message on ${topic} within ${ROS_TOPIC_TIMEOUT_SEC}s"
-        record_result "fail"
-    fi
+    # runtimeチェックは docker compose up の直後に走るため、トピックがまだ出ていない
+    # だけのケースがある。false failを避けるためリトライする。
+    local attempt=1
+    while [ "${attempt}" -le "${ROS_TOPIC_RETRY}" ]; do
+        if docker compose -f "${REPO_ROOT}/docker-compose.yml" exec -T "${service}" bash -lc "
+            ${setup_cmd}
+            timeout '${ROS_TOPIC_TIMEOUT_SEC}' ros2 topic echo '${topic}' --once >/dev/null
+        " >/dev/null 2>&1; then
+            log "${OK} ${label}: ${topic}"
+            record_result "pass"
+            return 0
+        fi
+        attempt=$((attempt + 1))
+    done
+
+    log "${FAIL} ${label}: no message on ${topic} within ${ROS_TOPIC_TIMEOUT_SEC}s x ${ROS_TOPIC_RETRY}"
+    record_result "fail"
 }
 
 check_can_traffic() {
@@ -337,13 +361,15 @@ read_env_value() {
     local env_file="${REPO_ROOT}/.env"
 
     [ -f "${env_file}" ] || return 0
-    awk -F= -v key="${key}" '
-        $1 == key {
-            value = substr($0, length(key) + 2)
-            gsub(/^["'\'']|["'\'']$/, "", value)
-            print value
-        }
-    ' "${env_file}" | tail -1
+    # 先頭の空白と `export ` を落として `KEY=value` に正規化してから読む
+    sed -E 's/^[[:space:]]*(export[[:space:]]+)?//' "${env_file}" |
+        awk -F= -v key="${key}" '
+            $1 == key {
+                value = substr($0, length(key) + 2)
+                gsub(/^["'\'']|["'\'']$/, "", value)
+                print value
+            }
+        ' | tail -1
 }
 
 detect_vehicle_id() {
@@ -354,28 +380,10 @@ detect_vehicle_id() {
     fi
 
     if [ -z "${vehicle_id}" ]; then
-        case "$(hostname)" in
-        ECU-RK-01) vehicle_id="A2" ;;
-        ECU-RK-02) vehicle_id="A3" ;;
-        ECU-RK-06) vehicle_id="A6" ;;
-        ECU-RK-00) vehicle_id="A7" ;;
-        esac
+        vehicle_id="$(vehicle_id_for_hostname "$(hostname)" || true)"
     fi
 
     printf '%s\n' "${vehicle_id}"
-}
-
-zenoh_port_for_vehicle_id() {
-    case "$1" in
-    A2) echo 7448 ;;
-    A3) echo 7449 ;;
-    A6) echo 7450 ;;
-    A7) echo 7451 ;;
-    A1) echo 7452 ;;
-    A5) echo 7453 ;;
-    A8) echo 7454 ;;
-    *) return 1 ;;
-    esac
 }
 
 # ヘッダー表示
@@ -390,10 +398,9 @@ print_header() {
     log ""
 }
 
-# 1. 物理デバイス・ハードウェア確認
+# 物理デバイス・ハードウェア確認 (preflight)
 check_hardware() {
-    log "${INFO} 1. Hardware Device Check"
-    log "----------------------------------------"
+    print_section "Hardware Device Check"
 
     # CANデバイス確認
     if ip link show "${CAN_IFACE}" >/dev/null 2>&1; then
@@ -425,10 +432,9 @@ check_hardware() {
     log ""
 }
 
-# 1. 起動後ハードウェア通信確認
+# 起動後ハードウェア通信確認 (runtime)
 check_runtime_hardware() {
-    log "${INFO} 1. Runtime Hardware Communication Check"
-    log "----------------------------------------"
+    print_section "Runtime Hardware Communication Check"
 
     if ip link show "${CAN_IFACE}" >/dev/null 2>&1; then
         if ip link show "${CAN_IFACE}" | grep -q "UP"; then
@@ -449,10 +455,9 @@ check_runtime_hardware() {
     log ""
 }
 
-# 2. ネットワーク・通信確認
+# ネットワーク・通信確認 (preflight)
 check_network() {
-    log "${INFO} 2. Network & Communication Check"
-    log "----------------------------------------"
+    print_section "Network & Communication Check"
 
     # 基本的な接続確認
     if ping -c 3 -W 5 8.8.8.8 >/dev/null 2>&1; then
@@ -526,17 +531,16 @@ check_network() {
         fi
     else
         log "${FAIL} Invalid VEHICLE_ID for Zenoh: ${vehicle_id_for_zenoh}"
-        log "   Valid: A1, A2, A3, A5, A6, A7, A8"
+        log "   Valid: ${VEHICLE_ID_VALID_LIST}"
         record_result "fail"
     fi
 
     log ""
 }
 
-# 3. Docker・環境確認
+# Docker・環境確認 (preflight)
 check_docker() {
-    log "${INFO} 3. Docker & Environment Check"
-    log "----------------------------------------"
+    print_section "Docker & Environment Check"
 
     # Docker確認
     check_command "docker" "Docker"
@@ -571,7 +575,6 @@ check_docker() {
             log "   Fix: Build aichallenge development image"
             record_result "warn"
         fi
-
     fi
 
     # 環境変数確認
@@ -587,10 +590,9 @@ check_docker() {
     log ""
 }
 
-# 3. 起動後Dockerサービス確認
+# 起動後Dockerサービス確認 (runtime)
 check_runtime_docker_services() {
-    log "${INFO} 3. Runtime Docker Service Check"
-    log "----------------------------------------"
+    print_section "Runtime Docker Service Check"
 
     if ! command -v docker >/dev/null 2>&1; then
         log "${FAIL} Docker command not found"
@@ -610,7 +612,7 @@ check_runtime_docker_services() {
     local required_services=(driver autoware rosbag zenoh)
     local running_services
     local missing_services=()
-    if running_services="$(docker compose -f "${REPO_ROOT}/docker-compose.yml" ps --services --filter status=running 2>/dev/null)"; then
+    if running_services="$(compose_running_services)"; then
         for service in "${required_services[@]}"; do
             if ! grep -Fxq "${service}" <<<"${running_services}"; then
                 missing_services+=("${service}")
@@ -634,10 +636,9 @@ check_runtime_docker_services() {
     log ""
 }
 
-# 4. GNSS/RTK状態確認
+# GNSS/RTK状態確認 (runtime)
 check_gnss_rtk_status() {
-    log "${INFO} 4. GNSS/RTK Status Check"
-    log "----------------------------------------"
+    print_section "GNSS/RTK Status Check"
 
     if ! command -v docker >/dev/null 2>&1; then
         log "${FAIL} Docker command not found; cannot check /sensing/gnss/navpvt"
@@ -647,7 +648,7 @@ check_gnss_rtk_status() {
     fi
 
     local running_services
-    if ! running_services="$(docker compose -f "${REPO_ROOT}/docker-compose.yml" ps --services --filter status=running 2>/dev/null)"; then
+    if ! running_services="$(compose_running_services)"; then
         log "${FAIL} Cannot inspect docker compose services for GNSS/RTK check"
         record_result "fail"
         log ""
@@ -699,10 +700,9 @@ check_gnss_rtk_status() {
     log ""
 }
 
-# 5. runtime ROS topic出力確認
+# ROS topic出力確認 (runtime)
 check_runtime_ros_topics() {
-    log "${INFO} 5. Runtime ROS Topic Output Check"
-    log "----------------------------------------"
+    print_section "Runtime ROS Topic Output Check"
 
     log "${INFO} Racing kart hardware/status topics"
     check_ros_topic_once "driver" "/racing_kart/vcu/status" "VCU status"
@@ -728,10 +728,9 @@ check_runtime_ros_topics() {
     log ""
 }
 
-# IMU ジャイロバイアス確認（静止状態で実行、runtime 専用）
+# IMUジャイロバイアス計測 (runtime)
 check_imu_bias() {
-    log "${INFO} IMU Gyro Bias Check (stationary)"
-    log "----------------------------------------"
+    print_section "IMU Gyro Bias Check (stationary)"
 
     if ! is_compose_service_running "autoware"; then
         log "${FAIL} IMU bias check: autoware service is not running"
@@ -844,10 +843,9 @@ check_imu_bias() {
     log ""
 }
 
-# 6. past_log.md既知問題チェック
+# past_log.md既知問題チェック (preflight)
 check_known_issues() {
-    log "${INFO} 6. Known Issues Prevention Check"
-    log "----------------------------------------"
+    print_section "Known Issues Prevention Check"
 
     # バッテリー警告
     log "${WARN} Remember: Check battery level manually (display values unreliable)"
@@ -860,10 +858,9 @@ check_known_issues() {
     log ""
 }
 
-# 7. 実行準備確認
+# 実行準備確認 (preflight)
 check_execution_readiness() {
-    log "${INFO} 7. Execution Readiness Check (Vehicle Mode)"
-    log "----------------------------------------"
+    print_section "Execution Readiness Check (Vehicle Mode)"
 
     # Docker Composeファイル存在確認（repo root基準、missingでも致命扱いしない）
     COMPOSE_FILE="${REPO_ROOT}/docker-compose.yml"

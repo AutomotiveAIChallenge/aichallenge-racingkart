@@ -2,10 +2,16 @@
 
 ## セットアップ確認スクリプト / Setup Check Script
 
-走行前の車両環境確認用スクリプトが利用可能です：
+走行前の車両環境確認用スクリプトが利用可能です。チェックは **起動前（preflight）** と **起動後（runtime）** の2フェーズに分かれています。
 
 ```bash
-# 基本実行（推奨）
+# 起動前チェックのみ（driver/autoware を起動する前に実行）
+./setup_check.sh --phase preflight
+
+# 起動後チェックのみ（スタックが起動している状態で実行）
+./setup_check.sh --phase runtime
+
+# 全チェック（既定。runtime を含むためスタック起動中に実行する）
 ./setup_check.sh
 
 # ログファイル出力付き実行
@@ -15,19 +21,28 @@
 ./setup_check.sh --help
 ```
 
-このスクリプトでは以下の項目をチェックします：
+preflight（起動前）でチェックする項目：
 1. **ハードウェアデバイス確認** - CAN、VCU、GNSS/RTK
 2. **ネットワーク・通信確認** - インターネット接続、リバースSSH、Zenohサーバー疎通
-3. **Docker・環境確認** - Docker動作、イメージ存在、権限設定
+3. **Docker・環境確認** - Docker動作、イメージ存在、環境変数
 4. **既知問題予防チェック** - 過去の実験から抽出した予防項目
 5. **実行準備確認** - リポジトリルート、gitブランチ確認
 
-`--phase runtime`（autoware 起動後）では、静止状態の IMU ジャイロバイアスを推定して
-`imu_corrector.param.yaml` の `angular_velocity_offset_*` を測定値で上書きする処理も走ります
-（次回 autoware 再起動時から反映。今動いているプロセスには効きません）。
-対話端末では静止確認の `y/N` プロンプトが出るため、無人で通したい場合は
-`IMU_BIAS_ASSUME_STATIONARY=y` を渡してください（未回答のまま 5 秒経過した場合も
-skip(warn) として先に進みます）。計測中の静止時ノイズが大きいときは書き込まず、
+runtime（起動後）でチェックする項目：
+1. **ハードウェア通信確認** - CANのリンク状態とトラフィック／エラーフレーム
+2. **Dockerサービス確認** - `driver` / `autoware` / `rosbag` / `zenoh` の稼働
+3. **GNSS/RTK状態確認** - `/sensing/gnss/navpvt` の RTK fixed / float 判定
+4. **ROS topic出力確認** - 車両status・最終指令・autoware制御指令の出力
+5. **IMUジャイロバイアス計測** - 静止時バイアスを測って `imu_corrector.param.yaml` を更新
+
+`make autoware-driver-zenoh-rosbag` は起動前に preflight、起動後に runtime を自動実行します。
+`make setup-vehicle` は `--phase all` 相当なので、**スタック起動中** に実行してください（停止中に叩くと runtime 系が一斉に fail します）。
+
+IMU ジャイロバイアス計測は、静止状態のバイアスを測って `imu_corrector.param.yaml` の
+`angular_velocity_offset_*` を測定値で上書きします（次回 autoware 再起動時から反映。
+今動いているプロセスには効きません）。対話端末では静止確認の `y/N` プロンプトが出るため、
+無人で通したい場合は `IMU_BIAS_ASSUME_STATIONARY=y` を渡してください（未回答のまま 5 秒
+経過した場合も skip(warn) として先に進みます）。計測中の静止時ノイズが大きいときは書き込まず、
 「車両に触れないでください」→再計測してよいか `y/N` の確認が入ります
 （最大 `IMU_BIAS_MAX_RETRIES` 回、既定 3 回）。
 

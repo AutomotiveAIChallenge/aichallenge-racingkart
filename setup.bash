@@ -284,11 +284,11 @@ docker_as_sudo_ok() {
 docker_run() {
     if docker_as_user_ok; then
         docker "$@"
-        return 0
+        return $?
     fi
     if cmd_exists sudo && cmd_exists docker; then
         sudo docker "$@"
-        return 0
+        return $?
     fi
     warn "${FAIL} docker not available"
     return 1
@@ -297,11 +297,11 @@ docker_run() {
 docker_run_no_prompt() {
     if docker_as_user_ok; then
         docker "$@"
-        return 0
+        return $?
     fi
     if docker_as_sudo_ok; then
         sudo -n docker "$@"
-        return 0
+        return $?
     fi
     return 1
 }
@@ -309,11 +309,11 @@ docker_run_no_prompt() {
 docker_compose_run() {
     if docker_as_user_ok; then
         docker compose "$@"
-        return 0
+        return $?
     fi
     if cmd_exists sudo && cmd_exists docker; then
         sudo docker compose "$@"
-        return 0
+        return $?
     fi
     warn "${FAIL} docker not available"
     return 1
@@ -322,11 +322,11 @@ docker_compose_run() {
 docker_compose_run_no_prompt() {
     if docker_as_user_ok; then
         docker compose "$@"
-        return 0
+        return $?
     fi
     if docker_as_sudo_ok; then
         sudo -n docker compose "$@"
-        return 0
+        return $?
     fi
     return 1
 }
