@@ -104,7 +104,7 @@ services:
   # Autoware service
   autoware-build:
     <<: *autoware-base 
-    command: ["bash", "-lc", 'exec /aichallenge/build_autoware.bash ${HOST_UID:-} ${HOST_GID:-} ${PACKAGES:-}']
+    command: ["bash", "-lc", "exec /aichallenge/build_autoware.bash ${HOST_UID:-} ${HOST_GID:-}"]
 
   simulator:
     <<: *autoware-base 

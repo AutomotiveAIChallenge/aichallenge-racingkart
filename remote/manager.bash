@@ -30,8 +30,7 @@ fi
 # 途絶と起動時の未ビルドを区別するため、後者は起動前に非ゼロで終わらせる。
 if ! python3 -c "import racing_kart_msgs.msg" 2>/dev/null; then
     echo "Error: racing_kart_msgs が見つかりません。" >&2
-    echo "       make autoware-build を実行してください" >&2
-    echo "       (racing_kart_msgs だけでよければ PACKAGES=racing_kart_msgs make autoware-build)。" >&2
+    echo "       make autoware-build を実行してください。" >&2
     exit 1
 fi
 

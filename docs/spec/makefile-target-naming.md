@@ -99,7 +99,6 @@ Good:
 - `dev` / `dev2` / `dev3` / `dev4`
 - `compose-ps` / `compose-down`
 - `remote`（対象車両は `VEHICLES="A2 A3 A7"` で渡す。既定値を置かず、未指定はエラー）
-- `autoware-build`（ビルド対象は `PACKAGES=racing_kart_msgs` で絞る）
 
 Bad（語順が逆・曖昧・存在しない）:
 - `build-autoware`（→ `autoware-build`）

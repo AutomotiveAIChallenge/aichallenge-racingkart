@@ -27,11 +27,9 @@ SIM_MODES += dev2 dev3 dev4 gate1 gate2 gate3
 $(addprefix simulator-,$(SIM_MODES)): simulator-%:
 	@$(MAKE) simulator SIM_MODE=$*
 
-# autowareのbuildのみ。PACKAGES を指定すると、そのパッケージと依存だけをビルドする。
-#   make autoware-build                              # 全部
-#   PACKAGES=racing_kart_msgs make autoware-build    # 遠隔操作PCに必要な分だけ
+# autowareのbuildのみ
 autoware-build:
-	PACKAGES="$(PACKAGES)" docker compose run -T --rm --no-deps autoware-build
+	docker compose run -T --rm --no-deps autoware-build
 
 # run autoware for vehicle
 autoware-vehicle:
