@@ -37,7 +37,6 @@ IMU_BIAS_WARMUP_SEC="${IMU_BIAS_WARMUP_SEC:-2}"
 IMU_BIAS_STD_THRESHOLD="${IMU_BIAS_STD_THRESHOLD:-0.03}"
 IMU_BIAS_VELOCITY_THRESHOLD="${IMU_BIAS_VELOCITY_THRESHOLD:-0.05}"
 IMU_BIAS_PROMPT_TIMEOUT_SEC="${IMU_BIAS_PROMPT_TIMEOUT_SEC:-5}"
-IMU_BIAS_MAX_RETRIES="${IMU_BIAS_MAX_RETRIES:-3}"
 TOTAL_CHECKS=0
 PASSED_CHECKS=0
 FAILED_CHECKS=0
@@ -98,15 +97,15 @@ ENVIRONMENT:
   IMU_BIAS_VELOCITY_THRESHOLD
                    treat as moving if |velocity| exceeds this [m/s, default: 0.05]
   IMU_BIAS_ASSUME_STATIONARY
-                   answer (y) to the stationary prompt and to the "re-measure?"
-                   prompt without asking; also used in interactive terminals so
-                   the check can run unattended [default: unset]
+                   answer (y) to the stationary prompt without asking; also used
+                   in interactive terminals so the check can run unattended. On
+                   a noisy (unreliable) measurement, an unattended run does not
+                   retry (no one to ask); an interactive run instead asks to
+                   re-measure, with no limit on how many times, as long as the
+                   operator keeps answering y [default: unset]
   IMU_BIAS_PROMPT_TIMEOUT_SEC
                    seconds to wait for the stationary/re-measure prompts before
-                   skipping as warn [default: 5]
-  IMU_BIAS_MAX_RETRIES
-                   max re-measurement attempts when stationary gyro noise is too
-                   high [default: 3]
+                   skipping/stopping as warn [default: 5]
 
 MODE:
   vehicle         Real vehicle mode (CAN + VCU required) [default]
@@ -778,10 +777,41 @@ check_imu_bias() {
     # rc=4 は「静止時ノイズが大きく、バイアス推定値が信用できない」の意味で、
     # ここ（bash 側）で人間に再計測してよいか毎回確認してから再実行する。
     # python 側では自動リトライしない。
+    # IMU_BIAS_ASSUME_STATIONARY による無人実行では、確認する相手がいないので
+    # 1回計測してノイズが大きければリトライせずそのまま諦める（無限ループ防止）。
+    # 対話実行では、y と答え続ける限り上限なく再計測する。
     local output
     local rc
     local attempt=1
-    while :; do
+    output="$(docker compose -f "${REPO_ROOT}/docker-compose.yml" exec -T autoware bash -lc "
+        ${setup_cmd}
+        python3 /vehicle/check_imu_bias.py \
+            --duration '${IMU_BIAS_DURATION_SEC}' \
+            --warmup '${IMU_BIAS_WARMUP_SEC}' \
+            --velocity-threshold '${IMU_BIAS_VELOCITY_THRESHOLD}' \
+            --std-threshold '${IMU_BIAS_STD_THRESHOLD}'
+    " 2>&1)"
+    rc=$?
+    log "${output}"
+
+    if [ "${rc}" = "4" ] && [ -n "${IMU_BIAS_ASSUME_STATIONARY-}" ]; then
+        log "${WARN} IMU bias check: noisy on an unattended run (IMU_BIAS_ASSUME_STATIONARY set); not retrying"
+    fi
+
+    while [ "${rc}" = "4" ] && [ -z "${IMU_BIAS_ASSUME_STATIONARY-}" ] && [ -t 0 ]; do
+        local retry_answer=""
+        if ! read -r -t "${IMU_BIAS_PROMPT_TIMEOUT_SEC}" \
+            -p "$(echo -e "${WARN} Do not touch the vehicle. Re-measure? [y/N] (${IMU_BIAS_PROMPT_TIMEOUT_SEC}s timeout, attempt $((attempt + 1))): ")" retry_answer; then
+            retry_answer=""
+            echo ""
+        fi
+
+        case "${retry_answer}" in
+        y | Y | yes | YES) ;;
+        *) break ;;
+        esac
+
+        attempt=$((attempt + 1))
         output="$(docker compose -f "${REPO_ROOT}/docker-compose.yml" exec -T autoware bash -lc "
             ${setup_cmd}
             python3 /vehicle/check_imu_bias.py \
@@ -791,38 +821,7 @@ check_imu_bias() {
                 --std-threshold '${IMU_BIAS_STD_THRESHOLD}'
         " 2>&1)"
         rc=$?
-
         log "${output}"
-
-        if [ "${rc}" != "4" ]; then
-            break
-        fi
-
-        if [ "${attempt}" -ge "${IMU_BIAS_MAX_RETRIES}" ]; then
-            log "${WARN} IMU bias check: still noisy after ${attempt} attempt(s); giving up retries"
-            break
-        fi
-
-        local retry_answer=""
-        if [ -n "${IMU_BIAS_ASSUME_STATIONARY-}" ]; then
-            retry_answer="${IMU_BIAS_ASSUME_STATIONARY}"
-            log "${INFO} IMU bias check: re-measure confirmation from IMU_BIAS_ASSUME_STATIONARY=${retry_answer}"
-        elif [ -t 0 ]; then
-            if ! read -r -t "${IMU_BIAS_PROMPT_TIMEOUT_SEC}" \
-                -p "$(echo -e "${WARN} Do not touch the vehicle. Re-measure? [y/N] (${IMU_BIAS_PROMPT_TIMEOUT_SEC}s timeout, attempt $((attempt + 1))/${IMU_BIAS_MAX_RETRIES}): ")" retry_answer; then
-                retry_answer=""
-                echo ""
-            fi
-        fi
-
-        case "${retry_answer}" in
-        y | Y | yes | YES) ;;
-        *)
-            break
-            ;;
-        esac
-
-        attempt=$((attempt + 1))
     done
 
     case "${rc}" in

@@ -64,6 +64,11 @@ EXIT_NOISY = 4
 
 AXES = ("x", "y", "z")
 
+# stddev が意味を持つには最低これだけのサンプルが要る。1サンプルしか取れない
+# ようなケース（IMU がほぼ来ていない）で std=0.0 になり静止時ノイズチェックを
+# すり抜けてしまうのを防ぐための下限。
+MIN_SAMPLES = 10
+
 # param.yaml の対象3行にだけマッチする（インデント・コメントはそのまま残すため
 # yaml ライブラリでの読み書きはせず、数値部分だけを直接置換する）。
 _OFFSET_LINE_RE = {
@@ -102,16 +107,16 @@ def write_new_offsets(param_yaml_path: str, new_offsets: dict[str, float]) -> bo
     except OSError:
         return False
 
-    updated = 0
+    updated_axes: set[str] = set()
     for i, line in enumerate(lines):
         for axis, pattern in _OFFSET_LINE_RE.items():
             m = pattern.match(line)
             if m:
                 start, end = m.span("value")
                 lines[i] = f"{line[:start]}{new_offsets[axis]:.6f}{line[end:]}"
-                updated += 1
+                updated_axes.add(axis)
 
-    if updated != len(AXES):
+    if updated_axes != set(AXES):
         return False
 
     with open(param_yaml_path, "w", encoding="utf-8") as f:
@@ -230,9 +235,10 @@ def main() -> int:
         rclpy.shutdown()
         return EXIT_MEASURE_FAIL
 
-    if node.sample_count == 0:
-        print(f"{'':2}❌ No messages on {args.imu_topic}. "
-              "Is the IMU driver up and publishing?")
+    if node.sample_count < MIN_SAMPLES:
+        print(f"{'':2}❌ Too few messages on {args.imu_topic} "
+              f"({node.sample_count} < {MIN_SAMPLES}). Is the IMU driver up and "
+              "publishing at a reasonable rate?")
         node.destroy_node()
         rclpy.shutdown()
         return EXIT_MEASURE_FAIL
