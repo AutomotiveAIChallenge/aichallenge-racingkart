@@ -59,6 +59,26 @@ make zenoh
 make autoware-driver-zenoh
 ```
 
+### ドライバーのパラメータを現地で振る
+
+`DRIVER_LAUNCH_ARGS` に書いた文字列は、そのまま driver の `ros2 launch` へ引数として渡ります。
+イメージを焼き直さずに値を変えられるので、現地での調整はこれを使ってください。
+
+```bash
+# 例: スロットル上限を 0.35 にして起動
+DRIVER_LAUNCH_ARGS="max_accel_ratio:=0.35" make autoware-driver-zenoh-rosbag
+```
+
+基準値は `.env` の `DRIVER_LAUNCH_ARGS` に書いておけます（コマンドラインで渡した値が優先されます）。
+
+**値が実際に入ったかは毎回確認してください。** 引数名を間違えても ROS はエラーも警告も出さず、黙って無視します。
+
+```bash
+CMD="ros2 param get /racing_kart_driver max_accel_ratio" docker compose run --rm --no-deps autoware-command
+```
+
+渡せるのは racing_kart_interface 側の launch が `<arg>` として宣言しているパラメータだけです。
+
 ### 可視化 / 記録
 
 ```bash
