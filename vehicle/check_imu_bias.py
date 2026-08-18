@@ -19,7 +19,8 @@ angular_velocity_offset_* と比較し、乖離が大きい場合に「警告」
 
 終了コード:
     0 : 全軸 OK（乖離・ノイズとも許容範囲）
-    2 : WARN（乖離が大きい / 静止時ノイズが大きい。測定自体は成功）
+    2 : WARN（乖離が大きい / 静止時ノイズが大きい / 現行 offset を取得できず
+        比較できなかった。いずれも測定自体は成功）
     3 : 測定不能（サンプリング中に車両が動いた / imu_raw が来ない）
 """
 
@@ -222,6 +223,7 @@ def main() -> int:
     print("-" * len(header))
 
     warn = False
+    noisy = False
     fix_lines: list[str] = []
     for axis in AXES:
         mean, std = stats[axis]
@@ -233,11 +235,14 @@ def main() -> int:
         if std > args.std_threshold:
             status = "WARN(noisy)"
             axis_warn = True
+            noisy = True
         if diff is not None and abs(diff) > args.warn_threshold:
             status = "WARN(offset)" if status == "OK" else "WARN(offset,noisy)"
             axis_warn = True
         elif current is None:
-            status = "WARN(no-offset)" if status == "OK" else status
+            # offset を読めなかった時点で「許容範囲内」とは言えないので必ず警告する。
+            status = "WARN(no-offset)" if status == "OK" else "WARN(no-offset,noisy)"
+            axis_warn = True
 
         current_str = f"{current:+.6f}" if current is not None else "   n/a   "
         diff_str = f"{diff:+.6f}" if diff is not None else "   n/a   "
@@ -245,18 +250,27 @@ def main() -> int:
 
         if axis_warn:
             warn = True
-            if diff is None or abs(diff) > args.warn_threshold:
-                fix_lines.append(
-                    f"  angular_velocity_offset_{axis}: {mean:.6f}"
-                )
+        if diff is not None and abs(diff) > args.warn_threshold:
+            fix_lines.append(
+                f"  angular_velocity_offset_{axis}: {mean:.6f}"
+            )
 
     print("")
 
     if warn:
         print("⚠️  IMU gyro bias check raised a warning.")
         if offsets is None:
-            print("    (could not read current offsets from imu_corrector; "
-                  "showing measured bias only)")
+            print("    Could not read angular_velocity_offset_* from "
+                  f"{args.corrector_node}; the bias comparison was skipped.")
+            print("    Check that imu_corrector is running, then re-run this check.")
+            print("    Measured stationary bias, for reference:")
+            for axis in AXES:
+                print(f"      angular_velocity_offset_{axis}: {stats[axis][0]:.6f}")
+        if noisy:
+            print(f"    Stationary gyro noise exceeds {args.std_threshold} rad/s. "
+                  "The vehicle may not have been")
+            print("    completely stationary (engine/fan vibration, someone leaning on it),")
+            print("    or the IMU itself is noisy. Re-measure on a settled vehicle first.")
         if fix_lines:
             print("    How to fix — edit the param file and set the measured bias as-is:")
             print(f"      file: {_param_yaml_hint(args)}")
