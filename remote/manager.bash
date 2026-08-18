@@ -24,6 +24,16 @@ if ! python3 -c "import rclpy" 2>/dev/null; then
     exit 1
 fi
 
+# 起動時点の欠落はここで落とす。manager 自身は racing_kart_msgs が無くても起動でき、
+# emergency を UNKNOWN 扱いにして全操作を塞ぐ (通信途絶と同じ安全側の挙動)。ただし GUI に
+# 出るのは「状態不明」であって、オペレータには原因がビルド漏れだと分からない。実行中の
+# 途絶と起動時の未ビルドを区別するため、後者は起動前に非ゼロで終わらせる。
+if ! python3 -c "import racing_kart_msgs.msg" 2>/dev/null; then
+    echo "Error: racing_kart_msgs が見つかりません。" >&2
+    echo "       PACKAGES=racing_kart_msgs make autoware-build を実行してください。" >&2
+    exit 1
+fi
+
 cd "${SCRIPT_DIR}"
 
 case "${1:-manager}" in

@@ -2,7 +2,8 @@
 SHELL := /bin/bash
 
 .PHONY: autoware-build autoware-vehicle autoware-simulator autoware-request-initialpose autoware-request-control  awsim-request-start awsim-request-reset autoware-driver-zenoh autoware-driver-zenoh-rosbag setup-vehicle \
-	simulator dev dev2 dev3 dev4 driver zenoh download rviz2 down down_all ps autoware-attach autoware-bash eval e2e
+	simulator dev dev2 dev3 dev4 driver zenoh download rviz2 down down_all ps autoware-attach autoware-bash eval e2e \
+	remote remote-stop
 
 # Used by docker-compose.yml for build/eval artifact ownership.
 HOST_UID ?= $(shell id -u)
@@ -26,9 +27,11 @@ SIM_MODES += dev2 dev3 dev4 gate1 gate2 gate3
 $(addprefix simulator-,$(SIM_MODES)): simulator-%:
 	@$(MAKE) simulator SIM_MODE=$*
 
-# autowareのbuildのみ
+# autowareのbuildのみ。PACKAGES を指定すると、そのパッケージと依存だけをビルドする。
+#   make autoware-build                              # 全部
+#   PACKAGES=racing_kart_msgs make autoware-build    # 遠隔操作PCに必要な分だけ
 autoware-build:
-	docker compose run -T --rm --no-deps autoware-build
+	PACKAGES="$(PACKAGES)" docker compose run -T --rm --no-deps autoware-build
 
 # run autoware for vehicle
 autoware-vehicle:
@@ -107,6 +110,24 @@ eval:
 rviz2:
 	docker compose stop rviz2
 	docker compose up -d rviz2
+
+# 遠隔操作PC一式（zenoh ブリッジ + joy + manager + 操作GUI）
+#   make remote VEHICLES="A2 A3 A7"
+# 対象車両に既定値を置かない。使わない車両が UNKNOWN のまま残ると停止確認が取れず、
+# すべての操作が塞がるため（docs/spec/multi-vehicle-start-stop.md）。
+# 遠隔側は常に ROS_DOMAIN_ID 0。車両側の domain とは無関係で、車両IDで区別する。
+remote:
+	@test -n "$(VEHICLES)" || { \
+		echo 'Error: VEHICLES を指定してください。  例: make remote VEHICLES="A2 A3 A7"' >&2; \
+		exit 1; \
+	}
+	LOG_DIR=$(LOG_DIR) ROS_DOMAIN_ID=0 VEHICLES="$(VEHICLES)" \
+		docker compose up -d zenoh-remote joy manager manager-gui
+	@echo "対象車両: $(VEHICLES)"
+	@echo "状態: make ps / ログ: docker compose logs -f manager / 停止: make remote-stop"
+
+remote-stop:
+	docker compose stop manager-gui manager joy zenoh-remote
 
 # driver + autoware + zenoh
 autoware-driver-zenoh:

@@ -47,6 +47,10 @@ volumes: `./output:/output`, `./aichallenge:/aichallenge`, `./remote:/remote`, `
 | `zenoh` | Zenoh ブリッジ（実車遠隔操作） |
 | `driver` | 実車ドライバスタック（racing_kart_interface） |
 | `rviz2` | RViz2 可視化 |
+| `zenoh-remote` | 遠隔操作PC側の Zenoh ブリッジ（対象車両ぶんを1コンテナで起動、`make remote`） |
+| `joy` | 遠隔操作PC側の joy_node（`make remote`） |
+| `manager` | racing_kart_manager ノード（`make remote`） |
+| `manager-gui` | racing_kart_manager の操作GUI（`make remote`） |
 
 eval サービス `autoware-simulator-evaluation`（image: `aichallenge-2025-eval`）は `docker-compose.yml` に定義する。
 このサービスは `/aichallenge` をマウントせず、イメージに焼き込まれた状態で `aichallenge/run_evaluation.bash` を実行する。

@@ -209,9 +209,12 @@
     },
     "link": {
       "tls": {
-        "root_ca_certificate": "./tls/server/minica.pem",
-        "connect_private_key": "./tls/client/key.pem",
-        "connect_certificate": "./tls/client/cert.pem",
+        //// __TLS_DIR__ は起動側が埋める。コンテナ内 (run_zenoh.bash) では /remote、
+        //// ホスト (connect_zenoh.bash) ではリポジトリの remote/ になる。相対パスにすると
+        //// zenoh が cwd 基準で解決するため、起動ディレクトリ次第で mTLS が黙って壊れる。
+        "root_ca_certificate": "__TLS_DIR__/tls/server/minica.pem",
+        "connect_private_key": "__TLS_DIR__/tls/client/key.pem",
+        "connect_certificate": "__TLS_DIR__/tls/client/cert.pem",
         "enable_mtls": true,
         "close_link_on_expiration": true
       }

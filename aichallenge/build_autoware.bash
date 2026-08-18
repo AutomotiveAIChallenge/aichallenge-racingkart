@@ -3,11 +3,13 @@
 set -eo pipefail
 
 # Usage:
-#   build_autoware.bash [clean] [HOST_UID HOST_GID]
+#   build_autoware.bash [clean] [HOST_UID HOST_GID] [PACKAGE ...]
 #
 # Notes:
 #   - If "clean" is provided, workspace/{build,install,log} are removed before building.
 #   - If running as root and HOST_UID/HOST_GID are provided, ownership is fixed after build.
+#   - Trailing arguments select packages to build (with their dependencies). The remote
+#     operation PC only needs racing_kart_msgs, not the whole Autoware overlay.
 
 action="${1-}"
 if [ "${action}" = "clean" ]; then
@@ -19,6 +21,18 @@ fi
 
 HOST_UID="${1-}"
 HOST_GID="${2-}"
+# UID/GID は省略可なので、実際に渡された数だけ捨てる。ここを shift 2 固定にすると
+# 片方だけ渡されたときに残りをパッケージ名と取り違える。
+for _ in 1 2; do
+    [ "$#" -gt 0 ] && shift
+done
+
+# 残りの引数はビルド対象のパッケージ。指定が無ければ従来どおり全部ビルドする。
+select_args=()
+if [ "$#" -gt 0 ]; then
+    select_args=(--packages-up-to "$@")
+    echo "[build_autoware] Building selected packages: $*"
+fi
 
 # shellcheck disable=SC1091
 source /opt/ros/humble/setup.bash
@@ -28,7 +42,7 @@ source /autoware/install/setup.bash
 cd ./workspace
 
 # NOTE: gyro_odometer exists in the Autoware underlay, so allow overriding in this overlay workspace.
-colcon build --symlink-install --allow-overriding gyro_odometer --cmake-args -DCMAKE_BUILD_TYPE=Release
+colcon build --symlink-install --allow-overriding gyro_odometer "${select_args[@]}" --cmake-args -DCMAKE_BUILD_TYPE=Release
 
 echo "[build_autoware] Build successful."
 

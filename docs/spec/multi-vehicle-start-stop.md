@@ -152,6 +152,7 @@ GUI は引数を取らない。status の `vehicles[]` からボタンを作る�
 | `remote/racing_kart_manager_core.py` | 純粋ロジック。型と3つの純関数。**ROS 非依存** |
 | `remote/racing_kart_manager.py` | ROS ノード。購読・`Joy` との変換・publish だけの薄い層 |
 | `remote/manager.bash` | 起動スクリプト（`joy.bash` と同じ粒度） |
+| `remote/run_zenoh.bash` | 遠隔側 zenoh ブリッジを対象車両ぶんまとめて起動する |
 | `remote/racing_kart_manager_gui.py` | GUI。manager とは別プロセスでトピック接続 |
 | `remote/tests/` | L1 の pytest |
 
@@ -163,7 +164,39 @@ core を別ファイルに分けているのは、L1 のテストを ROS なし�
 uv run --with pytest --with hypothesis python -m pytest remote/tests -q
 ```
 
-起動は `docker-compose.yml` に `rviz2` と同じ `*autoware-base` を継承したサービスを足し、`Makefile` にターゲットを追加する。
+### 遠隔操作PCの起動
+
+`docker-compose.yml` に `rviz2` と同じ `*autoware-base` を継承したサービスを4つ足し、`Makefile` に
+`remote` ターゲットを置く。
+
+```bash
+PACKAGES=racing_kart_msgs make autoware-build   # 初回だけ。数秒で終わる
+make remote VEHICLES="A2 A3 A7"
+```
+
+| サービス | 中身 |
+| --- | --- |
+| `zenoh-remote` | `remote/run_zenoh.bash` が対象車両ぶんのブリッジを1プロセスずつ起動し、各々リトライで面倒みる |
+| `joy` | `joy_node`（`autorepeat_rate` は既定 20.0 で自動再送される） |
+| `manager` | `racing_kart_manager` ノード |
+| `manager-gui` | 操作GUI。落ちても manager は joy を流し続けるので、`docker compose restart manager-gui` で単独復帰できる |
+
+**対象車両に既定値を置かない。** `VEHICLES` 未指定は `make remote` がエラーにする。既定で台数を
+決め打ちすると、使わない車両が永久に `UNKNOWN` になって全操作が塞がる（対象車両を引数にした理由と
+同じ）。`run_zenoh.bash` は起動前に全車両IDを検証し、1台でも綴り違いがあれば1本も起動しない。
+半端に上がるとその車両だけ停止確認が取れなくなるため。
+
+遠隔側は常に `ROS_DOMAIN_ID` 0。車両側の domain とは無関係で、トピック名の車両IDで区別する。
+
+1台だけ手で試すときは `remote/connect_zenoh.bash <VEHICLE_ID>` を使う。ホストで動くので、mTLS 資材の
+場所はテンプレートの `__TLS_DIR__` に埋められる（コンテナ内は `/remote`、ホストはリポジトリの
+`remote/`）。証明書のパスを相対で書くと zenoh が cwd 基準で解決し、起動ディレクトリ次第で mTLS が
+黙って壊れる。
+
+`racing_kart_msgs` が未ビルドのとき、manager 自身は起動でき `emergency` を `UNKNOWN` 扱いにして全操作を
+塞ぐ（通信途絶と同じ安全側の挙動）。ただし GUI に出るのは「状態不明」であって、オペレータには原因が
+ビルド漏れだと分からない。実行中の途絶と起動時の未ビルドを区別するため、後者は `manager.bash` が
+起動前に非ゼロで終わらせる。
 
 キーバインド定数は `racing_kart_interface` が別リポジトリのため参照できず複製するが、必要なのは無操作値で上書きする軸の index（`0, 2, 5, 6, 7`）と配列サイズ（buttons 11 / axes 8）だけ。ボタンは素通しするので定数の複製は不要。
 
