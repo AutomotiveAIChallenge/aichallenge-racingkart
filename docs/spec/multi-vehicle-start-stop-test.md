@@ -339,7 +339,7 @@ GUI 側に唯一許したロジック。manager が落ちても GUI には最後
 遠隔操作PC側の起動:
 
 ```bash
-PACKAGES=racing_kart_msgs make autoware-build   # 初回だけ
+make autoware-build                             # 初回だけ
 make remote VEHICLES="A2 A3 A7"                 # 対象車両は実際に使う分だけ挙げる
 ```
 

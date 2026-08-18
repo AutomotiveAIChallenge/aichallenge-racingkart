@@ -170,9 +170,12 @@ uv run --with pytest --with hypothesis python -m pytest remote/tests -q
 `remote` ターゲットを置く。
 
 ```bash
-PACKAGES=racing_kart_msgs make autoware-build   # 初回だけ。数秒で終わる
+make autoware-build                             # 初回だけ
 make remote VEHICLES="A2 A3 A7"
 ```
+
+遠隔操作PCは `racing_kart_msgs` しか要らないので、`PACKAGES=racing_kart_msgs make autoware-build`
+（数秒で終わる）でも足りる。`multi_purpose_mpc_ros` など無関係なパッケージのビルドを避けたいときに使う。
 
 | サービス | 中身 |
 | --- | --- |
