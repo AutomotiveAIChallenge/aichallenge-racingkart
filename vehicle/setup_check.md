@@ -153,12 +153,14 @@ git branch --show-current
 
 ---
 
-### 6. IMUジャイロバイアス確認（runtime フェーズ）
+### 6. IMUジャイロバイアス計測（runtime フェーズ）
 
 `--phase runtime` / `--phase all` で、autoware 起動後に **車両が静止している状態の**
-ジャイロバイアスを推定し、`imu_corrector` の現行 `angular_velocity_offset_*` と比較します。
-値の自動書き換えはせず、乖離が大きい場合に「param.yaml へどう書けばよいか」を出力するだけの
-read-only 診断です。
+ジャイロバイアスを推定し、静止時ノイズが十分小さければ `imu_corrector.param.yaml` の
+`angular_velocity_offset_*` を測定値でそのまま上書きします（乖離の大小による閾値判定はなく、
+無条件に書き込みます）。imu_corrector はパラメータを起動時に一度だけ読むため、
+**書き換えても今動いている autoware には反映されません。次回 autoware を再起動したときから
+新しい値が使われます。**
 
 ```bash
 # runtime フェーズの一部として実行される
@@ -174,10 +176,18 @@ docker compose exec autoware bash -lc \
    python3 /vehicle/check_imu_bias.py"
 ```
 
-対話端末では静止確認の `y/N` プロンプトが出ます。
+対話端末では静止確認の `y/N` プロンプトが出ます（y=計測開始、N=skip）。
 `IMU_BIAS_ASSUME_STATIONARY` が設定されていればプロンプトを出さずにその値を使い、
-無回答のまま `IMU_BIAS_PROMPT_TIMEOUT_SEC`（既定 60 秒）が経過した場合は
+無回答のまま `IMU_BIAS_PROMPT_TIMEOUT_SEC`（既定 5 秒）が経過した場合は
 skip（warn）として先へ進むので、起動フローが止まり続けることはありません。
+
+計測中の静止時ノイズ（std）が `IMU_BIAS_STD_THRESHOLD` を超えた場合は、
+バイアス推定値が信用できないため param.yaml への書き込みはせず、
+「車両に触れないでください」と表示したうえで**再計測してよいか毎回確認します**
+（自動では再計測しません）。ここも `y/N` で、`IMU_BIAS_ASSUME_STATIONARY` /
+`IMU_BIAS_PROMPT_TIMEOUT_SEC` を流用します。`IMU_BIAS_MAX_RETRIES`
+（既定 3 回）まで確認を繰り返し、それでもノイズが収まらない、または
+確認で `N`/無回答だった場合はその時点で warn として先へ進みます。
 
 **閾値（環境変数で調整可能）:**
 
@@ -185,50 +195,59 @@ skip（warn）として先へ進むので、起動フローが止まり続ける
 | --- | --- | --- |
 | `IMU_BIAS_DURATION_SEC` | 5 | サンプリング秒数（warmup を除く） |
 | `IMU_BIAS_WARMUP_SEC` | 2 | 開始直後に捨てる秒数 |
-| `IMU_BIAS_WARN_THRESHOLD` | 0.005 rad/s | 推定バイアスと現行 offset の乖離の警告閾値 |
-| `IMU_BIAS_STD_THRESHOLD` | 0.01 rad/s | 静止時ジャイロ std の警告閾値 |
-| `IMU_BIAS_VELOCITY_THRESHOLD` | 0.05 m/s | これを超えたら「動いた」と判定して測定中止 |
-| `IMU_BIAS_ASSUME_STATIONARY` | 未設定 | 静止確認プロンプトの回答（`y` で実行） |
-| `IMU_BIAS_PROMPT_TIMEOUT_SEC` | 60 | プロンプトの無回答タイムアウト秒数 |
+| `IMU_BIAS_STD_THRESHOLD` | 0.03 rad/s | 静止時ジャイロ std の警告閾値（暫定値。`imu_corrector.param.yaml` の想定ノイズ既定値に合わせている。実測を踏まえて後で絞り込む） |
+| `IMU_BIAS_VELOCITY_THRESHOLD` | 0.05 m/s | これを超えたら「動いた」と判定して測定中止（ノイズとは別扱いでリトライなし） |
+| `IMU_BIAS_ASSUME_STATIONARY` | 未設定 | 静止確認プロンプト・再計測確認プロンプト共通の回答（`y` で実行） |
+| `IMU_BIAS_PROMPT_TIMEOUT_SEC` | 5 | 各プロンプトの無回答タイムアウト秒数 |
+| `IMU_BIAS_MAX_RETRIES` | 3 | ノイズ超過時の再計測確認の上限回数 |
 
-**期待する結果（許容範囲内）:**
-
-```text
-axis    bias[rad/s]   offset[rad/s]          diff         std  status
----------------------------------------------------------------------
-x     +0.000329       +0.000000     +0.000329  0.002042  OK
-y     -0.000762       +0.000000     -0.000762  0.002062  OK
-z     +0.001286       +0.000000     +0.001286  0.002076  OK
-
-✅ IMU gyro bias is within tolerance of the current imu_corrector offsets.
-```
-
-**乖離が大きい場合（警告 / 終了コード 2）:**
+**静止時ノイズが小さい場合（書き込み成功 / 終了コード 0）:**
 
 ```text
-axis    bias[rad/s]   offset[rad/s]          diff         std  status
----------------------------------------------------------------------
-x     +0.000399       +0.000000     +0.000399  0.002070  OK
-y     -0.000780       +0.000000     -0.000780  0.002056  OK
-z     +0.018103       +0.000000     +0.018103  0.002097  WARN(offset)
+axis    bias[rad/s]         std  status
+---------------------------------------
+x     +0.000329  0.002042  OK
+y     -0.000762  0.002062  OK
+z     +0.001286  0.002076  OK
 
-⚠️  IMU gyro bias check raised a warning.
-    How to fix — edit the param file and set the measured bias as-is:
-      file: aichallenge/workspace/src/aichallenge_submit/imu_corrector/config/imu_corrector.param.yaml
-      angular_velocity_offset_z: 0.018103
-    Note: imu_corrector computes (raw - offset), so write the
-          measured bias value with its sign unchanged (+ stays +).
-    Restart autoware after editing so the new offset takes effect.
+Updated /aichallenge/workspace/src/aichallenge_submit/imu_corrector/config/imu_corrector.param.yaml:
+axis    old[rad/s]    new[rad/s]
+--------------------------------
+x     +0.000000  +0.000329
+y     +0.000000  -0.000762
+z     -0.000000  +0.001286
+
+✅ imu_corrector.param.yaml updated.
+   This bias will not take effect until autoware is restarted
+   (imu_corrector reads the parameter once at startup).
 ```
 
 `imu_corrector` は `output = raw - angular_velocity_offset` で補正するため、
-**測定値を符号そのまま** param.yaml に書きます（+ にずれていれば + を書く）。
-書き換え後は autoware を再起動してください。
+**測定値を符号そのまま** param.yaml に書きます（+ にずれていれば + を書く）。乖離の大小は
+判定せず常に上書きします。書き換え後は autoware を再起動しないと反映されません。
+
+**静止時ノイズが大きい場合（書き込まない / 終了コード 4、再計測確認へ）:**
+
+```text
+axis    bias[rad/s]         std  status
+---------------------------------------
+x     +0.000356  0.020723  WARN(noisy)
+y     -0.001511  0.020593  WARN(noisy)
+z     +0.002232  0.021002  WARN(noisy)
+
+⚠️  Stationary gyro noise exceeds 0.03 rad/s — do not touch the vehicle.
+    The bias estimate above is unreliable while noisy. The vehicle may not
+    have been completely stationary (engine/fan vibration, someone
+    touching it), or the IMU itself is noisy.
+```
+
+この rc=4 を受けて setup_check.sh 側が「Do not touch the vehicle. Re-measure? [y/N]」と
+確認し、`y` なら再計測、`N`/無回答/`IMU_BIAS_MAX_RETRIES` 到達なら warn として先へ進みます
+（この場合 param.yaml は書き換えません）。
 
 その他の終了コード:
 
-- `2`: 静止時ノイズが大きい（`WARN(noisy)`）／`imu_corrector` から現行 offset を取得できず比較できなかった（`WARN(no-offset)`）
-- `3`: 測定不能（サンプリング中に車両が動いた／`/sensing/imu/imu_raw` が来ない）
+- `3`: 測定不能（サンプリング中に車両が動いた／`/sensing/imu/imu_raw` が来ない／param.yaml を読めなかった。ノイズとは別扱いでリトライなし。param.yaml は書き換えません）
 
 ---
 

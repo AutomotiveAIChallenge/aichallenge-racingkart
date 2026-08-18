@@ -32,10 +32,11 @@ GNSS_NAVPVT_TIMEOUT_SEC="${GNSS_NAVPVT_TIMEOUT_SEC:-8}"
 ROS_TOPIC_TIMEOUT_SEC="${ROS_TOPIC_TIMEOUT_SEC:-4}"
 IMU_BIAS_DURATION_SEC="${IMU_BIAS_DURATION_SEC:-5}"
 IMU_BIAS_WARMUP_SEC="${IMU_BIAS_WARMUP_SEC:-2}"
-IMU_BIAS_WARN_THRESHOLD="${IMU_BIAS_WARN_THRESHOLD:-0.005}"
-IMU_BIAS_STD_THRESHOLD="${IMU_BIAS_STD_THRESHOLD:-0.01}"
+# 暫定値（imu_corrector.param.yaml の想定ノイズ既定値に合わせている）。実測を踏まえて後で絞り込む。
+IMU_BIAS_STD_THRESHOLD="${IMU_BIAS_STD_THRESHOLD:-0.03}"
 IMU_BIAS_VELOCITY_THRESHOLD="${IMU_BIAS_VELOCITY_THRESHOLD:-0.05}"
-IMU_BIAS_PROMPT_TIMEOUT_SEC="${IMU_BIAS_PROMPT_TIMEOUT_SEC:-60}"
+IMU_BIAS_PROMPT_TIMEOUT_SEC="${IMU_BIAS_PROMPT_TIMEOUT_SEC:-5}"
+IMU_BIAS_MAX_RETRIES="${IMU_BIAS_MAX_RETRIES:-3}"
 TOTAL_CHECKS=0
 PASSED_CHECKS=0
 FAILED_CHECKS=0
@@ -83,19 +84,22 @@ ENVIRONMENT:
                    IMU gyro bias sampling seconds [default: 5]
   IMU_BIAS_WARMUP_SEC
                    seconds discarded before sampling (IMU warmup) [default: 2]
-  IMU_BIAS_WARN_THRESHOLD
-                   warn if |bias - current offset| exceeds this [rad/s, default: 0.005]
   IMU_BIAS_STD_THRESHOLD
-                   warn if stationary gyro stddev exceeds this [rad/s, default: 0.01]
+                   warn if stationary gyro stddev exceeds this [rad/s, default: 0.03
+                   (provisional, matches imu_corrector's assumed noise; to be
+                   tightened after real measurements)]
   IMU_BIAS_VELOCITY_THRESHOLD
                    treat as moving if |velocity| exceeds this [m/s, default: 0.05]
   IMU_BIAS_ASSUME_STATIONARY
-                   answer (y) to the stationary prompt without asking; also used
-                   in interactive terminals so the check can run unattended
-                   [default: unset]
+                   answer (y) to the stationary prompt and to the "re-measure?"
+                   prompt without asking; also used in interactive terminals so
+                   the check can run unattended [default: unset]
   IMU_BIAS_PROMPT_TIMEOUT_SEC
-                   seconds to wait for the stationary prompt before skipping it
-                   as warn [default: 60]
+                   seconds to wait for the stationary/re-measure prompts before
+                   skipping as warn [default: 5]
+  IMU_BIAS_MAX_RETRIES
+                   max re-measurement attempts when stationary gyro noise is too
+                   high [default: 3]
 
 MODE:
   vehicle         Real vehicle mode (CAN + VCU required) [default]
@@ -772,32 +776,67 @@ check_imu_bias() {
     fi
 
     # check_imu_bias.py は ./vehicle:/vehicle マウント経由でコンテナから見える。
+    # rc=4 は「静止時ノイズが大きく、バイアス推定値が信用できない」の意味で、
+    # ここ（bash 側）で人間に再計測してよいか毎回確認してから再実行する。
+    # python 側では自動リトライしない。
     local output
     local rc
-    output="$(docker compose -f "${REPO_ROOT}/docker-compose.yml" exec -T autoware bash -lc "
-        ${setup_cmd}
-        python3 /vehicle/check_imu_bias.py \
-            --duration '${IMU_BIAS_DURATION_SEC}' \
-            --warmup '${IMU_BIAS_WARMUP_SEC}' \
-            --velocity-threshold '${IMU_BIAS_VELOCITY_THRESHOLD}' \
-            --warn-threshold '${IMU_BIAS_WARN_THRESHOLD}' \
-            --std-threshold '${IMU_BIAS_STD_THRESHOLD}'
-    " 2>&1)"
-    rc=$?
+    local attempt=1
+    while :; do
+        output="$(docker compose -f "${REPO_ROOT}/docker-compose.yml" exec -T autoware bash -lc "
+            ${setup_cmd}
+            python3 /vehicle/check_imu_bias.py \
+                --duration '${IMU_BIAS_DURATION_SEC}' \
+                --warmup '${IMU_BIAS_WARMUP_SEC}' \
+                --velocity-threshold '${IMU_BIAS_VELOCITY_THRESHOLD}' \
+                --std-threshold '${IMU_BIAS_STD_THRESHOLD}'
+        " 2>&1)"
+        rc=$?
 
-    log "${output}"
+        log "${output}"
+
+        if [ "${rc}" != "4" ]; then
+            break
+        fi
+
+        if [ "${attempt}" -ge "${IMU_BIAS_MAX_RETRIES}" ]; then
+            log "${WARN} IMU bias check: still noisy after ${attempt} attempt(s); giving up retries"
+            break
+        fi
+
+        local retry_answer=""
+        if [ -n "${IMU_BIAS_ASSUME_STATIONARY-}" ]; then
+            retry_answer="${IMU_BIAS_ASSUME_STATIONARY}"
+            log "${INFO} IMU bias check: re-measure confirmation from IMU_BIAS_ASSUME_STATIONARY=${retry_answer}"
+        elif [ -t 0 ]; then
+            if ! read -r -t "${IMU_BIAS_PROMPT_TIMEOUT_SEC}" \
+                -p "$(echo -e "${WARN} Do not touch the vehicle. Re-measure? [y/N] (${IMU_BIAS_PROMPT_TIMEOUT_SEC}s timeout, attempt $((attempt + 1))/${IMU_BIAS_MAX_RETRIES}): ")" retry_answer; then
+                retry_answer=""
+                echo ""
+            fi
+        fi
+
+        case "${retry_answer}" in
+        y | Y | yes | YES) ;;
+        *)
+            break
+            ;;
+        esac
+
+        attempt=$((attempt + 1))
+    done
 
     case "${rc}" in
     0)
-        log "${OK} IMU gyro bias within tolerance"
+        log "${OK} IMU gyro bias measured and imu_corrector.param.yaml updated (restart autoware to apply)"
         record_result "pass"
         ;;
-    2)
-        log "${WARN} IMU gyro bias warning (see above; update imu_corrector.param.yaml manually)"
+    4)
+        log "${WARN} IMU gyro bias check: gave up on noisy measurement (see above; not written)"
         record_result "warn"
         ;;
     *)
-        log "${FAIL} IMU gyro bias check failed (rc=${rc}; measurement not completed)"
+        log "${FAIL} IMU gyro bias check failed (rc=${rc}; measurement not completed, not written)"
         record_result "fail"
         ;;
     esac

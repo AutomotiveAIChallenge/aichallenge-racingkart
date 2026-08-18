@@ -23,10 +23,13 @@
 5. **実行準備確認** - リポジトリルート、gitブランチ確認
 
 `--phase runtime`（autoware 起動後）では、静止状態の IMU ジャイロバイアスを推定して
-`imu_corrector` の現行 `angular_velocity_offset_*` と比較する read-only 診断も走ります。
+`imu_corrector.param.yaml` の `angular_velocity_offset_*` を測定値で上書きする処理も走ります
+（次回 autoware 再起動時から反映。今動いているプロセスには効きません）。
 対話端末では静止確認の `y/N` プロンプトが出るため、無人で通したい場合は
-`IMU_BIAS_ASSUME_STATIONARY=y` を渡してください（未回答のまま 60 秒経過した場合も
-skip(warn) として先に進みます）。
+`IMU_BIAS_ASSUME_STATIONARY=y` を渡してください（未回答のまま 5 秒経過した場合も
+skip(warn) として先に進みます）。計測中の静止時ノイズが大きいときは書き込まず、
+「車両に触れないでください」→再計測してよいか `y/N` の確認が入ります
+（最大 `IMU_BIAS_MAX_RETRIES` 回、既定 3 回）。
 
 ```bash
 # 静止プロンプトを出さずに runtime チェックまで通す
