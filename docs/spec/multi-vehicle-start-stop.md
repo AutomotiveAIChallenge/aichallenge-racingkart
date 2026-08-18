@@ -481,7 +481,7 @@ GUI は各ボタンの近くに出すときだけ `targets` で絞り、メッ�
 | 箇所 | 内容 |
 | --- | --- |
 | `vehicle/zenoh.json5` の `publishers` | `/vehicle/status/control_mode` と `/racing_kart/debug/status` を追加。**現在はどちらも入っておらず、遠隔PCへ流れていない** |
-| `remote/zenoh-user.json5` の `subscribers` | 同じ2つを追加 |
+| `remote/zenoh-user.json5.template` の `subscribers` | 同じ2つを追加 |
 | manager の購読 | `/<VEHICLE_ID>/vehicle/status/control_mode`（型は遠隔PCのイメージに既にあり、ビルド不要） |
 | `VehicleObservation` | 制御モードの値と、受信からの経過時間 |
 | `VehicleStatus` と status の JSON | 制御モード名（`control_mode`）と、表示用の1行（`label`） |

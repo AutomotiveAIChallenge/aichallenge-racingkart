@@ -88,7 +88,7 @@ NO_INPUT_AXES: tuple[float, ...] = (
 # --------------------------------------------------------------------------
 
 #: これを超えたテレメトリは Tri.UNKNOWN 扱い。zenoh が全トピックを 10Hz に
-#: 間引く (remote/zenoh-user.json5 の pub_max_frequencies) ため十分長くとる。
+#: 間引く (remote/zenoh-user.json5.template の pub_max_frequencies) ため十分長くとる。
 TELEMETRY_TIMEOUT_S = 1.0
 
 #: VelocityReport.longitudinal_velocity の絶対値がこれ未満なら停止とみなす
