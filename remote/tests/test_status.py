@@ -1,9 +1,9 @@
 """L1: status のテスト (S-01 〜 S-23)。
 
-対応: multi-vehicle-start-stop-test.md 第7章
+対応: docs/spec/multi-vehicle-start-stop-test.md 第7章
 ハザード: HZ-4 (停止していない車両がいるのに操作を許可する)
 
-不変条件 INV-1 〜 INV-6 は multi-vehicle-start-stop.md の
+不変条件 INV-1 〜 INV-6 は docs/spec/multi-vehicle-start-stop.md の
 「Status が満たすべき不変条件」を参照。
 """
 

@@ -1,6 +1,6 @@
 """L1: next_state のテスト (N-01 〜 N-22)。
 
-対応: multi-vehicle-start-stop-test.md 第8章
+対応: docs/spec/multi-vehicle-start-stop-test.md 第8章
 ハザード: HZ-2 (止められない), HZ-4 (許可すべきでない遷移を許す)
 
 設計書は関数名を next_mode としていたが、Mode だけでは SINGLE の対象車と

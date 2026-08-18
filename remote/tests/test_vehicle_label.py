@@ -1,6 +1,6 @@
 """L1: 車両1台分の表示のテスト (V-01 〜 V-09)。
 
-対応: multi-vehicle-start-stop-test.md 第9.2節・第9.3節
+対応: docs/spec/multi-vehicle-start-stop-test.md 第9.2節・第9.3節
 
 各車両ボタンの下に出す1行。文言は manager 側で作り、GUI は受け取った文字列を
 描くだけにする (観点 F-1)。GUI に Tri から文言への変換表を置かない。

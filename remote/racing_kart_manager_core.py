@@ -3,8 +3,8 @@
 ROS に依存しない。sensor_msgs/Joy との相互変換はノード側 (racing_kart_manager.py) が行う。
 これにより L1 のテストは ROS を起動せずに pytest だけで完走できる。
 
-仕様: multi-vehicle-start-stop.md
-テスト: multi-vehicle-start-stop-test.md
+仕様: docs/spec/multi-vehicle-start-stop.md
+テスト: docs/spec/multi-vehicle-start-stop-test.md
 """
 
 from __future__ import annotations

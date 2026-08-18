@@ -1,6 +1,6 @@
 """L1: transform のテスト (T-01 〜 T-10)。
 
-対応: multi-vehicle-start-stop-test.md 第6章
+対応: docs/spec/multi-vehicle-start-stop-test.md 第6章
 ハザード: HZ-1 (無操作のつもりで踏んだ joy を送る), HZ-2, HZ-3
 """
 

@@ -7,7 +7,7 @@ manager とは別プロセス。GUI が落ちても manager は joy を流し続
 送ってきた status をそのまま使う。唯一の例外は status 途絶とバージョン
 不一致の検出で、これは manager 自身からは送れないため gui_gate() で行う。
 
-仕様: multi-vehicle-start-stop.md の「GUI インタフェース」
+仕様: docs/spec/multi-vehicle-start-stop.md の「GUI インタフェース」
 """
 
 from __future__ import annotations

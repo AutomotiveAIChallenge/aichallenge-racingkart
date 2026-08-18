@@ -1,6 +1,6 @@
 """L1: 対象車両リストのテスト (P-01 〜 P-09)。
 
-対応: multi-vehicle-start-stop-test.md 第10章
+対応: docs/spec/multi-vehicle-start-stop-test.md 第10章
 
 対象車両は起動時引数で、台数も車両IDも固定しない。使わない車両を固定リストに
 残すと、その車の停止確認が永久に取れず全操作が塞がれる。

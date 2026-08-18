@@ -4,7 +4,7 @@
 判断はすべて racing_kart_manager_core の純関数が行い、このファイルは
 「購読して、呼んで、publish する」だけの薄い層に徹する。
 
-仕様: multi-vehicle-start-stop.md
+仕様: docs/spec/multi-vehicle-start-stop.md
 """
 
 from __future__ import annotations
