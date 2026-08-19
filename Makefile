@@ -104,9 +104,12 @@ eval:
 	@echo "To stop: make down  (docker compose down --remove-orphans)"
 
 # remote operation (docker compose up -d rviz2)
+#   make rviz2 VEHICLE=A3
+# 遠隔側では車両トピックが /<VEHICLE_ID>/... の prefix 付きで届く。VEHICLE を渡すと
+# prefix を剥がす中継が立ち、その車両が RViz に映る。未指定だと地図しか出ない。
 rviz2:
 	docker compose stop rviz2
-	docker compose up -d rviz2
+	RVIZ_VEHICLE_ID="$(VEHICLE)" docker compose up -d rviz2
 
 # driver + autoware + zenoh
 autoware-driver-zenoh:
