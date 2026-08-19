@@ -180,4 +180,6 @@ services:
 #### remote visualization services ####
   rviz2:
     <<: *autoware-base 
-    command: ["bash", "-lc", "exec /aichallenge/utils/run_rviz.bash remote"]
+    # RVIZ_VEHICLE_ID は make rviz2 VEHICLE=<ID> が渡す。指定すると zenoh 経由の
+    # /<ID>/... を prefix なしに中継してから RViz を開く（run_rviz.bash 参照）。
+    command: ["bash", "-lc", "exec /aichallenge/utils/run_rviz.bash remote ${RVIZ_VEHICLE_ID:-}"]

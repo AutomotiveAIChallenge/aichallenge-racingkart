@@ -97,13 +97,18 @@ CMD="ros2 param get /racing_kart_driver max_accel_ratio" docker compose run --rm
 ### 可視化 / 記録
 
 ```bash
-# RViz2（前回を止めてから起動）
-make rviz2
+# RViz2（前回を止めてから起動）。遠隔PCでは対象車両を VEHICLE で指定する
+make rviz2 VEHICLE=A3
 
 # rosbag（手動。対象 domain を指定）
 CMD="env ROS_DOMAIN_ID=1 /aichallenge/utils/record_rosbag.bash" \
 docker compose run --rm --no-deps autoware-command
 ```
+
+遠隔側では車両トピックが `/A3/localization/kinematic_state` のように車両IDの prefix 付きで
+届きますが、`autoware_vehicle.rviz` は prefix なしの名前を購読します。`VEHICLE` を渡すと
+`run_rviz.bash` が prefix を剥がす中継を立ててから RViz を開くので、その車両が映ります。
+**未指定だと地図しか映りません。**
 
 ### 停止 / 状態確認
 
