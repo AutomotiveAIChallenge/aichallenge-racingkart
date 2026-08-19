@@ -470,16 +470,6 @@ check_network() {
         fi
     fi
 
-    # リバースSSHサービス状態確認
-    if systemctl is-active --quiet reverse-ssh.service; then
-        log "${OK} reverse-ssh.service is active (running)"
-        record_result "pass"
-    else
-        log "${WARN} reverse-ssh.service is not active"
-        log "   Fix: sudo systemctl start reverse-ssh.service"
-        record_result "warn"
-    fi
-
     # Zenohサーバー疎通確認。run_zenoh.bash と同じ VEHICLE_ID -> port 対応を使う。
     local zenoh_host="${ZENOH_HOST:-zenoh.dev.aichallenge-board.jsae.or.jp}"
     local vehicle_id_for_zenoh
