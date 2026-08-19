@@ -19,6 +19,7 @@ RELAY_TOPICS=(
     /planning/scenario_planning/trajectory
     /vehicle/status/velocity_status
     /sensing/gnss/pose_with_covariance
+    /v2x/vehicle_positions/markers
 )
 
 start_relays() {
