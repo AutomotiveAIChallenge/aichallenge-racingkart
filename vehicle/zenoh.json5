@@ -57,6 +57,7 @@
           "/control/command/control_cmd",
           "/localization/kinematic_state",
           "/planning/scenario_planning/trajectory",
+          "/v2x/vehicle_positions/markers",
           "/tf",
           "/tf_static",
           "/vehicle/status/gear_status",

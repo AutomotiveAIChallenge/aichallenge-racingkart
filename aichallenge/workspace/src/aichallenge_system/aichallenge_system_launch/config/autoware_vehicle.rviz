@@ -291,6 +291,22 @@ Visualization Manager:
           Width: 550
       Enabled: true
       Name: Utils
+    - Class: rviz_common/Group
+      Displays:
+        - Class: rviz_default_plugins/MarkerArray
+          Enabled: true
+          Name: VehicleMarkers
+          Namespaces:
+            v2x_vehicles: true
+          Topic:
+            Depth: 5
+            Durability Policy: Volatile
+            History Policy: Keep Last
+            Reliability Policy: Reliable
+            Value: /v2x/vehicle_positions/markers
+          Value: true
+      Enabled: true
+      Name: V2X
   Enabled: true
   Global Options:
     Background Color: 10; 10; 10
