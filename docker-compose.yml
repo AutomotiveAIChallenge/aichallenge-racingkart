@@ -146,7 +146,7 @@ services:
     # fixes log ownership back to HOST_UID:HOST_GID.
     user: "root"
     entrypoint: []
-    command: ["bash", "-lc", "exec /vehicle/run_driver.bash vehicle ${ROS_DOMAIN_ID:-1} ${LOG_DIR:-}"]
+    command: ["bash", "-lc", 'exec /vehicle/run_driver.bash vehicle "${ROS_DOMAIN_ID:-1}" "${LOG_DIR:-}" ${DRIVER_LAUNCH_ARGS:-}']
 
 #### remote visualization services ####
   rviz2:
