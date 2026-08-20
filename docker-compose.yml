@@ -146,10 +146,6 @@ services:
     # fixes log ownership back to HOST_UID:HOST_GID.
     user: "root"
     entrypoint: []
-    # DRIVER_LAUNCH_ARGS is forwarded verbatim to `ros2 launch` (run_driver.bash ->
-    # entrypoint.sh -> utils/run.bash), so driver params can be swept on site without
-    # rebuilding the image, e.g. DRIVER_LAUNCH_ARGS="max_accel_ratio:=0.35" make driver.
-    # Left unquoted on purpose so that multiple arguments split into separate words.
     command: ["bash", "-lc", 'exec /vehicle/run_driver.bash vehicle "${ROS_DOMAIN_ID:-1}" "${LOG_DIR:-}" ${DRIVER_LAUNCH_ARGS:-}']
 
 #### remote visualization services ####
