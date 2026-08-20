@@ -40,17 +40,11 @@ runtime（起動後）でチェックする項目：
 
 IMU ジャイロバイアス計測は、静止状態のバイアスを測って `imu_corrector.param.yaml` の
 `angular_velocity_offset_*` を測定値で上書きします（次回 autoware 再起動時から反映。
-今動いているプロセスには効きません）。対話端末では静止確認の `y/N` プロンプトが出るため、
-無人で通したい場合は `IMU_BIAS_ASSUME_STATIONARY=y` を渡してください（未回答のまま 5 秒
-経過した場合も skip(warn) として先に進みます）。計測中の静止時ノイズが大きいときは書き込まず、
-「車両に触れないでください」→再計測してよいか `y/N` の確認が入ります（`y` の間は上限なく
-再計測。無人実行時は確認せず1回で終えます）。
-
-```bash
-# 静止プロンプトを出さずに runtime チェックまで通す
-IMU_BIAS_ASSUME_STATIONARY=y ./setup_check.sh --phase runtime
-IMU_BIAS_ASSUME_STATIONARY=y make autoware-driver-zenoh-rosbag
-```
+今動いているプロセスには効きません）。計測前に静止確認の `y/N` プロンプトが出ます。
+誤って走行中に測ると誤ったバイアスを書き込むため、タイムアウトは設けておらず、回答するまで
+待ちます（`y` 以外は skip(warn) として先へ進みます）。計測中の静止時ノイズが大きいときは
+書き込まず、「車両に触れないでください」→再計測してよいか `y/N` の確認が入ります
+（`y` の間は上限なく再計測）。
 
 詳細な確認項目と手動コマンドについては [setup_check.md](./setup_check.md) を参照してください。
 

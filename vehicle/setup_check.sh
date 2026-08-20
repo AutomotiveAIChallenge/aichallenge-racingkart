@@ -36,7 +36,6 @@ IMU_BIAS_WARMUP_SEC="${IMU_BIAS_WARMUP_SEC:-2}"
 # 暫定値（imu_corrector.param.yaml の想定ノイズ既定値に合わせている）。実測を踏まえて後で絞り込む。
 IMU_BIAS_STD_THRESHOLD="${IMU_BIAS_STD_THRESHOLD:-0.03}"
 IMU_BIAS_VELOCITY_THRESHOLD="${IMU_BIAS_VELOCITY_THRESHOLD:-0.05}"
-IMU_BIAS_PROMPT_TIMEOUT_SEC="${IMU_BIAS_PROMPT_TIMEOUT_SEC:-5}"
 TOTAL_CHECKS=0
 PASSED_CHECKS=0
 FAILED_CHECKS=0
@@ -96,16 +95,6 @@ ENVIRONMENT:
                    tightened after real measurements)]
   IMU_BIAS_VELOCITY_THRESHOLD
                    treat as moving if |velocity| exceeds this [m/s, default: 0.05]
-  IMU_BIAS_ASSUME_STATIONARY
-                   answer (y) to the stationary prompt without asking; also used
-                   in interactive terminals so the check can run unattended. On
-                   a noisy (unreliable) measurement, an unattended run does not
-                   retry (no one to ask); an interactive run instead asks to
-                   re-measure, with no limit on how many times, as long as the
-                   operator keeps answering y [default: unset]
-  IMU_BIAS_PROMPT_TIMEOUT_SEC
-                   seconds to wait for the stationary/re-measure prompts before
-                   skipping/stopping as warn [default: 5]
 
 MODE:
   vehicle         Real vehicle mode (CAN + VCU required) [default]
@@ -116,10 +105,6 @@ Examples:
   $0 --phase runtime
   $0 --log
   CAN_SAMPLE_SEC=5 CAN_MIN_FRAMES=200 $0 --log
-  # runtime phase without the stationary prompt (vehicle is known to be parked)
-  IMU_BIAS_ASSUME_STATIONARY=y $0 --phase runtime
-  # same, through the Makefile startup flow (make does not stop for the prompt)
-  IMU_BIAS_ASSUME_STATIONARY=y make autoware-driver-zenoh-rosbag
 EOF
 }
 
@@ -739,21 +724,10 @@ check_imu_bias() {
     fi
 
     # 静止確認。バイアス推定は車両が完全に静止していることが前提なので、
-    # 対話端末では y/N で明示確認する。
-    # IMU_BIAS_ASSUME_STATIONARY が設定されていれば対話端末でもそれを優先する
-    # （make 経由の無人実行用: IMU_BIAS_ASSUME_STATIONARY=y make ...）。
-    # 無応答で起動フローが止まり続けないよう、プロンプトにはタイムアウトを付ける。
+    # y/N で明示確認する。誤って走行中に測ると黙って誤ったバイアスを書き込むので、
+    # タイムアウトは付けず回答があるまで待つ。
     local answer=""
-    if [ -n "${IMU_BIAS_ASSUME_STATIONARY-}" ]; then
-        answer="${IMU_BIAS_ASSUME_STATIONARY}"
-        log "${INFO} IMU bias check: stationary confirmation from IMU_BIAS_ASSUME_STATIONARY=${answer}"
-    elif [ -t 0 ]; then
-        if ! read -r -t "${IMU_BIAS_PROMPT_TIMEOUT_SEC}" \
-            -p "$(echo -e "${WARN} Vehicle must be COMPLETELY stationary for IMU bias check. Proceed? [y/N] (${IMU_BIAS_PROMPT_TIMEOUT_SEC}s timeout): ")" answer; then
-            answer=""
-            echo ""
-        fi
-    fi
+    read -r -p "$(echo -e "${WARN} Vehicle must be COMPLETELY stationary for IMU bias check. Proceed? [y/N]: ")" answer
 
     case "${answer}" in
     y | Y | yes | YES) ;;
@@ -777,9 +751,7 @@ check_imu_bias() {
     # rc=4 は「静止時ノイズが大きく、バイアス推定値が信用できない」の意味で、
     # ここ（bash 側）で人間に再計測してよいか毎回確認してから再実行する。
     # python 側では自動リトライしない。
-    # IMU_BIAS_ASSUME_STATIONARY による無人実行では、確認する相手がいないので
-    # 1回計測してノイズが大きければリトライせずそのまま諦める（無限ループ防止）。
-    # 対話実行では、y と答え続ける限り上限なく再計測する。
+    # y と答え続ける限り上限なく再計測する。
     local output
     local rc
     local attempt=1
@@ -794,17 +766,9 @@ check_imu_bias() {
     rc=$?
     log "${output}"
 
-    if [ "${rc}" = "4" ] && [ -n "${IMU_BIAS_ASSUME_STATIONARY-}" ]; then
-        log "${WARN} IMU bias check: noisy on an unattended run (IMU_BIAS_ASSUME_STATIONARY set); not retrying"
-    fi
-
-    while [ "${rc}" = "4" ] && [ -z "${IMU_BIAS_ASSUME_STATIONARY-}" ] && [ -t 0 ]; do
+    while [ "${rc}" = "4" ]; do
         local retry_answer=""
-        if ! read -r -t "${IMU_BIAS_PROMPT_TIMEOUT_SEC}" \
-            -p "$(echo -e "${WARN} Do not touch the vehicle. Re-measure? [y/N] (${IMU_BIAS_PROMPT_TIMEOUT_SEC}s timeout, attempt $((attempt + 1))): ")" retry_answer; then
-            retry_answer=""
-            echo ""
-        fi
+        read -r -p "$(echo -e "${WARN} Do not touch the vehicle. Re-measure? [y/N] (attempt $((attempt + 1))): ")" retry_answer
 
         case "${retry_answer}" in
         y | Y | yes | YES) ;;

@@ -259,31 +259,21 @@ autoware 起動後に **車両が静止している状態の** ジャイロバ�
 # runtime フェーズの一部として実行される
 ./setup_check.sh --phase runtime
 
-# 静止プロンプトを出さずに実行（無人実行 / make 経由）
-IMU_BIAS_ASSUME_STATIONARY=y ./setup_check.sh --phase runtime
-IMU_BIAS_ASSUME_STATIONARY=y make autoware-driver-zenoh-rosbag
-
 # 単体実行（コンテナ内）
 docker compose exec autoware bash -lc \
   "source /opt/ros/humble/setup.bash; source /aichallenge/workspace/install/setup.bash; \
    python3 /vehicle/check_imu_bias.py"
 ```
 
-対話端末では静止確認の `y/N` プロンプトが出ます（y=計測開始、N=skip）。
-`IMU_BIAS_ASSUME_STATIONARY` が設定されていればプロンプトを出さずにその値を使い、
-無回答のまま `IMU_BIAS_PROMPT_TIMEOUT_SEC`（既定 5 秒）が経過した場合は
-skip（warn）として先へ進むので、起動フローが止まり続けることはありません。
+計測前に静止確認の `y/N` プロンプトが出ます（y=計測開始、それ以外=skip）。
+誤って走行中に測ると誤ったバイアスを黙って書き込んでしまうため、タイムアウトは設けて
+いません。回答するまで待ち続けます。
 
 計測中の静止時ノイズ（std）が `IMU_BIAS_STD_THRESHOLD` を超えた場合は、
 バイアス推定値が信用できないため param.yaml への書き込みはせず、
-「車両に触れないでください」と表示します。この後の挙動は実行方法で変わります。
-
-- **対話端末**（`IMU_BIAS_ASSUME_STATIONARY` 未設定）: 「再計測してよいか」を
-  **毎回 `y/N` で確認**します（自動では再計測しません）。`y` と答え続ける限り
-  **上限なく**再計測し、`N`/無回答タイムアウトでその時点の warn として先へ進みます。
-- **無人実行**（`IMU_BIAS_ASSUME_STATIONARY` 設定時）: 確認する相手がいないので
-  **1回計測してノイズが大きければリトライせずそのまま warn** として先へ進みます
-  （無限ループ防止）。
+「車両に触れないでください」と表示し、「再計測してよいか」を **毎回 `y/N` で確認**します
+（自動では再計測しません）。`y` と答え続ける限り **上限なく** 再計測し、`y` 以外を答えると
+その時点の warn として先へ進みます。
 
 **閾値（環境変数で調整可能）:**
 
@@ -293,8 +283,6 @@ skip（warn）として先へ進むので、起動フローが止まり続ける
 | `IMU_BIAS_WARMUP_SEC` | 2 | 開始直後に捨てる秒数 |
 | `IMU_BIAS_STD_THRESHOLD` | 0.03 rad/s | 静止時ジャイロ std の警告閾値（暫定値。`imu_corrector.param.yaml` の想定ノイズ既定値に合わせている。実測を踏まえて後で絞り込む） |
 | `IMU_BIAS_VELOCITY_THRESHOLD` | 0.05 m/s | これを超えたら「動いた」と判定して測定中止（ノイズとは別扱いでリトライなし） |
-| `IMU_BIAS_ASSUME_STATIONARY` | 未設定 | 静止確認プロンプトの回答（`y` で実行）。設定時はノイズ再計測もリトライせず1回で終える |
-| `IMU_BIAS_PROMPT_TIMEOUT_SEC` | 5 | 各プロンプトの無回答タイムアウト秒数 |
 
 **静止時ノイズが小さい場合（書き込み成功 / 終了コード 0）:**
 
@@ -336,10 +324,9 @@ z     +0.002232  0.021002  WARN(noisy)
     touching it), or the IMU itself is noisy.
 ```
 
-この rc=4 を受けて setup_check.sh 側が（対話端末なら）「Do not touch the vehicle.
-Re-measure? [y/N]」と毎回確認し、`y` の間は再計測を続けます。`N`/無回答タイムアウト、
-または無人実行（`IMU_BIAS_ASSUME_STATIONARY` 設定時、確認せず1回で終了）なら
-warn として先へ進みます（この場合 param.yaml は書き換えません）。
+この rc=4 を受けて setup_check.sh 側が「Do not touch the vehicle. Re-measure? [y/N]」と
+毎回確認し、`y` の間は再計測を続けます。`y` 以外を答えると warn として先へ進みます
+（この場合 param.yaml は書き換えません）。
 
 その他の終了コード:
 
