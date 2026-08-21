@@ -18,17 +18,23 @@
 | 4 | 車両 | 車両側 zenoh を起動 |
 | 5 | 車両 | `cd vehicle` → `download_submission.sh` |
 | 6 | 車両 | `cd ..` → `make autoware-build` |
-| 7 | 車両 | `make autoware-driver-zenoh` |
-| 8 | 車両 | `make setup-vehicle` |
+| 7 | 車両 | `make setup-vehicle` |
+| 8 | 車両 | `make autoware-driver-zenoh` |
 | 9 | 手元 | ターミナル② → `cd remote` → zenoh 接続 |
 | 10 | 手元 | RViz 起動 |
 
 ここには次の問題があった。
 
-- **preflight が最後にある。** `Makefile` の `autoware-driver-zenoh-rosbag` は
+- **チェックがビルドの後にある。** `Makefile` の `autoware-driver-zenoh-rosbag` は
   「preflight → 起動 → runtime」の順に組まれているのに、実際の導線では
-  `make setup-vehicle`（`--phase all` 相当）が最後に来ていた。
+  `make setup-vehicle` がビルドの後（ステップ 7）に来ていた。
   CAN や GNSS/RTK の異常を、数分〜十数分かけた `autoware-build` の**後**に知ることになる。
+- **しかもその位置では runtime チェックが必ず落ちる。** `make setup-vehicle` は
+  `--phase all` 相当で runtime チェックを含むが、ステップ 7 の時点ではスタックが
+  まだ起動していない（起動はステップ 8）。`vehicle/README.md` 自身が
+  「停止中に叩くと runtime 系が一斉に fail します」と警告している状態を、
+  導線がそのまま踏んでいた。preflight と runtime を別のステップに分ける動機は
+  ここにもある。
 - **順序を人間が覚えている。** ステップ間の依存はドキュメントとして存在するだけで、
   実行系のどこにも表現されていない。
 - **`cd` の往復がある。** `download_submission.sh` は `vehicle/` にあり、`make` はリポジトリルートにある。
