@@ -24,10 +24,6 @@ INFO="ℹ️"
 MODE="vehicle"
 PHASE="all"
 ENABLE_LOG=false
-# ログは vehicle/logs/ に集める。SCRIPT_DIR はこの下で定義されるため、実際の
-# パスは引数解析後に resolve_log_file() が組み立てる。
-LOG_DIR_NAME="logs"
-LOG_FILE=""
 CAN_IFACE="${CAN_IFACE:-can0}"
 CAN_SAMPLE_SEC="${CAN_SAMPLE_SEC:-3}"
 CAN_MIN_FRAMES="${CAN_MIN_FRAMES:-100}"
@@ -51,8 +47,8 @@ source "${SCRIPT_DIR}/vehicle_ports.sh"
 # ログの実パスを決める。呼び出し元の cwd に散らさないため、常に vehicle/logs/
 # 配下に置く。ディレクトリが作れない環境では log() の tee が黙って落ちるので、
 # 画面出力だけが残る。
-LOG_FILE="${SCRIPT_DIR}/${LOG_DIR_NAME}/setup_check_$(date +'%Y%m%d_%H%M%S').log"
-mkdir -p "${SCRIPT_DIR}/${LOG_DIR_NAME}" 2>/dev/null || true
+LOG_FILE="${SCRIPT_DIR}/logs/setup_check_$(date +'%Y%m%d_%H%M%S').log"
+mkdir -p "${SCRIPT_DIR}/logs" 2>/dev/null || true
 
 # ログ関数
 log() {
@@ -737,8 +733,17 @@ check_execution_readiness() {
 print_summary() {
     log ""
     log "📊 ${TOTAL_CHECKS} checks: ${PASSED_CHECKS} ok, ${WARNING_CHECKS} warn, ${FAILED_CHECKS} fail"
+    # 判定を 1 行だけ添える。スクリプトを直接叩いた人が末尾で結論を得られるように。
+    # 行頭に ${FAIL} / ${WARN} を置かないこと: TUI が行頭のマーカーで失敗行を
+    # 拾うため、判定行まで failures 領域に混ざる。
     if [ "${FAILED_CHECKS}" -gt 0 ]; then
+        log "   失敗あり。上の失敗項目を直して再実行してください。"
         exit 1
+    fi
+    if [ "${WARNING_CHECKS}" -gt 0 ]; then
+        log "   警告のみ。内容を確認したうえで進めてください。"
+    else
+        log "   すべて通過。走行準備 OK。"
     fi
     exit 0
 }

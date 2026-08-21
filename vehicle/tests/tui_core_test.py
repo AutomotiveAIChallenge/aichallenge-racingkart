@@ -27,7 +27,7 @@ from tui_core import (  # noqa: E402
     is_runnable,
     step_by_id,
     step_status,
-    unmet_requirements,
+    has_unmet_requirement,
 )
 
 ALL_UP = frozenset({"driver", "autoware", "zenoh", "rosbag"})
@@ -224,32 +224,24 @@ class TestRunnable(unittest.TestCase):
         self.assertFalse(is_runnable(STEP_SUBMISSION, Workspace(), session))
 
 
-class TestUnmetRequirements(unittest.TestCase):
-    def test_no_requirements_is_always_empty(self):
-        self.assertEqual(unmet_requirements(STEP_PREFLIGHT, Workspace(), {}), ())
-        self.assertEqual(unmet_requirements(STEP_TEARDOWN, Workspace(), {}), ())
+class TestHasUnmetRequirement(unittest.TestCase):
+    def test_false_when_there_are_no_requirements(self):
+        self.assertFalse(has_unmet_requirement(STEP_PREFLIGHT, Workspace(), {}))
+        self.assertFalse(has_unmet_requirement(STEP_TEARDOWN, Workspace(), {}))
 
-    def test_empty_when_the_prerequisite_is_done(self):
+    def test_false_when_the_prerequisite_is_done(self):
         session = {STEP_PREFLIGHT: DONE}
-        self.assertEqual(unmet_requirements(STEP_SUBMISSION, Workspace(), session), ())
+        self.assertFalse(has_unmet_requirement(STEP_SUBMISSION, Workspace(), session))
 
-    def test_reports_the_unmet_prerequisite_when_pending(self):
-        self.assertEqual(
-            unmet_requirements(STEP_SUBMISSION, Workspace(), {}), (STEP_PREFLIGHT,)
-        )
+    def test_true_when_the_prerequisite_is_pending(self):
+        self.assertTrue(has_unmet_requirement(STEP_SUBMISSION, Workspace(), {}))
 
     def test_a_failed_prerequisite_counts_as_unmet(self):
         session = {STEP_PREFLIGHT: FAILED}
-        self.assertEqual(
-            unmet_requirements(STEP_SUBMISSION, Workspace(), session),
-            (STEP_PREFLIGHT,),
-        )
+        self.assertTrue(has_unmet_requirement(STEP_SUBMISSION, Workspace(), session))
 
     def test_build_reports_submission_as_unmet_without_a_session_entry(self):
-        self.assertEqual(
-            unmet_requirements(STEP_BUILD, Workspace(), {}), (STEP_SUBMISSION,)
-        )
-
+        self.assertTrue(has_unmet_requirement(STEP_BUILD, Workspace(), {}))
 
 if __name__ == "__main__":
     unittest.main()

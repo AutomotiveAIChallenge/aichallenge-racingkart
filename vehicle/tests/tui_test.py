@@ -44,13 +44,11 @@ class TestProbeWorkspace(unittest.TestCase):
     def test_empty_workspace(self):
         ws = probe_workspace(self.root, frozenset())
         self.assertIsNone(ws.install_mtime)
-        self.assertIsNone(ws.install_mtime)
         self.assertIsNone(ws.submit_mtime)
 
     def test_detects_built_install(self):
         self.make_install()
         ws = probe_workspace(self.root, frozenset())
-        self.assertIsNotNone(ws.install_mtime)
         self.assertIsNotNone(ws.install_mtime)
 
     def test_install_dir_without_setup_bash_is_not_built(self):
@@ -132,8 +130,8 @@ class TestIsFailureLine(unittest.TestCase):
         self.assertTrue(is_failure_line("\u274c CAN can0 not found"))
 
     def test_indented_marker_is_not_counted(self):
-        # setup_check.sh re-echoes each failure indented in its summary, so
-        # counting indented lines too reported 4 failures as 8.
+        # A check that quotes the marker inside example output or a hint must
+        # not be counted as a failure of its own.
         self.assertFalse(is_failure_line("   \u274c indented"))
 
     def test_ok_line_is_not_a_failure(self):

@@ -28,7 +28,6 @@ from tui_core import (
     REQUIRED_SERVICES,
     RUNNING,
     STEP_PREFLIGHT,
-    STEP_SUBMISSION,
     STEP_TEARDOWN,
     STEP_UP,
     STEPS,
@@ -36,7 +35,7 @@ from tui_core import (
     is_runnable,
     step_by_id,
     step_status,
-    unmet_requirements,
+    has_unmet_requirement,
 )
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
@@ -81,10 +80,11 @@ def is_failure_line(line: str) -> bool:
     setup_check.sh の FAIL マーカーに依存する。あちらのマーカーを変えると
     失敗の retain が黙って止まるので、変更するときはここも直すこと。
 
-    インデントされた行は拾わない。setup_check.sh は要約で失敗をインデント付きで
-    再掲するため、lstrip して判定すると同じ失敗を 2 回数える（実際に 4 件の失敗が
-    8 件と表示された）。マーカーを持たないステップ（make / docker）の失敗は
-    _fallback_failures が終了コードから拾う。
+    インデントされた行は拾わない。チェック自身が出す失敗行はどれも行頭にマーカーが
+    来るので、行頭だけを見れば足りる。字下げされたマーカーは、あるチェックが出力例や
+    ヒントの中でマーカーを引用したときに現れうるもので、それを失敗として数えたくない。
+    マーカーを持たないステップ（make / docker）の失敗は _fallback_failures が
+    終了コードから拾う。
     """
     return line.startswith("❌")
 
@@ -131,7 +131,7 @@ def probe_workspace(repo_root: Path, services_running: frozenset) -> Workspace:
     Note: aichallenge_submit/ ships with 15 git-tracked participant packages,
     so it is never actually empty on a checkout -- whether it *has* entries
     proves nothing about whether a download has run. That is exactly why
-    STEP_SUBMISSION is not in tui_core's _MEASURED set: its DONE/PENDING
+    the submission step is not in tui_core's _MEASURED set: its DONE/PENDING
     comes from the session (did `make download` exit 0 this run), not from
     this probe. submit_mtime is still sampled here because build_done() uses
     it to judge whether install/ is stale relative to the submission.
@@ -362,7 +362,7 @@ class Console:
     def _cell(self, idx: int, step) -> str:
         status = step_status(step.step_id, self.ws, self.session)
         mark = _MARK[status]
-        if status == PENDING and unmet_requirements(
+        if status == PENDING and has_unmet_requirement(
             step.step_id, self.ws, self.session
         ):
             # 前提未達。実行は妨げない（前提は助言）ので印だけ変える。

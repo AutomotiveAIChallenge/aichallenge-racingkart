@@ -161,7 +161,7 @@ def is_runnable(step_id: str, ws: Workspace, session: Dict[str, str]) -> bool:
     """Whether the console may run this step now.
 
     Prerequisites (`Step.requires`) are advisory, not a gate: they are shown
-    on screen via `unmet_requirements`, but do not block Enter. The operator
+    on screen via `has_unmet_requirement`, but do not block Enter. The operator
     is standing on the machine and can see for themselves that, say, preflight
     legitimately fails on a dev box with no CAN hardware attached -- the
     console's job is to surface that deviation, not to forbid working around
@@ -176,19 +176,16 @@ def is_runnable(step_id: str, ws: Workspace, session: Dict[str, str]) -> bool:
     return step_status(step_id, ws, session) != RUNNING
 
 
-def unmet_requirements(
+def has_unmet_requirement(
     step_id: str, ws: Workspace, session: Dict[str, str]
-) -> Tuple[str, ...]:
-    """Which of this step's prerequisites are not DONE, in `requires` order.
+) -> bool:
+    """Whether any of this step's prerequisites is not DONE.
 
-    表示は「未達がある」ことだけを 1 文字の印で示す。どの前提かは画面に出さない
-    ので、返り値の順序と内容を使う読み手はいまのところ居ない。
-
-    Display-only: used to warn the operator that a step is being run out of
-    the normal order, not to block it. Empty when every prerequisite is DONE
-    (including when there are none).
+    Display-only: it warns the operator that a step is being run out of the
+    normal order, and does not block it. The screen shows only that a
+    prerequisite is missing -- a single-character mark -- never which one, so
+    a boolean is the whole contract. False when every prerequisite is DONE,
+    and when there are none.
     """
     step = step_by_id(step_id)
-    return tuple(
-        dep for dep in step.requires if step_status(dep, ws, session) != DONE
-    )
+    return any(step_status(dep, ws, session) != DONE for dep in step.requires)
