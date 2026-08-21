@@ -22,7 +22,7 @@ exec >"${out_dir}/zenoh.log" 2>&1
 cd "${out_dir}" || exit
 
 while true; do
-    zenoh-bridge-ros2dds client -e "tls/zenoh.dev.aichallenge-board.jsae.or.jp:${PORT}" -c /vehicle/zenoh.json5
+    zenoh-bridge-ros2dds client -e "tls/zenoh.dev.aichallenge-board.jsae.or.jp:${PORT}" -c /vehicle/zenoh.json5 -n "/${vehicle_id}"
     status=$?
     echo "zenoh-bridge-ros2dds exited with status ${status}; retrying in 5s..."
     sleep 5
