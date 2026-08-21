@@ -279,7 +279,7 @@ class Console:
         lines, cols = self.screen.getmaxyx()
         width = max(1, cols - 1)
 
-        hints = "up/dn enter q"
+        hints = "↑↓ enter q"
         title = "vehicle console"
         pad = max(1, width - len(title) - len(hints))
         self.screen.addnstr(0, 0, f"{title}{' ' * pad}{hints}", width, curses.A_BOLD)
