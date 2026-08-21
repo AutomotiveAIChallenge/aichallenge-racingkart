@@ -33,9 +33,18 @@ runtime（起動後）でチェックする項目：
 2. **Dockerサービス確認** - `driver` / `autoware` / `rosbag` / `zenoh` の稼働
 3. **GNSS/RTK状態確認** - `/sensing/gnss/navpvt` の RTK fixed / float 判定
 4. **ROS topic出力確認** - 車両status・最終指令・autoware制御指令の出力
+5. **IMUジャイロバイアス計測** - 静止時バイアスを測って `imu_corrector.param.yaml` を更新
 
 `make autoware-driver-zenoh-rosbag` は起動前に preflight、起動後に runtime を自動実行します。
 `make setup-vehicle` は `--phase all` 相当なので、**スタック起動中** に実行してください（停止中に叩くと runtime 系が一斉に fail します）。
+
+IMU ジャイロバイアス計測は、静止状態のバイアスを測って `imu_corrector.param.yaml` の
+`angular_velocity_offset_*` を測定値で上書きします（次回 autoware 再起動時から反映。
+今動いているプロセスには効きません）。計測前に静止確認の `y/N` プロンプトが出ます。
+誤って走行中に測ると誤ったバイアスを書き込むため、タイムアウトは設けておらず、回答するまで
+待ちます（`y` 以外は skip(warn) として先へ進みます）。計測中の静止時ノイズが大きいときは
+書き込まず、「車両に触れないでください」→再計測してよいか `y/N` の確認が入ります
+（`y` の間は上限なく再計測）。
 
 詳細な確認項目と手動コマンドについては [setup_check.md](./setup_check.md) を参照してください。
 
