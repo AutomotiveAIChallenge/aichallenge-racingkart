@@ -120,8 +120,23 @@ def write_new_offsets(param_yaml_path: str, new_offsets: dict[str, float]) -> bo
     if updated_axes != set(AXES):
         return False
 
-    with open(param_yaml_path, "w", encoding="utf-8") as f:
-        f.writelines(lines)
+    # 途中で落ちても param.yaml が空/半端な状態で残らないよう、同じディレクトリに
+    # 一時ファイルを書いてから atomic に差し替える（失敗時は旧値がそのまま残る）。
+    # symlink（--symlink-install した install 側のパス）を渡された場合も実体を差し替える。
+    target = os.path.realpath(param_yaml_path)
+    tmp_path = f"{target}.tmp"
+    try:
+        with open(tmp_path, "w", encoding="utf-8") as f:
+            f.writelines(lines)
+            f.flush()
+            os.fsync(f.fileno())
+        os.replace(tmp_path, target)
+    except OSError:
+        try:
+            os.unlink(tmp_path)
+        except OSError:
+            pass
+        return False
     return True
 
 
