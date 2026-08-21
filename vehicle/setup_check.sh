@@ -24,7 +24,10 @@ INFO="ℹ️"
 MODE="vehicle"
 PHASE="all"
 ENABLE_LOG=false
-LOG_FILE="setup_check_$(date +'%Y%m%d_%H%M%S').log"
+# ログは vehicle/logs/ に集める。SCRIPT_DIR はこの下で定義されるため、実際の
+# パスは引数解析後に resolve_log_file() が組み立てる。
+LOG_DIR_NAME="logs"
+LOG_FILE=""
 CAN_IFACE="${CAN_IFACE:-can0}"
 CAN_SAMPLE_SEC="${CAN_SAMPLE_SEC:-3}"
 CAN_MIN_FRAMES="${CAN_MIN_FRAMES:-100}"
@@ -44,6 +47,12 @@ fi
 
 # shellcheck source-path=SCRIPTDIR source=vehicle_ports.sh
 source "${SCRIPT_DIR}/vehicle_ports.sh"
+
+# ログの実パスを決める。呼び出し元の cwd に散らさないため、常に vehicle/logs/
+# 配下に置く。ディレクトリが作れない環境では log() の tee が黙って落ちるので、
+# 画面出力だけが残る。
+LOG_FILE="${SCRIPT_DIR}/${LOG_DIR_NAME}/setup_check_$(date +'%Y%m%d_%H%M%S').log"
+mkdir -p "${SCRIPT_DIR}/${LOG_DIR_NAME}" 2>/dev/null || true
 
 # 失敗と警告の本文を retain して print_summary で末尾に再掲する。呼び出し側
 # (record_result は 57 箇所) を触らずに済むよう log 側で拾う。
@@ -735,26 +744,25 @@ check_execution_readiness() {
 
 # 結果サマリー表示。失敗は最後に置く: TUI のログ pane は末尾しか見えない。
 print_summary() {
-    # log() が拾い続けるので、自分の出力で汚れる前に控えを取る
-    local failed=("${FAILED_MESSAGES[@]}")
-    local warned=("${WARNING_MESSAGES[@]}")
+    # 再掲は "  ${msg}" とインデントするので log() の分類（マーカーが行頭）に
+    # 再マッチしない。控えを取らずに配列をそのまま回してよい。
     local msg
 
     log ""
     log "📊 ${TOTAL_CHECKS} checks: ${PASSED_CHECKS} ok, ${WARNING_CHECKS} warn, ${FAILED_CHECKS} fail"
 
-    if [ ${#warned[@]} -gt 0 ]; then
+    if [ ${#WARNING_MESSAGES[@]} -gt 0 ]; then
         log ""
         log "warnings:"
-        for msg in "${warned[@]}"; do
+        for msg in "${WARNING_MESSAGES[@]}"; do
             log "  ${msg}"
         done
     fi
 
-    if [ ${#failed[@]} -gt 0 ]; then
+    if [ ${#FAILED_MESSAGES[@]} -gt 0 ]; then
         log ""
         log "failures:"
-        for msg in "${failed[@]}"; do
+        for msg in "${FAILED_MESSAGES[@]}"; do
             log "  ${msg}"
         done
         exit 1

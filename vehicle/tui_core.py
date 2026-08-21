@@ -39,7 +39,6 @@ class Workspace:
     "unknown but probably fine".
     """
 
-    install_setup_bash: bool = False
     install_mtime: Optional[float] = None
     submit_mtime: Optional[float] = None
     services_running: FrozenSet[str] = field(default_factory=frozenset)
@@ -58,6 +57,9 @@ class Step:
     command: Tuple[str, ...]
     requires: Tuple[str, ...] = ()
     interactive: bool = False
+    # 実行するディレクトリ。リポジトリルートからの相対。コマンド名から推測すると
+    # 将来のステップが黙って間違った cwd を継ぐので、ステップ側で宣言させる。
+    cwd: str = "."
 
 
 STEPS = (
@@ -65,6 +67,7 @@ STEPS = (
         step_id=STEP_PREFLIGHT,
         title="preflight",
         command=("./setup_check.sh", "--phase", "preflight"),
+        cwd="vehicle",
     ),
     Step(
         step_id=STEP_SUBMISSION,
@@ -93,6 +96,7 @@ STEPS = (
         step_id=STEP_RUNTIME,
         title="doctor",
         command=("./setup_check.sh", "--phase", "runtime"),
+        cwd="vehicle",
         requires=(STEP_UP,),
     ),
     Step(
@@ -121,8 +125,6 @@ def step_by_id(step_id: str) -> Step:
 
 def build_done(ws: Workspace) -> bool:
     """Whether install/ exists and is no older than the submission."""
-    if not ws.install_setup_bash:
-        return False
     if ws.install_mtime is None or ws.submit_mtime is None:
         # Freshness is unprovable without both timestamps; report stale rather
         # than let an old install/ pass as built.
@@ -180,6 +182,9 @@ def unmet_requirements(
     step_id: str, ws: Workspace, session: Dict[str, str]
 ) -> Tuple[str, ...]:
     """Which of this step's prerequisites are not DONE, in `requires` order.
+
+    表示は「未達がある」ことだけを 1 文字の印で示す。どの前提かは画面に出さない
+    ので、返り値の順序と内容を使う読み手はいまのところ居ない。
 
     Display-only: used to warn the operator that a step is being run out of
     the normal order, not to block it. Empty when every prerequisite is DONE

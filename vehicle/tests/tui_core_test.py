@@ -36,7 +36,6 @@ ALL_UP = frozenset({"driver", "autoware", "zenoh", "rosbag"})
 def built_ws(**kwargs):
     """A workspace with a submission present and a fresh install/."""
     base = dict(
-        install_setup_bash=True,
         submit_mtime=100.0,
         install_mtime=200.0,
     )
@@ -89,7 +88,7 @@ class TestBuildDone(unittest.TestCase):
         self.assertFalse(build_done(Workspace(submit_mtime=100.0)))
 
     def test_missing_mtime_is_not_built(self):
-        ws = Workspace(install_setup_bash=True)
+        ws = Workspace(install_mtime=1.0)
         self.assertFalse(build_done(ws))
 
     def test_empty_workspace_is_not_built(self):

@@ -13,7 +13,6 @@ from pathlib import Path
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
 
 from tui import (  # noqa: E402
-    grid_columns,
     is_failure_line,
     probe_workspace,
     service_badge,
@@ -43,20 +42,20 @@ class TestProbeWorkspace(unittest.TestCase):
 
     def test_empty_workspace(self):
         ws = probe_workspace(self.root, frozenset())
-        self.assertFalse(ws.install_setup_bash)
+        self.assertIsNone(ws.install_mtime)
         self.assertIsNone(ws.install_mtime)
         self.assertIsNone(ws.submit_mtime)
 
     def test_detects_built_install(self):
         self.make_install()
         ws = probe_workspace(self.root, frozenset())
-        self.assertTrue(ws.install_setup_bash)
+        self.assertIsNotNone(ws.install_mtime)
         self.assertIsNotNone(ws.install_mtime)
 
     def test_install_dir_without_setup_bash_is_not_built(self):
         (self.ws / "install").mkdir()
         ws = probe_workspace(self.root, frozenset())
-        self.assertFalse(ws.install_setup_bash)
+        self.assertIsNone(ws.install_mtime)
 
     def test_populated_submit_dir_has_an_mtime(self):
         # submit_dir_populated is gone: aichallenge_submit/ ships tracked
@@ -85,7 +84,7 @@ class TestProbeWorkspace(unittest.TestCase):
         empty = self.root / "nowhere"
         empty.mkdir()
         ws = probe_workspace(empty, frozenset())
-        self.assertFalse(ws.install_setup_bash)
+        self.assertIsNone(ws.install_mtime)
         self.assertIsNone(ws.submit_mtime)
 
 
@@ -131,8 +130,10 @@ class TestIsFailureLine(unittest.TestCase):
     def test_marker_at_start(self):
         self.assertTrue(is_failure_line("\u274c CAN can0 not found"))
 
-    def test_marker_after_indent(self):
-        self.assertTrue(is_failure_line("   \u274c indented"))
+    def test_indented_marker_is_not_counted(self):
+        # setup_check.sh re-echoes each failure indented in its summary, so
+        # counting indented lines too reported 4 failures as 8.
+        self.assertFalse(is_failure_line("   \u274c indented"))
 
     def test_ok_line_is_not_a_failure(self):
         self.assertFalse(is_failure_line("\u2705 all good"))
@@ -145,16 +146,6 @@ class TestIsFailureLine(unittest.TestCase):
 
     def test_empty(self):
         self.assertFalse(is_failure_line(""))
-
-
-class TestGridColumns(unittest.TestCase):
-    def test_wide_gets_three(self):
-        self.assertEqual(grid_columns(60), 3)
-        self.assertEqual(grid_columns(200), 3)
-
-    def test_narrow_gets_two(self):
-        self.assertEqual(grid_columns(59), 2)
-        self.assertEqual(grid_columns(40), 2)
 
 
 class TestWrapLine(unittest.TestCase):

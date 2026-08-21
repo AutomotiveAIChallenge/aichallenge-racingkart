@@ -40,21 +40,19 @@ from tui_core import (
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 
-# 40x12 の内訳: header 1 + step 3 行 (2 列配置) + failures 見出し 1 + failures 3
-# + log 見出し 1 + log 3。これ未満だと failures か log が 0 行になり、失敗を
-# 流さずに残すという狙いが成立しない。
+# 40x12 の内訳: header 1 + step 6 行 (縦 1 列) + failures 見出し 1 + failures 1
+# + log 見出し 1 + log 1 で 11 行。1 行余裕を見て 12。これ未満だと failures か
+# log が 0 行になり、失敗を流さずに残すという狙いが成立しない。
+# 40 桁は最長セル "4 ?  autoware ----" の 18 文字に対する余裕。
 MIN_COLS = 40
 MIN_LINES = 12
 LOG_TAIL = 2000  # 保持するログ行数の上限。走行枠中に膨らみ続けないため。
+FAILURE_TAIL = 40  # failures 領域に retain する上限行数。
+FALLBACK_LINES = 5  # マーカーの無いステップが失敗したとき末尾から拾う行数。
 
 # 2 文字固定。桁を食わせない。"? " は前提未達で、実行は可能（前提は助言）。
 _MARK = {DONE: "OK", FAILED: "NG", RUNNING: ">>", PENDING: "- "}
 _MARK_UNMET = "? "
-
-# 最長セルは "4 ?  autoware dazr" の 18 文字。セル間に 1 桁空けるため 19 桁
-# 必要で、3 列なら 57 桁。切り上げて 60 を閾値にする。
-_GRID_WIDE_COLS = 60  # これ以上の幅なら 3 列に並べる
-
 
 def terminal_too_small(cols: int, lines: int) -> bool:
     """Whether the terminal is below the minimum the layout needs."""
@@ -78,14 +76,13 @@ def is_failure_line(line: str) -> bool:
 
     setup_check.sh の FAIL マーカーに依存する。あちらのマーカーを変えると
     失敗の retain が黙って止まるので、変更するときはここも直すこと。
-    make / docker の出力でも同じマーカーが載っていれば拾える。
+
+    インデントされた行は拾わない。setup_check.sh は要約で失敗をインデント付きで
+    再掲するため、lstrip して判定すると同じ失敗を 2 回数える（実際に 4 件の失敗が
+    8 件と表示された）。マーカーを持たないステップ（make / docker）の失敗は
+    _fallback_failures が終了コードから拾う。
     """
-    return line.lstrip().startswith("❌")
-
-
-def grid_columns(cols: int) -> int:
-    """ステップのセルを横に何個並べるか。"""
-    return 3 if cols >= _GRID_WIDE_COLS else 2
+    return line.startswith("❌")
 
 
 def wrap_line(line: str, width: int) -> list:
@@ -131,7 +128,6 @@ def probe_workspace(repo_root: Path, services_running: frozenset) -> Workspace:
     submit_has_entries = submit_dir.is_dir() and any(submit_dir.iterdir())
 
     return Workspace(
-        install_setup_bash=install_present,
         install_mtime=setup_bash.stat().st_mtime if install_present else None,
         submit_mtime=submit_dir.stat().st_mtime if submit_has_entries else None,
         services_running=services_running,
@@ -179,10 +175,21 @@ class Console:
         # 失敗行は log とは別に retain する。log は tail しか見えないので、
         # 混ぜると流れて消える（ユーザーの「Error も流れてよくわからない」）。
         self.failures: list = []
+        self._log_mark = 0
         self.log_queue: queue.Queue = queue.Queue()
-        self.running_step = None
         self.cursor = 0
-        self.ws = self.observe()
+        # 既定値で始める。observe() は docker compose ps を待つので、
+        # 最初の 1 フレームを描いたあとに _loop が呼ぶ。
+        self.ws = Workspace()
+
+    @property
+    def busy(self) -> bool:
+        """いずれかのステップが実行中か。
+
+        session に RUNNING が入っているかで判る。別のフラグを持つと
+        run_step と drain の両方で手で同期する必要が出る。
+        """
+        return any(status == RUNNING for status in self.session.values())
 
     def observe(self) -> Workspace:
         return probe_workspace(REPO_ROOT, running_services(REPO_ROOT))
@@ -193,11 +200,11 @@ class Console:
         step = step_by_id(step_id)
         # 前回の実行の失敗を持ち越さない。表示は常に「今の実行」のもの。
         self.failures.clear()
+        self._log_mark = len(self.log)
         if step.interactive:
             self._run_interactive(step)
             return
         self.session[step_id] = RUNNING
-        self.running_step = step_id
         self.log.append(f"$ {' '.join(step.command)}")
         threading.Thread(target=self._stream, args=(step,), daemon=True).start()
 
@@ -244,8 +251,7 @@ class Console:
 
     @staticmethod
     def _cwd_for(step) -> Path:
-        # setup_check.sh lives in vehicle/; every make target runs from the root.
-        return REPO_ROOT / "vehicle" if step.command[0].endswith(".sh") else REPO_ROOT
+        return REPO_ROOT / step.cwd
 
     def drain(self) -> None:
         """Move queued worker output into the log, applying exit codes."""
@@ -261,11 +267,24 @@ class Console:
             else:
                 step_id, code = payload
                 self.session[step_id] = DONE if code == 0 else FAILED
+                if code != 0 and not self.failures:
+                    self.failures.extend(self._fallback_failures())
                 self.log.append(f"[{step_id}] exit {code}")
-                self.running_step = None
                 self.ws = self.observe()
         if len(self.log) > LOG_TAIL:
             del self.log[: len(self.log) - LOG_TAIL]
+        if len(self.failures) > FAILURE_TAIL:
+            del self.failures[: len(self.failures) - FAILURE_TAIL]
+
+    def _fallback_failures(self) -> list:
+        """マーカーを持たないステップが失敗したときに見せる末尾。
+
+        make autoware-build や docker compose は setup_check.sh の ❌ を出さない
+        ので、そのままでは一番長く走るステップで failures 領域が空になる。
+        終了コードだけが根拠なので、そのステップの出力の末尾を拾う。
+        """
+        produced = [line for line in self.log[self._log_mark :] if line.strip()]
+        return produced[-FALLBACK_LINES:]
 
     # --- 描画 ---------------------------------------------------------------
 
@@ -284,44 +303,38 @@ class Console:
         pad = max(1, width - len(title) - len(hints))
         self.screen.addnstr(0, 0, f"{title}{' ' * pad}{hints}", width, curses.A_BOLD)
 
-        row = 1 + self._draw_grid(1, lines, cols)
+        row = self._draw_steps(1, lines, width)
 
         # failures は必要な分だけ。残りの 2/3 までに抑えて log を潰さない。
         # log より失敗のほうが読まれるべきなので log に多くは残さない。
-        fail_lines = self._wrapped(self.failures, width)
         budget = max(0, lines - row)
+        fail_lines = self._wrapped(self.failures, width, budget)
         fail_rows = min(len(fail_lines) + 1, budget * 2 // 3) if fail_lines else 0
         if fail_rows > 1:
             row = self._draw_region(
                 row, f"failures ({len(self.failures)})", fail_lines, fail_rows, width
             )
 
-        if lines - row > 0:
+        log_rows = lines - row
+        if log_rows > 0:
             self._draw_region(
-                row, "log", self._wrapped(self.log, width), lines - row, width
+                row, "log", self._wrapped(self.log, width, log_rows), log_rows, width
             )
 
         self.screen.noutrefresh()
         curses.doupdate()
 
-    def _draw_grid(self, top: int, lines: int, cols: int) -> int:
-        """ステップを幅に応じた列数で並べ、使った行数を返す。"""
-        ncols = grid_columns(cols)
-        cell_w = max(1, cols // ncols)
+    def _draw_steps(self, top: int, lines: int, width: int) -> int:
+        """ステップを縦 1 列に並べ、次に使える行番号を返す。"""
         used = 0
         for idx, step in enumerate(STEPS):
-            r, c = divmod(idx, ncols)
-            y = top + r
+            y = top + idx
             if y >= lines:
                 break
-            x = c * cell_w
-            room = max(0, min(cell_w - 1, cols - 1 - x))
-            if room <= 0:
-                continue
             attr = curses.A_REVERSE if idx == self.cursor else curses.A_NORMAL
-            self.screen.addnstr(y, x, self._cell(idx, step), room, attr)
-            used = max(used, r + 1)
-        return used
+            self.screen.addnstr(y, 0, self._cell(idx, step), width, attr)
+            used = idx + 1
+        return top + used
 
     def _cell(self, idx: int, step) -> str:
         status = step_status(step.step_id, self.ws, self.session)
@@ -356,9 +369,16 @@ class Console:
         return top + rows
 
     @staticmethod
-    def _wrapped(source: list, width: int) -> list:
+    def _wrapped(source: list, width: int, rows: int) -> list:
+        """末尾 rows 行ぶんだけ折り返す。
+
+        折り返しは行を増やすだけで減らさないので、生の行を rows 本取れば
+        表示に必要な折り返し後の行は必ず足りる。全部を折り返すと log が
+        LOG_TAIL まで育ったあと毎フレーム 2000 行を捨てるために折り返す
+        ことになり、実測で 1 回 13.6ms・8Hz で CPU コアの約 11% を焼いた。
+        """
         out = []
-        for line in source:
+        for line in source[-rows:] if rows > 0 else []:
             out.extend(wrap_line(line, width))
         return out
 
@@ -373,7 +393,7 @@ class Console:
         elif key == curses.KEY_DOWN:
             self.cursor = min(len(STEPS) - 1, self.cursor + 1)
         elif key in (curses.KEY_ENTER, ord("\n"), ord("\r")):
-            if self.running_step is None:
+            if not self.busy:
                 step = STEPS[self.cursor]
                 if is_runnable(step.step_id, self.ws, self.session):
                     self.run_step(step.step_id)
@@ -384,6 +404,8 @@ def _loop(screen) -> int:
     curses.curs_set(0)
     screen.nodelay(True)
     console = Console(screen)
+    console.draw()  # docker を待たずにまず画面を出す
+    console.ws = console.observe()
     # preflight runs on open: a CAN or GNSS fault has to surface before a build.
     console.run_step(STEP_PREFLIGHT)
     while True:
