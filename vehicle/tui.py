@@ -2,8 +2,10 @@
 """Vehicle console: the operations TUI for the kart's on-board PC.
 
 Drives the repository's existing entry points -- make targets and
-setup_check.sh -- instead of reimplementing them, and enforces the order they
-have to run in. The rules live in tui_core; this module does the I/O.
+setup_check.sh -- instead of reimplementing them, and shows the order they
+are meant to run in without enforcing it: the operator can run any step out
+of order, and the console warns rather than blocks. The rules live in
+tui_core; this module does the I/O.
 
 Usage:
     vehicle/tui.py
@@ -24,6 +26,7 @@ from tui_core import (
     REQUIRED_SERVICES,
     RUNNING,
     STEP_PREFLIGHT,
+    STEP_SUBMISSION,
     STEP_TEARDOWN,
     STEP_UP,
     STEPS,
@@ -31,6 +34,7 @@ from tui_core import (
     is_runnable,
     step_by_id,
     step_status,
+    unmet_requirements,
 )
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
@@ -218,11 +222,8 @@ class Console:
 
         for idx, step in enumerate(STEPS):
             status = step_status(step.step_id, self.ws, self.session)
-            runnable = is_runnable(step.step_id, self.ws, self.session)
             text = f" {idx + 1}  {_MARK[status]}{step.title:<16}{self._detail(step)}"
             attr = curses.A_REVERSE if idx == self.cursor else curses.A_NORMAL
-            if not runnable and status != DONE:
-                attr |= curses.A_DIM
             self.screen.addnstr(2 + idx, 0, text, cols - 1, attr)
 
         self.screen.addnstr(
@@ -243,14 +244,23 @@ class Console:
 
     def _detail(self, step) -> str:
         if step.step_id in (STEP_UP, STEP_TEARDOWN):
-            return "  ".join(
+            detail = "  ".join(
                 f"{name} {'on' if name in self.ws.services_running else 'off'}"
                 for name in REQUIRED_SERVICES
             )
-        # STEP_SUBMISSION has no filesystem-derived detail: aichallenge_submit/
-        # ships tracked packages, so its presence is not evidence a download
-        # happened. Its status marker (from the session) is the only signal.
-        return ""
+        elif step.step_id == STEP_SUBMISSION:
+            # No filesystem-derived detail: aichallenge_submit/ ships tracked
+            # packages, so its presence is not evidence a download happened.
+            # Its status marker (from the session) is the only signal.
+            detail = ""
+        else:
+            detail = ""
+        unmet = unmet_requirements(step.step_id, self.ws, self.session)
+        if unmet:
+            names = ", ".join(step_by_id(dep).title for dep in unmet)
+            warning = f"⚠ {names} 未完了"  # ⚠ <name> 未完了
+            detail = f"{detail}  {warning}" if detail else warning
+        return detail
 
     # --- 入力 ---------------------------------------------------------------
 

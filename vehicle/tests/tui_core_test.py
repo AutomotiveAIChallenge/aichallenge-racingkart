@@ -27,6 +27,7 @@ from tui_core import (  # noqa: E402
     is_runnable,
     step_by_id,
     step_status,
+    unmet_requirements,
 )
 
 ALL_UP = frozenset({"driver", "autoware", "zenoh", "rosbag"})
@@ -156,31 +157,33 @@ class TestStepStatus(unittest.TestCase):
 
 
 class TestRunnable(unittest.TestCase):
+    """Prerequisites are advisory: only a step's own RUNNING status blocks it."""
+
     def test_preflight_always_runnable(self):
         self.assertTrue(is_runnable(STEP_PREFLIGHT, Workspace(), {}))
 
     def test_teardown_always_runnable(self):
         self.assertTrue(is_runnable(STEP_TEARDOWN, Workspace(), {}))
 
-    def test_submission_blocked_until_preflight_passes(self):
-        self.assertFalse(is_runnable(STEP_SUBMISSION, Workspace(), {}))
+    def test_submission_runnable_even_with_preflight_unmet(self):
+        self.assertTrue(is_runnable(STEP_SUBMISSION, Workspace(), {}))
 
-    def test_submission_blocked_while_preflight_failed(self):
+    def test_submission_runnable_even_after_preflight_failed(self):
         session = {STEP_PREFLIGHT: FAILED}
-        self.assertFalse(is_runnable(STEP_SUBMISSION, Workspace(), session))
+        self.assertTrue(is_runnable(STEP_SUBMISSION, Workspace(), session))
 
     def test_submission_runnable_after_preflight_passes(self):
         session = {STEP_PREFLIGHT: DONE}
         self.assertTrue(is_runnable(STEP_SUBMISSION, Workspace(), session))
 
-    def test_build_blocked_without_a_submission(self):
+    def test_build_runnable_without_a_submission(self):
         session = {STEP_PREFLIGHT: DONE}
-        self.assertFalse(is_runnable(STEP_BUILD, Workspace(), session))
+        self.assertTrue(is_runnable(STEP_BUILD, Workspace(), session))
 
-    def test_up_blocked_until_built(self):
+    def test_up_runnable_even_when_not_built(self):
         session = {STEP_PREFLIGHT: DONE, STEP_SUBMISSION: DONE}
         ws = Workspace(submit_mtime=100.0)
-        self.assertFalse(is_runnable(STEP_UP, ws, session))
+        self.assertTrue(is_runnable(STEP_UP, ws, session))
 
     def test_up_runnable_once_built(self):
         session = {STEP_PREFLIGHT: DONE}
@@ -197,9 +200,9 @@ class TestRunnable(unittest.TestCase):
         self.assertEqual(step_status(STEP_BUILD, ws, {}), DONE)
         self.assertTrue(is_runnable(STEP_UP, ws, {}))
 
-    def test_runtime_blocked_until_the_stack_is_up(self):
+    def test_runtime_runnable_even_when_stack_is_not_up(self):
         session = {STEP_PREFLIGHT: DONE}
-        self.assertFalse(is_runnable(STEP_RUNTIME, built_ws(), session))
+        self.assertTrue(is_runnable(STEP_RUNTIME, built_ws(), session))
 
     def test_runtime_runnable_once_the_stack_is_up(self):
         session = {STEP_PREFLIGHT: DONE}
@@ -212,9 +215,37 @@ class TestRunnable(unittest.TestCase):
         self.assertTrue(is_runnable(STEP_SUBMISSION, Workspace(), session))
 
     def test_a_running_step_is_not_runnable(self):
-        # No launching a second overlapping run of the same step.
+        # No launching a second overlapping run of the same step. This is
+        # the one case prerequisites cannot override.
         session = {STEP_PREFLIGHT: DONE, STEP_SUBMISSION: RUNNING}
         self.assertFalse(is_runnable(STEP_SUBMISSION, Workspace(), session))
+
+
+class TestUnmetRequirements(unittest.TestCase):
+    def test_no_requirements_is_always_empty(self):
+        self.assertEqual(unmet_requirements(STEP_PREFLIGHT, Workspace(), {}), ())
+        self.assertEqual(unmet_requirements(STEP_TEARDOWN, Workspace(), {}), ())
+
+    def test_empty_when_the_prerequisite_is_done(self):
+        session = {STEP_PREFLIGHT: DONE}
+        self.assertEqual(unmet_requirements(STEP_SUBMISSION, Workspace(), session), ())
+
+    def test_reports_the_unmet_prerequisite_when_pending(self):
+        self.assertEqual(
+            unmet_requirements(STEP_SUBMISSION, Workspace(), {}), (STEP_PREFLIGHT,)
+        )
+
+    def test_a_failed_prerequisite_counts_as_unmet(self):
+        session = {STEP_PREFLIGHT: FAILED}
+        self.assertEqual(
+            unmet_requirements(STEP_SUBMISSION, Workspace(), session),
+            (STEP_PREFLIGHT,),
+        )
+
+    def test_build_reports_submission_as_unmet_without_a_session_entry(self):
+        self.assertEqual(
+            unmet_requirements(STEP_BUILD, Workspace(), {}), (STEP_SUBMISSION,)
+        )
 
 
 if __name__ == "__main__":

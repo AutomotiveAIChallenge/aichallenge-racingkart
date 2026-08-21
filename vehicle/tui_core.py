@@ -160,13 +160,32 @@ def _measured_done(step_id: str, ws: Workspace) -> bool:
 def is_runnable(step_id: str, ws: Workspace, session: Dict[str, str]) -> bool:
     """Whether the console may run this step now.
 
-    Not runnable while the step itself is already RUNNING, so the console
-    never launches a second overlapping run of the same step. Otherwise
-    runnable once every prerequisite reports DONE; the step's own status
-    being PENDING, DONE or FAILED is fine either way, so re-running a
-    finished step and retrying a failed one both stay possible.
+    Prerequisites (`Step.requires`) are advisory, not a gate: they are shown
+    on screen via `unmet_requirements`, but do not block Enter. The operator
+    is standing on the machine and can see for themselves that, say, preflight
+    legitimately fails on a dev box with no CAN hardware attached -- the
+    console's job is to surface that deviation, not to forbid working around
+    it. Launching `make autoware-build` or the stack with an unmet
+    prerequisite is a deliberate operator call, not a bug.
+
+    The one real hazard is launching a second overlapping run of the same
+    step (e.g. two concurrent `make autoware-driver-zenoh-rosbag` against the
+    same compose project), so this still returns False while the step's own
+    status is RUNNING. That is the only thing that blocks Enter.
     """
-    if step_status(step_id, ws, session) == RUNNING:
-        return False
+    return step_status(step_id, ws, session) != RUNNING
+
+
+def unmet_requirements(
+    step_id: str, ws: Workspace, session: Dict[str, str]
+) -> Tuple[str, ...]:
+    """Which of this step's prerequisites are not DONE, in `requires` order.
+
+    Display-only: used to warn the operator that a step is being run out of
+    the normal order, not to block it. Empty when every prerequisite is DONE
+    (including when there are none).
+    """
     step = step_by_id(step_id)
-    return all(step_status(dep, ws, session) == DONE for dep in step.requires)
+    return tuple(
+        dep for dep in step.requires if step_status(dep, ws, session) != DONE
+    )
