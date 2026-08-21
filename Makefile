@@ -2,7 +2,7 @@
 SHELL := /bin/bash
 
 .PHONY: autoware-build autoware-vehicle autoware-simulator autoware-request-initialpose autoware-request-control  awsim-request-start awsim-request-reset autoware-driver-zenoh autoware-driver-zenoh-rosbag setup-vehicle \
-	simulator dev dev2 dev3 dev4 driver zenoh download rviz2 down down_all ps autoware-attach autoware-bash eval e2e
+	simulator dev dev2 dev3 dev4 driver zenoh download rviz2 down down_all ps autoware-attach autoware-bash eval e2e vehicle-tui
 
 # Used by docker-compose.yml for build/eval artifact ownership.
 HOST_UID ?= $(shell id -u)
@@ -125,8 +125,6 @@ autoware-driver-zenoh-rosbag:
 	LOG_DIR=$(LOG_DIR) RUN_MODE=vehicle docker compose up -d driver autoware rosbag
 	sleep 15
 	LOG_DIR=$(LOG_DIR) docker compose up -d zenoh
-	@echo "Run vehicle setup runtime check"
-	@cd vehicle && ./setup_check.sh --phase runtime
 
 down:
 	@for p in 1 2 3 4; do docker compose -p $$p down --remove-orphans; done
@@ -170,3 +168,8 @@ download:
 			vehicle/download_submission.sh --output aichallenge/workspace/src/; \
 		fi; \
 	fi
+
+# 車両 PC 上の操作コンソール。tmux 常駐なので ssh が切れても作業が残り、
+# 再接続して同じターゲットを叩けば -A で同じセッションへアタッチする。
+vehicle-tui:
+	tmux new -A -s aic-vehicle "vehicle/tui.py"

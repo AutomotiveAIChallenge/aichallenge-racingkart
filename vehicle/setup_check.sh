@@ -24,7 +24,6 @@ INFO="ℹ️"
 MODE="vehicle"
 PHASE="all"
 ENABLE_LOG=false
-LOG_FILE="setup_check_$(date +'%Y%m%d_%H%M%S').log"
 CAN_IFACE="${CAN_IFACE:-can0}"
 CAN_SAMPLE_SEC="${CAN_SAMPLE_SEC:-3}"
 CAN_MIN_FRAMES="${CAN_MIN_FRAMES:-100}"
@@ -44,6 +43,12 @@ fi
 
 # shellcheck source-path=SCRIPTDIR source=vehicle_ports.sh
 source "${SCRIPT_DIR}/vehicle_ports.sh"
+
+# ログの実パスを決める。呼び出し元の cwd に散らさないため、常に vehicle/logs/
+# 配下に置く。ディレクトリが作れない環境では log() の tee が黙って落ちるので、
+# 画面出力だけが残る。
+LOG_FILE="${SCRIPT_DIR}/logs/setup_check_$(date +'%Y%m%d_%H%M%S').log"
+mkdir -p "${SCRIPT_DIR}/logs" 2>/dev/null || true
 
 # ログ関数
 log() {
@@ -724,31 +729,23 @@ check_execution_readiness() {
     log ""
 }
 
-# 結果サマリー表示
+# 結果サマリー表示。失敗は最後に置く: TUI のログ pane は末尾しか見えない。
 print_summary() {
-    log "========================================"
-    log "📊 Check Results Summary"
-    log "========================================"
-    log "Total checks: $TOTAL_CHECKS"
-    log "${OK} Passed: $PASSED_CHECKS"
-    log "${WARN} Warnings: $WARNING_CHECKS"
-    log "${FAIL} Failed: $FAILED_CHECKS"
     log ""
-
-    if [ $FAILED_CHECKS -eq 0 ] && [ $WARNING_CHECKS -eq 0 ]; then
-        log "${OK} All checks passed! System ready for vehicle mode."
-        exit 0
-    elif [ $FAILED_CHECKS -eq 0 ]; then
-        log "${WARN} Some warnings found. Review before proceeding with vehicle mode."
-        exit 0
-    else
-        log "${FAIL} Critical issues found! Fix failures before running vehicle mode."
-        log ""
-        log "Recommended actions:"
-        log "1. Address all failed checks above"
-        log "2. Re-run this script"
+    log "📊 ${TOTAL_CHECKS} checks: ${PASSED_CHECKS} ok, ${WARNING_CHECKS} warn, ${FAILED_CHECKS} fail"
+    # 判定を 1 行だけ添える。スクリプトを直接叩いた人が末尾で結論を得られるように。
+    # 行頭に ${FAIL} / ${WARN} を置かないこと: TUI が行頭のマーカーで失敗行を
+    # 拾うため、判定行まで failures 領域に混ざる。
+    if [ "${FAILED_CHECKS}" -gt 0 ]; then
+        log "   失敗あり。上の失敗項目を直して再実行してください。"
         exit 1
     fi
+    if [ "${WARNING_CHECKS}" -gt 0 ]; then
+        log "   警告のみ。内容を確認したうえで進めてください。"
+    else
+        log "   すべて通過。走行準備 OK。"
+    fi
+    exit 0
 }
 
 # メイン実行
