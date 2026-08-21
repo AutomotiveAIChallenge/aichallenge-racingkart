@@ -64,7 +64,8 @@
           "/vehicle/status/velocity_status"
         ],
         subscribers: [
-          "/racing_kart/joy",
+          "/racing_kart/sd/joy",
+          "/racing_kart/so/joy",
           "/initialpose"
         ],
         service_servers: [],

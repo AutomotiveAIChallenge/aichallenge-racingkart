@@ -667,7 +667,7 @@ check_runtime_ros_topics() {
     check_ros_topic_once "driver" "/racing_kart/vcu/status" "VCU status"
     check_ros_topic_once "driver" "/racing_kart/steer/status" "Steer status"
     check_ros_topic_once "driver" "/racing_kart/brake/status" "Brake status"
-    check_ros_topic_once "driver" "/racing_kart/joy" "Joy input"
+    check_ros_topic_once "driver" "/racing_kart/sd/joy" "Joy input"
 
     log "${INFO} Racing kart final command topics"
     check_ros_topic_once "driver" "/racing_kart/vcu/command" "VCU command"
