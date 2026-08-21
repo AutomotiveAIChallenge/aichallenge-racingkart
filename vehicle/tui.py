@@ -17,6 +17,7 @@ import queue
 import shutil
 import subprocess
 import textwrap
+import time
 import threading
 from pathlib import Path
 
@@ -49,6 +50,9 @@ MIN_LINES = 12
 LOG_TAIL = 2000  # 保持するログ行数の上限。走行枠中に膨らみ続けないため。
 FAILURE_TAIL = 40  # failures 領域に retain する上限行数。
 FALLBACK_LINES = 5  # マーカーの無いステップが失敗したとき末尾から拾う行数。
+# アイドル中に実測を取り直す間隔。observe() は docker compose ps を待つので、
+# 描画ごと (約 8Hz) に呼ぶと UI スレッドを塞ぐ。
+OBSERVE_INTERVAL_SEC = 2.0
 
 # 2 文字固定。桁を食わせない。"? " は前提未達で、実行は可能（前提は助言）。
 _MARK = {DONE: "OK", FAILED: "NG", RUNNING: ">>", PENDING: "- "}
@@ -96,6 +100,18 @@ def wrap_line(line: str, width: int) -> list:
     if not line.strip():
         return [""]
     return textwrap.wrap(line, width) or [""]
+
+
+def should_reobserve(busy: bool, now: float, observed_at: float) -> bool:
+    """アイドル中の実測を取り直すべきか。
+
+    実行中は取り直さない。observe() は描画スレッドを塞ぐし、ステップ終了時には
+    どうせ取り直すため。アイドル中に取り直さないと、別のシェルで make down された
+    ときにバッジと実測ステップの表示が古いまま残る。
+    """
+    if busy:
+        return False
+    return now - observed_at >= OBSERVE_INTERVAL_SEC
 
 
 def probe_workspace(repo_root: Path, services_running: frozenset) -> Workspace:
@@ -176,6 +192,7 @@ class Console:
         # 混ぜると流れて消える（ユーザーの「Error も流れてよくわからない」）。
         self.failures: list = []
         self._log_mark = 0
+        self._observed_at = 0.0
         self.log_queue: queue.Queue = queue.Queue()
         self.cursor = 0
         # 既定値で始める。observe() は docker compose ps を待つので、
@@ -192,7 +209,13 @@ class Console:
         return any(status == RUNNING for status in self.session.values())
 
     def observe(self) -> Workspace:
+        self._observed_at = time.monotonic()
         return probe_workspace(REPO_ROOT, running_services(REPO_ROOT))
+
+    def refresh_if_stale(self) -> None:
+        """アイドルが続いても実測を追い続ける。"""
+        if should_reobserve(self.busy, time.monotonic(), self._observed_at):
+            self.ws = self.observe()
 
     # --- 実行 ---------------------------------------------------------------
 
@@ -410,6 +433,7 @@ def _loop(screen) -> int:
     console.run_step(STEP_PREFLIGHT)
     while True:
         console.drain()
+        console.refresh_if_stale()
         console.draw()
         try:
             key = screen.getch()

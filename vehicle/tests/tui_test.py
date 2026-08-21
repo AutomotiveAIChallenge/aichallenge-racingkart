@@ -16,6 +16,7 @@ from tui import (  # noqa: E402
     is_failure_line,
     probe_workspace,
     service_badge,
+    should_reobserve,
     terminal_too_small,
     wrap_line,
 )
@@ -162,6 +163,22 @@ class TestWrapLine(unittest.TestCase):
 
     def test_zero_width_yields_nothing(self):
         self.assertEqual(wrap_line("anything", 0), [])
+
+
+class TestShouldReobserve(unittest.TestCase):
+    def test_not_while_a_step_is_running(self):
+        # observe() blocks the draw thread, and the step's exit re-observes.
+        self.assertFalse(should_reobserve(True, 1000.0, 0.0))
+
+    def test_not_before_the_interval_elapses(self):
+        self.assertFalse(should_reobserve(False, 1.9, 0.0))
+
+    def test_at_the_interval(self):
+        self.assertTrue(should_reobserve(False, 2.0, 0.0))
+
+    def test_after_the_interval(self):
+        # An external `make down` while idle has to show up on its own.
+        self.assertTrue(should_reobserve(False, 10.0, 0.0))
 
 
 if __name__ == "__main__":
