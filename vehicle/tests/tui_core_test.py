@@ -187,8 +187,13 @@ class TestRunnable(unittest.TestCase):
 
     def test_a_failed_step_stays_runnable(self):
         # That is how retry works.
-        session = {STEP_PREFLIGHT: FAILED}
-        self.assertTrue(is_runnable(STEP_PREFLIGHT, Workspace(), session))
+        session = {STEP_PREFLIGHT: DONE, STEP_SUBMISSION: FAILED}
+        self.assertTrue(is_runnable(STEP_SUBMISSION, Workspace(), session))
+
+    def test_a_running_step_is_not_runnable(self):
+        # No launching a second overlapping run of the same step.
+        session = {STEP_PREFLIGHT: DONE, STEP_SUBMISSION: RUNNING}
+        self.assertFalse(is_runnable(STEP_SUBMISSION, Workspace(), session))
 
 
 if __name__ == "__main__":

@@ -157,8 +157,13 @@ def _measured_done(step_id: str, ws: Workspace) -> bool:
 def is_runnable(step_id: str, ws: Workspace, session: Dict[str, str]) -> bool:
     """Whether the console may run this step now.
 
-    Runnable when every prerequisite reports DONE. Failed steps stay runnable
-    so they can be retried.
+    Not runnable while the step itself is already RUNNING, so the console
+    never launches a second overlapping run of the same step. Otherwise
+    runnable once every prerequisite reports DONE; the step's own status
+    being PENDING, DONE or FAILED is fine either way, so re-running a
+    finished step and retrying a failed one both stay possible.
     """
+    if step_status(step_id, ws, session) == RUNNING:
+        return False
     step = step_by_id(step_id)
     return all(step_status(dep, ws, session) == DONE for dep in step.requires)
