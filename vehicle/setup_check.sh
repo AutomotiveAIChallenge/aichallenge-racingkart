@@ -45,8 +45,17 @@ fi
 # shellcheck source-path=SCRIPTDIR source=vehicle_ports.sh
 source "${SCRIPT_DIR}/vehicle_ports.sh"
 
+# 失敗と警告の本文を retain して print_summary で末尾に再掲する。呼び出し側
+# (record_result は 57 箇所) を触らずに済むよう log 側で拾う。
+FAILED_MESSAGES=()
+WARNING_MESSAGES=()
+
 # ログ関数
 log() {
+    case "$1" in
+    "${FAIL}"*) FAILED_MESSAGES+=("$1") ;;
+    "${WARN}"*) WARNING_MESSAGES+=("$1") ;;
+    esac
     echo -e "$1" | tee -a "$LOG_FILE" 2>/dev/null || echo -e "$1"
 }
 
@@ -724,31 +733,34 @@ check_execution_readiness() {
     log ""
 }
 
-# 結果サマリー表示
+# 結果サマリー表示。失敗は最後に置く: TUI のログ pane は末尾しか見えない。
 print_summary() {
-    log "========================================"
-    log "📊 Check Results Summary"
-    log "========================================"
-    log "Total checks: $TOTAL_CHECKS"
-    log "${OK} Passed: $PASSED_CHECKS"
-    log "${WARN} Warnings: $WARNING_CHECKS"
-    log "${FAIL} Failed: $FAILED_CHECKS"
-    log ""
+    # log() が拾い続けるので、自分の出力で汚れる前に控えを取る
+    local failed=("${FAILED_MESSAGES[@]}")
+    local warned=("${WARNING_MESSAGES[@]}")
+    local msg
 
-    if [ $FAILED_CHECKS -eq 0 ] && [ $WARNING_CHECKS -eq 0 ]; then
-        log "${OK} All checks passed! System ready for vehicle mode."
-        exit 0
-    elif [ $FAILED_CHECKS -eq 0 ]; then
-        log "${WARN} Some warnings found. Review before proceeding with vehicle mode."
-        exit 0
-    else
-        log "${FAIL} Critical issues found! Fix failures before running vehicle mode."
+    log ""
+    log "📊 ${TOTAL_CHECKS} checks: ${PASSED_CHECKS} ok, ${WARNING_CHECKS} warn, ${FAILED_CHECKS} fail"
+
+    if [ ${#warned[@]} -gt 0 ]; then
         log ""
-        log "Recommended actions:"
-        log "1. Address all failed checks above"
-        log "2. Re-run this script"
+        log "warnings:"
+        for msg in "${warned[@]}"; do
+            log "  ${msg}"
+        done
+    fi
+
+    if [ ${#failed[@]} -gt 0 ]; then
+        log ""
+        log "failures:"
+        for msg in "${failed[@]}"; do
+            log "  ${msg}"
+        done
         exit 1
     fi
+
+    exit 0
 }
 
 # メイン実行
