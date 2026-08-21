@@ -270,8 +270,8 @@ curses の描画、実車での疎通、`make` ターゲットの実行そのも
 本 repo にあるのは `remote/zenoh-user.json5` でテンプレート版が存在しない。
 同期 CI を作る際に解消が必要である。
 
-`/v2x/vehicle_positions/markers` の許可は解消済み。`vehicle/zenoh.json5` の
-`allow.publishers` と `remote/zenoh-user.json5` の `allow.subscribers` に追加した。
-`v2x_marker_publisher`（`aichallenge_system.launch.xml` が `domain_id != 0` のとき起動）が
-車両側で `MarkerArray` を publish し、遠隔側が subscribe する構図である。
-これがないと車両が V2X マーカーを送っても遠隔側の RViz に他車が映らない。
+`/v2x/vehicle_positions/markers` の許可が `vehicle/zenoh.json5` の `allow.publishers` と
+`remote/zenoh-user.json5` の `allow.subscribers` のいずれにも無い。`v2x_marker_publisher`
+（`aichallenge_system.launch.xml` が `domain_id != 0` のとき起動）が車両側で `MarkerArray` を
+publish するが、この 1 行が無いとブリッジが中継せず遠隔側の RViz に他車が映らない。
+本 spec の対象外で、別 PR で扱う。
