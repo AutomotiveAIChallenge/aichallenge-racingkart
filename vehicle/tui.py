@@ -16,6 +16,7 @@ import curses
 import queue
 import shutil
 import subprocess
+import textwrap
 import threading
 from pathlib import Path
 
@@ -39,16 +40,65 @@ from tui_core import (
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 
-MIN_COLS = 80
-MIN_LINES = 24
+# 40x12 の内訳: header 1 + step 3 行 (2 列配置) + failures 見出し 1 + failures 3
+# + log 見出し 1 + log 3。これ未満だと failures か log が 0 行になり、失敗を
+# 流さずに残すという狙いが成立しない。
+MIN_COLS = 40
+MIN_LINES = 12
 LOG_TAIL = 2000  # 保持するログ行数の上限。走行枠中に膨らみ続けないため。
 
-_MARK = {DONE: "OK ", FAILED: "NG ", RUNNING: ">> ", PENDING: "-- "}
+# 2 文字固定。桁を食わせない。"? " は前提未達で、実行は可能（前提は助言）。
+_MARK = {DONE: "OK", FAILED: "NG", RUNNING: ">>", PENDING: "- "}
+_MARK_UNMET = "? "
+
+# 最長セルは "4 ?  autoware dazr" の 18 文字。セル間に 1 桁空けるため 19 桁
+# 必要で、3 列なら 57 桁。切り上げて 60 を閾値にする。
+_GRID_WIDE_COLS = 60  # これ以上の幅なら 3 列に並べる
 
 
 def terminal_too_small(cols: int, lines: int) -> bool:
     """Whether the terminal is below the minimum the layout needs."""
     return cols < MIN_COLS or lines < MIN_LINES
+
+
+def service_badge(services_running) -> str:
+    """REQUIRED_SERVICES を 1 文字ずつ並べた位置固定のバッジ。
+
+    起動中はサービス名の頭文字、停止中は '-'。`driver off  autoware off ...`
+    が 47 文字だったのを 4 文字にする。位置で意味が決まるので凡例が要らない。
+    括弧を付けない: 40 桁の 2 列配置でセルに収める必要がある。
+    """
+    return "".join(
+        name[0] if name in services_running else "-" for name in REQUIRED_SERVICES
+    )
+
+
+def is_failure_line(line: str) -> bool:
+    """失敗を報告している行か。
+
+    setup_check.sh の FAIL マーカーに依存する。あちらのマーカーを変えると
+    失敗の retain が黙って止まるので、変更するときはここも直すこと。
+    make / docker の出力でも同じマーカーが載っていれば拾える。
+    """
+    return line.lstrip().startswith("❌")
+
+
+def grid_columns(cols: int) -> int:
+    """ステップのセルを横に何個並べるか。"""
+    return 3 if cols >= _GRID_WIDE_COLS else 2
+
+
+def wrap_line(line: str, width: int) -> list:
+    """1 行を width で折り返す。空行は 1 行として残す。
+
+    切り詰めると長いパスやコンパイラ出力の末尾が読めなくなるため、
+    addnstr の切り詰めではなく折り返しを使う。
+    """
+    if width < 1:
+        return []
+    if not line.strip():
+        return [""]
+    return textwrap.wrap(line, width) or [""]
 
 
 def probe_workspace(repo_root: Path, services_running: frozenset) -> Workspace:
@@ -126,6 +176,9 @@ class Console:
         self.screen = screen
         self.session: dict = {}
         self.log: list = []
+        # 失敗行は log とは別に retain する。log は tail しか見えないので、
+        # 混ぜると流れて消える（ユーザーの「Error も流れてよくわからない」）。
+        self.failures: list = []
         self.log_queue: queue.Queue = queue.Queue()
         self.running_step = None
         self.cursor = 0
@@ -138,6 +191,8 @@ class Console:
 
     def run_step(self, step_id: str) -> None:
         step = step_by_id(step_id)
+        # 前回の実行の失敗を持ち越さない。表示は常に「今の実行」のもの。
+        self.failures.clear()
         if step.interactive:
             self._run_interactive(step)
             return
@@ -201,6 +256,8 @@ class Console:
                 break
             if kind == "line":
                 self.log.append(payload)
+                if is_failure_line(payload):
+                    self.failures.append(payload)
             else:
                 step_id, code = payload
                 self.session[step_id] = DONE if code == 0 else FAILED
@@ -213,54 +270,97 @@ class Console:
     # --- 描画 ---------------------------------------------------------------
 
     def draw(self) -> None:
+        """1 画面 = header 1 行 + ステップのグリッド + failures + log。
+
+        failures は log とは別領域に固定する。log は tail しか映らないので、
+        同じ流れに置くと失敗が押し出されて読めなくなる。
+        """
         self.screen.erase()
         lines, cols = self.screen.getmaxyx()
+        width = max(1, cols - 1)
 
-        self.screen.addnstr(
-            0, 0, "Racing Kart Vehicle Console", cols - 1, curses.A_BOLD
-        )
+        hints = "up/dn enter q"
+        title = "vehicle console"
+        pad = max(1, width - len(title) - len(hints))
+        self.screen.addnstr(0, 0, f"{title}{' ' * pad}{hints}", width, curses.A_BOLD)
 
-        for idx, step in enumerate(STEPS):
-            status = step_status(step.step_id, self.ws, self.session)
-            text = f" {idx + 1}  {_MARK[status]}{step.title:<16}{self._detail(step)}"
-            attr = curses.A_REVERSE if idx == self.cursor else curses.A_NORMAL
-            self.screen.addnstr(2 + idx, 0, text, cols - 1, attr)
+        row = 1 + self._draw_grid(1, lines, cols)
 
-        self.screen.addnstr(
-            3 + len(STEPS),
-            0,
-            " up/down 選択   Enter 実行   q 終了",
-            cols - 1,
-            curses.A_DIM,
-        )
+        # failures は必要な分だけ。残りの 2/3 までに抑えて log を潰さない。
+        # log より失敗のほうが読まれるべきなので log に多くは残さない。
+        fail_lines = self._wrapped(self.failures, width)
+        budget = max(0, lines - row)
+        fail_rows = min(len(fail_lines) + 1, budget * 2 // 3) if fail_lines else 0
+        if fail_rows > 1:
+            row = self._draw_region(
+                row, f"failures ({len(self.failures)})", fail_lines, fail_rows, width
+            )
 
-        log_top = 5 + len(STEPS)
-        room = max(0, lines - log_top - 1)
-        for offset, line in enumerate(self.log[-room:] if room else []):
-            self.screen.addnstr(log_top + offset, 0, line, cols - 1)
+        if lines - row > 0:
+            self._draw_region(
+                row, "log", self._wrapped(self.log, width), lines - row, width
+            )
 
         self.screen.noutrefresh()
         curses.doupdate()
 
+    def _draw_grid(self, top: int, lines: int, cols: int) -> int:
+        """ステップを幅に応じた列数で並べ、使った行数を返す。"""
+        ncols = grid_columns(cols)
+        cell_w = max(1, cols // ncols)
+        used = 0
+        for idx, step in enumerate(STEPS):
+            r, c = divmod(idx, ncols)
+            y = top + r
+            if y >= lines:
+                break
+            x = c * cell_w
+            room = max(0, min(cell_w - 1, cols - 1 - x))
+            if room <= 0:
+                continue
+            attr = curses.A_REVERSE if idx == self.cursor else curses.A_NORMAL
+            self.screen.addnstr(y, x, self._cell(idx, step), room, attr)
+            used = max(used, r + 1)
+        return used
+
+    def _cell(self, idx: int, step) -> str:
+        status = step_status(step.step_id, self.ws, self.session)
+        mark = _MARK[status]
+        if status == PENDING and unmet_requirements(
+            step.step_id, self.ws, self.session
+        ):
+            # 前提未達。実行は妨げない（前提は助言）ので印だけ変える。
+            mark = _MARK_UNMET
+        return f"{idx + 1} {mark} {step.title}{self._detail(step)}"
+
     def _detail(self, step) -> str:
+        """セルの右に足す情報。桁を食わないものだけ。
+
+        前提未達は _cell のマークで示すので、ここには出さない。
+        """
         if step.step_id in (STEP_UP, STEP_TEARDOWN):
-            detail = "  ".join(
-                f"{name} {'on' if name in self.ws.services_running else 'off'}"
-                for name in REQUIRED_SERVICES
-            )
-        elif step.step_id == STEP_SUBMISSION:
-            # No filesystem-derived detail: aichallenge_submit/ ships tracked
-            # packages, so its presence is not evidence a download happened.
-            # Its status marker (from the session) is the only signal.
-            detail = ""
-        else:
-            detail = ""
-        unmet = unmet_requirements(step.step_id, self.ws, self.session)
-        if unmet:
-            names = ", ".join(step_by_id(dep).title for dep in unmet)
-            warning = f"⚠ {names} 未完了"  # ⚠ <name> 未完了
-            detail = f"{detail}  {warning}" if detail else warning
-        return detail
+            return " " + service_badge(self.ws.services_running)
+        return ""
+
+    def _draw_region(
+        self, top: int, label: str, wrapped: list, rows: int, width: int
+    ) -> int:
+        """区切り 1 行 + 折り返し済み行の末尾を描き、次の行番号を返す。"""
+        sep = f"-- {label} "
+        self.screen.addnstr(
+            top, 0, sep + "-" * max(0, width - len(sep)), width, curses.A_DIM
+        )
+        body = rows - 1
+        for offset, line in enumerate(wrapped[-body:] if body > 0 else []):
+            self.screen.addnstr(top + 1 + offset, 0, line, width)
+        return top + rows
+
+    @staticmethod
+    def _wrapped(source: list, width: int) -> list:
+        out = []
+        for line in source:
+            out.extend(wrap_line(line, width))
+        return out
 
     # --- 入力 ---------------------------------------------------------------
 

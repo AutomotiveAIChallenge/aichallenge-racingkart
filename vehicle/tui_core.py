@@ -68,7 +68,7 @@ STEPS = (
     ),
     Step(
         step_id=STEP_SUBMISSION,
-        title="提出物",
+        title="download",
         command=("make", "download"),
         requires=(STEP_PREFLIGHT,),
         # download_submission.sh prompts for username/password and
@@ -83,7 +83,7 @@ STEPS = (
     ),
     Step(
         step_id=STEP_UP,
-        title="スタック起動",
+        title="autoware",
         # CHECK=0: this console runs preflight first and runtime after, so the
         # target's own embedded checks would run them a second time.
         command=("make", "autoware-driver-zenoh-rosbag", "CHECK=0"),
@@ -91,13 +91,13 @@ STEPS = (
     ),
     Step(
         step_id=STEP_RUNTIME,
-        title="runtime check",
+        title="doctor",
         command=("./setup_check.sh", "--phase", "runtime"),
         requires=(STEP_UP,),
     ),
     Step(
         step_id=STEP_TEARDOWN,
-        title="片付け",
+        title="cleanup",
         command=("make", "down"),
     ),
 )
