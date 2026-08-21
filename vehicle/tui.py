@@ -24,7 +24,6 @@ from tui_core import (
     REQUIRED_SERVICES,
     RUNNING,
     STEP_PREFLIGHT,
-    STEP_SUBMISSION,
     STEP_TEARDOWN,
     STEP_UP,
     STEPS,
@@ -61,19 +60,26 @@ def probe_workspace(repo_root: Path, services_running: frozenset) -> Workspace:
     from aichallenge_submit/, but not when the contents of a file already
     inside it are edited. Editing a package's source in place therefore does
     not make build_done() report stale.
+
+    Note: aichallenge_submit/ ships with 15 git-tracked participant packages,
+    so it is never actually empty on a checkout -- whether it *has* entries
+    proves nothing about whether a download has run. That is exactly why
+    STEP_SUBMISSION is not in tui_core's _MEASURED set: its DONE/PENDING
+    comes from the session (did `make download` exit 0 this run), not from
+    this probe. submit_mtime is still sampled here because build_done() uses
+    it to judge whether install/ is stale relative to the submission.
     """
     ws_dir = repo_root / "aichallenge" / "workspace"
     setup_bash = ws_dir / "install" / "setup.bash"
     submit_dir = ws_dir / "src" / "aichallenge_submit"
 
     install_present = setup_bash.is_file()
-    submit_populated = submit_dir.is_dir() and any(submit_dir.iterdir())
+    submit_has_entries = submit_dir.is_dir() and any(submit_dir.iterdir())
 
     return Workspace(
         install_setup_bash=install_present,
-        submit_dir_populated=submit_populated,
         install_mtime=setup_bash.stat().st_mtime if install_present else None,
-        submit_mtime=submit_dir.stat().st_mtime if submit_populated else None,
+        submit_mtime=submit_dir.stat().st_mtime if submit_has_entries else None,
         services_running=services_running,
     )
 
@@ -241,8 +247,9 @@ class Console:
                 f"{name} {'on' if name in self.ws.services_running else 'off'}"
                 for name in REQUIRED_SERVICES
             )
-        if step.step_id == STEP_SUBMISSION:
-            return "取得済" if self.ws.submit_dir_populated else "未取得"
+        # STEP_SUBMISSION has no filesystem-derived detail: aichallenge_submit/
+        # ships tracked packages, so its presence is not evidence a download
+        # happened. Its status marker (from the session) is the only signal.
         return ""
 
     # --- 入力 ---------------------------------------------------------------

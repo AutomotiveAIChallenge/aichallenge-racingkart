@@ -37,7 +37,6 @@ class TestProbeWorkspace(unittest.TestCase):
     def test_empty_workspace(self):
         ws = probe_workspace(self.root, frozenset())
         self.assertFalse(ws.install_setup_bash)
-        self.assertFalse(ws.submit_dir_populated)
         self.assertIsNone(ws.install_mtime)
         self.assertIsNone(ws.submit_mtime)
 
@@ -52,16 +51,19 @@ class TestProbeWorkspace(unittest.TestCase):
         ws = probe_workspace(self.root, frozenset())
         self.assertFalse(ws.install_setup_bash)
 
-    def test_detects_populated_submission(self):
+    def test_populated_submit_dir_has_an_mtime(self):
+        # submit_dir_populated is gone: aichallenge_submit/ ships tracked
+        # packages, so its presence proves nothing about a download having
+        # run (see tui_core's _MEASURED comment). submit_mtime is still
+        # sampled, though -- build_done() needs it to judge staleness.
         self.make_submission()
         ws = probe_workspace(self.root, frozenset())
-        self.assertTrue(ws.submit_dir_populated)
         self.assertIsNotNone(ws.submit_mtime)
 
-    def test_empty_submit_dir_is_not_populated(self):
+    def test_empty_submit_dir_has_no_mtime(self):
         (self.ws / "src" / "aichallenge_submit").mkdir(parents=True)
         ws = probe_workspace(self.root, frozenset())
-        self.assertFalse(ws.submit_dir_populated)
+        self.assertIsNone(ws.submit_mtime)
 
     def test_built_workspace_reads_as_built(self):
         self.make_submission()
@@ -77,7 +79,7 @@ class TestProbeWorkspace(unittest.TestCase):
         empty.mkdir()
         ws = probe_workspace(empty, frozenset())
         self.assertFalse(ws.install_setup_bash)
-        self.assertFalse(ws.submit_dir_populated)
+        self.assertIsNone(ws.submit_mtime)
 
 
 class TestTerminalSize(unittest.TestCase):

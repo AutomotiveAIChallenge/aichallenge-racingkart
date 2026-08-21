@@ -40,7 +40,6 @@ class Workspace:
     """
 
     install_setup_bash: bool = False
-    submit_dir_populated: bool = False
     install_mtime: Optional[float] = None
     submit_mtime: Optional[float] = None
     services_running: FrozenSet[str] = field(default_factory=frozenset)
@@ -106,7 +105,13 @@ STEPS = (
 _STEPS_BY_ID = {s.step_id: s for s in STEPS}
 
 # 環境から実測できるステップ。session の記録より実測を優先する。
-_MEASURED = frozenset({STEP_SUBMISSION, STEP_BUILD, STEP_UP, STEP_TEARDOWN})
+#
+# STEP_SUBMISSION は含めない: aichallenge_submit/ はこのリポジトリの
+# checkout そのものに 15 個の tracked な参加者パッケージが入っており、
+# ダウンロード前から常に非空である。ディレクトリの有無は「取得済み」の
+# 証拠にならないので、実測ではなく session の記録（ダウンロードを実際に
+# 実行して成功したか）から状態を出す。うっかり実測へ戻さないこと。
+_MEASURED = frozenset({STEP_BUILD, STEP_UP, STEP_TEARDOWN})
 
 
 def step_by_id(step_id: str) -> Step:
@@ -143,8 +148,6 @@ def step_status(step_id: str, ws: Workspace, session: Dict[str, str]) -> str:
 
 
 def _measured_done(step_id: str, ws: Workspace) -> bool:
-    if step_id == STEP_SUBMISSION:
-        return ws.submit_dir_populated
     if step_id == STEP_BUILD:
         return build_done(ws)
     if step_id == STEP_UP:

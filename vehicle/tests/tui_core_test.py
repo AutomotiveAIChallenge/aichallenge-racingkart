@@ -35,7 +35,6 @@ ALL_UP = frozenset({"driver", "autoware", "zenoh", "rosbag"})
 def built_ws(**kwargs):
     """A workspace with a submission present and a fresh install/."""
     base = dict(
-        submit_dir_populated=True,
         install_setup_bash=True,
         submit_mtime=100.0,
         install_mtime=200.0,
@@ -86,10 +85,10 @@ class TestBuildDone(unittest.TestCase):
         self.assertFalse(build_done(built_ws(install_mtime=50.0)))
 
     def test_no_install_is_not_built(self):
-        self.assertFalse(build_done(Workspace(submit_dir_populated=True)))
+        self.assertFalse(build_done(Workspace(submit_mtime=100.0)))
 
     def test_missing_mtime_is_not_built(self):
-        ws = Workspace(submit_dir_populated=True, install_setup_bash=True)
+        ws = Workspace(install_setup_bash=True)
         self.assertFalse(build_done(ws))
 
     def test_empty_workspace_is_not_built(self):
@@ -107,12 +106,23 @@ class TestStepStatus(unittest.TestCase):
             step_status(STEP_PREFLIGHT, ws, {STEP_PREFLIGHT: FAILED}), FAILED
         )
 
-    def test_submission_is_measured_not_remembered(self):
-        ws = Workspace(submit_dir_populated=True)
-        self.assertEqual(step_status(STEP_SUBMISSION, ws, {}), DONE)
+    def test_submission_pending_with_empty_session_even_if_dir_has_content(self):
+        # aichallenge_submit/ ships tracked packages, so it always has
+        # content on a checkout -- that must not read as "downloaded".
+        ws = Workspace(submit_mtime=100.0)
+        self.assertEqual(step_status(STEP_SUBMISSION, ws, {}), PENDING)
 
-    def test_submission_pending_when_src_is_empty(self):
-        self.assertEqual(step_status(STEP_SUBMISSION, Workspace(), {}), PENDING)
+    def test_submission_done_when_session_records_done(self):
+        ws = Workspace(submit_mtime=100.0)
+        self.assertEqual(
+            step_status(STEP_SUBMISSION, ws, {STEP_SUBMISSION: DONE}), DONE
+        )
+
+    def test_submission_failed_when_session_records_failed(self):
+        ws = Workspace(submit_mtime=100.0)
+        self.assertEqual(
+            step_status(STEP_SUBMISSION, ws, {STEP_SUBMISSION: FAILED}), FAILED
+        )
 
     def test_build_measured_from_the_workspace(self):
         self.assertEqual(step_status(STEP_BUILD, built_ws(), {}), DONE)
@@ -168,13 +178,24 @@ class TestRunnable(unittest.TestCase):
         self.assertFalse(is_runnable(STEP_BUILD, Workspace(), session))
 
     def test_up_blocked_until_built(self):
-        session = {STEP_PREFLIGHT: DONE}
-        ws = Workspace(submit_dir_populated=True)
+        session = {STEP_PREFLIGHT: DONE, STEP_SUBMISSION: DONE}
+        ws = Workspace(submit_mtime=100.0)
         self.assertFalse(is_runnable(STEP_UP, ws, session))
 
     def test_up_runnable_once_built(self):
         session = {STEP_PREFLIGHT: DONE}
         self.assertTrue(is_runnable(STEP_UP, built_ws(), session))
+
+    def test_restart_with_empty_session_still_allows_up_once_built(self):
+        # Console restarted: session is empty, so STEP_SUBMISSION reads
+        # PENDING again even though a submission was downloaded and built in
+        # an earlier session. STEP_BUILD and STEP_UP are measured from disk,
+        # not from the session, so a fresh install/ still reports built and
+        # the stack can still be brought up without re-running download.
+        ws = built_ws()
+        self.assertEqual(step_status(STEP_SUBMISSION, ws, {}), PENDING)
+        self.assertEqual(step_status(STEP_BUILD, ws, {}), DONE)
+        self.assertTrue(is_runnable(STEP_UP, ws, {}))
 
     def test_runtime_blocked_until_the_stack_is_up(self):
         session = {STEP_PREFLIGHT: DONE}
