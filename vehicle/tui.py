@@ -44,7 +44,7 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 # 40x12 の内訳: header 1 + step 6 行 (縦 1 列) + failures 見出し 1 + failures 1
 # + log 見出し 1 + log 1 で 11 行。1 行余裕を見て 12。これ未満だと failures か
 # log が 0 行になり、失敗を流さずに残すという狙いが成立しない。
-# 40 桁は最長セル "4 ?  autoware ----" の 18 文字に対する余裕。
+# 40 桁は最長セル "1 NG check preflight" の 20 文字に対する余裕。
 MIN_COLS = 40
 MIN_LINES = 12
 LOG_TAIL = 2000  # 保持するログ行数の上限。走行枠中に膨らみ続けないため。

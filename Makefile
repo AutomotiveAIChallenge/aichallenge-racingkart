@@ -119,11 +119,14 @@ setup-vehicle:
 	@cd vehicle && ./setup_check.sh
 
 # driver + autoware + all-topic rosbag + zenoh
-# チェックは含めない。走らせたいときは make setup-vehicle を別に叩く。
 autoware-driver-zenoh-rosbag:
+	@echo "Run vehicle setup preflight check"
+	@cd vehicle && ./setup_check.sh --phase preflight
 	LOG_DIR=$(LOG_DIR) RUN_MODE=vehicle docker compose up -d driver autoware rosbag
 	sleep 15
 	LOG_DIR=$(LOG_DIR) docker compose up -d zenoh
+	@echo "Run vehicle setup runtime check"
+	@cd vehicle && ./setup_check.sh --phase runtime
 
 down:
 	@for p in 1 2 3 4; do docker compose -p $$p down --remove-orphans; done

@@ -54,17 +54,8 @@ source "${SCRIPT_DIR}/vehicle_ports.sh"
 LOG_FILE="${SCRIPT_DIR}/${LOG_DIR_NAME}/setup_check_$(date +'%Y%m%d_%H%M%S').log"
 mkdir -p "${SCRIPT_DIR}/${LOG_DIR_NAME}" 2>/dev/null || true
 
-# 失敗と警告の本文を retain して print_summary で末尾に再掲する。呼び出し側
-# (record_result は 57 箇所) を触らずに済むよう log 側で拾う。
-FAILED_MESSAGES=()
-WARNING_MESSAGES=()
-
 # ログ関数
 log() {
-    case "$1" in
-    "${FAIL}"*) FAILED_MESSAGES+=("$1") ;;
-    "${WARN}"*) WARNING_MESSAGES+=("$1") ;;
-    esac
     echo -e "$1" | tee -a "$LOG_FILE" 2>/dev/null || echo -e "$1"
 }
 
@@ -744,30 +735,11 @@ check_execution_readiness() {
 
 # 結果サマリー表示。失敗は最後に置く: TUI のログ pane は末尾しか見えない。
 print_summary() {
-    # 再掲は "  ${msg}" とインデントするので log() の分類（マーカーが行頭）に
-    # 再マッチしない。控えを取らずに配列をそのまま回してよい。
-    local msg
-
     log ""
     log "📊 ${TOTAL_CHECKS} checks: ${PASSED_CHECKS} ok, ${WARNING_CHECKS} warn, ${FAILED_CHECKS} fail"
-
-    if [ ${#WARNING_MESSAGES[@]} -gt 0 ]; then
-        log ""
-        log "warnings:"
-        for msg in "${WARNING_MESSAGES[@]}"; do
-            log "  ${msg}"
-        done
-    fi
-
-    if [ ${#FAILED_MESSAGES[@]} -gt 0 ]; then
-        log ""
-        log "failures:"
-        for msg in "${FAILED_MESSAGES[@]}"; do
-            log "  ${msg}"
-        done
+    if [ "${FAILED_CHECKS}" -gt 0 ]; then
         exit 1
     fi
-
     exit 0
 }
 

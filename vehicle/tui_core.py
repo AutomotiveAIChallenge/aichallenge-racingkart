@@ -65,7 +65,7 @@ class Step:
 STEPS = (
     Step(
         step_id=STEP_PREFLIGHT,
-        title="preflight",
+        title="check preflight",
         command=("./setup_check.sh", "--phase", "preflight"),
         cwd="vehicle",
     ),
@@ -92,7 +92,7 @@ STEPS = (
     ),
     Step(
         step_id=STEP_RUNTIME,
-        title="doctor",
+        title="check runtime",
         command=("./setup_check.sh", "--phase", "runtime"),
         cwd="vehicle",
         requires=(STEP_UP,),

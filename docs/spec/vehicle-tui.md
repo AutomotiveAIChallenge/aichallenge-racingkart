@@ -80,16 +80,17 @@
 
 | # | 表示名 | 実行するもの | 前提（助言） | 完了の判定 |
 |---|--------|--------------|--------------|------------|
-| 1 | `preflight` | `./setup_check.sh --phase preflight` | なし | 終了コード 0（セッション記憶） |
+| 1 | `check preflight` | `./setup_check.sh --phase preflight` | なし | 終了コード 0（セッション記憶） |
 | 2 | `download` | `make download` | 1 | 終了コード 0（セッション記憶） |
 | 3 | `build` | `make autoware-build` | 2 | `workspace/install/setup.bash` が存在し `src/` より新しい（実測） |
 | 4 | `autoware` | `make autoware-driver-zenoh-rosbag` | 3 | `driver` / `autoware` / `zenoh` / `rosbag` が compose 上で running（実測） |
-| 5 | `doctor` | `./setup_check.sh --phase runtime` | 4 | 終了コード 0（セッション記憶） |
+| 5 | `check runtime` | `./setup_check.sh --phase runtime` | 4 | 終了コード 0（セッション記憶） |
 | 6 | `cleanup` | `make down` | なし | 上記サービスがいずれも running でない（実測） |
 
-表示名はこのリポジトリの CLI 語彙（`setup.bash` の `download` / `doctor`）に揃えている。
-内部のステップ ID は `preflight` / `submission` / `build` / `up` / `runtime` / `teardown` で、
-表示名とは別である。
+チェックの 2 ステップは `check preflight` / `check runtime` と表示する。
+`setup_check.sh` の `--phase` の値をそのまま名前にしているので、画面の名前から
+実行されるコマンドが辿れる。内部のステップ ID は `preflight` / `submission` /
+`build` / `up` / `runtime` / `teardown` で、表示名とは別である。
 
 ### 実測とセッション記憶
 
@@ -105,20 +106,23 @@
 既に空でない。したがって「提出物が存在するか」をディレクトリの中身で判定してはならない。
 判定すると常に完了と出て、ステップの存在意義が失われる。
 
-### チェックは起動ターゲットに含めない
+### 起動ターゲットの内包チェックは残す
 
-`autoware-driver-zenoh-rosbag` は以前 preflight と runtime を内包していた。
-TUI はステップ 1 と 5 を独立に持つため、そのままでは preflight が 2 回走る。
+`autoware-driver-zenoh-rosbag` は preflight と runtime を内包している。TUI は
+同じチェックを `check preflight` / `check runtime` として独立に持つため、
+`autoware` ステップを実行すると preflight がもう一度走る（30 秒程度）。
 
-抑止フラグ（`CHECK=0`）を足す形は採らなかった。1 つのターゲットが起動と 2 種類の
-チェックを兼ねているのが元の問題であり、フラグはその回避策にすぎない。しかも
-`CHECK` は衝突しやすい名前で、環境変数から継承されると実車の安全チェックが黙って
-飛ぶため、`ifneq ($(origin CHECK),command line)` のような防御を足す必要が出る。
-フラグを誤無効化から守らなければならないこと自体が、形が違うという合図である。
+これを承知で残している。`CHECK=0` のような抑止フラグを足す形は一度試して外した。
+1 つのターゲットが起動と 2 種類のチェックを兼ねているのが元の構造であり、
+フラグはその回避策にすぎない。しかも `CHECK` は衝突しやすい名前で、環境変数から
+継承されていると実車の安全チェックが黙って飛ぶ（実測で確認した）。防御として
+`ifneq ($(origin CHECK),command line)` を足す必要が出た時点で、形が違うという
+合図である。ターゲットを起動専用と合成用に分けるのが筋だが、それは本 spec より
+前から存在する構造の問題であり、`Makefile` の変更を最小に保つため別途とする。
 
-代わりに**内包チェックを外し、起動ターゲットは起動だけを行う**。チェックを
-走らせたいときは `make setup-vehicle`（`--phase all` 相当）を別に叩く。
-TUI は preflight / doctor をそれぞれのステップとして持つ。
+重複の実害は 30 秒であり、スタックが上がる直前にもう一度 preflight が走ることは
+安全側に転ぶ。したがって `Makefile` への変更は `vehicle-tui` ターゲットの追加だけに
+留めている。
 
 ## 画面設計
 
@@ -170,16 +174,14 @@ TUI は端末上で動くため、この対話をそのまま通せる。
 
 ## setup_check.sh の出力
 
-TUI のログ領域は末尾しか映らないため、`setup_check.sh` の要約も合わせて変更している。
-
-- 要約は 1 行（`📊 N checks: X ok, Y warn, Z fail`）。
-- **失敗の本文を最後に置く。** 警告 → 失敗の順に再掲する。
-  失敗が「Recommended actions」のような後続テキストに埋もれると読めない。
-- 再掲のために `log()` が `❌` / `⚠️` で始まる行を配列に retain する。
-  `record_result` の呼び出しは 57 箇所あり、メッセージは各呼び出し元が別に出しているため、
-  `log()` 側で拾えば呼び出し側を一切触らずに済む。
+- 要約は 1 行（`📊 N checks: X ok, Y warn, Z fail`）。従来は 7 行のブロックと
+  3 種類の判定文（`Critical issues found! Fix failures before...` など）を出していた。
+- 失敗の本文は**チェックの進行に合わせてその場で 1 回だけ**出す。要約で再掲はしない。
+  再掲を入れると同じ失敗が 2 回並ぶ（実測で 4 件が 8 件に見えた）。
+  「末尾にまとめて読みたい」という要求は TUI の failures 領域が満たしており、
+  そちらは行頭の `❌` を集めて画面下部に固定する。
 - 終了コードは変えない。失敗ゼロなら 0（警告のみでも 0）、失敗ありなら 1。
-  TUI の `preflight` / `doctor` の合否判定がこれに依存している。
+  TUI の `check preflight` / `check runtime` の合否判定がこれに依存している。
 - ログファイルは `vehicle/logs/` 配下に置く。呼び出し元の作業ディレクトリに
   散らさないためである。
 
@@ -230,7 +232,7 @@ Python 3 標準ライブラリのみを使う（`curses` / `subprocess` / `threa
 |------|
 | ステップ数と実行順 |
 | `download` ステップが対話扱いであること |
-| `autoware` ステップが起動ターゲットだけを呼ぶこと |
+| `autoware` ステップが起動ターゲットを呼ぶこと |
 | `install/` と `src/` の新旧による build の完了判定（同時刻を含む境界） |
 | 実測ステップが古いセッション記録より実測を優先すること |
 | 実行中のステップだけが実行不可であること |
