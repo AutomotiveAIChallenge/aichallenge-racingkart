@@ -87,9 +87,7 @@ STEPS = (
     Step(
         step_id=STEP_UP,
         title="autoware",
-        # CHECK=0: this console runs preflight first and runtime after, so the
-        # target's own embedded checks would run them a second time.
-        command=("make", "autoware-driver-zenoh-rosbag", "CHECK=0"),
+        command=("make", "autoware-driver-zenoh-rosbag"),
         requires=(STEP_BUILD,),
     ),
     Step(

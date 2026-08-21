@@ -65,9 +65,13 @@ class TestSteps(unittest.TestCase):
     def test_preflight_step_is_not_interactive(self):
         self.assertFalse(step_by_id(STEP_PREFLIGHT).interactive)
 
-    def test_up_step_disables_the_embedded_checks(self):
-        # The console runs preflight and runtime itself.
-        self.assertIn("CHECK=0", step_by_id(STEP_UP).command)
+    def test_up_step_only_brings_the_stack_up(self):
+        # The target carries no checks: the console runs preflight and doctor
+        # as their own steps, and `make setup-vehicle` covers the CLI case.
+        self.assertEqual(
+            step_by_id(STEP_UP).command,
+            ("make", "autoware-driver-zenoh-rosbag"),
+        )
 
     def test_step_by_id_rejects_unknown(self):
         with self.assertRaises(KeyError):

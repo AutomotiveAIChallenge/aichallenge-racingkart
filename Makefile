@@ -118,26 +118,12 @@ setup-vehicle:
 	@echo "Run vehicle setup check"
 	@cd vehicle && ./setup_check.sh
 
-# 内包チェックの有無。既定 1（従来どおり）。vehicle-tui は preflight を先頭で
-# 自分が走らせ、runtime も起動後に自分で走らせるため CHECK=0 で二重実行を避ける。
-# An exported CHECK from the environment must not silently disable safety checks.
-ifneq ($(origin CHECK),command line)
-CHECK := 1
-endif
-
 # driver + autoware + all-topic rosbag + zenoh
+# チェックは含めない。走らせたいときは make setup-vehicle を別に叩く。
 autoware-driver-zenoh-rosbag:
-	@if [ "$(CHECK)" = "1" ]; then \
-		echo "Run vehicle setup preflight check"; \
-		cd vehicle && ./setup_check.sh --phase preflight; \
-	fi
 	LOG_DIR=$(LOG_DIR) RUN_MODE=vehicle docker compose up -d driver autoware rosbag
 	sleep 15
 	LOG_DIR=$(LOG_DIR) docker compose up -d zenoh
-	@if [ "$(CHECK)" = "1" ]; then \
-		echo "Run vehicle setup runtime check"; \
-		cd vehicle && ./setup_check.sh --phase runtime; \
-	fi
 
 down:
 	@for p in 1 2 3 4; do docker compose -p $$p down --remove-orphans; done

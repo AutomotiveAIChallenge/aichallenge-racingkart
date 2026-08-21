@@ -34,7 +34,9 @@ runtime（起動後）でチェックする項目：
 3. **GNSS/RTK状態確認** - `/sensing/gnss/navpvt` の RTK fixed / float 判定
 4. **ROS topic出力確認** - 車両status・最終指令・autoware制御指令の出力
 
-`make autoware-driver-zenoh-rosbag` は起動前に preflight、起動後に runtime を自動実行します。
+`make autoware-driver-zenoh-rosbag` はスタックを起動するだけで、チェックは含みません。
+チェックは `make setup-vehicle`（`--phase all` 相当）を別に叩くか、`make vehicle-tui` の
+preflight / doctor ステップから実行します。
 `make setup-vehicle` は `--phase all` 相当なので、**スタック起動中** に実行してください（停止中に叩くと runtime 系が一斉に fail します）。
 
 詳細な確認項目と手動コマンドについては [setup_check.md](./setup_check.md) を参照してください。

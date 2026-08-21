@@ -77,7 +77,7 @@
 | 1 | `preflight` | `./setup_check.sh --phase preflight` | なし | 終了コード 0（セッション記憶） |
 | 2 | `download` | `make download` | 1 | 終了コード 0（セッション記憶） |
 | 3 | `build` | `make autoware-build` | 2 | `workspace/install/setup.bash` が存在し `src/` より新しい（実測） |
-| 4 | `autoware` | `make autoware-driver-zenoh-rosbag CHECK=0` | 3 | `driver` / `autoware` / `zenoh` / `rosbag` が compose 上で running（実測） |
+| 4 | `autoware` | `make autoware-driver-zenoh-rosbag` | 3 | `driver` / `autoware` / `zenoh` / `rosbag` が compose 上で running（実測） |
 | 5 | `doctor` | `./setup_check.sh --phase runtime` | 4 | 終了コード 0（セッション記憶） |
 | 6 | `cleanup` | `make down` | なし | 上記サービスがいずれも running でない（実測） |
 
@@ -99,16 +99,20 @@
 既に空でない。したがって「提出物が存在するか」をディレクトリの中身で判定してはならない。
 判定すると常に完了と出て、ステップの存在意義が失われる。
 
-### 二重チェックの回避
+### チェックは起動ターゲットに含めない
 
-`autoware-driver-zenoh-rosbag` は起動前に preflight、起動後に runtime を内包している。
+`autoware-driver-zenoh-rosbag` は以前 preflight と runtime を内包していた。
 TUI はステップ 1 と 5 を独立に持つため、そのままでは preflight が 2 回走る。
 
-`Makefile` は `CHECK` 変数を持ち、`CHECK=0` のとき内包チェックを飛ばす。既定値は `1` で、
-`make` を直接叩く既存の運用は挙動が変わらない。環境変数から継承した `CHECK` は
-無視する（`ifneq ($(origin CHECK),command line)`）。`CHECK` は衝突しやすい名前であり、
-輸出されていると実車の安全チェックが黙って飛ぶためである。同ファイルが
-`ROS_DOMAIN_ID` に対して行っている対処と同じ作法。
+抑止フラグ（`CHECK=0`）を足す形は採らなかった。1 つのターゲットが起動と 2 種類の
+チェックを兼ねているのが元の問題であり、フラグはその回避策にすぎない。しかも
+`CHECK` は衝突しやすい名前で、環境変数から継承されると実車の安全チェックが黙って
+飛ぶため、`ifneq ($(origin CHECK),command line)` のような防御を足す必要が出る。
+フラグを誤無効化から守らなければならないこと自体が、形が違うという合図である。
+
+代わりに**内包チェックを外し、起動ターゲットは起動だけを行う**。チェックを
+走らせたいときは `make setup-vehicle`（`--phase all` 相当）を別に叩く。
+TUI は preflight / doctor をそれぞれのステップとして持つ。
 
 ## 画面設計
 
@@ -220,7 +224,7 @@ Python 3 標準ライブラリのみを使う（`curses` / `subprocess` / `threa
 |------|
 | ステップ数と実行順 |
 | `download` ステップが対話扱いであること |
-| `autoware` ステップが `CHECK=0` を渡すこと |
+| `autoware` ステップが起動ターゲットだけを呼ぶこと |
 | `install/` と `src/` の新旧による build の完了判定（同時刻を含む境界） |
 | 実測ステップが古いセッション記録より実測を優先すること |
 | 実行中のステップだけが実行不可であること |

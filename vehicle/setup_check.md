@@ -30,7 +30,7 @@
 
 | ターゲット | フェーズ |
 | --- | --- |
-| `make autoware-driver-zenoh-rosbag` | 起動前に `--phase preflight`、起動後に `--phase runtime` |
+| `make vehicle-tui` | preflight ステップで `--phase preflight`、doctor ステップで `--phase runtime` |
 | `make setup-vehicle` | `--phase all`（runtime を含むため **スタック起動中** に実行する） |
 
 preflight が fail すると exit code が非0になり、`docker compose up` に進まず中断します。
