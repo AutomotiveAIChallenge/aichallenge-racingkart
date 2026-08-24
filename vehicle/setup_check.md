@@ -7,8 +7,16 @@
 
 ## 自動チェックスクリプト
 
+チェックは **起動前（preflight）** と **起動後（runtime）** の2フェーズに分かれています。
+
 ```bash
-# 基本実行（推奨）
+# 起動前チェックのみ（driver/autoware を起動する前に実行）
+./setup_check.sh --phase preflight
+
+# 起動後チェックのみ（スタックが起動している状態で実行）
+./setup_check.sh --phase runtime
+
+# 全チェック（既定。runtime を含むためスタック起動中に実行する）
 ./setup_check.sh
 
 # ログファイル出力付き実行
@@ -18,9 +26,20 @@
 ./setup_check.sh --help
 ```
 
-## チェック項目（6段階）
+`Makefile` からの呼び出し:
 
-### 1. ハードウェアデバイス確認
+| ターゲット | フェーズ |
+| --- | --- |
+| `make autoware-driver-zenoh-rosbag` | 起動前に `--phase preflight`、起動後に `--phase runtime` |
+| `make setup-vehicle` | `--phase all`（runtime を含むため **スタック起動中** に実行する） |
+
+preflight が fail すると exit code が非0になり、`docker compose up` に進まず中断します。
+
+## チェック項目
+
+セクション番号は表示順に振られるため、実行したフェーズごとに 1 から連番になります。
+
+### preflight: 1. ハードウェアデバイス確認
 
 #### CANインターフェース
 ```bash
@@ -32,7 +51,7 @@ ip -details link show can0
 **期待する結果:**
 - ✅ `CAN interface can0 is UP`
 - ❌ `CAN interface can0 not found` → ハードウェア接続確認
-- ⚠️ `CAN interface can0 exists but not UP` → `sudo ip link set can0 up type can bitrate 500000`
+- ❌ `CAN interface can0 exists but not UP` → `sudo ip link set can0 up type can bitrate 1000000`
 
 #### VCU（Vehicle Control Unit）
 ```bash
@@ -60,56 +79,40 @@ ls -la /dev/gnss/usb
 
 ---
 
-### 2. ネットワーク・通信確認
+### preflight: 2. ネットワーク・通信確認
 
 #### インターネット接続
 ```bash
 # 手動確認コマンド
 ping -c 3 8.8.8.8
-```
-
-#### リバースSSH
-```bash
-# 手動確認コマンド
-systemctl is-active --quiet reverse-ssh.service
-sudo systemctl status reverse-ssh.service
+ip route get 8.8.8.8
+getent hosts zenoh.dev.aichallenge-board.jsae.or.jp
 ```
 
 #### Zenohサーバー疎通
 ```bash
 # 手動確認コマンド
-timeout 5 bash -c "echo >/dev/tcp/57.180.63.135/7447"
-nc -zv 57.180.63.135 7447
+export VEHICLE_ID=A6  # ECU-RK-06 の例
+timeout 5 bash -c "echo >/dev/tcp/zenoh.dev.aichallenge-board.jsae.or.jp/7450"
+nc -zv zenoh.dev.aichallenge-board.jsae.or.jp 7450
 ```
 
 **期待する結果:**
 - ✅ `Internet connectivity (8.8.8.8)`
-- ✅ `Zenoh server connectivity (57.180.63.135:7447)`
-- ✅ `reverse-ssh.service is active (running)`
-- ⚠️ `reverse-ssh.service is not active`
+- ✅ `Internet route available`
+- ✅ `DNS resolution works`
+- ✅ `Zenoh endpoint connectivity (A6: zenoh.dev.aichallenge-board.jsae.or.jp:7450)`
 
 ---
 
-### 3. システムサービス確認
-
-#### RTK関連サービス（optional）
-```bash
-# 手動確認コマンド
-systemctl status rtk_str2str.service
-```
-
-**期待する結果:**
-- ⚠️ `Service rtk_str2str.service is not active (optional)`
-
----
-
-### 4. Docker・環境確認
+### preflight: 3. Docker・環境確認
 
 #### Docker基本確認
 ```bash
 # 手動確認コマンド
 docker ps
 docker images
+docker compose -f ../docker-compose.yml ps
 ```
 
 #### Dockerイメージ確認
@@ -117,26 +120,24 @@ docker images
 - ✅ `Racing kart interface image: ghcr.io/tier4/racing_kart_interface:latest-experiment (2025-08-25 10:30:45 +0900 JST)`
 - ✅ `Aichallenge dev image: aichallenge-2025-dev-t4tanaka:latest (2025-08-24 15:22:11 +0900 JST)`
 
-#### 環境変数・権限
+#### 環境変数
 ```bash
 # 手動確認コマンド
 echo $XAUTHORITY
-groups $USER
 ```
 
 **期待する結果:**
 - ✅ `XAUTHORITY is set: /home/user/.Xauthority`
-- ✅ `User t4tanaka in dialout group`
+- ⚠️ `XAUTHORITY not set` → `export XAUTHORITY=~/.Xauthority`
 
 ---
 
-### 5. 既知問題予防チェック
+### preflight: 4. 既知問題予防チェック
 
 #### past_log.mdからの予防項目
 
 **バッテリー管理注意**
 - ⚠️ `Remember: Check battery level manually (display values unreliable)`
-- ⚠️ `Remember: Avoid direct sunlight exposure for batteries`
 
 **GNSS Fix推奨事項**
 - ℹ️ `Recommendation: Wait outside for GNSS Fix before driving`
@@ -144,29 +145,110 @@ groups $USER
 
 ---
 
-### 6. 実行準備確認
+### preflight: 5. 実行準備確認
 
-#### Docker Compose環境
+#### リポジトリ状態
 ```bash
 # 手動確認コマンド
-ls -la docker-compose.yml
+git rev-parse --show-toplevel
 git branch --show-current
 ```
 
 **期待する結果:**
-- ✅ `docker-compose.yml exists`
+- ✅ `docker-compose.yml exists at repo root: ...`（存在する場合のみ）
 - ℹ️ `Current git branch: experiment`
+
+---
+
+### runtime: 1. 起動後ハードウェア通信確認
+
+CANが実際に通信しているかを見ます。エラーフレームが出ていれば配線・終端・ビットレート・モータ電源を疑います。
+
+```bash
+# 手動確認コマンド
+ip link show can0
+ip -details -statistics link show can0
+candump -ta -e can0
+```
+
+**期待する結果:**
+- ✅ `CAN interface can0 is UP`
+- ✅ `CAN interface can0 state is ERROR-ACTIVE`
+- ✅ `CAN traffic observed: 1234 frames, 12 IDs, no error frames`
+- ❌ `CAN error frames observed during sample: ...` → モータ/コントローラ電源、CAN-H/CAN-L配線、終端、ビットレート確認
+- ❌ `No CAN traffic observed in 3s` → VCU状態とモータ/コントローラ電源確認
+
+環境変数 `CAN_IFACE` / `CAN_SAMPLE_SEC` / `CAN_MIN_FRAMES` で対象と閾値を変更できます。
+
+---
+
+### runtime: 2. 起動後Dockerサービス確認
+
+```bash
+# 手動確認コマンド
+docker compose -f ../docker-compose.yml ps --services --filter status=running
+```
+
+**期待する結果:**
+- ✅ `Required compose services are running: driver autoware rosbag zenoh`
+- ❌ `Required compose services not running: zenoh` → 該当サービスのログを確認
+
+---
+
+### runtime: 3. GNSS/RTK状態確認
+
+`driver` コンテナ内で `/sensing/gnss/navpvt` の `flags` を読み、RTKの状態を判定します。
+`ros-humble-ublox-msgs` が入っていないと型解決に失敗するため `packages.txt` に含めています。
+
+```bash
+# 手動確認コマンド
+docker compose -f ../docker-compose.yml exec -T driver bash -lc \
+  'source /opt/ros/humble/setup.bash && source /workspace/install/setup.bash &&
+   ros2 topic echo /sensing/gnss/navpvt --once --field flags'
+```
+
+**期待する結果:**
+- ✅ `GNSS RTK fixed: NavPVT flags=131`
+- ⚠️ `GNSS RTK float: NavPVT flags=67` → ichimilのアカウント/状態、補正データ接続、上空視界を確認。fixedになるまで待つ
+- ❌ それ以外 → **fixedを確認するまで自動走行を開始しない**
+
+待ち時間は `GNSS_NAVPVT_TIMEOUT_SEC` で変更できます。
+
+---
+
+### runtime: 4. ROS topic出力確認
+
+`driver` / `autoware` の各コンテナで主要トピックにメッセージが出ているかを確認します。
+`docker compose up` 直後はまだ出ていないことがあるため、1トピックあたり `ROS_TOPIC_RETRY` 回まで再試行します。
+
+**確認するトピック:**
+
+| コンテナ | トピック |
+| --- | --- |
+| `driver` | `/racing_kart/vcu/status`, `/racing_kart/steer/status`, `/racing_kart/brake/status`, `/racing_kart/joy` |
+| `driver` | `/racing_kart/vcu/command`, `/racing_kart/steer/command`, `/racing_kart/brake/command` |
+| `autoware` | `/vehicle/status/velocity_status`, `/vehicle/status/steering_status`, `/vehicle/status/gear_status`, `/vehicle/status/actuation_status` |
+| `autoware` | `/control/command/control_cmd`, `/control/command/actuation_cmd` |
+
+**期待する結果:**
+- ✅ `VCU status: /racing_kart/vcu/status`
+- ❌ `Control command: no message on /control/command/control_cmd within 4s x 2` → autowareの起動状況とログを確認
+
+`ROS_TOPIC_TIMEOUT_SEC`（1回あたりの待ち秒数）と `ROS_TOPIC_RETRY`（試行回数）で調整できます。
 
 ---
 
 ## 出力例
 
+### preflight
+
 ```bash
-$ ./setup_check.sh
+$ ./setup_check.sh --phase preflight
 
 ========================================
 Racing Kart Setup Check
 Mode: vehicle
+Phase: preflight
 Time: 2025年  8月 25日 月曜日 22:54:19 JST
 ========================================
 
@@ -174,6 +256,7 @@ Time: 2025年  8月 25日 月曜日 22:54:19 JST
 ----------------------------------------
 ❌ CAN interface can0 not found
    Fix: Check CAN hardware connection
+✅ candump (can-utils) command available
 ❌ VCU directory missing: /dev/vcu
 ❌ VCU USB device missing: /dev/vcu/usb
 ✅ GNSS serial devices found
@@ -182,33 +265,29 @@ Time: 2025年  8月 25日 月曜日 22:54:19 JST
 ℹ️ 2. Network & Communication Check
 ----------------------------------------
 ✅ Internet connectivity (8.8.8.8)
-⚠️ reverse-ssh.service is not active
-   Fix: sudo systemctl start reverse-ssh.service
-✅ Zenoh server connectivity (57.180.63.135:7447)
+✅ Internet route available
+   Route: 8.8.8.8 via 192.168.x.x dev wlan0 src 192.168.x.x uid 1000
+✅ DNS resolution works
+ℹ️ Active NetworkManager connections: ...
+✅ Zenoh endpoint connectivity (A6: zenoh.dev.aichallenge-board.jsae.or.jp:7450)
 
-ℹ️ 3. System Services Check
-----------------------------------------
-⚠️ Service rtk_str2str.service is not active (optional)
-
-ℹ️ 4. Docker & Environment Check
+ℹ️ 3. Docker & Environment Check
 ----------------------------------------
 ✅ Docker command available
 ✅ Docker daemon is running
 ✅ Racing kart interface image: ghcr.io/tier4/racing_kart_interface:latest-experiment (2025-08-25 10:30:45 +0900 JST)
-✅ ai-challenge dev image: aichallenge-2025-dev-t4tanaka:latest (2025-08-24 15:22:11 +0900 JST)
-✅ XAUTHORITY is set: $USER/.Xauthority
-✅ User t4tanaka in dialout group
+✅ Aichallenge dev image: aichallenge-2025-dev:latest (2025-08-24 15:22:11 +0900 JST)
+✅ XAUTHORITY is set: /home/user/.Xauthority
 
-ℹ️ 5. Known Issues Prevention Check
+ℹ️ 4. Known Issues Prevention Check
 ----------------------------------------
 ⚠️ Remember: Check battery level manually (display values unreliable)
-⚠️ Remember: Avoid direct sunlight exposure for batteries
 ℹ️ Recommendation: Wait outside for GNSS Fix before driving
 ℹ️ Recommendation: Check Fix status reaches ~80% before starting
 
-ℹ️ 6. Execution Readiness Check (Vehicle Mode)
+ℹ️ 5. Execution Readiness Check (Vehicle Mode)
 ----------------------------------------
-✅ docker-compose.yml exists
+✅ docker-compose.yml exists at repo root: /path/to/aichallenge-racingkart/docker-compose.yml
 ℹ️ Current git branch: experiment
 
 ========================================
@@ -216,7 +295,7 @@ Time: 2025年  8月 25日 月曜日 22:54:19 JST
 ========================================
 Total checks: 15
 ✅ Passed: 10
-⚠️ Warnings: 5
+⚠️ Warnings: 2
 ❌ Failed: 3
 
 ❌ Critical issues found! Fix failures before running vehicle mode.
@@ -224,6 +303,57 @@ Total checks: 15
 Recommended actions:
 1. Address all failed checks above
 2. Re-run this script
+```
+
+### runtime
+
+`--phase runtime` では番号が改めて 1 から振られます。
+
+```bash
+$ ./setup_check.sh --phase runtime
+
+========================================
+Racing Kart Setup Check
+Mode: vehicle
+Phase: runtime
+Time: 2025年  8月 25日 月曜日 23:10:02 JST
+========================================
+
+ℹ️ 1. Runtime Hardware Communication Check
+----------------------------------------
+✅ CAN interface can0 is UP
+ℹ️ CAN traffic sample (can0, 3s)
+✅ CAN interface can0 state is ERROR-ACTIVE
+ℹ️ CAN berr-counter tx 0 rx 0
+✅ CAN traffic observed: 4821 frames, 14 IDs, no error frames
+
+ℹ️ 2. Runtime Docker Service Check
+----------------------------------------
+✅ Required compose services are running: driver autoware rosbag zenoh
+
+ℹ️ 3. GNSS/RTK Status Check
+----------------------------------------
+✅ GNSS RTK fixed: NavPVT flags=131
+
+ℹ️ 4. Runtime ROS Topic Output Check
+----------------------------------------
+ℹ️ Racing kart hardware/status topics
+✅ VCU status: /racing_kart/vcu/status
+✅ Steer status: /racing_kart/steer/status
+...
+ℹ️ Autoware downstream control command topics
+✅ Control command: /control/command/control_cmd
+✅ Actuation command: /control/command/actuation_cmd
+
+========================================
+📊 Check Results Summary
+========================================
+Total checks: 18
+✅ Passed: 18
+⚠️ Warnings: 0
+❌ Failed: 0
+
+✅ All checks passed! System ready for vehicle mode.
 ```
 
 ## 手動確認が必要な項目

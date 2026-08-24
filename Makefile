@@ -1,8 +1,8 @@
 # make file inspired by https://roborovsky-racers.github.io/RoborovskyNote/
 SHELL := /bin/bash
 
-.PHONY: autoware-build autoware-vehicle autoware-simulator autoware-request-initialpose autoware-request-control  awsim-request-start awsim-request-reset autoware-driver-zenoh autoware-driver-zenoh-rosbag \
-	simulator dev dev2 dev3 dev4 driver zenoh download rviz2 down down_all ps autoware-attach autoware-bash eval
+.PHONY: autoware-build autoware-vehicle autoware-simulator autoware-request-initialpose autoware-request-control  awsim-request-start awsim-request-reset autoware-driver-zenoh autoware-driver-zenoh-rosbag setup-vehicle \
+	simulator dev dev2 dev3 dev4 driver zenoh download rviz2 down down_all ps autoware-attach autoware-bash eval e2e
 
 # Used by docker-compose.yml for build/eval artifact ownership.
 HOST_UID ?= $(shell id -u)
@@ -84,6 +84,12 @@ dev2 dev3 dev4: simulator
 	for p in $$(seq 1 $$N); do LOG_DIR=$(LOG_DIR) ROS_DOMAIN_ID=$$p docker compose -p $$p up -d autoware; done; \
 	echo "To Stop: make down"
 
+# e2e は練習兼提出参考モード（e2e.sh）。e2e-final.sh は make simulator-e2e-final。
+e2e: SIM_MODE := e2e
+e2e: simulator autoware-simulator
+	@echo "Start e2e simulation (AWSIM + Autoware)"
+	@echo "To stop: make down  (docker compose down --remove-orphans)"
+
 gate1: SIM_MODE := gate1
 gate2: SIM_MODE := gate2
 gate3: SIM_MODE := gate3
@@ -108,11 +114,19 @@ autoware-driver-zenoh:
 	sleep 15
 	LOG_DIR=$(LOG_DIR) docker compose up -d zenoh
 
+setup-vehicle:
+	@echo "Run vehicle setup check"
+	@cd vehicle && ./setup_check.sh
+
 # driver + autoware + all-topic rosbag + zenoh
 autoware-driver-zenoh-rosbag:
+	@echo "Run vehicle setup preflight check"
+	@cd vehicle && ./setup_check.sh --phase preflight
 	LOG_DIR=$(LOG_DIR) RUN_MODE=vehicle docker compose up -d driver autoware rosbag
 	sleep 15
 	LOG_DIR=$(LOG_DIR) docker compose up -d zenoh
+	@echo "Run vehicle setup runtime check"
+	@cd vehicle && ./setup_check.sh --phase runtime
 
 down:
 	@for p in 1 2 3 4; do docker compose -p $$p down --remove-orphans; done
