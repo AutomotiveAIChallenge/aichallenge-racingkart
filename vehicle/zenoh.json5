@@ -57,9 +57,11 @@
           "/control/command/control_cmd",
           "/localization/kinematic_state",
           "/planning/scenario_planning/trajectory",
+          "/racing_kart/debug/status",
           "/tf",
           "/tf_static",
           "/v2x/vehicle_positions/markers",
+          "/vehicle/status/control_mode",
           "/vehicle/status/gear_status",
           "/vehicle/status/steering_status",
           "/vehicle/status/velocity_status"
