@@ -1,5 +1,9 @@
 #!/bin/bash
 
+# 車両側の zenoh ブリッジは vehicle/run_zenoh.bash が -n "/<VEHICLE_ID>" 付きで起動する。
+# zenoh のキーにはその名前空間が前置されるので、遠隔PC側も同じ -n を渡さないとキーが
+# 噛み合わずデータが流れない。allow リストは前置なしのローカル ROS 名のままでよい。
+
 # スクリプトに引数が1つだけ渡されているかチェック
 if [ "$#" -ne 1 ]; then
     echo "エラー: Vechicle IDを指定してください。" >&2
@@ -14,42 +18,49 @@ A2)
     echo "Connecting Zenoh. Target Vehicle: '$NAMESPACE' (ECU-RK-01) - Port 7448"
     RUST_BACKTRACE=1 zenoh-bridge-ros2dds client \
         -e tls/zenoh.dev.aichallenge-board.jsae.or.jp:7448 \
+        -n "/${NAMESPACE}" \
         -c zenoh-user.json5
     ;;
 A3)
     echo "Connecting Zenoh. Target Vehicle: '$NAMESPACE' (ECU-RK-02) - Port 7449"
     RUST_BACKTRACE=1 zenoh-bridge-ros2dds client \
         -e tls/zenoh.dev.aichallenge-board.jsae.or.jp:7449 \
+        -n "/${NAMESPACE}" \
         -c zenoh-user.json5
     ;;
 A6)
     echo "Connecting Zenoh. Target Vehicle: '$NAMESPACE' (ECU-RK-06) - Port 7450"
     RUST_BACKTRACE=1 zenoh-bridge-ros2dds client \
         -e tls/zenoh.dev.aichallenge-board.jsae.or.jp:7450 \
+        -n "/${NAMESPACE}" \
         -c zenoh-user.json5
     ;;
 A7)
     echo "Connecting Zenoh. Target Vehicle: '$NAMESPACE' (ECU-RK-00) - Port 7451"
     RUST_BACKTRACE=1 zenoh-bridge-ros2dds client \
         -e tls/zenoh.dev.aichallenge-board.jsae.or.jp:7451 \
+        -n "/${NAMESPACE}" \
         -c zenoh-user.json5
     ;;
 A1)
     echo "Connecting Zenoh. Target Vehicle: '$NAMESPACE' - Port 7452"
     RUST_BACKTRACE=1 zenoh-bridge-ros2dds client \
         -e tls/zenoh.dev.aichallenge-board.jsae.or.jp:7452 \
+        -n "/${NAMESPACE}" \
         -c zenoh-user.json5
     ;;
 A5)
     echo "Connecting Zenoh. Target Vehicle: '$NAMESPACE' - Port 7453"
     RUST_BACKTRACE=1 zenoh-bridge-ros2dds client \
         -e tls/zenoh.dev.aichallenge-board.jsae.or.jp:7453 \
+        -n "/${NAMESPACE}" \
         -c zenoh-user.json5
     ;;
 A8)
     echo "Connecting Zenoh. Target Vehicle: '$NAMESPACE' - Port 7454"
     RUST_BACKTRACE=1 zenoh-bridge-ros2dds client \
         -e tls/zenoh.dev.aichallenge-board.jsae.or.jp:7454 \
+        -n "/${NAMESPACE}" \
         -c zenoh-user.json5
     ;;
 test-remote)
@@ -57,6 +68,7 @@ test-remote)
     echo "Connecting Zenoh. Target Vehicle: 'local' - Endpoint ${ENDPOINT}"
     RUST_BACKTRACE=1 zenoh-bridge-ros2dds client \
         -e "${ENDPOINT}" \
+        -n /A2 \
         -c zenoh-user.json5
     ;;
 test-vehicle)
@@ -64,6 +76,7 @@ test-vehicle)
     echo "Connecting Zenoh. Target Vehicle: 'local' - Endpoint ${ENDPOINT}"
     RUST_BACKTRACE=1 zenoh-bridge-ros2dds client \
         -e "${ENDPOINT}" \
+        -n /A2 \
         -c ../vehicle/zenoh.json5
     ;;
 test-server)
