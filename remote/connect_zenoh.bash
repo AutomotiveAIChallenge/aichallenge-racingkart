@@ -1,9 +1,5 @@
 #!/bin/bash
 
-# 車両側の zenoh ブリッジは vehicle/run_zenoh.bash が -n "/<VEHICLE_ID>" 付きで起動する。
-# zenoh のキーにはその名前空間が前置されるので、遠隔PC側も同じ -n を渡さないとキーが
-# 噛み合わずデータが流れない。allow リストは前置なしのローカル ROS 名のままでよい。
-
 # スクリプトに引数が1つだけ渡されているかチェック
 if [ "$#" -ne 1 ]; then
     echo "エラー: Vechicle IDを指定してください。" >&2
