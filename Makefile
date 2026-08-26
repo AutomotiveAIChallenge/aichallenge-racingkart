@@ -20,11 +20,16 @@ LOG_DIR := /output/$(TIMESTAMP)
 
 # make simulator-<mode>: <mode> は simulator_scripts/*.sh のファイル名
 SIM_MODES := $(notdir $(basename $(wildcard aichallenge/simulator_scripts/*.sh)))
-# dev<N>（車両数）/ gate<N>（テスト番号）は run_simulator.bash が展開するエイリアス
-SIM_MODES += dev2 dev3 dev4 gate1 gate2 gate3
+# dev<N>（車両数、2..4）は run_simulator.bash が展開するエイリアス
+DEV_NS := 2 3 4
+SIM_MODES += $(addprefix dev,$(DEV_NS))
 .PHONY: $(addprefix simulator-,$(SIM_MODES))
 $(addprefix simulator-,$(SIM_MODES)): simulator-%:
 	@$(MAKE) simulator SIM_MODE=$*
+
+# gate<N>（テスト番号、任意）も run_simulator.bash が展開するエイリアス
+simulator-gate%:
+	@$(MAKE) simulator SIM_MODE=gate$*
 
 # autowareのbuildのみ
 autoware-build:
@@ -72,17 +77,11 @@ zenoh:
 
 dev: SIM_MODE := dev
 dev: simulator autoware-simulator
-	@echo "Start dev simulation (AWSIM + Autoware)"
-	@echo "To stop: make down  (docker compose down --remove-orphans)"
 
-dev2: SIM_MODE := dev2
-dev3: SIM_MODE := dev3
-dev4: SIM_MODE := dev4
-dev2 dev3 dev4: simulator
-	@N=$(@:dev%=%); \
-	echo "Start $$N-vehicle dev (autoware on ROS_DOMAIN_ID 1..$$N via docker compose -p)"; \
-	for p in $$(seq 1 $$N); do LOG_DIR=$(LOG_DIR) ROS_DOMAIN_ID=$$p docker compose -p $$p up -d autoware; done; \
-	echo "To Stop: make down"
+# dev<N>: N台並列（autoware を compose -p 1..N / ROS_DOMAIN_ID=1..N で起動）
+$(addprefix dev,$(DEV_NS)): dev%:
+	@$(MAKE) simulator SIM_MODE=$@ LOG_DIR=$(LOG_DIR)
+	@for p in $$(seq 1 $*); do LOG_DIR=$(LOG_DIR) ROS_DOMAIN_ID=$$p docker compose -p $$p up -d autoware; done
 
 # e2e は練習兼提出参考モード（e2e.sh）。e2e-final.sh は make simulator-e2e-final。
 e2e: SIM_MODE := e2e
@@ -90,12 +89,10 @@ e2e: simulator autoware-simulator
 	@echo "Start e2e simulation (AWSIM + Autoware)"
 	@echo "To stop: make down  (docker compose down --remove-orphans)"
 
-gate1: SIM_MODE := gate1
-gate2: SIM_MODE := gate2
-gate3: SIM_MODE := gate3
-gate1 gate2 gate3: simulator autoware-simulator
-	@echo "Start safety gate simulation (AWSIM + Autoware)"
-	@echo "To stop: make down  (docker compose down --remove-orphans)"
+# gate<N>: 任意のテスト番号を受け付ける（例: make gate7）
+gate%:
+	@$(MAKE) simulator SIM_MODE=$@ LOG_DIR=$(LOG_DIR)
+	@$(MAKE) autoware-simulator LOG_DIR=$(LOG_DIR)
 
 eval:
 	@echo "Start evaluation simulation (AWSIM + Autoware)"
