@@ -79,10 +79,22 @@ x-racing_kart_interface-base: &racing_kart_interface-base
     - HOST_GID=${HOST_GID:-}
     - NTRIP_USERNAME=${NTRIP_USERNAME:-}
     - NTRIP_PASSWORD=${NTRIP_PASSWORD:-}
+    # V2X position sharing. Passed through to racing_kart_vehicle.launch.xml.
+    # Defaults keep the driver launchable when V2X is not configured: the broker
+    # falls back to localhost, so the connector just fails to connect and the rest
+    # of the stack is unaffected.
+    - V2X_VEHICLE_ID=${V2X_VEHICLE_ID:-d1}
+    - V2X_VEHICLE_IDS=${V2X_VEHICLE_IDS:-d1,d2,d3,d4}
+    - V2X_BROKER_HOST=${V2X_BROKER_HOST:-127.0.0.1}
+    - V2X_BROKER_PORT=${V2X_BROKER_PORT:-1883}
+    - V2X_MQTT_TLS_CA_FILE=${V2X_MQTT_TLS_CA_FILE:-}
+    - V2X_MQTT_TLS_CERT_FILE=${V2X_MQTT_TLS_CERT_FILE:-}
+    - V2X_MQTT_TLS_KEY_FILE=${V2X_MQTT_TLS_KEY_FILE:-}
   volumes:
     - ./output:${OUTPUT_ROOT:-/output}
     - ./vehicle:/vehicle:ro
     - ./aichallenge/utils:/aichallenge/utils:ro
+    - ${V2X_TLS_DIR:-/etc/v2x/tls}:/etc/v2x/tls:ro
     - /dev/vcu:/dev/vcu
     - /dev/gnss:/dev/gnss
     - /tmp/.X11-unix:/tmp/.X11-unix:rw
@@ -146,7 +158,7 @@ services:
     # fixes log ownership back to HOST_UID:HOST_GID.
     user: "root"
     entrypoint: []
-    command: ["bash", "-lc", "exec /vehicle/run_driver.bash vehicle ${ROS_DOMAIN_ID:-1} ${LOG_DIR:-}"]
+    command: ["bash", "-lc", 'exec /vehicle/run_driver.bash vehicle "${ROS_DOMAIN_ID:-1}" "${LOG_DIR:-}" ${DRIVER_LAUNCH_ARGS:-}']
 
 #### remote visualization services ####
   rviz2:

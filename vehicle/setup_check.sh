@@ -24,13 +24,17 @@ INFO="ℹ️"
 MODE="vehicle"
 PHASE="all"
 ENABLE_LOG=false
-LOG_FILE="setup_check_$(date +'%Y%m%d_%H%M%S').log"
 CAN_IFACE="${CAN_IFACE:-can0}"
 CAN_SAMPLE_SEC="${CAN_SAMPLE_SEC:-3}"
 CAN_MIN_FRAMES="${CAN_MIN_FRAMES:-100}"
 GNSS_NAVPVT_TIMEOUT_SEC="${GNSS_NAVPVT_TIMEOUT_SEC:-8}"
 ROS_TOPIC_TIMEOUT_SEC="${ROS_TOPIC_TIMEOUT_SEC:-4}"
 ROS_TOPIC_RETRY="${ROS_TOPIC_RETRY:-2}"
+IMU_BIAS_DURATION_SEC="${IMU_BIAS_DURATION_SEC:-5}"
+IMU_BIAS_WARMUP_SEC="${IMU_BIAS_WARMUP_SEC:-2}"
+# 暫定値（imu_corrector.param.yaml の想定ノイズ既定値に合わせている）。実測を踏まえて後で絞り込む。
+IMU_BIAS_STD_THRESHOLD="${IMU_BIAS_STD_THRESHOLD:-0.03}"
+IMU_BIAS_VELOCITY_THRESHOLD="${IMU_BIAS_VELOCITY_THRESHOLD:-0.05}"
 TOTAL_CHECKS=0
 PASSED_CHECKS=0
 FAILED_CHECKS=0
@@ -44,6 +48,12 @@ fi
 
 # shellcheck source-path=SCRIPTDIR source=vehicle_ports.sh
 source "${SCRIPT_DIR}/vehicle_ports.sh"
+
+# ログの実パスを決める。呼び出し元の cwd に散らさないため、常に vehicle/logs/
+# 配下に置く。ディレクトリが作れない環境では log() の tee が黙って落ちるので、
+# 画面出力だけが残る。
+LOG_FILE="${SCRIPT_DIR}/logs/setup_check_$(date +'%Y%m%d_%H%M%S').log"
+mkdir -p "${SCRIPT_DIR}/logs" 2>/dev/null || true
 
 # ログ関数
 log() {
@@ -80,6 +90,16 @@ ENVIRONMENT:
                    seconds to wait for each runtime ROS topic [default: 4]
   ROS_TOPIC_RETRY  attempts per runtime ROS topic before reporting a failure
                    [default: 2]
+  IMU_BIAS_DURATION_SEC
+                   IMU gyro bias sampling seconds [default: 5]
+  IMU_BIAS_WARMUP_SEC
+                   seconds discarded before sampling (IMU warmup) [default: 2]
+  IMU_BIAS_STD_THRESHOLD
+                   warn if stationary gyro stddev exceeds this [rad/s, default: 0.03
+                   (provisional, matches imu_corrector's assumed noise; to be
+                   tightened after real measurements)]
+  IMU_BIAS_VELOCITY_THRESHOLD
+                   treat as moving if |velocity| exceeds this [m/s, default: 0.05]
 
 MODE:
   vehicle         Real vehicle mode (CAN + VCU required) [default]
@@ -687,6 +707,100 @@ check_runtime_ros_topics() {
     log ""
 }
 
+# IMUジャイロバイアス計測 (runtime)
+check_imu_bias() {
+    print_section "IMU Gyro Bias Check (stationary)"
+
+    if ! is_compose_service_running "autoware"; then
+        log "${FAIL} IMU bias check: autoware service is not running"
+        record_result "fail"
+        log ""
+        return 0
+    fi
+
+    # 静止確認。バイアス推定は車両が完全に静止していることが前提なので、
+    # y/N で明示確認する。誤って走行中に測ると黙って誤ったバイアスを書き込むので、
+    # タイムアウトは付けず回答があるまで待つ。
+    local answer=""
+    read -r -p "$(echo -e "${WARN} Vehicle must be COMPLETELY stationary for IMU bias check. Proceed? [y/N]: ")" answer
+
+    case "${answer}" in
+    y | Y | yes | YES) ;;
+    *)
+        log "${WARN} IMU bias check skipped (vehicle not confirmed stationary)"
+        record_result "warn"
+        log ""
+        return 0
+        ;;
+    esac
+
+    local setup_cmd
+    if ! setup_cmd="$(ros_setup_command_for_service autoware)"; then
+        log "${FAIL} IMU bias check: unknown compose service 'autoware'"
+        record_result "fail"
+        log ""
+        return 0
+    fi
+
+    # check_imu_bias.py は ./vehicle:/vehicle マウント経由でコンテナから見える。
+    # rc=4 は「静止時ノイズが大きく、バイアス推定値が信用できない」の意味で、
+    # ここ（bash 側）で人間に再計測してよいか毎回確認してから再実行する。
+    # python 側では自動リトライしない。
+    # y と答え続ける限り上限なく再計測する。
+    local output
+    local rc
+    local attempt=1
+    output="$(docker compose -f "${REPO_ROOT}/docker-compose.yml" exec -T autoware bash -lc "
+        ${setup_cmd}
+        python3 /vehicle/check_imu_bias.py \
+            --duration '${IMU_BIAS_DURATION_SEC}' \
+            --warmup '${IMU_BIAS_WARMUP_SEC}' \
+            --velocity-threshold '${IMU_BIAS_VELOCITY_THRESHOLD}' \
+            --std-threshold '${IMU_BIAS_STD_THRESHOLD}'
+    " 2>&1)"
+    rc=$?
+    log "${output}"
+
+    while [ "${rc}" = "4" ]; do
+        local retry_answer=""
+        read -r -p "$(echo -e "${WARN} Do not touch the vehicle. Re-measure? [y/N] (attempt $((attempt + 1))): ")" retry_answer
+
+        case "${retry_answer}" in
+        y | Y | yes | YES) ;;
+        *) break ;;
+        esac
+
+        attempt=$((attempt + 1))
+        output="$(docker compose -f "${REPO_ROOT}/docker-compose.yml" exec -T autoware bash -lc "
+            ${setup_cmd}
+            python3 /vehicle/check_imu_bias.py \
+                --duration '${IMU_BIAS_DURATION_SEC}' \
+                --warmup '${IMU_BIAS_WARMUP_SEC}' \
+                --velocity-threshold '${IMU_BIAS_VELOCITY_THRESHOLD}' \
+                --std-threshold '${IMU_BIAS_STD_THRESHOLD}'
+        " 2>&1)"
+        rc=$?
+        log "${output}"
+    done
+
+    case "${rc}" in
+    0)
+        log "${OK} IMU gyro bias measured and imu_corrector.param.yaml updated (restart autoware to apply)"
+        record_result "pass"
+        ;;
+    4)
+        log "${WARN} IMU gyro bias check: gave up on noisy measurement (see above; not written)"
+        record_result "warn"
+        ;;
+    *)
+        log "${FAIL} IMU gyro bias check failed (rc=${rc}; measurement not completed, not written)"
+        record_result "fail"
+        ;;
+    esac
+
+    log ""
+}
+
 # past_log.md既知問題チェック (preflight)
 check_known_issues() {
     print_section "Known Issues Prevention Check"
@@ -724,31 +838,23 @@ check_execution_readiness() {
     log ""
 }
 
-# 結果サマリー表示
+# 結果サマリー表示。失敗は最後に置く: TUI のログ pane は末尾しか見えない。
 print_summary() {
-    log "========================================"
-    log "📊 Check Results Summary"
-    log "========================================"
-    log "Total checks: $TOTAL_CHECKS"
-    log "${OK} Passed: $PASSED_CHECKS"
-    log "${WARN} Warnings: $WARNING_CHECKS"
-    log "${FAIL} Failed: $FAILED_CHECKS"
     log ""
-
-    if [ $FAILED_CHECKS -eq 0 ] && [ $WARNING_CHECKS -eq 0 ]; then
-        log "${OK} All checks passed! System ready for vehicle mode."
-        exit 0
-    elif [ $FAILED_CHECKS -eq 0 ]; then
-        log "${WARN} Some warnings found. Review before proceeding with vehicle mode."
-        exit 0
-    else
-        log "${FAIL} Critical issues found! Fix failures before running vehicle mode."
-        log ""
-        log "Recommended actions:"
-        log "1. Address all failed checks above"
-        log "2. Re-run this script"
+    log "📊 ${TOTAL_CHECKS} checks: ${PASSED_CHECKS} ok, ${WARNING_CHECKS} warn, ${FAILED_CHECKS} fail"
+    # 判定を 1 行だけ添える。スクリプトを直接叩いた人が末尾で結論を得られるように。
+    # 行頭に ${FAIL} / ${WARN} を置かないこと: TUI が行頭のマーカーで失敗行を
+    # 拾うため、判定行まで failures 領域に混ざる。
+    if [ "${FAILED_CHECKS}" -gt 0 ]; then
+        log "   失敗あり。上の失敗項目を直して再実行してください。"
         exit 1
     fi
+    if [ "${WARNING_CHECKS}" -gt 0 ]; then
+        log "   警告のみ。内容を確認したうえで進めてください。"
+    else
+        log "   すべて通過。走行準備 OK。"
+    fi
+    exit 0
 }
 
 # メイン実行
@@ -772,6 +878,7 @@ main() {
         check_runtime_docker_services
         check_gnss_rtk_status
         check_runtime_ros_topics
+        check_imu_bias
         ;;
     all)
         check_hardware
@@ -781,6 +888,7 @@ main() {
         check_runtime_docker_services
         check_gnss_rtk_status
         check_runtime_ros_topics
+        check_imu_bias
         check_known_issues
         check_execution_readiness
         ;;
