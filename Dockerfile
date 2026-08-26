@@ -19,7 +19,7 @@ RUN mkdir -p /etc/xdg/qt5ct \
 ENV QT_QPA_PLATFORMTHEME=qt5ct
 
 COPY requirements.txt .
-RUN python3 -m pip install --no-cache-dir -r requirements.txt
+RUN python3 -m pip install --no-cache-dir --timeout 600 -r requirements.txt
 
 # Provide a robust `colcon` wrapper which avoids setuptools "entry script"
 # dependency resolution issues (e.g. pkg_resources evaluating __requires__).

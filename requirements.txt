@@ -1,9 +1,9 @@
---extra-index-url https://download.pytorch.org/whl/cu121
+--extra-index-url https://download.pytorch.org/whl/cu128
 
-# Dockerfile内のCUDA 12.2と互換性のあるCUDA 12.1向けPyTorchをインストール
-torch==2.3.1
-torchvision==0.18.1
-torchaudio==2.3.1
+# RTX 5070 Ti (Blackwell/sm_120) 対応: CUDA 12.8 + PyTorch 2.6以降が必要
+torch>=2.6.0
+torchvision
+torchaudio
 
 
 cvxpy
