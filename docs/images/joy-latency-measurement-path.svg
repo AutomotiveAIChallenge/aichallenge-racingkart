@@ -1,0 +1,53 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 920 470" width="920" height="470" font-family="Helvetica, Arial, sans-serif">
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#9a9a9a"/>
+    </marker>
+  </defs>
+
+  <rect x="14" y="34" width="892" height="118" rx="8" fill="none" stroke="#2a78d6" stroke-width="1" stroke-dasharray="5 4" opacity="0.65"/>
+  <text x="24" y="28" font-size="13" fill="#2a78d6" font-weight="bold">remote side  ROS_DOMAIN_ID 0</text>
+
+  <rect x="30" y="62" width="200" height="62" rx="6" fill="none" stroke="#9a9a9a" stroke-width="1.5"/>
+  <text x="130" y="86" font-size="13" fill="#6b6b6b" text-anchor="middle">measure_joy_latency.py</text>
+  <text x="130" y="104" font-size="11" fill="#6b6b6b" text-anchor="middle">publish 20 Hz</text>
+
+  <rect x="470" y="62" width="220" height="62" rx="6" fill="none" stroke="#9a9a9a" stroke-width="1.5"/>
+  <text x="580" y="86" font-size="13" fill="#6b6b6b" text-anchor="middle">zenoh-bridge-ros2dds</text>
+  <text x="580" y="104" font-size="11" fill="#6b6b6b" text-anchor="middle">client, no namespace</text>
+
+  <line x1="230" y1="93" x2="464" y2="93" stroke="#9a9a9a" stroke-width="1.5" marker-end="url(#arrow)"/>
+  <circle cx="290" cy="93" r="5" fill="#2a78d6"/>
+  <text x="290" y="79" font-size="12" fill="#2a78d6" text-anchor="middle" font-weight="bold">t0</text>
+  <text x="347" y="140" font-size="10" fill="#6b6b6b" text-anchor="middle">/A2/racing_kart/joy</text>
+
+  <rect x="700" y="62" width="190" height="62" rx="6" fill="none" stroke="#eb6834" stroke-width="1.8"/>
+  <text x="795" y="86" font-size="12" fill="#6b6b6b" text-anchor="middle">pub_max_frequencies</text>
+  <text x="795" y="104" font-size="11" fill="#eb6834" text-anchor="middle">10 Hz へ間引き</text>
+
+  <rect x="320" y="196" width="280" height="60" rx="6" fill="none" stroke="#1baf7a" stroke-width="2"/>
+  <text x="460" y="220" font-size="13" fill="#6b6b6b" text-anchor="middle">EC2 zenoh router (mTLS 7448)</text>
+  <text x="460" y="238" font-size="11" fill="#6b6b6b" text-anchor="middle">AS250 + KDDI SIM 経由</text>
+
+  <path d="M 795 130 L 795 226 L 606 226" fill="none" stroke="#9a9a9a" stroke-width="1.5" marker-end="url(#arrow)"/>
+  <path d="M 314 226 L 120 226 L 120 310 L 190 310" fill="none" stroke="#9a9a9a" stroke-width="1.5" marker-end="url(#arrow)"/>
+
+  <rect x="14" y="288" width="892" height="118" rx="8" fill="none" stroke="#2a78d6" stroke-width="1" stroke-dasharray="5 4" opacity="0.65"/>
+  <text x="24" y="282" font-size="13" fill="#2a78d6" font-weight="bold">vehicle side  ROS_DOMAIN_ID 61   (同じ PC 上)</text>
+
+  <rect x="196" y="286" width="220" height="62" rx="6" fill="none" stroke="#9a9a9a" stroke-width="1.5"/>
+  <text x="306" y="310" font-size="13" fill="#6b6b6b" text-anchor="middle">zenoh-bridge-ros2dds</text>
+  <text x="306" y="328" font-size="11" fill="#6b6b6b" text-anchor="middle">client, -n /A2</text>
+
+  <rect x="620" y="286" width="220" height="62" rx="6" fill="none" stroke="#9a9a9a" stroke-width="1.5"/>
+  <text x="730" y="310" font-size="13" fill="#6b6b6b" text-anchor="middle">measure_joy_latency.py</text>
+  <text x="730" y="328" font-size="11" fill="#6b6b6b" text-anchor="middle">subscribe (driver の代役)</text>
+
+  <line x1="416" y1="317" x2="614" y2="317" stroke="#9a9a9a" stroke-width="1.5" marker-end="url(#arrow)"/>
+  <circle cx="560" cy="317" r="5" fill="#2a78d6"/>
+  <text x="560" y="303" font-size="12" fill="#2a78d6" text-anchor="middle" font-weight="bold">t2</text>
+  <text x="500" y="364" font-size="10" fill="#6b6b6b" text-anchor="middle">/racing_kart/joy</text>
+
+  <text x="24" y="432" font-size="12" fill="#6b6b6b">zenoh 区間 = t2 - t0</text>
+  <text x="24" y="452" font-size="11" fill="#6b6b6b">送信と受信を 1 プロセスで行うため、両方の時刻が同一クロックから得られる。経路は PC から EC2 を往復する。</text>
+</svg>
