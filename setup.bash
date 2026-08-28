@@ -417,6 +417,7 @@ ensure_docker_group() {
     log "${INFO} Adding ${USER-} to docker group"
     sudo_refresh
     sudo usermod -aG docker "${USER-}"
+    sudo newgrp docker
     warn "${WARN} Docker group takes effect after re-login."
     if [ "${SETUP_ASSUME_YES}" = "1" ]; then
         warn "${INFO} Non-interactive mode: continuing, but docker commands may fail until re-login."
