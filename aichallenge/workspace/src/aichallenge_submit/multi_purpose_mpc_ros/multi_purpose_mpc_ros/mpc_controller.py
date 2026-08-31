@@ -263,9 +263,14 @@ class MPCController(Node):
 
             for param in parameters:
                 if param.name == "v_max" and param.type_ == Parameter.Type.DOUBLE:
-                    mpc_cfg.v_max = param.value
-                    self._mpc.update_v_max(kmh_to_m_per_sec(param.value))
-                    v_ref: List[float] = [kmh_to_m_per_sec(param.value)] * len(self._reference_path.waypoints)
+                    # MPCConfig.v_max は m/s で保持する (create_mpc が kmh_to_m_per_sec して
+                    # 組み立てる)。param は km/h で受け取るので、ここで必ず変換すること。
+                    # km/h の生値を入れると _control() 内の 2 つのキャップ
+                    # (ref_vel との min と、制御無効時の減速 clip) が m/s と km/h の比較に
+                    # なり、上限が 3.6 倍に緩んで実質無効化される。
+                    mpc_cfg.v_max = kmh_to_m_per_sec(param.value)
+                    self._mpc.update_v_max(mpc_cfg.v_max)
+                    v_ref: List[float] = [mpc_cfg.v_max] * len(self._reference_path.waypoints)
                     self._reference_path.set_v_ref(v_ref)
 
                     self.get_logger().warn(f"v_max was updated to '{param.value}' [km/h]")
@@ -808,12 +813,14 @@ class MPCController(Node):
             # self.get_logger().info(f"u: {u}")
 
         if self._ref_vel_configulator is not None:
-            ref_vel_mps = self._ref_vel_configulator.get_ref_vel(self._mpc.model.wp_id)
-            ref_vel_kmph = min(
-                kmh_to_m_per_sec(ref_vel_mps),
+            # ref_vel.yaml は km/h、MPC と MPCConfig.v_max は m/s。名前で取り違えると
+            # 上限が 3.6 倍ずれるので、単位を変数名に出す。
+            ref_vel_kmph = self._ref_vel_configulator.get_ref_vel(self._mpc.model.wp_id)
+            ref_vel_mps = min(
+                kmh_to_m_per_sec(ref_vel_kmph),
                 self._mpc_cfg.v_max)
-            self._mpc.update_v_max(ref_vel_kmph)
-            v_ref: List[float] = [ref_vel_kmph] * len(self._reference_path.waypoints)
+            self._mpc.update_v_max(ref_vel_mps)
+            v_ref: List[float] = [ref_vel_mps] * len(self._reference_path.waypoints)
             self._reference_path.set_v_ref(v_ref)
 
         # override by brake command if control is disabled
