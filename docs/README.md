@@ -21,6 +21,7 @@
 - `log-design.md` — `/output` 配下へログを集約する設計（compose / `run_evaluation.bash` の出力レイアウト）。
 - `makefile-target-naming.md` — Makefile ターゲットの `<service>-<command>` 命名ガイドライン。
 - `mpc-integration.md` — `multi_purpose_mpc_ros` のインテグレーション設計。
+- `mpc-tuning-tui.md` — MPC のパラメータを走行中に詰めるための設計。メタデータの正本を ROS 2 の `ParameterDescriptor` に置き、その上に端末で動く調整用 TUI（`make tui`）を載せる。`width` を走行中に変えるためのコリドー再生成のベクトル化を含む。
 - `vehicle-tui.md` — 車両 PC 上の走行枠オペレーション（preflight → 提出物 → build → 起動 → runtime → 片付け）を 1 つの TUI に集約する設計。順序の強制と状態の実測のみを担い、既存の `make` / `setup_check.sh` / `prestage` は再実装しない。
 
 ## docs/guide/ 一覧
