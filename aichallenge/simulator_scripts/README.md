@@ -24,6 +24,9 @@ make eval → run_evaluation.bash → evaluation.launch.xml
 - `make dev` / `make gate1..gate3` / `make e2e` は AWSIM に加えて Autoware も起動する複合ターゲット。
   `make e2e` が起動するのは `e2e` モード（`e2e-final` は `make simulator-e2e-final`）。
   `make dev2..dev4` は N 台分の autoware を別 compose プロジェクト（ROS_DOMAIN_ID=1..N）で起動する。
+- **セーフティゲートの通し実行の正は `make eval-gate`**（= `SIM_MODE=gate make eval`。
+  `evaluation.launch.xml` 経由で orchestrator/rosbag 込みの決勝相当フローを通る）。
+  `make gate1..gate3` は AWSIM→Autoware 2段起動の単発デバッグ用で、通し検証には使わない。
 
 ## モード一覧
 

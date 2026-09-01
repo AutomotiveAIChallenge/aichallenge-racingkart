@@ -42,7 +42,7 @@
 
 10. **`HOST_UID` / `HOST_GID` を Makefile が export し、`output/` 配下の成果物がホストユーザ所有になる。コンテナを直接 `docker compose` で起動する場合も `HOST_UID` / `HOST_GID` を渡すこと。** 守らないと `output/` が root 所有になり、ホストで成果物を参照/削除できなくなる。
 
-11. **`dN-result-details.json` のファイル名接頭辞 `d{vehicle_number}-` と `schema_version: "v3"`、`result-summary.json` のファイル名と `schema_version: "v2"`、`vehicles[].vehicle_number`、`vehicles[].final_position` は変更しない。** 守らないと AWS `result_update` Lambda がファイル検索に失敗するか、スコアリングが壊れる。`result-summary.json` はファイル名が Lambda の S3 イベント発火条件であり固定。
+11. **`dN-result-details.json` のファイル名接頭辞 `d{vehicle_number}-` と `schema_version: "v3"`、`result-summary.json` のファイル名と `schema_version: "v2"`（レースモード。セーフティゲートモードは `"safety-gate-v1"`、§5 参照）、`vehicles[].vehicle_number`、`vehicles[].final_position` は変更しない。** 守らないと AWS `result_update` Lambda がファイル検索に失敗するか、スコアリングが壊れる。`result-summary.json` はファイル名が Lambda の S3 イベント発火条件であり固定。
 
 12. **`dN-result-details.json` の配置は AWSIM の CWD に従う（固定の `d0/` 前提でパスを決め打ちしない）。`result-summary.json` は `autostart_orchestrator` が `output_dir / "result-summary.json"` と `run_dir / "result-summary.json"` の両方を探索する（ソース: `_refresh_latest_artifact_links`）。この探索ロジックを変更する場合は配置パターンと整合させること。** 守らないと `latest/` へのシンボリックリンクが張れず、最新成果物の特定手段が失われる。
 
@@ -180,6 +180,34 @@ result JSON の**生産者は AWSIM（Unity）シミュレータ本体**。`scri
 `vehicles[]` 要素: `vehicle_number` (int)、`vehicle_name` (string)、`final_position` (int, 1 始まり)、`finished` (bool)、`lap_count` (int)、`laps` (float[] 秒)、`min_lap_time` / `max_lap_time` / `avg_lap_time` / `total_lap_time` (float 秒)。`final_position` は MCR（"1334" 形式）: 同着はグループ最小順位を共有するため値が飛びうる（順位付けアルゴリズム自体は AWSIM 側にあり本リポジトリのソースには無く、実サンプル出力から確認）。
 
 AWS `result_update` Lambda は `vehicles[].vehicle_number` と `vehicles[].final_position` のみを消費してスコア（Elo レーティング）を算出する。
+
+##### セーフティゲートモードの `result-summary.json`（2026-09 追加）
+
+セーフティゲート実行（`SIM_MODE=gate*`、`evaluation_mode: s2r_2_practice_solo`）では、AWSIM は
+レースを走らせないため通常の summary は生成せず、代わりに **gate 版 summary** を CWD に書き出す。
+完了契約（「summary を最後にアップロード → `result_update` 発火」）は全モード共通:
+
+```json
+{
+  "schema_version": "safety-gate-v1",
+  "safety_gate": {
+    "all_passed": true,
+    "gate_arg": "all",
+    "scenario_folder": "SafetyGate",
+    "tests": [{ "test_name": "test1", "passed": true, "fail_reason": "" }]
+  },
+  "vehicles": []
+}
+```
+
+- `safety_gate` キーの有無がモード判別子。**レース用フィールドの偽装は禁止**（`vehicles` は空配列。
+  `final_position` / `laps` のダミー値を入れない）。
+- `schema_version` はレース用 `"v2"` と区別するため `"safety-gate-v1"` 固定。gate 版 summary は
+  `safety_gate` + `vehicles` しか持たないので、v2（session + legacy projection）契約でパースしてはならない
+  （AWS `result_update` は `schema_version` を読まず `vehicles[].final_position` のみ参照するため影響なし）。
+- `vehicles: []` のため `result_update` の順位パースは安全に None を返し、`executions.status=2` と
+  raw JSON の `result` 列保存のみが行われる（レーティングは `evaluation_mode` ガードで不変）。
+- 人間/デバッグ用の `safety-gate-result.json` も従来どおり CWD に併存する（S3 へはアップロードしない）。
 
 ---
 
