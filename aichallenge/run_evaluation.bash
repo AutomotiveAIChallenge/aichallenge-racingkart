@@ -17,7 +17,7 @@ exec > >(tee -a "${log_file}") 2>&1
 
 sim_mode="${SIM_MODE:-eval}"
 
-ros2 launch aichallenge_system_launch evaluation.launch.xml \
+exec ros2 launch aichallenge_system_launch evaluation.launch.xml \
     "domain_id:=${domain_id}" \
     "sim_mode:=${sim_mode}" \
     "log_dir:=${out_dir}" \
