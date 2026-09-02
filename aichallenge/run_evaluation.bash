@@ -25,4 +25,5 @@ exec ros2 launch aichallenge_system_launch evaluation.launch.xml \
     "rosbag:=true" \
     "simulation:=true" \
     "use_sim_time:=true" \
-    "run_rviz:=true"
+    "run_rviz:=${RUN_RVIZ:-true}" \
+    "debug:=true"

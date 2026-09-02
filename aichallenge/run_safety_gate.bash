@@ -14,5 +14,8 @@ fi
 
 export SIM_MODE=safety-gate
 export ROS_DOMAIN_ID="${ROS_DOMAIN_ID:-1}"
+# No rviz in the evaluation environment: capture comes from the standalone screen recorder (full X screen),
+# not from rviz's capture panel, which only records the rviz window region.
+export RUN_RVIZ=false
 
 exec bash /aichallenge/run_evaluation.bash

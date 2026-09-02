@@ -241,6 +241,7 @@ AWS `result_update` Lambda は `vehicles[].vehicle_number` と `vehicles[].final
 - **引数なしで起動できる。** 評価環境から渡されるのは環境変数のみ（`EVAL_TIMEOUT_SEC` は `main.bash` の `timeout` に使われ、入口には渡らない）。
 - **ROS 環境を自分で整える。** `/aichallenge/workspace/install/setup.bash` を必ず source し、`d1` overlay は存在すれば source する（ローカル eval イメージでは存在しないので条件付き）。
 - **`SIM_MODE` を自分で決める。** 入口 = モードなので、外から渡された `SIM_MODE` は上書きする。AWSIM の引数は `simulator_scripts/<mode>.sh` に置き、入口や launch に直接書かない（`safety-gate.sh` / `parallel.sh`）。
+- **rviz は起動しない（`RUN_RVIZ=false`）。** 録画は standalone の `aichallenge_screen_recorder`（X root window 全体 = 1280x720）で行う。rviz が居ると Autoware 標準の AutowareScreenCapturePanel が同じ `/debug/service/capture_screen` を提供し、rviz ウィンドウ領域（1850x1136、オフセット 70,27）しか録れない。`evaluation.launch.xml` は `run_rviz=false` かつ `capture=true` のときだけ recorder を起動する。debug 可視化 / motion analytics は `debug` 引数で独立に on。
 - **出力レイアウトは §5 に従う。** gate は `/output/<ts>/d1/`（`result-summary.json` も同じ場所）、parallel は `/output/<ts>/`（`result-summary.json` は run_dir 直下、車両ログは `d1..d3/`）。
 - **完了は `/admin/awsim/state` で通知する。** gate は AWSIM の自己終了時 `terminate`、parallel は `finishall`。入口が自分で結果をアップロードしたり、`/output` 以外に書いたりしない。
 - **ローカルの `make eval-gate` は `run_evaluation.bash` + `SIM_MODE=gate`（`gate.sh`）で、入口スクリプトは通らない。** 評価環境と同じ入口をローカルで試すときは eval イメージ内で `bash /aichallenge/run_safety_gate.bash` を直接実行する。
