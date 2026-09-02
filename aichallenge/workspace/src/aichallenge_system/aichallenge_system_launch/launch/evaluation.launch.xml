@@ -8,7 +8,7 @@
     <arg name="simulation" default="true"/>
     <arg name="use_sim_time" default="true"/>
     <arg name="run_rviz" default="true"/>
-    <!-- Debug visualization / motion analytics; independent of rviz so the evaluation can keep it on with rviz off. -->
+    <!-- Debug visualization / motion analytics (awsim.launch.xml); independent of rviz. -->
     <arg name="debug" default="$(var run_rviz)"/>
 
     <log message="Launching evaluation bundle (simulator + autoware)."/>
@@ -38,9 +38,8 @@
         </group>
     </group>
 
-    <!-- Screen capture without rviz: the standalone recorder grabs the X root window (full 1280x720),
-         whereas rviz's AutowareScreenCapturePanel records only the rviz window region. With rviz on,
-         the panel provides /debug/service/capture_screen, so the recorder is skipped to avoid two servers. -->
+    <!-- Standalone recorder (X root window). With rviz on, its AutowareScreenCapturePanel already serves
+         /debug/service/capture_screen, so the recorder is skipped to avoid two servers. -->
     <group if="$(var capture)">
         <group unless="$(var run_rviz)">
             <set_env name="ROS_DOMAIN_ID" value="$(var domain_id)"/>

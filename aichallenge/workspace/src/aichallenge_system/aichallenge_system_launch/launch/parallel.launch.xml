@@ -14,12 +14,13 @@
     <arg name="mem_awsim" default="unlimited"/>
     <arg name="cpu_screen_recorder" default="5-6"/>
     <arg name="mem_screen_recorder" default="unlimited"/>
+    <!-- mem_d*: 12 GiB in bytes; prlimit does not accept unit suffixes (e.g. 12G). -->
     <arg name="cpu_d1" default="7-9"/>
-    <arg name="mem_d1" default="12884901888"/> <!-- 12 GiB in bytes; prlimit does not accept unit suffixes (e.g. 12G) here -->
+    <arg name="mem_d1" default="12884901888"/>
     <arg name="cpu_d2" default="10-12"/>
-    <arg name="mem_d2" default="12884901888"/> <!-- 12 GiB in bytes; prlimit does not accept unit suffixes (e.g. 12G) here -->
+    <arg name="mem_d2" default="12884901888"/>
     <arg name="cpu_d3" default="13-15"/>
-    <arg name="mem_d3" default="12884901888"/> <!-- 12 GiB in bytes; prlimit does not accept unit suffixes (e.g. 12G) here -->
+    <arg name="mem_d3" default="12884901888"/>
 
     <log message="Launching parallel evaluation (AWSIM args: simulator_scripts/parallel.sh)."/>
 

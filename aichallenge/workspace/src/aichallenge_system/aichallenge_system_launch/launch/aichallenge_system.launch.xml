@@ -3,7 +3,6 @@
     <arg name="simulation"/>
     <arg name="use_sim_time"/>
     <arg name="run_rviz"/>
-    <!-- Debug visualization / motion analytics (awsim.launch.xml). Defaults to run_rviz so local runs are unchanged. -->
     <arg name="debug" default="$(var run_rviz)"/>
     <arg name="sensor_model" default="racing_kart_sensor_kit"/>
     <arg name="launch_vehicle_interface" default="$(eval &quot;'$(var simulation)' == 'false'&quot;)"/>
