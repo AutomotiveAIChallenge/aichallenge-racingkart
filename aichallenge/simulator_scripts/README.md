@@ -26,6 +26,7 @@ make eval → run_evaluation.bash → evaluation.launch.xml
   `make dev2..dev4` は N 台分の autoware を別 compose プロジェクト（ROS_DOMAIN_ID=1..N）で起動する。
 - **セーフティゲートの通し実行の正は `make eval-gate`**（= `SIM_MODE=gate make eval`。
   `evaluation.launch.xml` 経由で orchestrator/rosbag 込みの決勝相当フローを通る）。
+  評価環境は `run_safety_gate.bash` → `safety-gate.sh` を使う（`docs/interface/evaluation-interface.md` §6）。
   `make gate1..gate3` は AWSIM→Autoware 2段起動の単発デバッグ用で、通し検証には使わない。
 
 ## モード一覧
@@ -34,11 +35,12 @@ make eval → run_evaluation.bash → evaluation.launch.xml
 |---|---|---|---|
 | `eval.sh` | 評価 | - | 1台 / 6 laps / 600s / count開始 / handicap・wall-recovery・ranking off |
 | `dev.sh` | 開発 / S2R 練習 | 車両数 N（既定 1） | unlimited laps・timeout / count開始 / handicap・wall-recovery・ranking off / camera・lidar off |
-| `parallel.sh` | 複数台レース | - | 3台 / 6 laps / 600s / sync開始 / handicap・ranking・start-random off / wall-recovery off |
+| `parallel.sh` | 3台並列評価（`parallel.launch.xml` が起動） | - | 3台 / 6 laps / 480s / sync開始 / collisions・handicap・overtaking-lane・ranking on / wall-recovery off |
 | `e2e.sh` | E2E 練習兼提出参考 | - | 1台 + NPC 2体 / 6 laps / timeout 実質なし / count開始（0秒） / start-random on / handicap・ranking off / camera・lidar cpu |
 | `e2e-final.sh` | E2E 決勝 | - | 4台 / 6 laps / 420s / sync開始 / handicap・ranking on / camera・lidar cpu / sound on |
 | `s2r-final.sh` | S2R 決勝 | - | 4台 / 6 laps / 420s / sync開始 / handicap・ranking on / camera・lidar off / sound on |
-| `gate.sh` | Safety Gate テスト | テスト番号 1/2/3/all（既定 all） | 1台。all は test1〜3 を順次実行 |
+| `safety-gate.sh` | Safety Gate 評価（`run_safety_gate.bash` が起動、評価環境の正） | - | 1台 / 全シナリオ / handicap・ranking off / camera・lidar off |
+| `gate.sh` | Safety Gate 単発デバッグ | テスト番号 1/2/3/all（既定 all） | 1台。all は test1〜3 を順次実行 |
 | `sample-scenario.sh` | シナリオ指定起動 | - | `StreamingAssets/Race/official.yaml` を `--scenario` で読み込む |
 | `multiplay-server.sh` | Multiplay 専用サーバー | - | `-batchmode -nographics`、port 7777 |
 | `multiplay-host.sh` | Multiplay ホスト | - | 127.0.0.1:7777、vehicle-index 1 |

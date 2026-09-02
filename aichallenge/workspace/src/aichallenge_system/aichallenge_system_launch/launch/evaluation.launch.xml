@@ -22,6 +22,8 @@
     <group>
         <group>
             <set_env name="ROS_DOMAIN_ID" value="0"/>
+            <!-- run_simulator.bash writes awsim.log under LOG_DIR. -->
+            <set_env name="LOG_DIR" value="$(var log_dir)"/>
             <executable
                 name="aichallenge_awsim_eval"
                 cwd="$(var log_dir)"

@@ -1,24 +1,18 @@
 #!/bin/bash
 
-# Race settings for the 3-vehicle parallel evaluation (parallel.launch.xml).
+# Safety gate for the evaluation environment (run_safety_gate.bash): all scenarios, fixed args.
+# For per-test debugging use gate.sh (make gate1..gate3).
 AWSIM_DIRECTORY=/aichallenge/simulator/AWSIM
 export ROS_DOMAIN_ID=0
 
 exec "$AWSIM_DIRECTORY/AWSIM.x86_64" \
-    --start-mode sync \
-    --start-count-seconds 5 \
-    --vehicles 3 \
-    --npcs 0 \
-    --boosts 2 \
-    --laps 6 \
-    --timeout 480 \
+    --vehicles 1 \
+    --safety-gate "all" \
     --steer-source ackermann \
     --sound off \
     --collisions on \
-    --handicap on \
-    --wall-recovery off \
-    --overtaking-lane on \
-    --ranking on \
+    --handicap off \
+    --ranking off \
     --camera off \
     --lidar off \
     -screen-fullscreen 1 \
