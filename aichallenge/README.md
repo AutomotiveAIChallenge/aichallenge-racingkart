@@ -21,7 +21,7 @@
 ## `aichallenge/` 配下の主要ファイル（設計思想）
 
 - `aichallenge/run_evaluation.bash`: 評価オーケストレータ。起動→待機→初期化→収集→後処理までを1本で管理
-- `aichallenge/run_safety_gate.bash` / `aichallenge/run_parallel.bash`: 評価環境（aichallenge-aws）の入口。ROS overlay の source と `SIM_MODE` を自分で決めてから起動する自己完結スクリプト（契約: `docs/interface/evaluation-interface.md` §6）
+- `aichallenge/run_evaluation.bash` / `aichallenge/run_safety_gate.bash` / `aichallenge/run_parallel.bash`: 評価環境（aichallenge-aws）の入口でもある。ROS overlay の source と `SIM_MODE` を自分で決める自己完結スクリプト（契約: `docs/interface/evaluation-interface.md` §6）
 - `aichallenge/build_autoware.bash`: overlay(`aichallenge/workspace/`) のビルド。必要なら `clean` で `build/install/log` を削除
 - `aichallenge/run_simulator.bash`: AWSIM の起動。`SIM_MODE` をファイル名として `simulator_scripts/<mode>.sh` に委譲（起動引数の正本は各スクリプト側）
 - `aichallenge/run_autoware.bash`: Autoware の起動。`awsim/vehicle/rosbag` などモード別に launch 引数を整理

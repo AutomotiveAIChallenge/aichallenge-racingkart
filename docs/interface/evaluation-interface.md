@@ -48,7 +48,7 @@
 12. **`dN-result-details.json` の配置は AWSIM の CWD に従う（固定の `d0/` 前提でパスを決め打ちしない）。`result-summary.json` は `autostart_orchestrator` が `output_dir / "result-summary.json"` と `run_dir / "result-summary.json"` の両方を探索する（ソース: `_refresh_latest_artifact_links`）。この探索ロジックを変更する場合は配置パターンと整合させること。** 守らないと `latest/` へのシンボリックリンクが張れず、最新成果物の特定手段が失われる。
 
 
-13. **評価パイプライン（`aichallenge-aws` の `main.bash`）が起動するのは `aichallenge/run_safety_gate.bash` と `aichallenge/run_parallel.bash` の 2 本だけ。両者は自己完結（ROS overlay を自分で source し、`SIM_MODE` / `ROS_DOMAIN_ID` / `LOG_DIR` を自分で決める）で、`docker-entrypoint.sh` や compose の環境変数に依存しない。名前・引数なし起動・自己完結性を変更しない。** 守らないと評価イメージ（entrypoint 無し、提出物は `/aichallenge/d1` overlay）で `ros2: command not found` や提出パッケージ未検出で全件 failed になる（2026-09-02 に実際に発生）。ローカル開発用の `run_evaluation.bash` / `run_autoware.bash` はこの契約の対象外で、変更してよいが、入口スクリプトが exec する先である点は保つ（§6）。
+13. **評価パイプライン（`aichallenge-aws` の `main.bash`）は `EVAL_ENTRYPOINT` で指定された入口スクリプトを `bash /aichallenge/<EVAL_ENTRYPOINT>` で起動する。入口は `run_evaluation.bash`（s2r_1_practice_solo）、`run_safety_gate.bash`（s2r_2_practice_solo）、`run_parallel.bash`（s2r_1_rated_trios）の 3 本だけ。各入口は ROS overlay を自分で source し、`SIM_MODE` / `ROS_DOMAIN_ID` / `LOG_DIR` を自分で決める（`docker-entrypoint.sh` や compose の環境変数に依存しない）。評価環境側が渡すのは `EVAL_ENTRYPOINT` / `EVAL_TIMEOUT_SEC` / `RUN_RVIZ=false` と Batch 固有の env のみ。名前・引数なし起動・自己完結性を変更しない。** 守らないと評価イメージ（entrypoint 無し、提出物は `/aichallenge/d1` overlay）で `ros2: command not found` や提出パッケージ未検出で全件 failed になる（2026-09-02 に実際に発生）。
 ---
 
 ## 2. ドメイン規約の約束
@@ -231,24 +231,26 @@ AWS `result_update` Lambda は `vehicles[].vehicle_number` と `vehicles[].final
 
 ### 6-1. 入口スクリプト
 
-| 入口 | 用途 | 中で行うこと | AWS 側の選択条件 |
+`aichallenge-aws` の `start_build` Lambda が `evaluation_mode` を入口名とタイムアウトに変換し、Step Functions が Batch コンテナの env（`EVAL_ENTRYPOINT`, `EVAL_TIMEOUT_SEC`）として渡す。`main.bash` は許可リストで名前を検証してから起動する。
+
+| evaluation_mode | EVAL_ENTRYPOINT | 中で行うこと | EVAL_TIMEOUT_SEC |
 |---|---|---|---|
-| `aichallenge/run_safety_gate.bash` | セーフティゲート（1 台、`evaluation_mode: s2r_2_practice_solo`） | base overlay を source → `/aichallenge/d1/workspace/install/setup.bash` があれば source → `SIM_MODE=safety-gate`、`ROS_DOMAIN_ID=1` を設定 → `exec bash run_evaluation.bash` | `PARALLEL_MODE != true` |
-| `aichallenge/run_parallel.bash` | 3 台並列レース（`evaluation_mode: s2r_1_rated_trios`） | base overlay を source → `exec ros2 launch parallel.launch.xml log_dir:=/output/<ts>`（各車両の `d1..d3` overlay は launch 内で source） | `PARALLEL_MODE == true` |
+| `s2r_1_practice_solo` | `run_evaluation.bash` | base overlay を source → `/aichallenge/d1/workspace/install/setup.bash` があれば source → `SIM_MODE`（既定 `eval` = `eval.sh`）で `evaluation.launch.xml` | 800 |
+| `s2r_2_practice_solo` | `run_safety_gate.bash` | `SIM_MODE=safety-gate`、`ROS_DOMAIN_ID=1` を設定 → `exec bash run_evaluation.bash` | 400 |
+| `s2r_1_rated_trios` | `run_parallel.bash` | base overlay を source → `exec ros2 launch parallel.launch.xml log_dir:=/output/<ts>`（各車両の `d1..d3` overlay は launch 内で source） | 800 |
 
 ### 6-2. 入口スクリプトが守ること
 
 - **引数なしで起動できる。** 評価環境から渡されるのは環境変数のみ（`EVAL_TIMEOUT_SEC` は `main.bash` の `timeout` に使われ、入口には渡らない）。
-- **ROS 環境を自分で整える。** `/aichallenge/workspace/install/setup.bash` を必ず source し、`d1` overlay は存在すれば source する（ローカル eval イメージでは存在しないので条件付き）。
-- **`SIM_MODE` を自分で決める。** 入口 = モードなので、外から渡された `SIM_MODE` は上書きする。AWSIM の引数は `simulator_scripts/<mode>.sh` に置き、入口や launch に直接書かない（`safety-gate.sh` / `parallel.sh`）。
-- **rviz は起動しない（`RUN_RVIZ=false`）。** 録画は standalone の `aichallenge_screen_recorder`（X root window 全体 = 1280x720）で行う。rviz が居ると Autoware 標準の AutowareScreenCapturePanel が同じ `/debug/service/capture_screen` を提供し、rviz ウィンドウ領域（1850x1136、オフセット 70,27）しか録れない。`evaluation.launch.xml` は `run_rviz=false` かつ `capture=true` のときだけ recorder を起動する。debug 可視化 / motion analytics は `debug` 引数で独立に on。
-- **出力レイアウトは §5 に従う。** gate は `/output/<ts>/d1/`（`result-summary.json` も同じ場所）、parallel は `/output/<ts>/`（`result-summary.json` は run_dir 直下、車両ログは `d1..d3/`）。
-- **完了は `/admin/awsim/state` で通知する。** gate は AWSIM の自己終了時 `terminate`、parallel は `finishall`。入口が自分で結果をアップロードしたり、`/output` 以外に書いたりしない。
-- **ローカルの `make eval-gate` は `run_evaluation.bash` + `SIM_MODE=gate`（`gate.sh`）で、入口スクリプトは通らない。** 評価環境と同じ入口をローカルで試すときは eval イメージ内で `bash /aichallenge/run_safety_gate.bash` を直接実行する。
+- **ROS 環境を自分で整える。** `/aichallenge/workspace/install/setup.bash` を必ず source し、単体系は `d1` overlay が存在すれば source する（ローカル eval イメージでは存在しないので条件付き）。この処理は `run_evaluation.bash` に置き、`run_safety_gate.bash` はモード指定だけの薄い wrapper にする。
+- **`SIM_MODE` を自分で決める。** 入口 = モードなので、外から渡された `SIM_MODE` は上書きする。AWSIM の引数は `simulator_scripts/<mode>.sh` に置き、入口や launch に直接書かない（`eval.sh` / `safety-gate.sh` / `parallel.sh`）。
+- **rviz は評価環境側が切る（`RUN_RVIZ=false` を `main.bash` が export）。** 録画は standalone の `aichallenge_screen_recorder`（X root window 全体 = 1280x720）で行う。rviz が居ると Autoware 標準の AutowareScreenCapturePanel が同じ `/debug/service/capture_screen` を提供し、rviz ウィンドウ領域（1850x1136、オフセット 70,27）しか録れない。`evaluation.launch.xml` は `run_rviz=false` かつ `capture=true` のときだけ recorder を起動する。debug 可視化 / motion analytics は `debug` 引数で独立に on。
+- **出力レイアウトは §5 に従う。** 単体系は `/output/<ts>/d1/`（`result-summary.json` も同じ場所）、parallel は `/output/<ts>/`（`result-summary.json` は run_dir 直下、車両ログは `d1..d3/`）。
+- **完了は `/admin/awsim/state` で通知する。** gate は AWSIM の自己終了時 `terminate`、レース系は `finishall`。入口が自分で結果をアップロードしたり、`/output` 以外に書いたりしない。
 
 ### 6-3. 変更時の手順
 
-入口の名前・数・自己完結性を変えるときは、(1) 本節と約束 13 を更新、(2) `aichallenge-aws/makefile/main.bash` の起動分岐を合わせる、(3) base image（`aichallenge-aws/base_image`）を stg から再ビルドして push、(4) `makefile/deploy.sh` で `main.bash` を反映、の順で行う。base image は `aichallenge/` を丸ごと取り込むため、入口スクリプトは base image 再ビルドまで評価環境に届かない。
+入口の名前・数・自己完結性を変えるときは、(1) 本節と約束 13 を更新、(2) `aichallenge-aws` の `start_build`（mode → 入口の表）と `makefile/main.bash` の許可リストを合わせる、(3) base image（`aichallenge-aws/base_image`）を stg から再ビルドして push、(4) `makefile/deploy.sh` で `main.bash` を反映、の順で行う。base image は `aichallenge/` を丸ごと取り込むため、入口スクリプトは base image 再ビルドまで評価環境に届かない。
 
 ---
 

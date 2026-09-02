@@ -1,4 +1,16 @@
 #!/usr/bin/env bash
+# Single-vehicle evaluation. Also an evaluation-environment entrypoint (s2r_1_practice_solo);
+# it sources its own ROS overlays because that image has no docker-entrypoint.sh
+# (docs/interface/evaluation-interface.md §6). Sourcing again locally is harmless.
+
+# shellcheck disable=SC1091
+source /aichallenge/workspace/install/setup.bash
+# The evaluation image builds the submission as an overlay under /aichallenge/d1 (aichallenge-aws makefile/Dockerfile);
+# the local eval image builds it into /aichallenge/workspace, so the overlay is optional.
+if [ -f /aichallenge/d1/workspace/install/setup.bash ]; then
+    # shellcheck disable=SC1091
+    source /aichallenge/d1/workspace/install/setup.bash
+fi
 
 domain_id="${ROS_DOMAIN_ID:-1}"
 ts="$(date +%Y%m%d-%H%M%S)"
