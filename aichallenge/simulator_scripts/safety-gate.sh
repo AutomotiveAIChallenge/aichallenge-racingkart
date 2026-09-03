@@ -8,6 +8,7 @@ export ROS_DOMAIN_ID=0
 exec "$AWSIM_DIRECTORY/AWSIM.x86_64" \
     --vehicles 1 \
     --safety-gate "all" \
+    --overtake-lane on \
     --steer-source ackermann \
     --sound off \
     --collisions on \
