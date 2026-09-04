@@ -52,7 +52,7 @@ x-autoware-rosbag-base: &autoware-rosbag-base
     - ./remote:/remote
     - ./vehicle:/vehicle
     - ./vehicle/cyclonedds.xml:/opt/autoware/cyclonedds.xml
-    - ${RACING_KART_INTERFACE_DIR:-/home/tier4/racing_kart_interface}:${RACING_KART_INTERFACE_DIR:-/home/tier4/racing_kart_interface}:ro
+    - ${RACING_KART_INTERFACE_DIR:-/home/tier4/racing_kart_interface}:/workspace:ro
     - /etc/passwd:/etc/passwd:ro
     - /etc/group:/etc/group:ro
     - /tmp/.X11-unix:/tmp/.X11-unix:rw
@@ -91,6 +91,11 @@ x-racing_kart_interface-base: &racing_kart_interface-base
     - V2X_MQTT_TLS_CERT_FILE=${V2X_MQTT_TLS_CERT_FILE:-}
     - V2X_MQTT_TLS_KEY_FILE=${V2X_MQTT_TLS_KEY_FILE:-}
   volumes:
+    # Mount the repository so source/param edits take effect without rebuilding the
+    # image: the image is built with --symlink-install, so install/**/*.param.yaml and
+    # launch files are symlinks into /workspace/src. Build artifacts land in the host
+    # repository's build/install, same as autoware-build does under /aichallenge.
+    - ${RACING_KART_INTERFACE_DIR:-/home/tier4/racing_kart_interface}:/workspace
     - ./output:${OUTPUT_ROOT:-/output}
     - ./vehicle:/vehicle:ro
     - ./aichallenge/utils:/aichallenge/utils:ro
@@ -106,6 +111,17 @@ x-racing_kart_interface-base: &racing_kart_interface-base
   group_add:
     - "${HOST_GID_DIALOUT:-20}"
   working_dir: /workspace
+
+# Build-only variant of the above. Drops the vehicle hardware (/dev/vcu, /dev/gnss),
+# X11 and privileged mode so `make driver-build` also runs on a development PC.
+x-racing_kart_interface-build-base: &racing_kart_interface-build-base
+  <<: *racing_kart_interface-base
+  privileged: false
+  volumes:
+    - ${RACING_KART_INTERFACE_DIR:-/home/tier4/racing_kart_interface}:/workspace
+    - /etc/passwd:/etc/passwd:ro
+    - /etc/group:/etc/group:ro
+  devices: []
 
 services:
   # Autoware service
@@ -128,7 +144,7 @@ services:
 
   rosbag:
     <<: *autoware-rosbag-base
-    command: ["bash", "-lc", 'exec /aichallenge/utils/record_all_rosbag.bash "${ROS_DOMAIN_ID:-1}" "${LOG_DIR:-}" "${RACING_KART_INTERFACE_DIR:-/home/tier4/racing_kart_interface}"']
+    command: ["bash", "-lc", 'exec /aichallenge/utils/record_all_rosbag.bash "${ROS_DOMAIN_ID:-1}" "${LOG_DIR:-}"']
 
   autoware-simulator-evaluation:
     <<: *autoware-base
@@ -150,6 +166,23 @@ services:
     <<: *autoware-base
     working_dir: /vehicle
     command: ["bash", "-lc", "exec /vehicle/run_zenoh.bash ${VEHICLE_ID:-} ${ROS_DOMAIN_ID:-1} ${LOG_DIR:-}"]
+
+  # racing_kart_interface build service. Mirrors autoware-build: build in the
+  # container, artifacts stay in the host repository.
+  driver-build:
+    <<: *racing_kart_interface-build-base
+    # Root for the same reason autoware-build is; ownership is handed back below.
+    user: "root"
+    entrypoint: []
+    command:
+      - "bash"
+      - "-lc"
+      - >-
+        source /opt/ros/humble/setup.bash &&
+        cd /workspace &&
+        colcon build --symlink-install --packages-up-to racing_kart_launch
+        --cmake-args -DCMAKE_BUILD_TYPE=Release &&
+        chown -R ${HOST_UID:-1000}:${HOST_GID:-1000} build install log
 
   # Driver service
   driver:

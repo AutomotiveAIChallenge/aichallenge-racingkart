@@ -76,6 +76,7 @@ aichallenge-racingkart/              # リポジトリルート（Docker ビル�
 | `autoware-command` | `aichallenge-2025-dev` | ROS one-shot コマンド（initial pose / control 要求など） | `$CMD` 変数で指定 |
 | `zenoh` | `aichallenge-2025-dev` | Zenoh ブリッジ（実車連携用。実車環境でのみ使用） | `zenoh-bridge-ros2dds` |
 | `driver` | `ghcr.io/tier4/racing_kart_interface:latest-experiment` | 実車ドライバスタック（racing_kart_interface） | `vehicle` モード |
+| `driver-build` | `ghcr.io/tier4/racing_kart_interface:latest-experiment` | racing_kart_interface の colcon build 実行（車両ハードウェア不要） | `colcon build` 直接実行 |
 | `rviz2` | `aichallenge-2025-dev` | RViz2 リモートビジュアライゼーション | `run_rviz.bash remote` |
 | `autoware-simulator-evaluation` | `aichallenge-2025-eval` | 封入評価実行 | `run_evaluation.bash` |
 

@@ -94,6 +94,10 @@ make down
 # Autoware overlay ビルド
 make autoware-build
 
+# racing_kart_interface ビルド（成果物は $RACING_KART_INTERFACE_DIR 直下に出る）
+# param / launch の変更だけならビルド不要。driver を起動しなおせば反映される
+make driver-build
+
 # 提出物データのダウンロード
 make download
 make download SUBMISSION_ID=<id>

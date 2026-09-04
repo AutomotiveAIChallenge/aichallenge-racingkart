@@ -46,6 +46,7 @@ volumes: `./output:/output`, `./aichallenge:/aichallenge`, `./remote:/remote`, `
 | `autoware-command` | ros2 service/topic の単発操作（`make autoware-request-*`） |
 | `zenoh` | Zenoh ブリッジ（実車遠隔操作） |
 | `driver` | 実車ドライバスタック（racing_kart_interface） |
+| `driver-build` | racing_kart_interface の colcon build 専用（`make driver-build`） |
 | `rviz2` | RViz2 可視化 |
 
 eval サービス `autoware-simulator-evaluation`（image: `aichallenge-2025-eval`）は `docker-compose.yml` に定義する。

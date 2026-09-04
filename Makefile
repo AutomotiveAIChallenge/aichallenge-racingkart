@@ -1,7 +1,7 @@
 # make file inspired by https://roborovsky-racers.github.io/RoborovskyNote/
 SHELL := /bin/bash
 
-.PHONY: autoware-build autoware-vehicle autoware-simulator autoware-request-initialpose autoware-request-control  awsim-request-start awsim-request-reset autoware-driver-zenoh autoware-driver-zenoh-rosbag setup-vehicle \
+.PHONY: autoware-build driver-build autoware-vehicle autoware-simulator autoware-request-initialpose autoware-request-control  awsim-request-start awsim-request-reset autoware-driver-zenoh autoware-driver-zenoh-rosbag setup-vehicle \
 	simulator dev dev2 dev3 dev4 driver zenoh download rviz2 down down_all ps autoware-attach autoware-bash eval e2e vehicle-tui
 
 # Used by docker-compose.yml for build/eval artifact ownership.
@@ -66,6 +66,10 @@ simulator:
 	@echo "Start AWSIM (SIM_MODE=$(SIM_MODE))"
 	@echo "Log dir: .$(LOG_DIR)"
 	LOG_DIR=$(LOG_DIR) SIM_MODE="$(SIM_MODE)" ROS_DOMAIN_ID=0 docker compose up -d simulator
+
+# racing_kart_interface のビルドのみ（成果物は $RACING_KART_INTERFACE_DIR 直下に出る）
+driver-build:
+	docker compose run -T --rm --no-deps driver-build
 
 # racing kart (docker compose up -d driver)
 driver:
