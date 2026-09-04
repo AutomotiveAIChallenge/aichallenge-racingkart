@@ -1,0 +1,42 @@
+# V2X 仮想オブジェクト — 柏の葉テストフィールド（デモ・練習会 2026-09-07〜09）
+#
+#   cd vehicle && ./v2x_virtual_objects.py --scenario v2x-scenarios/kashiwanoha-demo.yaml
+#
+# 実車側は kashiwanoha トラックで起動し（vehicle/kashiwanoha-track.md）、
+# ここに並ぶ ID を V2X_VEHICLE_IDS に含めること（vehicle/v2x-virtual-objects.md）。
+rate_hz: 20.0
+
+broker:
+  host: v2x-mqtt.dev.aichallenge-board.jsae.or.jp
+  port: 8883
+  tls: true
+  # <certs_dir>/<id>/{ca.crt,kart.crt,kart.key}。issue-kart-cert.sh の出力そのまま。
+  # 相対パスはこのリポジトリのルートから解決される。
+  certs_dir: ../aichallenge-aws/cloudformation_templates/v2x-mqtt-broker/kart-certs/dev
+  qos: 0
+
+defaults:
+  frame_id: map
+  # 柏の葉のレースライン（1 周 376 m、閉ループ）。map(MGRS) 座標。
+  raceline: aichallenge/workspace/src/aichallenge_submit/simple_trajectory_generator/data/kashiwanoha/raceline_awsim_30km_from_garage.csv
+  # 実車 GNSS の標準偏差の代表値 [m]。分散ではない（R10.2.1）。
+  covariance: [0.08, 0.08, 0.15]
+  z_offset: 0.0
+
+objects:
+  # 停止した仮想カート。回避練習用。s_m はレースライン上の弧長 [m]。
+  - id: d5
+    mode: static
+    s_m: 120.0
+
+  # 4.0 m/s で周回する追い越し対象。
+  - id: d8
+    mode: raceline
+    speed_mps: 4.0
+    start_s_m: 60.0
+
+  # レースライン CSV の速度（5.0 m/s）の 60 % で周回する低速車。
+  - id: d10
+    mode: raceline
+    speed_scale: 0.6
+    start_s_m: 240.0

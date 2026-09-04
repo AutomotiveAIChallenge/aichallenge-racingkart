@@ -1,0 +1,30 @@
+# V2X 仮想オブジェクト — City Circuit Tokyo Bay（cctb 用の別 broker）
+#
+#   cd vehicle && ./v2x_virtual_objects.py --scenario v2x-scenarios/citycircuit-demo.yaml
+#
+# cctb は独立した broker・独立した CA なので、host と certs_dir が
+# kashiwanoha-demo.yaml とは別になる（v2x-mqtt-broker/README.md「Run a second broker」）。
+rate_hz: 20.0
+
+broker:
+  host: v2x-mqtt-cctb.dev.aichallenge-board.jsae.or.jp
+  port: 8883
+  tls: true
+  certs_dir: ../aichallenge-aws/cloudformation_templates/v2x-mqtt-broker/kart-certs/dev/v2x-mqtt-broker-cctb
+  qos: 0
+
+defaults:
+  frame_id: map
+  # cctb のレースライン（1 周 358 m、閉ループ）。
+  raceline: aichallenge/workspace/src/aichallenge_submit/simple_trajectory_generator/data/raceline_cctb_30km.csv
+  covariance: [0.08, 0.08, 0.15]
+
+objects:
+  - id: d3
+    mode: raceline
+    speed_mps: 5.0
+    start_s_m: 40.0
+
+  - id: d7
+    mode: static
+    s_m: 180.0

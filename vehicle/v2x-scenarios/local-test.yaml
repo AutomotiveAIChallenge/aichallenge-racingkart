@@ -1,0 +1,26 @@
+# V2X 仮想オブジェクト — 手元の mosquitto で動作確認するだけのシナリオ。
+# 証明書も TLS もなし。搬入前の疎通確認と、シナリオ編集後の見直しに使う。
+#
+#   mosquitto -p 1883 -v                                    # 別端末
+#   mosquitto_sub -h 127.0.0.1 -t 'v2x/vehicles/+/position' -v   # 別端末
+#   cd vehicle && ./v2x_virtual_objects.py --scenario v2x-scenarios/local-test.yaml
+rate_hz: 20.0
+
+broker:
+  host: 127.0.0.1
+  port: 1883
+  tls: false
+
+defaults:
+  frame_id: map
+  raceline: aichallenge/workspace/src/aichallenge_submit/simple_trajectory_generator/data/kashiwanoha/raceline_awsim_30km_from_garage.csv
+
+objects:
+  - id: d2
+    mode: raceline
+    speed_mps: 6.0
+    start_s_m: 0.0
+
+  - id: d3
+    mode: static
+    s_m: 100.0

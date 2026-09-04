@@ -98,3 +98,19 @@ make autoware-build
 make download
 make download SUBMISSION_ID=<id>
 ```
+
+## V2X 仮想オブジェクトの投入（デモ・練習会）
+
+実車が 1 台しかいない場所でも、V2X の MQTT broker へ疑似カートの位置を publish して他車が居るように見せられます。実車側の設定変更は不要で、`/v2x/vehicle_positions` に他車として並びます。
+
+```bash
+cd vehicle
+
+# 座標と動きだけ確認（broker へ繋がない）
+./v2x_virtual_objects.py --scenario v2x-scenarios/kashiwanoha-demo.yaml --dry-run --duration 2
+
+# 本番（Ctrl-C で停止）
+./v2x_virtual_objects.py --scenario v2x-scenarios/kashiwanoha-demo.yaml
+```
+
+実車側は表示される `V2X_VEHICLE_IDS=…` を設定して起動する必要があります（受信ルートがこの一覧から生成されるため、載っていない ID は捨てられます）。シナリオの書き方・証明書・当日の手順は [v2x-virtual-objects.md](./v2x-virtual-objects.md) を参照してください。
