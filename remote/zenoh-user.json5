@@ -63,6 +63,7 @@
           "/planning/scenario_planning/trajectory",
           "/tf",
           "/tf_static",
+          "/v2x/vehicle_positions/markers",
           "/vehicle/status/gear_status",
           "/vehicle/status/steering_status",
           "/vehicle/status/velocity_status"
