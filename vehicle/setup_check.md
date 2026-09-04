@@ -225,7 +225,7 @@ docker compose -f ../docker-compose.yml exec -T driver bash -lc \
 
 | コンテナ | トピック |
 | --- | --- |
-| `driver` | `/racing_kart/vcu/status`, `/racing_kart/steer/status`, `/racing_kart/brake/status`, `/racing_kart/joy` |
+| `driver` | `/racing_kart/vcu/status`, `/racing_kart/steer/status`, `/racing_kart/brake/status`, `/racing_kart/sd/joy` |
 | `driver` | `/racing_kart/vcu/command`, `/racing_kart/steer/command`, `/racing_kart/brake/command` |
 | `autoware` | `/vehicle/status/velocity_status`, `/vehicle/status/steering_status`, `/vehicle/status/gear_status`, `/vehicle/status/actuation_status` |
 | `autoware` | `/control/command/control_cmd`, `/control/command/actuation_cmd` |

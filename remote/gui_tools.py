@@ -1,7 +1,9 @@
 #!/usr/bin/env python3
 from __future__ import annotations
 
+import os
 import queue
+import signal
 import subprocess
 import threading
 from dataclasses import dataclass
@@ -322,7 +324,7 @@ COMMANDS: List[CommandSpec] = [
     ),
     CommandSpec(
         label="Restart Joy",
-        command="bash -lc \"pkill -f 'ros2 run joy joy_node' || true; ./joy.bash\"",
+        command="./joy.bash",
         log_key="joy",
         stop_before=True,
         note="joy ノードを再起動します。",
@@ -510,6 +512,12 @@ class RemoteGui:
                 stderr=subprocess.STDOUT,
                 text=True,
                 bufsize=1,
+                # 起動するのは bash -> スクリプト -> ros2 run -> 実体 の多段で、
+                # ros2 run は joy_node を別プロセスとして起こす。専用のプロセス
+                # グループに入れておかないと、停止時に親だけが死んで実体が孤児
+                # として残り (親が systemd に引き取られる)、GUI から止められなく
+                # なる。同じ理由で scripts/run_remote.bash もグループで畳んでいる。
+                start_new_session=True,
             )
         except FileNotFoundError:
             messagebox.showerror("Command error", f"bash が見つかりませんでした。")
@@ -544,12 +552,24 @@ class RemoteGui:
         if not process:
             return
         if process.poll() is None:
-            process.terminate()
+            self._signal_process_group(process, signal.SIGTERM)
             try:
                 process.wait(timeout=3)
             except subprocess.TimeoutExpired:
-                process.kill()
+                self._signal_process_group(process, signal.SIGKILL)
         self._append_log(log_key, "[process terminated]\n")
+
+    @staticmethod
+    def _signal_process_group(process: subprocess.Popen[str], sig: int) -> None:
+        """子孫ごと畳む。start_new_session=True で作ったグループに送る。"""
+        try:
+            os.killpg(os.getpgid(process.pid), sig)
+        except (ProcessLookupError, PermissionError):
+            # グループが既に消えている場合などは、直接の子だけに送って諦める。
+            if sig == signal.SIGKILL:
+                process.kill()
+            else:
+                process.terminate()
 
     def _process_running(self, log_key: str) -> bool:
         proc = self.processes.get(log_key)
