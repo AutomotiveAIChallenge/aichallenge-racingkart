@@ -119,6 +119,7 @@ x-racing_kart_interface-build-base: &racing_kart_interface-build-base
   privileged: false
   volumes:
     - ${RACING_KART_INTERFACE_DIR:-/home/tier4/racing_kart_interface}:/workspace
+    - ./vehicle:/vehicle:ro
     - /etc/passwd:/etc/passwd:ro
     - /etc/group:/etc/group:ro
   devices: []
@@ -171,18 +172,11 @@ services:
   # container, artifacts stay in the host repository.
   driver-build:
     <<: *racing_kart_interface-build-base
-    # Root for the same reason autoware-build is; ownership is handed back below.
-    user: "root"
+    # Runs as HOST_UID:HOST_GID from the base, like autoware-build, so artifacts
+    # come out owned by the host user and no chown is needed.
+    # The image's ENTRYPOINT is /entrypoint.sh, which would run the driver instead.
     entrypoint: []
-    command:
-      - "bash"
-      - "-lc"
-      - >-
-        source /opt/ros/humble/setup.bash &&
-        cd /workspace &&
-        colcon build --symlink-install --packages-up-to racing_kart_launch
-        --cmake-args -DCMAKE_BUILD_TYPE=Release &&
-        chown -R ${HOST_UID:-1000}:${HOST_GID:-1000} build install log
+    command: ["bash", "-lc", "exec /vehicle/build_driver.bash"]
 
   # Driver service
   driver:
