@@ -521,7 +521,7 @@ class RemoteGui:
         # _poll_stop_escalation で SIGTERM/SIGKILL の生存確認をポーリング中のプロセス。
         # _on_close / _terminate_all がウィンドウを閉じる際、self.processes から既に
         # 取り除かれてしまった (停止処理の途中の) プロセスも確実に畳めるようにするための保険 (RC12)。
-        self._escalating: Dict[str, subprocess.Popen[str]] = {}
+        self._escalating: Dict[str, List[subprocess.Popen[str]]] = {}
 
         self._build_ui()
         self._refresh_button_states()
@@ -877,9 +877,11 @@ class RemoteGui:
         if process.poll() is None:
             self._signal_process_group(process, signal.SIGTERM)
             self._append_log(log_key, "[stop: SIGTERM sent]\n")
-            self._refresh_button_states()
             # process.wait() はメインスレッドをブロックするので使わず、after で非同期に監視する (RC3)
-            self._escalating[log_key] = process
+            # 登録はボタン状態の更新より先に行う。順序を逆にすると、その瞬間だけ
+            # 「実行中でも停止中でもない」と見えて Start が有効に戻ってしまう。
+            self._escalating.setdefault(log_key, []).append(process)
+            self._refresh_button_states()
             self.root.after(
                 STOP_ESCALATE_INTERVAL_MS,
                 lambda: self._poll_stop_escalation(log_key, process, time.monotonic(), on_terminated),
@@ -899,7 +901,11 @@ class RemoteGui:
         sigkill_sent: bool = False,
     ) -> None:
         if process.poll() is not None:
-            self._escalating.pop(log_key, None)
+            remaining = [p for p in self._escalating.get(log_key, []) if p is not process]
+            if remaining:
+                self._escalating[log_key] = remaining
+            else:
+                self._escalating.pop(log_key, None)
             self._append_log(log_key, "[process terminated]\n")
             self._refresh_button_states()
             if on_terminated is not None:
@@ -942,8 +948,9 @@ class RemoteGui:
         """ボタンの有効/無効をプロセスの実行状態に同期する (RC6)。
 
         "Start X" は実行中は無効 (二重起動防止)、GUI 管理のプロセスを畳む "Stop X"
-        (kind="stop") は未実行なら無効。"Restart X" は常に有効。RC12 の起動待ち中
-        (`_pending_launch`) はそのグループのボタンを一律無効にして誤操作を防ぐ。
+        (kind="stop") は未実行なら無効。"Restart X" は通常は常に有効。
+        RC12 の起動待ち中 (`_pending_launch`) と停止処理中 (`_escalating`) は、その
+        グループのボタンを一律無効にして誤操作とプロセスグループの重複を防ぐ。
 
         注意: "Stop RViz" は kind="stop" ではなく `./rviz.bash down` を実行する
         kind="command" で、GUI 外で起動されたコンテナも畳める。これを Start 扱いにすると
@@ -958,15 +965,20 @@ class RemoteGui:
             log_key = spec.log_key
             running = running_by_key.get(log_key, False) if log_key else False
             pending = bool(log_key and self._pending_launch.get(log_key))
+            # 停止処理中のプロセスは self.processes から既に外れているが、SIGKILL 昇格まで
+            # 最大3秒生きている。この間に起動を許すとプロセスグループが重なり、ポートや
+            # デバイスを奪い合う (zenoh bridge や joy_node で顕著) ので busy 扱いにする。
+            stopping = bool(log_key and self._escalating.get(log_key))
+            busy = running or pending or stopping
             lowered = spec.label.lower()
-            if pending:
+            if pending or stopping:
                 desired = tk.DISABLED
             elif spec.kind == "stop":
                 desired = tk.NORMAL if running else tk.DISABLED
             elif lowered.startswith(("stop", "restart")):
                 desired = tk.NORMAL
             else:
-                desired = tk.DISABLED if running else tk.NORMAL
+                desired = tk.DISABLED if busy else tk.NORMAL
             if self._button_state_cache.get(label) != desired:
                 self._button_state_cache[label] = desired
                 button.configure(state=desired)
@@ -989,7 +1001,7 @@ class RemoteGui:
         for log_key, label in self.status_labels.items():
             if self._pending_launch.get(log_key):
                 text, style_name = "● waiting…", "StatusPending.TLabel"
-            elif self._escalating.get(log_key) is not None:
+            elif self._escalating.get(log_key):
                 text, style_name = "● stopping…", "StatusPending.TLabel"
             elif running_by_key.get(log_key):
                 text, style_name = "● running", "StatusRunning.TLabel"
@@ -1101,12 +1113,13 @@ class RemoteGui:
         # RC12: Restart の「旧プロセス終了待ち」中は self.processes から既に外れているが、
         # まだ生きている可能性があるプロセスが self._escalating に残っている。
         # ここで回収しないと、ウィンドウを閉じたときにそれらだけ後始末されずに孤児化する。
-        for log_key, process in list(self._escalating.items()):
+        for log_key, processes in list(self._escalating.items()):
             self._escalating.pop(log_key, None)
-            if process.poll() is None and process not in still_running:
-                # 既に SIGTERM 送信済みなので再送はしない。以降の SIGKILL 昇格判断は
-                # 呼び出し元 (_finish_close / _terminate_all) に委ねる。
-                still_running.append(process)
+            for process in processes:
+                if process.poll() is None and process not in still_running:
+                    # 既に SIGTERM 送信済みなので再送はしない。以降の SIGKILL 昇格判断は
+                    # 呼び出し元 (_finish_close / _terminate_all) に委ねる。
+                    still_running.append(process)
         return still_running
 
     def _terminate_all(self, blocking: bool) -> None:
