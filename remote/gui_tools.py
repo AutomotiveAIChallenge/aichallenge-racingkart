@@ -3,7 +3,6 @@ from __future__ import annotations
 
 import os
 import queue
-import re
 import signal
 import subprocess
 import threading
@@ -22,11 +21,14 @@ ROOT_DIR = Path(__file__).resolve().parent
 REMOTE_DIR = ROOT_DIR
 
 DEFAULT_VEHICLE_ID = "A2"
-# connect_zenoh.bash が受け付ける Vehicle ID の形式 (A1〜A8、または test- 始まり)。
-# ハードコードの一覧を持つとスクリプト側の変更に追随できなくなるため、正規表現のみで軽く検証する。
-VEHICLE_ID_PATTERN = r"^(A[1-8]|test-.+)$"
-# Combobox に出す候補。test-* は候補に出せないので手入力できるようにしておく。
-VEHICLE_ID_CHOICES = ["A1", "A2", "A3", "A5", "A6", "A7", "A8"]
+# connect_zenoh.bash の case が受理する Vehicle ID。A4 は無い点に注意。
+# ここを緩くするとスクリプト側で「無効な名前空間です」と落ちるだけになるので、
+# 候補一覧と検証を同じ定義から導いて食い違わないようにする。
+VEHICLE_IDS = ["A1", "A2", "A3", "A5", "A6", "A7", "A8"]
+TEST_VEHICLE_IDS = ["test-remote", "test-vehicle", "test-server"]
+VALID_VEHICLE_IDS = VEHICLE_IDS + TEST_VEHICLE_IDS
+# Combobox に出す候補 (実車 ID を先に、test-* を後ろに)。
+VEHICLE_ID_CHOICES = VALID_VEHICLE_IDS
 
 # --- ウィンドウ ---
 WINDOW_GEOMETRY = "1100x680"
@@ -370,6 +372,10 @@ class CommandSpec:
     stop_before: bool = False
     note: str | None = None
     kind: str = "command"  # command, stop, stop_all
+    # UI 上の役割。ボタンの色と有効/無効の判定はこれだけを見る。表示ラベルの文字列を
+    # 条件に使うと、文言を変えただけで挙動が壊れる。kind とは独立している点に注意:
+    # "Stop RViz" は `./rviz.bash down` を実行する kind="command" だが role="stop"。
+    role: str = "start"  # start, stop, restart
 
     def render(self, vehicle_id: str) -> str:
         if self.kind != "command":
@@ -387,6 +393,7 @@ COMMANDS: List[CommandSpec] = [
     ),
     CommandSpec(
         label="Stop Zenoh",
+        role="stop",
         log_key="zenoh",
         kind="stop",
         requires_vehicle=True,
@@ -394,6 +401,7 @@ COMMANDS: List[CommandSpec] = [
     ),
     CommandSpec(
         label="Restart Zenoh",
+        role="restart",
         command="./connect_zenoh.bash {vehicle_id}",
         log_key="zenoh",
         requires_vehicle=True,
@@ -402,6 +410,7 @@ COMMANDS: List[CommandSpec] = [
     ),
     CommandSpec(
         label="Restart Zenoh and RViz",
+        role="restart",
         command="./restart.bash {vehicle_id}",
         log_key="zenoh",
         requires_vehicle=True,
@@ -416,6 +425,7 @@ COMMANDS: List[CommandSpec] = [
     ),
     CommandSpec(
         label="Stop RViz",
+        role="stop",
         command="./rviz.bash down",
         log_key="rviz",
         stop_before=True,
@@ -423,6 +433,7 @@ COMMANDS: List[CommandSpec] = [
     ),
     CommandSpec(
         label="Restart RViz",
+        role="restart",
         command="./rviz.bash restart",
         log_key="rviz",
         note="RViz コンテナを再起動します。",
@@ -435,12 +446,14 @@ COMMANDS: List[CommandSpec] = [
     ),
     CommandSpec(
         label="Stop Joy",
+        role="stop",
         log_key="joy",
         kind="stop",
         note="GUI で起動した joy プロセスを終了します (Ctrl+C 相当)。",
     ),
     CommandSpec(
         label="Restart Joy",
+        role="restart",
         command="./joy.bash",
         log_key="joy",
         stop_before=True,
@@ -456,6 +469,21 @@ COLUMN_LAYOUT = [
     ("Joy", ["Start Joy", "Stop Joy", "Restart Joy"]),
     ("Zenoh and RViz", ["Restart Zenoh and RViz"]),
 ]
+
+# フェーズごとのステータス表示 (テキスト, スタイル名)。
+STATUS_BY_PHASE = {
+    "pending": ("● waiting…", "StatusPending.TLabel"),
+    "stopping": ("● stopping…", "StatusPending.TLabel"),
+    "running": ("● running", "StatusRunning.TLabel"),
+    "idle": ("● stopped", "Status.TLabel"),
+}
+
+# role ごとのボタンスタイル。ラベル文字列で分岐しないための対応表。
+BUTTON_STYLE_BY_ROLE = {
+    "start": "DeviasPrimary.TButton",
+    "stop": "DeviasDanger.TButton",
+    "restart": "DeviasOutline.TButton",
+}
 
 LOG_AREAS = {
     "zenoh": "Zenoh Log",
@@ -494,7 +522,10 @@ class RemoteGui:
         # SSH user input was removed from the UI entirely; there is nothing to keep here anymore.
 
         self.processes: Dict[str, _ProcessEntry] = {}
-        self.process_threads: Dict[str, threading.Thread] = {}
+        # self.processes への「世代を見てから消す」操作はリーダースレッドとメイン
+        # スレッドの双方から走る。get と pop の間に別スレッドが新しいプロセスを
+        # 登録すると、世代チェックを通り抜けて新プロセスを消してしまうので排他する。
+        self._processes_lock = threading.Lock()
         self.log_queue: "queue.Queue[tuple[str, str]]" = queue.Queue(maxsize=LOG_QUEUE_MAXSIZE)
         self._log_dropped: Dict[str, int] = {}
         self._next_token = 0
@@ -593,11 +624,7 @@ class RemoteGui:
             else:
                 for btn_label in buttons:
                     spec = SPEC_MAP[btn_label]
-                    btn_style = "DeviasPrimary.TButton"
-                    if spec.kind == "stop" or spec.label.lower().startswith("stop"):
-                        btn_style = "DeviasDanger.TButton"
-                    elif spec.label.lower().startswith("restart"):
-                        btn_style = "DeviasOutline.TButton"
+                    btn_style = BUTTON_STYLE_BY_ROLE[spec.role]
 
                     button = ttk.Button(
                         col_frame,
@@ -700,10 +727,10 @@ class RemoteGui:
             if not vehicle_id:
                 messagebox.showwarning("入力不足", "Vehicle ID を指定してください。")
                 return
-            if not re.match(VEHICLE_ID_PATTERN, vehicle_id):
+            if vehicle_id not in VALID_VEHICLE_IDS:
                 messagebox.showwarning(
                     "Vehicle ID が不正です",
-                    "Vehicle ID は A1〜A8、または test- から始まる文字列で指定してください。"
+                    f"指定できるのは {', '.join(VALID_VEHICLE_IDS)} のいずれかです。"
                     f"\n(入力値: {vehicle_id!r})",
                 )
                 return
@@ -738,14 +765,21 @@ class RemoteGui:
             )
             return
 
-        if self._process_running(log_key):
-            messagebox.showinfo(
-                "Process running",
-                f"{LOG_AREAS.get(log_key, log_key)} でコマンドが実行中です。先に停止してください。",
-            )
+        if self._warn_if_running(log_key):
             return
 
         self._launch(log_key, command_text, working_dir)
+
+    def _warn_if_running(self, log_key: str) -> bool:
+        """既に実行中なら警告ダイアログを出して True を返す。起動系の入口はここを通す。"""
+        if not self._process_running(log_key):
+            return False
+        messagebox.showinfo(
+            "Process running",
+            f"{LOG_AREAS.get(log_key, log_key)} でコマンドが実行中です。先に停止してください。",
+        )
+        self._refresh_button_states()
+        return True
 
     def _launch(self, log_key: str, command_text: str, working_dir: Path) -> None:
         """実際に子プロセスを起動する。
@@ -754,18 +788,18 @@ class RemoteGui:
         コールバックとしてもここに来る (RC12)。ウィンドウを閉じた後 (`self._closing`)
         に呼ばれた場合は新プロセスを起動せずに no-op で抜ける。
         """
-        self._pending_launch.pop(log_key, None)
+        # 遅延起動 (Restart) の場合、待っている間に Stop All / close で取り消されている
+        # ことがある。取り消されていたら起動しない。
+        was_pending = self._pending_launch.pop(log_key, None)
+        if was_pending is False:
+            self._refresh_button_states()
+            return
         if self._closing:
             self._refresh_button_states()
             return
 
-        if self._process_running(log_key):
-            # 通常はボタンが無効化されているので起きないはずだが、念のための保険。
-            messagebox.showinfo(
-                "Process running",
-                f"{LOG_AREAS.get(log_key, log_key)} でコマンドが実行中です。先に停止してください。",
-            )
-            self._refresh_button_states()
+        # 通常はボタンが無効化されているので起きないはずだが、念のための保険。
+        if self._warn_if_running(log_key):
             return
 
         try:
@@ -799,8 +833,8 @@ class RemoteGui:
             args=(log_key, process, token),
             daemon=True,
         )
-        self.processes[log_key] = _ProcessEntry(token, process)
-        self.process_threads[log_key] = thread
+        with self._processes_lock:
+            self.processes[log_key] = _ProcessEntry(token, process)
         thread.start()
         self._append_log(log_key, f"$ {command_text}\n")
         self._refresh_button_states()
@@ -815,22 +849,9 @@ class RemoteGui:
         try:
             self.log_queue.put_nowait((log_key, line))
         except queue.Full:
-            dropped = self._log_dropped.get(log_key, 0) + 1
-            self._log_dropped[log_key] = dropped
-            # 溜まり続けている間も定期的に状況を知らせる (キューが常に満杯でも通知が出るように)
-            if dropped % 500 == 1:
-                try:
-                    self.log_queue.put_nowait((log_key, f"[{dropped} lines dropped]\n"))
-                except queue.Full:
-                    pass
-            return
-        # 直前までドロップが発生していた場合、キューに空きが戻った時点で一度だけ知らせる
-        dropped = self._log_dropped.pop(log_key, 0)
-        if dropped:
-            try:
-                self.log_queue.put_nowait((log_key, f"[{dropped} lines dropped]\n"))
-            except queue.Full:
-                self._log_dropped[log_key] = dropped
+            # 通知をここで積もうとしても、満杯だからこそドロップしているので入らない。
+            # カウントだけ増やし、報告は消費側 (_poll_log_queue) が行う。
+            self._log_dropped[log_key] = self._log_dropped.get(log_key, 0) + 1
 
     def _stream_output(self, log_key: str, process: subprocess.Popen[str], token: int) -> None:
         assert process.stdout is not None
@@ -851,12 +872,12 @@ class RemoteGui:
                 process.stdout.close()
             except Exception:
                 pass
-            # このスレッドが積んだ token と現在の登録が一致する場合のみ取り除く (RC2)
-            entry = self.processes.get(log_key)
-            if entry is not None and entry.token == token:
-                self.processes.pop(log_key, None)
-            if self.process_threads.get(log_key) is threading.current_thread():
-                self.process_threads.pop(log_key, None)
+            # このスレッドが積んだ token と現在の登録が一致する場合のみ取り除く (RC2)。
+            # 判定と削除は不可分に行う。
+            with self._processes_lock:
+                entry = self.processes.get(log_key)
+                if entry is not None and entry.token == token:
+                    del self.processes[log_key]
 
     def _stop_process(
         self, log_key: str, on_terminated: Optional[Callable[[], None]] = None
@@ -867,7 +888,8 @@ class RemoteGui:
         済んだ場合は即座に、粘った場合は SIGKILL 後の消滅確認を経て) 呼び出す。
         Restart 系 (RC12) が「旧プロセスの終了後に新プロセスを起動する」ために使う。
         """
-        entry = self.processes.pop(log_key, None)
+        with self._processes_lock:
+            entry = self.processes.pop(log_key, None)
         if entry is None:
             self._refresh_button_states()
             if on_terminated is not None:
@@ -944,69 +966,72 @@ class RemoteGui:
         entry = self.processes.get(log_key)
         return entry is not None and entry.process.poll() is None
 
-    def _refresh_button_states(self) -> None:
-        """ボタンの有効/無効をプロセスの実行状態に同期する (RC6)。
+    def _process_phase(self, log_key: Optional[str]) -> str:
+        """log_key の現在のフェーズを返す: pending / stopping / running / idle。
 
-        "Start X" は実行中は無効 (二重起動防止)、GUI 管理のプロセスを畳む "Stop X"
-        (kind="stop") は未実行なら無効。"Restart X" は通常は常に有効。
-        RC12 の起動待ち中 (`_pending_launch`) と停止処理中 (`_escalating`) は、その
-        グループのボタンを一律無効にして誤操作とプロセスグループの重複を防ぐ。
-
-        注意: "Stop RViz" は kind="stop" ではなく `./rviz.bash down` を実行する
-        kind="command" で、GUI 外で起動されたコンテナも畳める。これを Start 扱いにすると
-        RViz 実行中に押せなくなるため、ラベルが stop で始まる command は常に有効にする。
-        値が変わらない限り configure しない (churn 防止)。
+        ボタンの有効/無効とステータス表示の双方がこの1箇所を見る。優先順位を
+        2箇所に書くと、片方だけ直したときに「ボタンは無効なのに running 表示」と
+        いったズレが出る。
         """
-        # プロセス状態は log_key ごとに1回だけ調べる (poll() はシステムコールなので、
+        if log_key is None:
+            return "idle"
+        if self._pending_launch.get(log_key):
+            return "pending"
+        if self._escalating.get(log_key):
+            return "stopping"
+        if self._process_running(log_key):
+            return "running"
+        return "idle"
+
+    def _refresh_button_states(self) -> None:
+        """ボタンの有効/無効をプロセスのフェーズに同期する (RC6)。
+
+        pending (起動待ち) と stopping (SIGKILL 昇格待ち) の間は、そのグループを
+        一律無効にして誤操作とプロセスグループの重複を防ぐ。running 中は Start だけ
+        無効、GUI 管理のプロセスを畳む "Stop X" (kind="stop") は未実行なら無効。
+        値が変わらない限り configure しない (Tcl 往復を避けるため churn 防止)。
+        """
+        # フェーズは log_key ごとに1回だけ調べる (poll() はシステムコールなので、
         # ボタンごとに呼ぶと同じ log_key に対して何度も走ってしまう)。
-        running_by_key = {key: self._process_running(key) for key in LOG_AREAS}
+        phase_by_key = {key: self._process_phase(key) for key in LOG_AREAS}
         for label, button in self.buttons.items():
             spec = SPEC_MAP[label]
-            log_key = spec.log_key
-            running = running_by_key.get(log_key, False) if log_key else False
-            pending = bool(log_key and self._pending_launch.get(log_key))
-            # 停止処理中のプロセスは self.processes から既に外れているが、SIGKILL 昇格まで
-            # 最大3秒生きている。この間に起動を許すとプロセスグループが重なり、ポートや
-            # デバイスを奪い合う (zenoh bridge や joy_node で顕著) ので busy 扱いにする。
-            stopping = bool(log_key and self._escalating.get(log_key))
-            busy = running or pending or stopping
-            lowered = spec.label.lower()
-            if pending or stopping:
+            phase = phase_by_key.get(spec.log_key, "idle") if spec.log_key else "idle"
+            if phase in ("pending", "stopping"):
                 desired = tk.DISABLED
             elif spec.kind == "stop":
-                desired = tk.NORMAL if running else tk.DISABLED
-            elif lowered.startswith(("stop", "restart")):
+                # GUI が起動したプロセスを畳むボタン。止める相手がいなければ無効。
+                desired = tk.NORMAL if phase == "running" else tk.DISABLED
+            elif spec.role in ("stop", "restart"):
+                # role="stop" の command ("Stop RViz" = `./rviz.bash down`) は GUI 外で
+                # 起動されたものも畳めるので、実行中かどうかによらず常に有効。
                 desired = tk.NORMAL
             else:
-                desired = tk.DISABLED if busy else tk.NORMAL
+                desired = tk.DISABLED if phase != "idle" else tk.NORMAL
             if self._button_state_cache.get(label) != desired:
                 self._button_state_cache[label] = desired
                 button.configure(state=desired)
 
         stop_all = getattr(self, "stop_all_button", None)
         if stop_all is not None:
-            desired = tk.NORMAL if any(running_by_key.values()) else tk.DISABLED
+            # 停止処理中や起動待ちでも有効にしておく。無効にすると、ユーザーが後悔した
+            # Restart を中断する手段が UI から無くなる。
+            any_busy = any(phase != "idle" for phase in phase_by_key.values())
+            desired = tk.NORMAL if any_busy else tk.DISABLED
             if self._button_state_cache.get("__stop_all__") != desired:
                 self._button_state_cache["__stop_all__"] = desired
                 stop_all.configure(state=desired)
 
-        self._refresh_status_indicators(running_by_key)
+        self._refresh_status_indicators(phase_by_key)
 
-    def _refresh_status_indicators(self, running_by_key: Dict[str, bool]) -> None:
+    def _refresh_status_indicators(self, phase_by_key: Dict[str, str]) -> None:
         """各ログペインの実行状態インジケータを更新する (RC14)。
 
-        `_refresh_button_states` から実行状態のマップを受け取り、値が変わるときだけ
+        `_refresh_button_states` からフェーズのマップを受け取り、値が変わるときだけ
         configure する。比較には Tk へ問い合わせない Python 側のキャッシュを使う。
         """
         for log_key, label in self.status_labels.items():
-            if self._pending_launch.get(log_key):
-                text, style_name = "● waiting…", "StatusPending.TLabel"
-            elif self._escalating.get(log_key):
-                text, style_name = "● stopping…", "StatusPending.TLabel"
-            elif running_by_key.get(log_key):
-                text, style_name = "● running", "StatusRunning.TLabel"
-            else:
-                text, style_name = "● stopped", "Status.TLabel"
+            text, style_name = STATUS_BY_PHASE[phase_by_key.get(log_key, "idle")]
             if self._status_cache.get(log_key) != text:
                 self._status_cache[log_key] = text
                 label.configure(text=text, style=style_name)
@@ -1020,14 +1045,27 @@ class RemoteGui:
         widget.configure(state=tk.DISABLED)
 
     def _handle_stop_all(self) -> None:
-        """追跡中の全プロセスを停止する。ウィンドウは閉じない (RC14)。"""
-        targets = [key for key in list(self.processes.keys()) if self._process_running(key)]
-        if not targets:
-            return
-        for log_key in targets:
+        """追跡中の全プロセスを停止する。ウィンドウは閉じない (RC14)。
+
+        Restart の「旧プロセス終了待ち」中の log_key は self.processes から既に
+        外れているので、それも取り消さないと「全部止めて」と言った直後に新しい
+        プロセスが立ち上がってしまう。
+        """
+        self._cancel_pending_launches()
+        for log_key in [key for key in self.processes if self._process_running(key)]:
             self._append_log(log_key, "[stop all requested]\n")
             self._stop_process(log_key)
         self._refresh_button_states()
+
+    def _cancel_pending_launches(self) -> None:
+        """予約済みの遅延起動を取り消す。_launch 側はフラグが消えていれば起動しない。"""
+        for log_key, pending in list(self._pending_launch.items()):
+            if not pending:
+                continue
+            # キーごと消すと _launch 側で「遅延起動が取り消された」のか「そもそも
+            # 直接起動なのか」を区別できないので、False を取り消し済みの印として残す。
+            self._pending_launch[log_key] = False
+            self._append_log(log_key, "[restart cancelled]\n")
 
     def _update_preview(self, working_dir: Path, command: str, note: str) -> None:
         self.directory_label.config(text=f"Directory: {working_dir}")
@@ -1083,6 +1121,14 @@ class RemoteGui:
             count += 1
             if time.monotonic() >= deadline:
                 break
+        # ドロップ数の報告は消費側で行う。producer 側から積もうとしても、満杯だから
+        # こそドロップしているので通知自体が入らない。
+        for log_key in list(self._log_dropped.keys()):
+            dropped = self._log_dropped.pop(log_key, 0)
+            if dropped:
+                batches.setdefault(log_key, []).append(
+                    f"{time.strftime('%H:%M:%S')} [{dropped} lines dropped]\n"
+                )
         for log_key, lines in batches.items():
             self._append_log(log_key, "".join(lines))
         # プロセスが自然終了したケース (Stop を押していない) もここで拾ってボタン状態に反映する。
@@ -1102,8 +1148,10 @@ class RemoteGui:
     def _collect_running_processes(self) -> List[subprocess.Popen[str]]:
         """追跡中の全プロセスへ SIGTERM を送り、self.processes を空にして生存プロセス一覧を返す。"""
         still_running: List[subprocess.Popen[str]] = []
-        for log_key in list(self.processes.keys()):
-            entry = self.processes.pop(log_key, None)
+        with self._processes_lock:
+            entries = list(self.processes.values())
+            self.processes.clear()
+        for entry in entries:
             if entry is None:
                 continue
             process = entry.process
@@ -1156,6 +1204,7 @@ class RemoteGui:
     def _on_close(self) -> None:
         """ウィンドウを閉じるときは、追跡中の全プロセスを SIGTERM → (猶予後) SIGKILL で畳んでから破棄する (RC4)。"""
         self._closing = True
+        self._cancel_pending_launches()
         if self._poll_after_id is not None:
             try:
                 self.root.after_cancel(self._poll_after_id)
