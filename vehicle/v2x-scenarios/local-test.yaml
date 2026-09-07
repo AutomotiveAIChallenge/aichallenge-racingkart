@@ -23,4 +23,5 @@ objects:
 
   - id: d3
     mode: static
-    s_m: 100.0
+    s_m: 150
+    lateral_offset: 2.0
