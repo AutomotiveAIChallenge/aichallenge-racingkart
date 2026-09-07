@@ -1,14 +1,20 @@
 # 提出物の事前ビルド・暗号化配置（prestaged submissions）
 
-決勝など**オフライン会場**で、参加チームが自分で車両 PC 上で走行準備を行う運用を前提に、
-32 チーム分の提出物を**事前にビルドして暗号化した状態で車両 PC に配置**し、
+決勝など、参加チームが自分で**運営が用意した PC** 上で走行準備を行う運用を前提に、
+32 チーム分の提出物を**事前にビルドして暗号化した状態で運営 PC に配置**し、
 走行枠ごとに**運営が該当チーム 1 件だけを復号・展開**する仕組みの設計。
+
+「運営 PC」は SIM 決勝（9/19）では席 A〜D の Autoware PC とリハーサル卓 PC、
+実機決勝（9/20）では車両 PC を指す。以下の本文では歴史的経緯から「車両 PC」と書いている箇所があるが、
+どちらにも同じ手順が適用される。SIM 決勝固有の事項は「[SIM 決勝での適用](#sim-決勝での適用)」にまとめた。
 
 ## 背景と課題
 
-会場に十分な回線がある場合はこの仕組みは不要で、走行枠の頭に運営が
-`make download USER_ID=<id>` を実行すれば足りる（他チームのファイルがそもそも車両 PC 上に存在しない）。
-本 spec が対象とするのは、当日ダウンロードに依存できないケースである。
+会場に十分な回線があり、枠の頭に DL とビルドを収める余裕があれば、この仕組みは不要で、
+走行枠の頭に運営が `make download USER_ID=<id>` を実行すれば足りる（他チームのファイルがそもそも運営 PC 上に存在しない）。
+本 spec が対象とするのは、当日ダウンロードに依存できないケース、および SIM 決勝のように
+セットアップ枠が 10 分しかなく、その場でのビルド失敗（`build/` に前チームの残骸があると失敗する、
+9/7 プレ検証で実際に発生）を許容できないケースである。
 
 このとき素朴に「32 チーム分を車両 PC に平文で置く」と、以下の理由でチーム間の秘匿が成立しない。
 
@@ -216,22 +222,26 @@ install/rl_train_controller/lib/.../rl_train_controller_node.py
 `vehicle/download/<filename>` に書く。本設計ではこの既存挙動には触れず、
 `prestage_all.sh` が確定パスへ書き出せるように `--dest-file` を新設するだけに留めた。
 
-## ディスク見積り
+## ディスク・時間の実測値
 
-実測値（`aichallenge/workspace/`、`--symlink-install` あり）:
+`make prestage-e2e SUBMIT=submit/aichallenge_submit.tar.gz`（参照提出物 = リポジトリの `aichallenge_submit/`、
+`SYMLINK_INSTALL=0`、イメージ `aichallenge-2025-dev` = `sha256:20de9cbb…`、RTX 4090 の開発機、2026-09-07）:
 
-| 対象 | サイズ |
-|------|--------|
-| `install/` 全体 | 465 MB |
-| うち `install/multi_purpose_mpc_ros/.venv` | 451 MB |
-| `build/` | 113 MB |
+| 対象 | 実測 |
+|------|------|
+| DL(ローカル tar コピー) + colcon build + zstd アーカイブ | 39 s（うち colcon 25 パッケージ 35 s） |
+| `install/`（実体コピー） | 492 MB |
+| うち `install/multi_purpose_mpc_ros/.venv` | 453 MB |
+| `build/` | 85 MB（ボールトには入れない） |
+| `install.tar.zst` | 126 MB |
+| `stage_team.sh`（復号 + sha256 照合 + 展開） | 2 s |
+| `install/` 内に残るシンボリックリンク | 4（すべて venv 内部の相対リンクか `/usr/bin/python3`） |
 
-`--symlink-install` を外すと実体コピーのぶん増える。MPC を使うチームが多い場合、
-32 チームで最大 20 GB 程度（見込み）。zstd 圧縮後のボールトは venv が高圧縮なので
-数 GB に収まる見込みだが、**zstd 圧縮後のボールト実サイズとチームあたりのビルド時間は
-実イメージでの E2E（未実施、下記「検証方法」参照）が済んでおらず未計測**である。
-上記はいずれも見込み値であり、実測値として扱わないこと。
-`.venv` の重複排除は効果が大きいが、まずは実測してから判断する（本 spec の対象外）。
+32 チームが同程度なら、ボールトは約 4 GB、ビルドは直列で約 25 分。参加者の提出物は参照より大きい
+（学習済み重み・追加 pip 依存）ことがあるので、実際の 32 チームを流したときのサマリで再確認する。
+`.venv` の重複排除は効果が大きいが、上記サイズなら不要（本 spec の対象外）。
+
+参考: `--symlink-install` あり（開発時の既定）では `install/` 465 MB、`build/` 113 MB。
 
 ## 運用手順
 
@@ -241,9 +251,66 @@ install/rl_train_controller/lib/.../rl_train_controller_node.py
 
 - **会場前（運営 PC）**: `teams.tsv` を用意し `make prestage-build VAULT=<path> TEAMS=teams.tsv`
   でボールトを構築、サマリで `failed` のチームを確認、ボールトを車両 PC へ搬入する。
-- **走行枠ごと（車両 PC・運営が実行）**: 枠の頭にチームがログアウトしている状態で
+- **会場前（イメージ）**: `stage_team.sh` はイメージ ID の一致を要求するので、`./docker_build.sh dev`
+  を各 PC で個別に実行してはいけない（ID が揃わない）。ビルド担当 PC で
+  `make prestage-image-export IMAGE_TAR=<file>`、各運営 PC で `make prestage-image-import IMAGE_TAR=<file>`
+  （`docker save` / `docker load` は `.Id` を保存する）。
+- **走行枠ごと（運営 PC・運営が実行）**: 枠の頭にチームがログアウトしている状態で
   `make prestage-stage VAULT=<path> TEAM=<team_id>`、枠の終わりに
   `make prestage-unstage [KEEP_OUTPUT=<保管先>]`。
+- **検証**: `make prestage-test`（スタブ、docker 不要）と `make prestage-e2e SUBMIT=<tar>`（実イメージ）。
+
+## SIM 決勝での適用
+
+### PC 構成とチーム数
+
+- AWSIM PC 1 台（`make simulator`、変更なし）、Autoware PC 4 台（席 A〜D、各チームが `make autoware-simulator`）、
+  リハーサル卓 PC（試合と同じ構成）。E2E 部門は持ち込み PC なので対象外。
+- Sim to Real 部門 一般 16 + 学生 16 = 32 チームが、4 台の Autoware PC を 8 試合（各 4 チーム）で使い回す。
+  席の割り当ては対戦表で決まるが、PC 故障や席替えに備えて**全 PC に全チームのボールトを置く**
+  （ボールトは暗号文なので置いても秘匿は崩れない）。
+- 席 = `ROS_DOMAIN_ID` は各 PC の `.env` で固定（A=1 … D=4）。チーム ID には席を入れない。
+
+### チーム ID の規約
+
+`<クラス>-<予選順位 2 桁>`（`general-03`、`student-12`）。aic-next の `group_id` 接頭辞
+（`general-` / `student-`）と対戦表の表記に一致し、短く、ソートできる。ボールト内のディレクトリ名は
+暗号化されるので、名前の可読性は他チームへの漏洩と引き換えにならない。人が読むチーム名は
+`teams.tsv` の 4 列目（label）に置く。順位は補欠繰り上げで変わりうるので、`teams.tsv` を確定した時点の
+順位で固定する。
+
+### 1 試合（20 分枠）の流れ
+
+現行の進行表ではセットアップ 10 分の中で「ダウンロード・ビルド・起動」を各チームが行うことになっている。
+本方式ではこれを「運営が stage（2 秒）→ チームが起動」に置き換える。
+
+| 時刻 | リハーサル卓 PC | ステージ PC（席 A〜D） |
+|------|----------------|------------------------|
+| T-20 | 次の試合のチームを stage | 前の試合が走行中 |
+| T-5 | チーム退席後に unstage | 前の試合を unstage（`KEEP_OUTPUT` で走行ログを保管） |
+| T+0 | — | 席ごとに stage、チームが `make autoware-simulator` |
+| T+18 | — | 走行終了、チーム退席後に unstage |
+
+各チームは計 2 回ステージされる。unstage は「チームが席を離れてから」実行する
+（枠中に仕込まれた常駐プロセスによる次チームの盗み見は本設計では防げない。脅威モデル参照）。
+
+### 提出締切との関係
+
+事前ビルドは提出締切**後**にしか意味を持たない。SIM 決勝の締切を「リハーサル卓で動作確認した以降は
+更新禁止」（直前まで更新可）のままにすると、prestage を会場で回すことになり事前配置の意味が薄れる。
+推奨は前日 18:00 などに締切を前倒しして prestage を回し、以降の更新は例外として
+ビルド担当 PC で `prestage_all.sh --team <id> --force` による個別再 prestage（要ネットワーク + 約 1 分）
+→ 該当 PC へボールト再コピー、とする。締切の決定は運営（本 spec の対象外）。
+
+### 枠中にチームができること
+
+`install/` には launch XML・param YAML・Python ノード・学習済み重みが平文コピーで入るので、
+チームは枠中にそれらを直接編集して調整できる。`src/` は無いので C++ の再ビルドはできない。
+枠中に `make autoware-build` を叩いてはいけない。実測（2026-09-07）では、実体コピーの `install/` に
+対して既定の `--symlink-install` ビルドが `bag_manager_py` の段階で衝突して**失敗**する
+（`Failed <<< bag_manager_py`、他は Aborted）。参加者パッケージの `install/` はそのまま残り
+`ros2 launch` も解決できるが、`aichallenge_tools` 側の install が一部書き換わる。
+運営はチームに「ビルドは不要・禁止、調整は `install/` 内の YAML 編集で行う」と案内する。
 
 ## 非対象（やらないこと）
 
@@ -288,5 +355,10 @@ install/rl_train_controller/lib/.../rl_train_controller_node.py
 上記のうち 1・2 は `vehicle/prestage/tests/prestage_test.sh`、4・6 は `stage_test.sh`、
 5 は `unstage_test.sh` で検証済み（ダウンロード・ビルド・docker をスタブに差し替え、
 ネットワークも docker も使わない。`make prestage-test` でまとめて実行できる）。
-3 の**実イメージでの `make dev` E2E のみ未実施**（作業中の未コミット差分を消してしまう
-おそれがあり保留中）。
+
+3 は `make prestage-e2e SUBMIT=<tar>`（`vehicle/prestage/e2e_real_image.sh`）で実イメージに対して検証する。
+ダウンロードだけをローカル tar のコピーに差し替え、ビルド・ボールト・stage・`make autoware-simulator`・
+unstage は本物を使う。2026-09-07 の実行では stage 後に 25 ノード
+（`/localization/imu_gnss_poser`、`/planning/scenario_planning/simple_trajectory_generator`、`/mpc_controller` 等）
+が起動し、unstage 後に平文が残らないことを確認した。実行すると `aichallenge/workspace/src/aichallenge_submit`
+を一時的に置き換えるため（終了時に git から復元）、未コミットの変更があるマシンでは実行しない。
