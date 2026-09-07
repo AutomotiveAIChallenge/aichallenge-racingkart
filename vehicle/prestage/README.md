@@ -61,7 +61,15 @@ docker image inspect --format '{{.Id}}' aichallenge-2025-dev
 
 各運営 PC で `aichallenge/workspace/install` が**存在しない**状態にしておく（存在すると
 `stage_team.sh` が拒否する）。開発で使った PC なら 1 回 `make prestage-unstage` を流す。
+`unstage_team.sh` は git 管理下の checkout であれば `aichallenge/workspace/src/aichallenge_submit`
+を削除せず、git から参照提出物を復元する（`git clean` + `git checkout`）。これにより
+`prestage-unstage` の後も `make dev` / `make autoware-build` がそのまま動く。
 `.env` の `ROS_DOMAIN_ID` は席ごとに固定する（A=1, B=2, C=3, D=4）。チーム ID には席を含めない。
+
+`make autoware-build` は `aichallenge/workspace/.staged_team`（=誰かが stage 中）を検知すると
+既定の `--symlink-install` ビルドを拒否する。事前ビルドした実体コピーの `install/` を
+シンボリックリンクで上書きして壊してしまうためで、`make prestage-unstage` で unstage してから
+ビルドする（詳細は `docs/spec/prestaged-submissions.md`）。
 
 ## 走行枠ごと（運営が実行）
 
@@ -71,7 +79,7 @@ make prestage-stage VAULT=/path/to/vault TEAM=general-03
 
 # チームに引き渡す。チームは通常どおり make autoware-simulator（実機は make autoware-vehicle）を使う
 
-# 枠の終わり
+# 枠の終わり（install/ build/ log/ を削除し、src/aichallenge_submit は git から参照提出物に復元）
 make prestage-unstage KEEP_OUTPUT=/path/to/logs
 ```
 

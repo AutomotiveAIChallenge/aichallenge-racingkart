@@ -177,20 +177,20 @@ vehicle-tui:
 prestage-build:
 	@[ -n "$(VAULT)" ] || { echo "VAULT=<cipherdir> is required"; exit 2; }
 	@[ -n "$(TEAMS)" ] || { echo "TEAMS=<teams.tsv> is required"; exit 2; }
-	vehicle/prestage/prestage_all.sh --vault $(VAULT) --teams $(TEAMS)
+	vehicle/prestage/prestage_all.sh --vault "$(VAULT)" --teams "$(TEAMS)"
 
 # Stage one team's prebuilt workspace (vehicle PC, organiser only).
 # Usage: make prestage-stage VAULT=<cipherdir> TEAM=<team_id>
 prestage-stage:
 	@[ -n "$(VAULT)" ] || { echo "VAULT=<cipherdir> is required"; exit 2; }
 	@[ -n "$(TEAM)" ] || { echo "TEAM=<team_id> is required"; exit 2; }
-	vehicle/prestage/stage_team.sh --vault $(VAULT) $(TEAM)
+	vehicle/prestage/stage_team.sh --vault "$(VAULT)" "$(TEAM)"
 
 # Wipe the staged submission after a slot.
 # Usage: make prestage-unstage [KEEP_OUTPUT=<dir>]
 prestage-unstage:
 	@if [ -n "$(KEEP_OUTPUT)" ]; then \
-		vehicle/prestage/unstage_team.sh --keep-output $(KEEP_OUTPUT); \
+		vehicle/prestage/unstage_team.sh --keep-output "$(KEEP_OUTPUT)"; \
 	else \
 		vehicle/prestage/unstage_team.sh; \
 	fi
@@ -202,14 +202,14 @@ prestage-test:
 # Needs docker, aichallenge-2025-dev and .env. Usage: make prestage-e2e SUBMIT=submit/aichallenge_submit.tar.gz
 prestage-e2e:
 	@[ -n "$(SUBMIT)" ] || { echo "SUBMIT=<aichallenge_submit.tar.gz> is required"; exit 2; }
-	vehicle/prestage/e2e_real_image.sh --submit $(SUBMIT)
+	vehicle/prestage/e2e_real_image.sh --submit "$(SUBMIT)"
 
 # Ship the dev image to the other PCs (stage_team.sh checks the image ID).
 # Usage: make prestage-image-export IMAGE_TAR=/path/aichallenge-2025-dev.tar.zst
 prestage-image-export:
 	@[ -n "$(IMAGE_TAR)" ] || { echo "IMAGE_TAR=<file.tar.zst> is required"; exit 2; }
-	vehicle/prestage/image_transfer.sh export $(IMAGE_TAR)
+	vehicle/prestage/image_transfer.sh export "$(IMAGE_TAR)"
 
 prestage-image-import:
 	@[ -n "$(IMAGE_TAR)" ] || { echo "IMAGE_TAR=<file.tar.zst> is required"; exit 2; }
-	vehicle/prestage/image_transfer.sh import $(IMAGE_TAR)
+	vehicle/prestage/image_transfer.sh import "$(IMAGE_TAR)"

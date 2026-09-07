@@ -66,8 +66,21 @@ SUBMIT="$(cd "$(dirname "${SUBMIT}")" && pwd)/$(basename "${SUBMIT}")"
 require_tools gocryptfs fusermount zstd python3 docker make
 
 WORK="$(mktemp -d)"
+# Set once stage_team.sh has succeeded, so cleanup() knows a team is actually
+# staged (and unstage_team.sh has something to undo) even when a later step
+# (die, a signal, or an unexpected failure) exits before the happy-path end.
+STAGED=0
 cleanup() {
     (cd "${REPO_ROOT}" && docker compose down --remove-orphans >/dev/null 2>&1) || true
+    if [ "${STAGED}" -eq 1 ]; then
+        "${SCRIPT_DIR}/unstage_team.sh" --yes || warn "unstage_team.sh failed during cleanup"
+    fi
+    # prestage_all.sh replaces the reference submission with the built tar; put it
+    # back regardless of STAGED, since prestage can run (and fail) before staging.
+    if git -C "${REPO_ROOT}" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+        git -C "${REPO_ROOT}" checkout -- aichallenge/workspace/src/aichallenge_submit || true
+        log "restored aichallenge/workspace/src/aichallenge_submit from git"
+    fi
     umount_vault "${WORK}/mnt"
     rm -rf "${WORK}"
 }
@@ -124,6 +137,7 @@ umount_vault "${WORK}/mnt"
 log "=== 2/4 stage ==="
 t2=$(date +%s)
 "${SCRIPT_DIR}/stage_team.sh" --vault "${VAULT}" "${TEAM}"
+STAGED=1
 t3=$(date +%s)
 STAGE_SEC=$((t3 - t2))
 log "stage wall time: ${STAGE_SEC} s"
@@ -151,13 +165,9 @@ fi
 log "participant nodes are up ($(printf '%s\n' "${nodes}" | grep -c '^/') nodes)"
 docker compose down --remove-orphans >/dev/null 2>&1 || true
 
-log "=== 4/4 unstage ==="
-"${SCRIPT_DIR}/unstage_team.sh" --yes
-
-# prestage_all.sh replaced the reference submission with the tar; put it back.
-if git -C "${REPO_ROOT}" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
-    git -C "${REPO_ROOT}" checkout -- aichallenge/workspace/src/aichallenge_submit
-    log "restored aichallenge/workspace/src/aichallenge_submit from git"
-fi
+# unstage and the reference-submission restore run exactly once, in cleanup()
+# on exit — including on a die() below this point — so a failure never leaves
+# the repo staged with the reference submission deleted.
+log "=== 4/4 unstage (runs in cleanup on exit) ==="
 
 log "E2E OK — build ${BUILD_SEC} s, archive ${ARCHIVE_SIZE}, stage ${STAGE_SEC} s, install/ ${INSTALL_SIZE}"
