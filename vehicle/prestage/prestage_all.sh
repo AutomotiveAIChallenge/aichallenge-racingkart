@@ -24,7 +24,7 @@ Usage: prestage_all.sh --vault <cipherdir> --teams <teams.tsv> [options]
 
 Options:
   --vault <dir>     gocryptfs cipherdir (must already be initialised with -init)
-  --teams <file>    TSV: team_id, user_id, [submission_id]. See teams.tsv.example
+  --teams <file>    TSV: team_id, user_id, [submission_id, [label]]. See teams.tsv.example
   --team <id>       Process only this team_id
   --force           Rebuild even if the team is already in the vault
   -h, --help        Show this help
@@ -112,7 +112,8 @@ ok_count=0
 fail_count=0
 skip_count=0
 
-while IFS=$'\t' read -r team_id user_id submission_id || [ -n "${team_id}" ]; do
+while IFS=$'\t' read -r team_id user_id submission_id label || [ -n "${team_id}" ]; do
+    : "${label:=}"
     case "${team_id}" in
     "" | \#*) continue ;;
     esac
@@ -131,7 +132,7 @@ while IFS=$'\t' read -r team_id user_id submission_id || [ -n "${team_id}" ]; do
         continue
     fi
 
-    log "=== ${team_id} (user ${user_id}) ==="
+    log "=== ${team_id} (user ${user_id})${label:+ — ${label}} ==="
     mkdir -p "${team_dir}"
     clean_workspace
 

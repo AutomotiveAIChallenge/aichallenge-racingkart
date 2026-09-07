@@ -7,7 +7,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PRESTAGE="${SCRIPT_DIR}/../prestage_all.sh"
 MANIFEST_PY="${SCRIPT_DIR}/../manifest.py"
 WORK="$(mktemp -d)"
-trap 'fusermount -u "${WORK}/mnt" 2>/dev/null; fusermount -u "${WORK}/mnt2" 2>/dev/null; rm -rf "${WORK}"' EXIT INT TERM
+trap 'fusermount -u "${WORK}/mnt" 2>/dev/null; fusermount -u "${WORK}/mnt2" 2>/dev/null; fusermount -u "${WORK}/mnt3" 2>/dev/null; rm -rf "${WORK}"' EXIT INT TERM
 
 fails=0
 expect_eq() { # $1=label $2=expected $3=actual
@@ -149,6 +149,21 @@ expect_eq "usage does not mention bare USERNAME" "no" \
     "$(printf '%s' "${usage_out}" | grep -qE '\bUSERNAME\b' && echo yes || echo no)"
 expect_eq "usage does not mention bare PASSWORD" "no" \
     "$(printf '%s' "${usage_out}" | grep -qE '\bPASSWORD\b' && echo yes || echo no)"
+
+# --- 4 列目 (label) があっても、submission_id が空でも受け付けること ---
+mkdir -p "${WORK}/vault3" "${WORK}/mnt3"
+printf 'general-01\tuser-a\t\tShibaura Univ\nstudent-02\tuser-b\tsub-b\tChiba Tech (student)\n' >"${WORK}/teams3.tsv"
+gocryptfs -q -init -passfile "${WORK}/pw" "${WORK}/vault3" >/dev/null 2>&1
+label_out=$("${PRESTAGE}" --vault "${WORK}/vault3" --teams "${WORK}/teams3.tsv" 2>&1)
+label_rc=$?
+echo "    ${label_out//$'\n'/$'\n    '}"
+expect_eq "labelled tsv exits 0" "0" "${label_rc}"
+gocryptfs -q -passfile "${WORK}/pw" "${WORK}/vault3" "${WORK}/mnt3"
+expect_eq "general-01 ok (empty submission_id + label)" "ok" \
+    "$(python3 "${MANIFEST_PY}" get "${WORK}/mnt3/manifest.json" --team-id general-01 --field build_status)"
+expect_eq "student-02 keeps its submission_id" "sub-b" \
+    "$(python3 "${MANIFEST_PY}" get "${WORK}/mnt3/manifest.json" --team-id student-02 --field submission_id)"
+fusermount -u "${WORK}/mnt3"
 
 [ "${fails}" -eq 0 ] && echo "ALL PASS" || echo "${fails} FAILURE(S)"
 exit "${fails}"
