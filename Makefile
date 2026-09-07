@@ -3,7 +3,7 @@ SHELL := /bin/bash
 
 .PHONY: autoware-build autoware-vehicle autoware-simulator autoware-request-initialpose autoware-request-control  awsim-request-start awsim-request-reset autoware-driver-zenoh autoware-driver-zenoh-rosbag setup-vehicle \
 	simulator dev dev2 dev3 dev4 driver zenoh download rviz2 down down_all ps autoware-attach autoware-bash eval e2e vehicle-tui \
-	prestage-build prestage-stage prestage-unstage prestage-test prestage-image-export prestage-image-import
+	prestage-build prestage-stage prestage-unstage prestage-test prestage-image-export prestage-image-import prestage-e2e
 
 # Used by docker-compose.yml for build/eval artifact ownership.
 HOST_UID ?= $(shell id -u)
@@ -197,6 +197,12 @@ prestage-unstage:
 
 prestage-test:
 	vehicle/prestage/tests/run_all.sh
+
+# Real-image end-to-end: prestage one local tar -> stage -> make autoware-simulator -> unstage.
+# Needs docker, aichallenge-2025-dev and .env. Usage: make prestage-e2e SUBMIT=submit/aichallenge_submit.tar.gz
+prestage-e2e:
+	@[ -n "$(SUBMIT)" ] || { echo "SUBMIT=<aichallenge_submit.tar.gz> is required"; exit 2; }
+	vehicle/prestage/e2e_real_image.sh --submit $(SUBMIT)
 
 # Ship the dev image to the other PCs (stage_team.sh checks the image ID).
 # Usage: make prestage-image-export IMAGE_TAR=/path/aichallenge-2025-dev.tar.zst
