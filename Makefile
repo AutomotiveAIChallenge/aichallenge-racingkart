@@ -3,7 +3,7 @@ SHELL := /bin/bash
 
 .PHONY: autoware-build autoware-vehicle autoware-simulator autoware-request-initialpose autoware-request-control  awsim-request-start awsim-request-reset autoware-driver-zenoh autoware-driver-zenoh-rosbag setup-vehicle \
 	simulator dev dev2 dev3 dev4 driver zenoh download rviz2 down down_all ps autoware-attach autoware-bash eval e2e vehicle-tui \
-	prestage-build prestage-stage prestage-unstage prestage-test
+	prestage-build prestage-stage prestage-unstage prestage-test prestage-image-export prestage-image-import
 
 # Used by docker-compose.yml for build/eval artifact ownership.
 HOST_UID ?= $(shell id -u)
@@ -197,3 +197,13 @@ prestage-unstage:
 
 prestage-test:
 	vehicle/prestage/tests/run_all.sh
+
+# Ship the dev image to the other PCs (stage_team.sh checks the image ID).
+# Usage: make prestage-image-export IMAGE_TAR=/path/aichallenge-2025-dev.tar.zst
+prestage-image-export:
+	@[ -n "$(IMAGE_TAR)" ] || { echo "IMAGE_TAR=<file.tar.zst> is required"; exit 2; }
+	vehicle/prestage/image_transfer.sh export $(IMAGE_TAR)
+
+prestage-image-import:
+	@[ -n "$(IMAGE_TAR)" ] || { echo "IMAGE_TAR=<file.tar.zst> is required"; exit 2; }
+	vehicle/prestage/image_transfer.sh import $(IMAGE_TAR)

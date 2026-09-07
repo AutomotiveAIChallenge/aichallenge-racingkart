@@ -30,6 +30,21 @@ make prestage-build VAULT=/path/to/vault TEAMS=teams.tsv
 
 ボールトを車両 PC へコピー（または USB で搬入）する。**パスフレーズは持ち込まない。**
 
+`stage_team.sh` はボールトに記録されたイメージ ID と車両 PC の `aichallenge-2025-dev` の ID が
+一致しないと展開を拒否する。`./docker_build.sh dev` を各 PC で個別に実行すると ID が揃わないため、
+運営 PC でビルドしたイメージを書き出し、他の全 PC へ配って読み込ませる。
+
+```bash
+# 運営 PC（ビルドした側）で書き出す
+make prestage-image-export IMAGE_TAR=/path/to/aichallenge-2025-dev.tar.zst
+
+# ボールトと一緒に運び、各車両 PC / リハーサル卓 PC で読み込む
+make prestage-image-import IMAGE_TAR=/path/to/aichallenge-2025-dev.tar.zst
+
+# 全 PC で ID が一致することを確認する
+docker image inspect --format '{{.Id}}' aichallenge-2025-dev
+```
+
 `PRESTAGE_PASSFILE`（ボールトのパスフレーズを平文ファイルから読む）はテスト用、および無人で流す
 運営 PC 上の実行専用のオプションである。**車両 PC では使わない** — パスフレーズをファイルに置いた
 時点でその機体上の秘匿が崩れる。
