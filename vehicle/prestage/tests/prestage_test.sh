@@ -7,7 +7,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PRESTAGE="${SCRIPT_DIR}/../prestage_all.sh"
 MANIFEST_PY="${SCRIPT_DIR}/../manifest.py"
 WORK="$(mktemp -d)"
-trap 'fusermount -u "${WORK}/mnt" 2>/dev/null; fusermount -u "${WORK}/mnt2" 2>/dev/null; fusermount -u "${WORK}/mnt3" 2>/dev/null; rm -rf "${WORK}"' EXIT INT TERM
+trap 'fusermount -u "${WORK}/mnt" 2>/dev/null; fusermount -u "${WORK}/mnt2" 2>/dev/null; fusermount -u "${WORK}/mnt3" 2>/dev/null; fusermount -u "${WORK}/mnt4" 2>/dev/null; fusermount -u "${WORK}/mnt5" 2>/dev/null; fusermount -u "${WORK}/mnt6" 2>/dev/null; rm -rf "${WORK}"' EXIT INT TERM
 
 fails=0
 expect_eq() { # $1=label $2=expected $3=actual
@@ -164,6 +164,96 @@ expect_eq "general-01 ok (empty submission_id + label)" "ok" \
 expect_eq "student-02 keeps its submission_id" "sub-b" \
     "$(python3 "${MANIFEST_PY}" get "${WORK}/mnt3/manifest.json" --team-id student-02 --field submission_id)"
 fusermount -u "${WORK}/mnt3"
+
+# --- F1: build/download コマンドが teams.tsv の stdin を横取りしないこと ---
+# BUILD_CMD が cat >/dev/null で stdin を吸い込んでも、while read ループの
+# 残り行が消費されてはならない（3 チーム全部処理されること）。
+mkdir -p "${WORK}/vault4" "${WORK}/mnt4"
+printf 'f1-a\tuser-a\nf1-b\tuser-b\nf1-c\tuser-c\n' >"${WORK}/teams4.tsv"
+
+cat >"${WORK}/fake_build_drain.sh" <<'STUB'
+#!/usr/bin/env bash
+# stdin を丸ごと読み捨てる。teams.tsv が build コマンドの stdin に
+# 漏れていないかを検出するためのスタブ。
+set -eo pipefail
+cat >/dev/null
+ws="${FAKE_WS}/aichallenge/workspace"
+mkdir -p "${ws}/install/pkg/lib" "${ws}/build/pkg"
+echo "built artifact" >"${ws}/install/pkg/lib/libpkg.so"
+echo "setup" >"${ws}/install/setup.bash"
+STUB
+chmod +x "${WORK}/fake_build_drain.sh"
+
+gocryptfs -q -init -passfile "${WORK}/pw" "${WORK}/vault4" >/dev/null 2>&1
+
+drain_out=$(PRESTAGE_BUILD_CMD="FAKE_WS=${WS} ${WORK}/fake_build_drain.sh" \
+    "${PRESTAGE}" --vault "${WORK}/vault4" --teams "${WORK}/teams4.tsv" 2>&1)
+drain_rc=$?
+echo "    ${drain_out//$'\n'/$'\n    '}"
+expect_eq "stdin-draining build still exits 0" "0" "${drain_rc}"
+expect_eq "stdin-draining build: summary is 3 ok" "yes" \
+    "$(printf '%s' "${drain_out}" | grep -q '3 ok' && echo yes || echo no)"
+
+gocryptfs -q -passfile "${WORK}/pw" "${WORK}/vault4" "${WORK}/mnt4"
+for t in f1-a f1-b f1-c; do
+    expect_eq "${t} ok despite stdin-draining build" "ok" \
+        "$(python3 "${MANIFEST_PY}" get "${WORK}/mnt4/manifest.json" --team-id "${t}" --field build_status)"
+done
+fusermount -u "${WORK}/mnt4"
+
+# --- F2: タブの連続 (空の submission_id 列) が後続列を巻き込んで潰れないこと ---
+mkdir -p "${WORK}/vault5" "${WORK}/mnt5"
+: >"${WORK}/fake_dl_log5"
+cat >"${WORK}/fake_download_logged.sh" <<'STUB'
+#!/usr/bin/env bash
+set -eo pipefail
+printf '%s\n' "$*" >>"${FAKE_DL_LOG}"
+dest=""
+while [ $# -gt 0 ]; do
+    case "$1" in
+    --dest-file) dest="$2"; shift 2 ;;
+    *) shift ;;
+    esac
+done
+tmp=$(mktemp -d)
+mkdir -p "${tmp}/aichallenge_submit/pkg"
+echo "source" >"${tmp}/aichallenge_submit/pkg/node.cpp"
+mkdir -p "$(dirname "${dest}")"
+tar czf "${dest}" -C "${tmp}" aichallenge_submit
+rm -rf "${tmp}"
+STUB
+chmod +x "${WORK}/fake_download_logged.sh"
+
+printf 'general-01\tuser-a\t\tShibaura Univ\nstudent-02\tuser-b\tsub-b\tChiba Tech\n' >"${WORK}/teams5.tsv"
+gocryptfs -q -init -passfile "${WORK}/pw" "${WORK}/vault5" >/dev/null 2>&1
+
+FAKE_DL_LOG="${WORK}/fake_dl_log5" PRESTAGE_DOWNLOAD_CMD="${WORK}/fake_download_logged.sh" \
+    "${PRESTAGE}" --vault "${WORK}/vault5" --teams "${WORK}/teams5.tsv" >/dev/null 2>&1
+expect_eq "empty submission_id: called with --latest" "yes" \
+    "$(grep -F 'general-01' "${WORK}/fake_dl_log5" | grep -q -- '--latest' && echo yes || echo no)"
+expect_eq "empty submission_id: NOT called with --submission-id" "no" \
+    "$(grep -F 'general-01' "${WORK}/fake_dl_log5" | grep -q -- '--submission-id' && echo yes || echo no)"
+gocryptfs -q -passfile "${WORK}/pw" "${WORK}/vault5" "${WORK}/mnt5"
+expect_eq "empty submission_id: user_id not swallowed into submission_id" "" \
+    "$(python3 "${MANIFEST_PY}" get "${WORK}/mnt5/manifest.json" --team-id general-01 --field submission_id 2>/dev/null || true)"
+expect_eq "non-empty submission_id: called with --submission-id sub-b" "yes" \
+    "$(grep -F 'student-02' "${WORK}/fake_dl_log5" | grep -q -- '--submission-id sub-b' && echo yes || echo no)"
+fusermount -u "${WORK}/mnt5"
+
+# --- F3: CRLF 改行の TSV を扱えること (Excel/Windows エクスポート対策) ---
+mkdir -p "${WORK}/vault6" "${WORK}/mnt6"
+: >"${WORK}/fake_dl_log6"
+printf 'crlf-01\tuser-c\r\n' >"${WORK}/teams6.tsv"
+gocryptfs -q -init -passfile "${WORK}/pw" "${WORK}/vault6" >/dev/null 2>&1
+
+FAKE_DL_LOG="${WORK}/fake_dl_log6" PRESTAGE_DOWNLOAD_CMD="${WORK}/fake_download_logged.sh" \
+    "${PRESTAGE}" --vault "${WORK}/vault6" --teams "${WORK}/teams6.tsv" >/dev/null 2>&1
+gocryptfs -q -passfile "${WORK}/pw" "${WORK}/vault6" "${WORK}/mnt6"
+expect_eq "crlf-01 ok" "ok" \
+    "$(python3 "${MANIFEST_PY}" get "${WORK}/mnt6/manifest.json" --team-id crlf-01 --field build_status)"
+expect_eq "crlf-01: user-id has no trailing CR" "yes" \
+    "$(grep -F 'crlf-01' "${WORK}/fake_dl_log6" | grep -q -- '--user-id user-c$' && echo yes || echo no)"
+fusermount -u "${WORK}/mnt6"
 
 [ "${fails}" -eq 0 ] && echo "ALL PASS" || echo "${fails} FAILURE(S)"
 exit "${fails}"

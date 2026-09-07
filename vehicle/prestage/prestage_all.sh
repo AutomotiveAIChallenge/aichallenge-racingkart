@@ -70,6 +70,16 @@ done
 [ -f "${TEAMS_FILE}" ] || die "teams file not found: ${TEAMS_FILE}"
 require_tools gocryptfs fusermount zstd tar python3 sha256sum
 
+# A team_id/user_id row split on a non-whitespace separator, so consecutive
+# tabs (an empty submission_id column) do not collapse and swallow the
+# following column. Strips a trailing CR so an Excel/Windows-exported TSV
+# does not leak "\r" into user_id.
+split_team_line() {
+    local raw="$1"
+    raw="${raw%$'\r'}"
+    IFS=$'\x1f' read -r team_id user_id submission_id label _ <<<"${raw//$'\t'/$'\x1f'}"
+}
+
 DOWNLOAD_CMD="${PRESTAGE_DOWNLOAD_CMD:-python3 ${REPO_ROOT}/vehicle/download_submission.py}"
 BUILD_CMD="${PRESTAGE_BUILD_CMD:-docker compose run --rm --no-deps -e SYMLINK_INSTALL=0 autoware-build}"
 
@@ -112,7 +122,12 @@ ok_count=0
 fail_count=0
 skip_count=0
 
-while IFS=$'\t' read -r team_id user_id submission_id label || [ -n "${team_id}" ]; do
+# The teams file is read on its own file descriptor (3), not stdin: BUILD_CMD
+# and DOWNLOAD_CMD are external commands that otherwise inherit this loop's
+# stdin and can drain it (e.g. any tool that does `cat` on stdin), silently
+# eating the remaining team rows while the script still exits 0.
+while IFS= read -r -u 3 raw_line || [ -n "${raw_line-}" ]; do
+    split_team_line "${raw_line}"
     : "${label:=}"
     case "${team_id}" in
     "" | \#*) continue ;;
@@ -120,9 +135,6 @@ while IFS=$'\t' read -r team_id user_id submission_id label || [ -n "${team_id}"
     if [ -n "${ONLY_TEAM}" ] && [ "${team_id}" != "${ONLY_TEAM}" ]; then
         continue
     fi
-    case "${team_id}" in
-    *[!A-Za-z0-9_-]*) die "invalid team_id (allowed: A-Za-z0-9_-): ${team_id}" ;;
-    esac
 
     team_dir="${MNT}/team_${team_id}"
     if [ "${FORCE}" -eq 0 ] && [ -f "${team_dir}/install.tar.zst" ] &&
@@ -145,7 +157,7 @@ while IFS=$'\t' read -r team_id user_id submission_id label || [ -n "${team_id}"
         dl_args+=(--username "${PRESTAGE_USERNAME}" --password "${PRESTAGE_PASSWORD}")
     fi
 
-    if ! ${DOWNLOAD_CMD} "${dl_args[@]}" >>"${team_dir}/build.log" 2>&1; then
+    if ! ${DOWNLOAD_CMD} "${dl_args[@]}" </dev/null >>"${team_dir}/build.log" 2>&1; then
         warn "${team_id}: download failed (see ${team_dir}/build.log)"
         python3 "${MANIFEST_PY}" upsert "${MANIFEST}" --team-id "${team_id}" --user-id "${user_id}" \
             --submission-id "${submission_id-}" --build-status failed ||
@@ -167,7 +179,7 @@ while IFS=$'\t' read -r team_id user_id submission_id label || [ -n "${team_id}"
         continue
     fi
 
-    if ! (cd "${WORKSPACE_ROOT}" && eval "${BUILD_CMD}") >>"${team_dir}/build.log" 2>&1; then
+    if ! (cd "${WORKSPACE_ROOT}" && eval "${BUILD_CMD}") </dev/null >>"${team_dir}/build.log" 2>&1; then
         warn "${team_id}: build failed (see ${team_dir}/build.log)"
         python3 "${MANIFEST_PY}" upsert "${MANIFEST}" --team-id "${team_id}" --user-id "${user_id}" \
             --submission-id "${submission_id-}" --build-status failed \
@@ -211,7 +223,7 @@ while IFS=$'\t' read -r team_id user_id submission_id label || [ -n "${team_id}"
     log "${team_id}: ok ($(du -h "${team_dir}/install.tar.zst" | cut -f1))"
     ok_count=$((ok_count + 1))
     clean_workspace
-done <"${TEAMS_FILE}"
+done 3<"${TEAMS_FILE}"
 
 clean_workspace
 
