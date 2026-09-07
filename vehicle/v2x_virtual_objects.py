@@ -9,6 +9,7 @@ another kart being driven.
     ./v2x_virtual_objects.py --scenario v2x-scenarios/kashiwanoha-demo.yaml
     ./v2x_virtual_objects.py --scenario … --dry-run     # 座標と動きだけ確認
     ./v2x_virtual_objects.py --scenario … --only d8     # 1 台だけ出す
+    ./v2x_virtual_objects.py --scenario … --ids d14,d15,d16   # 送信 ID を差し替える
 
 Each object publishes ``v2x/vehicles/{id}/position`` at the scenario rate. The
 broker's own fan-out is the relay (R6.4.1), so nothing has to run on the kart.
@@ -48,6 +49,7 @@ from v2x_virtual_objects_core import (  # noqa: E402
     missing_files,
     parse_raceline,
     parse_scenario,
+    with_vehicle_ids,
 )
 
 REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -65,11 +67,30 @@ def parse_args(argv: Optional[List[str]] = None) -> argparse.Namespace:
     )
     parser.add_argument("--scenario", required=True, help="scenario YAML (v2x-scenarios/*.yaml)")
     parser.add_argument("--only", help="comma separated ids; spawn just these objects")
+    parser.add_argument(
+        "--ids",
+        help="comma separated ids to publish under, replacing the scenario's ids in order "
+        "(e.g. d14,d15,d16); one id per object, applied after --only",
+    )
     parser.add_argument("--host", help="override broker.host")
     parser.add_argument("--port", type=int, help="override broker.port")
     parser.add_argument("--certs-dir", help="override broker.certs_dir")
     parser.add_argument("--no-tls", action="store_true", help="plain MQTT (local mosquitto test)")
     parser.add_argument("--rate", type=float, help="override rate_hz")
+    shape = parser.add_mutually_exclusive_group()
+    shape.add_argument(
+        "--loop",
+        dest="loop",
+        action="store_true",
+        default=None,
+        help="circulate on every raceline, whatever the gap between its ends",
+    )
+    shape.add_argument(
+        "--no-loop",
+        dest="loop",
+        action="store_false",
+        help="stop at the end of every raceline instead of circulating",
+    )
     parser.add_argument("--duration", type=float, help="[s] stop after this long (default endless)")
     parser.add_argument(
         "--transport",
@@ -145,6 +166,8 @@ def load_scenario(path: str, args: argparse.Namespace) -> Scenario:
         broker["certs_dir"] = args.certs_dir
     if args.rate is not None:
         document["rate_hz"] = args.rate
+    if args.loop is not None:
+        document["loop"] = args.loop
 
     try:
         scenario = parse_scenario(document)
@@ -163,7 +186,17 @@ def load_scenario(path: str, args: argparse.Namespace) -> Scenario:
             broker=scenario.broker,
             objects=tuple(item for item in scenario.objects if item.vehicle_id in wanted),
             rate_hz=scenario.rate_hz,
+            loop=scenario.loop,
         )
+
+    if args.ids:
+        # --only の後に当てる。「シナリオを絞ってから、その日の証明書がある ID を
+        # 順に割り当てる」が現場での使い方だから。
+        wanted_ids = tuple(part.strip() for part in args.ids.split(",") if part.strip())
+        try:
+            scenario = with_vehicle_ids(scenario, wanted_ids)
+        except ScenarioError as error:
+            raise SystemExit(f"ERROR: --ids: {error}")
     return scenario
 
 
@@ -174,13 +207,15 @@ def load_racelines(scenario: Scenario, scenario_path: str) -> Dict[str, Raceline
         path = resolve_path(reference, scenario_path)
         try:
             with open(path, encoding="utf-8") as handle:
-                racelines[reference] = parse_raceline(handle.read())
+                racelines[reference] = parse_raceline(handle.read(), scenario.loop)
         except OSError as error:
             raise SystemExit(f"ERROR: cannot read raceline {reference}: {error}")
         except ScenarioError as error:
             raise SystemExit(f"ERROR: raceline {path}: {error}")
         line = racelines[reference]
-        shape = "loop" if line.closed else "open line"
+        shape = "loop" if line.closed else "open line (objects stop at its end)"
+        if line.lead_in_points:
+            shape += f", {line.lead_in_points} garage lead-in point(s) dropped"
         print(
             f"raceline {display_path(path)}: "
             f"{len(line.points)} points, {line.length:.1f} m, {shape}"
@@ -252,13 +287,16 @@ def print_plan(
         f"broker: {transport}://{scenario.broker.host}:{scenario.broker.port} "
         f"qos={scenario.broker.qos}  rate={scenario.rate_hz:g} Hz"
     )
-    print(f"{'id':<6} {'mode':<9} {'x':>12} {'y':>12} {'z':>7} {'speed':>7}  topic")
+    print(f"{'id':<6} {'mode':<9} {'x':>12} {'y':>12} {'z':>7} {'lat':>6} {'speed':>7}  topic")
     for spawned in scenario.objects:
         state = states[spawned.vehicle_id]
         speed = f"{state.speed_mps:.2f}" if spawned.mode == MODE_RACELINE else "-"
+        # x/y にはもう横オフセットが入っているので、効いたかどうかは列で見せる。
+        lateral = f"{spawned.lateral_offset:+.2f}" if spawned.lateral_offset else "-"
         print(
             f"{spawned.vehicle_id:<6} {spawned.mode:<9} {state.position[0]:>12.2f} "
-            f"{state.position[1]:>12.2f} {state.position[2]:>7.2f} {speed:>7}  {spawned.topic}"
+            f"{state.position[1]:>12.2f} {state.position[2]:>7.2f} {lateral:>6} "
+            f"{speed:>7}  {spawned.topic}"
         )
     print(
         "\nthe karts must be launched with these ids in their receive routes:\n"

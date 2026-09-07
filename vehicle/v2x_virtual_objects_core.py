@@ -18,7 +18,7 @@ import io
 import json
 import math
 import os
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import datetime, timezone
 from typing import Dict, Optional, Sequence, Tuple
 
@@ -37,6 +37,15 @@ MODES = (MODE_STATIC, MODE_RACELINE)
 
 # レースラインが閉ループとみなせる始点・終点間の距離 [m]。
 LOOP_CLOSURE_TOLERANCE_M = 5.0
+
+# 終点が戻ってくる点を先頭から何 m まで探すか。ガレージからの引き込み
+# （raceline_*_from_garage.csv）はここに収まる長さしかない。範囲を切らないと、
+# 後半でコース自身に近づくだけの線を 1 周と誤認しかねない。
+LEAD_IN_SEARCH_M = 30.0
+
+# 横オフセットのマイター上限。鋭角のコーナーで外側の頂点が無限に伸びるのを防ぐ。
+# 指定した横オフセットの 4 倍まで。
+MITER_LIMIT = 4.0
 
 
 class ScenarioError(ValueError):
@@ -88,24 +97,52 @@ class Raceline:
 
     ``cumulative[i]`` is the distance from the first point to point ``i``;
     ``length`` includes the closing segment when the line is a loop, so that
-    ``sample(length)`` lands back on ``sample(0.0)``.
+    ``sample(length)`` lands back on ``sample(0.0)``. ``normals[i]`` is the
+    left-hand miter normal at point ``i``: shifting every point by
+    ``normals[i] * d`` gives a polyline parallel to this one at ``d`` metres,
+    so a position can be moved off the line without recomputing the geometry
+    every cycle.
     """
 
     points: Tuple[Tuple[float, float, float], ...]
     speeds: Tuple[float, ...]
     cumulative: Tuple[float, ...]
+    normals: Tuple[Tuple[float, float], ...]
     length: float
     closed: bool
+    # 周回の手前で切り落としたガレージ引き込みの点数（報告用）。
+    lead_in_points: int = 0
 
-    def sample(self, s_m: float) -> Tuple[float, float, float]:
-        """Position at arc length ``s_m``, wrapping around a closed loop."""
+    def sample(self, s_m: float, lateral_offset_m: float = 0.0) -> Tuple[float, float, float]:
+        """Position at arc length ``s_m``, wrapping around a closed loop.
+
+        ``lateral_offset_m`` moves the point sideways off the line: positive is
+        left of the direction of travel, negative right. The normal is
+        interpolated along the segment together with the position, so an
+        offset object follows a continuous curve instead of stepping sideways
+        at every point of the polyline.
+        """
         index, ratio = self._locate(s_m)
+        following = (index + 1) % len(self.points)
         start = self.points[index]
-        end = self.points[(index + 1) % len(self.points)]
-        return (
+        end = self.points[following]
+        point = (
             start[0] + (end[0] - start[0]) * ratio,
             start[1] + (end[1] - start[1]) * ratio,
             start[2] + (end[2] - start[2]) * ratio,
+        )
+        if not lateral_offset_m:
+            return point
+        # マイター法線を位置と同じ比で混ぜる。両端が区間から等距離にあるので、
+        # 間の点もその区間と平行な線の上に乗る。
+        start_normal = self.normals[index]
+        end_normal = self.normals[following]
+        normal_x = start_normal[0] + (end_normal[0] - start_normal[0]) * ratio
+        normal_y = start_normal[1] + (end_normal[1] - start_normal[1]) * ratio
+        return (
+            point[0] + normal_x * lateral_offset_m,
+            point[1] + normal_y * lateral_offset_m,
+            point[2],
         )
 
     def speed_at(self, s_m: float) -> float:
@@ -143,13 +180,113 @@ class Raceline:
         return index, min(max(ratio, 0.0), 1.0)
 
 
-def parse_raceline(text: str) -> Raceline:
+def _closure_point(points: Sequence[Tuple[float, float, float]]) -> Tuple[int, float]:
+    """The point near the start that the line's end comes back to.
+
+    Usually that is the first point. A raceline exported from the garage
+    (``raceline_*_from_garage.csv``) instead begins with a lead-in that is not
+    part of the lap, and its last point lands back on an interior point: the
+    kashiwanoha line ends exactly on point 7, 7 m away from point 0. Only the
+    first LEAD_IN_SEARCH_M are searched, so a line that merely passes close to
+    itself later on is not taken for a lap.
+
+    Returns the index and its distance from the end point; the caller decides
+    whether that distance is close enough to call the line closed.
+    """
+    end = points[-1]
+    best_index, best_gap = 0, math.dist(end[:2], points[0][:2])
+    travelled = 0.0
+    for index in range(1, len(points) - 1):
+        travelled += math.dist(points[index][:2], points[index - 1][:2])
+        if travelled > LEAD_IN_SEARCH_M:
+            break
+        gap = math.dist(end[:2], points[index][:2])
+        if gap < best_gap:
+            best_index, best_gap = index, gap
+    return best_index, best_gap
+
+
+def _unit_left_normal(
+    start: Tuple[float, float, float], end: Tuple[float, float, float]
+) -> Tuple[float, float]:
+    """Unit normal pointing left of the direction ``start`` → ``end``.
+
+    Left is +90 degrees from the heading, (dx, dy) → (-dy, dx), which is the
+    left-hand side of the track in the map frame the karts share (R9.1).
+    """
+    dx = end[0] - start[0]
+    dy = end[1] - start[1]
+    span = math.hypot(dx, dy)
+    if span <= 0.0:
+        return (0.0, 0.0)
+    return (-dy / span, dx / span)
+
+
+def _miter_normal(
+    incoming: Tuple[float, float], outgoing: Tuple[float, float]
+) -> Tuple[float, float]:
+    """The left normal at a corner between two segments, as a miter vector.
+
+    The bisector of the two unit normals, lengthened by 1 / cos(half angle) so
+    that the corner of the offset line stays the requested distance from both
+    segments — the plain bisector would cut the corner and pull the object back
+    towards the raceline. Capped at MITER_LIMIT for a sharp corner, and at a
+    180 degree turnaround, where the bisector vanishes, the incoming normal is
+    kept.
+    """
+    x = incoming[0] + outgoing[0]
+    y = incoming[1] + outgoing[1]
+    span = math.hypot(x, y)
+    if span <= 1e-9:
+        return incoming
+    bisector = (x / span, y / span)
+    cosine = bisector[0] * outgoing[0] + bisector[1] * outgoing[1]
+    scale = min(1.0 / cosine, MITER_LIMIT) if cosine > 1e-9 else MITER_LIMIT
+    return (bisector[0] * scale, bisector[1] * scale)
+
+
+def left_normals(
+    points: Sequence[Tuple[float, float, float]], closed: bool
+) -> Tuple[Tuple[float, float], ...]:
+    """The left-hand miter normal at every point (see ``_miter_normal``).
+
+    One normal per point rather than per segment is what keeps an offset
+    object on a continuous curve: with a per-segment normal it would step
+    sideways as it crossed each point. A line of fewer than two points has no
+    direction, so its normals are zero and a lateral offset does nothing.
+    """
+    count = len(points)
+    if count < 2:
+        return ((0.0, 0.0),) * count
+    segments = [
+        _unit_left_normal(points[index], points[(index + 1) % count])
+        for index in range(count if closed else count - 1)
+    ]
+    normals = []
+    for index in range(count):
+        if closed:
+            incoming, outgoing = segments[index - 1], segments[index]
+        else:
+            incoming = segments[index - 1] if index > 0 else segments[0]
+            outgoing = segments[index] if index < count - 1 else segments[-1]
+        normals.append(_miter_normal(incoming, outgoing))
+    return tuple(normals)
+
+
+def parse_raceline(text: str, loop: Optional[bool] = None) -> Raceline:
     """Parse a simple_trajectory_generator raceline CSV.
 
     Columns ``x``, ``y`` are required; ``z`` and ``speed`` are optional and
-    default to 0.0 and 0.0. The line is treated as a loop when its first and
-    last points are within LOOP_CLOSURE_TOLERANCE_M of each other, which is how
-    the track racelines in aichallenge_submit are shaped.
+    default to 0.0 and 0.0.
+
+    With ``loop`` left at None the shape is decided from the geometry: the line
+    is a lap when its end comes back within LOOP_CLOSURE_TOLERANCE_M of the
+    start, or of a point inside the leading LEAD_IN_SEARCH_M — the garage
+    lead-in of a ``from_garage`` CSV, which is then dropped so that the lap
+    itself closes. Anything else is an open line, which an object walks to the
+    end of and then stops on. ``loop=True`` closes the line whatever the gap
+    (the object drives straight across it once a lap), ``loop=False`` keeps it
+    open even when it visibly closes.
     """
     reader = csv.DictReader(io.StringIO(text))
     if reader.fieldnames is None:
@@ -183,14 +320,22 @@ def parse_raceline(text: str) -> Raceline:
     # (raceline_cctb_30km.csv) はその終点を落とす。落としてから距離で判定すると、
     # 最終区間の長さを「開いた線の隙間」と取り違えてしまう。
     closed = False
-    if len(points) > 2:
-        gap = math.dist(points[-1][:2], points[0][:2])
-        if gap < 1e-9:
+    lead_in_points = 0
+    if len(points) > 2 and loop is not False:
+        index, gap = _closure_point(points)
+        if gap <= LOOP_CLOSURE_TOLERANCE_M:
             closed = True
-            points.pop()
-            speeds.pop()
-        elif gap <= LOOP_CLOSURE_TOLERANCE_M:
-            # 柏の葉のレースラインのように 1 m ほど開いている CSV。1 周とみなす。
+            if index:
+                # ガレージ引き込み。周回に入る点より前を落とすと、そのまま
+                # 閉ループになる。弧長の原点も周回の入口へ移る。
+                lead_in_points = index
+                del points[:index]
+                del speeds[:index]
+            if gap < 1e-9:
+                points.pop()
+                speeds.pop()
+        elif loop:
+            # 明示的に周回させる。隙間はそのまま最終区間になる。
             closed = True
 
     cumulative = [0.0]
@@ -204,8 +349,10 @@ def parse_raceline(text: str) -> Raceline:
         points=tuple(points),
         speeds=tuple(speeds),
         cumulative=tuple(cumulative),
+        normals=left_normals(points, closed),
         length=length,
         closed=closed,
+        lead_in_points=lead_in_points,
     )
 
 
@@ -245,6 +392,9 @@ class VirtualObject:
     frame_id: str = DEFAULT_FRAME_ID
     covariance: Tuple[float, float, float] = DEFAULT_COVARIANCE
     z_offset: float = 0.0
+    # レースラインからの横オフセット [m]。正が進行方向の左、負が右。路肩に
+    # 停めたカートを置く、コース中央を外して並走させる、といった用途。
+    lateral_offset: float = 0.0
     # static
     position: Optional[Tuple[float, float, float]] = None
     static_s_m: Optional[float] = None
@@ -266,6 +416,8 @@ class Scenario:
     broker: BrokerConfig
     objects: Tuple[VirtualObject, ...]
     rate_hz: float = DEFAULT_RATE_HZ
+    # レースラインを周回させるか。None は CSV の形から判断する（既定）。
+    loop: Optional[bool] = None
 
     @property
     def raceline_paths(self) -> Tuple[str, ...]:
@@ -279,6 +431,44 @@ class Scenario:
     @property
     def vehicle_ids(self) -> Tuple[str, ...]:
         return tuple(spawned.vehicle_id for spawned in self.objects)
+
+
+def check_vehicle_id(vehicle_id: str, context: str) -> None:
+    """Reject an id that cannot be a single MQTT topic level.
+
+    ``v2x/vehicles/<id>/position`` breaks apart on ``/`` and matches a
+    subscription pattern on ``+`` / ``#``, so the broker's ACL would no longer
+    bind the id to its certificate.
+    """
+    if not vehicle_id:
+        raise ScenarioError(f"{context}: id must not be empty")
+    if "/" in vehicle_id or "+" in vehicle_id or "#" in vehicle_id:
+        raise ScenarioError(f"{context}: id must not contain /, + or #")
+
+
+def with_vehicle_ids(scenario: Scenario, vehicle_ids: Sequence[str]) -> Scenario:
+    """The same scenario with its objects renamed, in order.
+
+    Lets one scenario file be run under whichever ids have certificates on the
+    day (``--ids d14,d15,d16``) without editing the YAML. The count must match:
+    silently renaming a prefix of the objects would put a kart on the track
+    under an id nobody expects.
+    """
+    if len(vehicle_ids) != len(scenario.objects):
+        raise ScenarioError(
+            f"{len(vehicle_ids)} id(s) given for {len(scenario.objects)} object(s) "
+            f"({list(scenario.vehicle_ids)}); give one id per object, or narrow the "
+            f"scenario with --only first"
+        )
+    seen = set()
+    renamed = []
+    for spawned, vehicle_id in zip(scenario.objects, vehicle_ids):
+        check_vehicle_id(vehicle_id, f"id '{vehicle_id}'")
+        if vehicle_id in seen:
+            raise ScenarioError(f"id '{vehicle_id}': duplicate id")
+        seen.add(vehicle_id)
+        renamed.append(replace(spawned, vehicle_id=vehicle_id))
+    return replace(scenario, objects=tuple(renamed))
 
 
 def _as_float(container: dict, key: str, context: str, default=None):
@@ -342,6 +532,10 @@ def parse_scenario(document: dict) -> Scenario:
     if rate_hz <= 0.0:
         raise ScenarioError("rate_hz must be greater than zero")
 
+    loop = document.get("loop")
+    if loop is not None and not isinstance(loop, bool):
+        raise ScenarioError("loop must be true or false")
+
     raw_objects = document.get("objects")
     if not isinstance(raw_objects, list) or not raw_objects:
         raise ScenarioError("scenario needs a non-empty objects list")
@@ -355,8 +549,7 @@ def parse_scenario(document: dict) -> Scenario:
         context = f"object {vehicle_id or index}"
         if not vehicle_id:
             raise ScenarioError(f"objects[{index}] needs an id")
-        if "/" in vehicle_id or "+" in vehicle_id or "#" in vehicle_id:
-            raise ScenarioError(f"{context}: id must not contain /, + or #")
+        check_vehicle_id(vehicle_id, context)
         if vehicle_id in seen_ids:
             raise ScenarioError(f"{context}: duplicate id")
         seen_ids.add(vehicle_id)
@@ -368,6 +561,12 @@ def parse_scenario(document: dict) -> Scenario:
         raceline = raw.get("raceline", defaults.get("raceline"))
         z_offset = _as_float(
             raw, "z_offset", context, _as_float(defaults, "z_offset", "defaults", 0.0)
+        )
+        lateral_offset = _as_float(
+            raw,
+            "lateral_offset",
+            context,
+            _as_float(defaults, "lateral_offset", "defaults", 0.0),
         )
         covariance = _as_covariance(
             raw.get("covariance", defaults.get("covariance")), context
@@ -393,6 +592,11 @@ def parse_scenario(document: dict) -> Scenario:
                 raise ScenarioError(f"{context}: a static object needs x and y, or s_m")
             if has_xy and static_s_m is not None:
                 raise ScenarioError(f"{context}: give x/y or s_m, not both")
+            if has_xy and lateral_offset:
+                raise ScenarioError(
+                    f"{context}: lateral_offset is measured from the raceline, so it needs "
+                    f"s_m; with an explicit x/y put the offset into the coordinates"
+                )
             if static_s_m is not None and not raceline:
                 raise ScenarioError(f"{context}: s_m needs a raceline")
         else:
@@ -417,6 +621,7 @@ def parse_scenario(document: dict) -> Scenario:
                 frame_id=frame_id,
                 covariance=covariance,
                 z_offset=z_offset,
+                lateral_offset=lateral_offset,
                 position=position,
                 static_s_m=static_s_m,
                 raceline=str(raceline) if raceline else None,
@@ -426,7 +631,7 @@ def parse_scenario(document: dict) -> Scenario:
             )
         )
 
-    return Scenario(broker=broker, objects=tuple(objects), rate_hz=rate_hz)
+    return Scenario(broker=broker, objects=tuple(objects), rate_hz=rate_hz, loop=loop)
 
 
 # --- 走行状態 ---------------------------------------------------------------
@@ -449,7 +654,7 @@ def initial_state(spawned: VirtualObject, raceline: Optional[Raceline]) -> Objec
             if raceline is None:
                 raise ScenarioError(f"object {spawned.vehicle_id}: s_m needs a loaded raceline")
             s_m = raceline.normalize(spawned.static_s_m or 0.0)
-            base = raceline.sample(s_m)
+            base = raceline.sample(s_m, spawned.lateral_offset)
         return ObjectState(s_m=s_m, position=_with_offset(base, spawned.z_offset), speed_mps=0.0)
 
     if raceline is None:
@@ -457,7 +662,7 @@ def initial_state(spawned: VirtualObject, raceline: Optional[Raceline]) -> Objec
     s_m = raceline.normalize(spawned.start_s_m)
     return ObjectState(
         s_m=s_m,
-        position=_with_offset(raceline.sample(s_m), spawned.z_offset),
+        position=_with_offset(raceline.sample(s_m, spawned.lateral_offset), spawned.z_offset),
         speed_mps=current_speed(spawned, raceline, s_m),
     )
 
@@ -481,7 +686,7 @@ def advance(
     s_m = raceline.normalize(state.s_m + speed * dt_s)
     return ObjectState(
         s_m=s_m,
-        position=_with_offset(raceline.sample(s_m), spawned.z_offset),
+        position=_with_offset(raceline.sample(s_m, spawned.lateral_offset), spawned.z_offset),
         speed_mps=speed,
     )
 
