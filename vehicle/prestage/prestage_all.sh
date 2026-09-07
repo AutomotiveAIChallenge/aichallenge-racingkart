@@ -80,6 +80,39 @@ split_team_line() {
     IFS=$'\x1f' read -r team_id user_id submission_id label _ <<<"${raw//$'\t'/$'\x1f'}"
 }
 
+# Validate every row before touching the vault or the workspace: an empty
+# user_id would make download_submission.py silently drop the query
+# parameter and download the organiser's OWN latest submission, recording it
+# ok for the wrong team.
+validate_teams_file() {
+    local file="$1" lineno=0 raw
+    local team_id user_id submission_id label
+    declare -A seen_team_ids=()
+    while IFS= read -r raw || [ -n "${raw}" ]; do
+        lineno=$((lineno + 1))
+        split_team_line "${raw}"
+        case "${team_id}" in
+        "" | \#*) continue ;;
+        esac
+        case "${team_id}" in
+        *[!A-Za-z0-9_-]*) die "teams file line ${lineno}: invalid team_id (allowed: A-Za-z0-9_-): ${raw}" ;;
+        esac
+        [ -n "${user_id-}" ] || die "teams file line ${lineno}: empty user_id: ${raw}"
+        [ -z "${seen_team_ids[${team_id}]-}" ] || die "teams file line ${lineno}: duplicate team_id: ${team_id}"
+        seen_team_ids["${team_id}"]=1
+    done <"${file}"
+}
+validate_teams_file "${TEAMS_FILE}"
+
+# The reference submission under aichallenge_submit/ may be a tracked (and
+# possibly locally modified) checkout on the organiser's machine; refuse to
+# run clean_workspace over uncommitted work that nothing would restore.
+if git -C "${WORKSPACE_ROOT}" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+    if [ -n "$(git -C "${WORKSPACE_ROOT}" status --porcelain -- aichallenge/workspace/src/aichallenge_submit)" ]; then
+        die "aichallenge/workspace/src/aichallenge_submit has uncommitted changes under ${WORKSPACE_ROOT} — commit, stash, or remove them first (prestage_all.sh deletes this directory while it runs)"
+    fi
+fi
+
 DOWNLOAD_CMD="${PRESTAGE_DOWNLOAD_CMD:-python3 ${REPO_ROOT}/vehicle/download_submission.py}"
 BUILD_CMD="${PRESTAGE_BUILD_CMD:-docker compose run --rm --no-deps -e SYMLINK_INSTALL=0 autoware-build}"
 
@@ -87,6 +120,11 @@ MNT="$(mktemp -d)"
 cleanup() {
     umount_vault "${MNT}"
     rmdir "${MNT}" 2>/dev/null || true
+    # Restore the tracked reference submission that clean_workspace deleted.
+    if git -C "${WORKSPACE_ROOT}" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+        git -C "${WORKSPACE_ROOT}" checkout -- aichallenge/workspace/src/aichallenge_submit 2>/dev/null ||
+            warn "failed to restore aichallenge/workspace/src/aichallenge_submit from git"
+    fi
 }
 # Signals must EXIT, not just run the handler: bash resumes the script after a
 # handler returns, which would leave the loop writing plaintext into the

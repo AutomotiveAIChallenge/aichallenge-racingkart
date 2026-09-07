@@ -7,7 +7,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PRESTAGE="${SCRIPT_DIR}/../prestage_all.sh"
 MANIFEST_PY="${SCRIPT_DIR}/../manifest.py"
 WORK="$(mktemp -d)"
-trap 'fusermount -u "${WORK}/mnt" 2>/dev/null; fusermount -u "${WORK}/mnt2" 2>/dev/null; fusermount -u "${WORK}/mnt3" 2>/dev/null; fusermount -u "${WORK}/mnt4" 2>/dev/null; fusermount -u "${WORK}/mnt5" 2>/dev/null; fusermount -u "${WORK}/mnt6" 2>/dev/null; rm -rf "${WORK}"' EXIT INT TERM
+trap 'fusermount -u "${WORK}/mnt" 2>/dev/null; fusermount -u "${WORK}/mnt2" 2>/dev/null; fusermount -u "${WORK}/mnt3" 2>/dev/null; fusermount -u "${WORK}/mnt4" 2>/dev/null; fusermount -u "${WORK}/mnt5" 2>/dev/null; fusermount -u "${WORK}/mnt6" 2>/dev/null; fusermount -u "${WORK}/mnt7" 2>/dev/null; fusermount -u "${WORK}/mnt8" 2>/dev/null; rm -rf "${WORK}"' EXIT INT TERM
 
 fails=0
 expect_eq() { # $1=label $2=expected $3=actual
@@ -254,6 +254,55 @@ expect_eq "crlf-01 ok" "ok" \
 expect_eq "crlf-01: user-id has no trailing CR" "yes" \
     "$(grep -F 'crlf-01' "${WORK}/fake_dl_log6" | grep -q -- '--user-id user-c$' && echo yes || echo no)"
 fusermount -u "${WORK}/mnt6"
+
+# --- F4: 空の user_id は事前検証で拒否し、何も作らないこと ---
+mkdir -p "${WORK}/vault7" "${WORK}/mnt7"
+: >"${WORK}/fake_dl_log7"
+printf 'general-07\t\n' >"${WORK}/teams7.tsv"
+gocryptfs -q -init -passfile "${WORK}/pw" "${WORK}/vault7" >/dev/null 2>&1
+
+FAKE_DL_LOG="${WORK}/fake_dl_log7" PRESTAGE_DOWNLOAD_CMD="${WORK}/fake_download_logged.sh" \
+    "${PRESTAGE}" --vault "${WORK}/vault7" --teams "${WORK}/teams7.tsv" >"${WORK}/f4_out" 2>&1
+f4_rc=$?
+echo "    $(tr '\n' '|' <"${WORK}/f4_out")"
+expect_eq "empty user_id: exits non-zero" "yes" "$([ "${f4_rc}" -ne 0 ] && echo yes || echo no)"
+expect_eq "empty user_id: download stub never called" "yes" \
+    "$([ ! -s "${WORK}/fake_dl_log7" ] && echo yes || echo no)"
+gocryptfs -q -passfile "${WORK}/pw" "${WORK}/vault7" "${WORK}/mnt7"
+expect_eq "empty user_id: no manifest.json created" "no" \
+    "$([ -f "${WORK}/mnt7/manifest.json" ] && echo yes || echo no)"
+fusermount -u "${WORK}/mnt7"
+
+# --- F5: 運営の git checkout 上の参照提出物を壊さず、終了時に復元すること ---
+GITWS="${WORK}/gitws"
+mkdir -p "${GITWS}/aichallenge/workspace/src/aichallenge_submit/ref"
+echo "reference marker" >"${GITWS}/aichallenge/workspace/src/aichallenge_submit/ref/marker.txt"
+git -C "${GITWS}" init -q
+git -C "${GITWS}" -c user.name=t -c user.email=t@t add -A
+git -C "${GITWS}" -c user.name=t -c user.email=t@t commit -q -m "ref submission"
+
+mkdir -p "${WORK}/vault8" "${WORK}/mnt8"
+printf 'f5-a\tuser-a\n' >"${WORK}/teams8.tsv"
+gocryptfs -q -init -passfile "${WORK}/pw" "${WORK}/vault8" >/dev/null 2>&1
+
+f5_out=$(PRESTAGE_WORKSPACE_ROOT="${GITWS}" PRESTAGE_BUILD_CMD="FAKE_WS=${GITWS} ${WORK}/fake_build.sh" \
+    "${PRESTAGE}" --vault "${WORK}/vault8" --teams "${WORK}/teams8.tsv" 2>&1)
+f5_rc=$?
+echo "    ${f5_out//$'\n'/$'\n    '}"
+expect_eq "git workspace: prestage exits 0" "0" "${f5_rc}"
+expect_eq "git workspace: reference submission restored after run" "yes" \
+    "$([ -f "${GITWS}/aichallenge/workspace/src/aichallenge_submit/ref/marker.txt" ] && echo yes || echo no)"
+
+# 未コミットの変更 (untracked) があれば中断し、その平文を壊さないこと
+echo "untracked work" >"${GITWS}/aichallenge/workspace/src/aichallenge_submit/ref/untracked.txt"
+f5b_out=$(PRESTAGE_WORKSPACE_ROOT="${GITWS}" PRESTAGE_BUILD_CMD="FAKE_WS=${GITWS} ${WORK}/fake_build.sh" \
+    "${PRESTAGE}" --vault "${WORK}/vault8" --teams "${WORK}/teams8.tsv" --force 2>&1)
+f5b_rc=$?
+echo "    ${f5b_out//$'\n'/$'\n    '}"
+expect_eq "git workspace with untracked changes: exits non-zero" "yes" \
+    "$([ "${f5b_rc}" -ne 0 ] && echo yes || echo no)"
+expect_eq "git workspace with untracked changes: untracked file survives" "yes" \
+    "$([ -f "${GITWS}/aichallenge/workspace/src/aichallenge_submit/ref/untracked.txt" ] && echo yes || echo no)"
 
 [ "${fails}" -eq 0 ] && echo "ALL PASS" || echo "${fails} FAILURE(S)"
 exit "${fails}"
