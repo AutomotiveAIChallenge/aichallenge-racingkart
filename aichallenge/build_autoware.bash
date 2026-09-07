@@ -24,6 +24,21 @@ HOST_GID="${2-}"
 # symlinks into src/ and build/), required for prestaged submissions.
 # See docs/spec/prestaged-submissions.md
 SYMLINK_INSTALL="${SYMLINK_INSTALL:-1}"
+
+# A prestaged team's install/ is a real-copy build (SYMLINK_INSTALL=0). A default
+# --symlink-install build here would rewrite parts of it with symlinks pointing
+# into src/ and build/, corrupting the prestaged workspace. This must run before
+# sourcing ROS (below) so it is testable with DRY_RUN=1 outside the container.
+# Checked relative to this script's cwd (./workspace/...) because the script cds
+# into ./workspace later.
+if [ -f ./workspace/.staged_team ] && [ "${SYMLINK_INSTALL}" != "0" ]; then
+    echo "[build_autoware] ERROR: a prestaged team is staged (./workspace/.staged_team present)." >&2
+    echo "[build_autoware] a --symlink-install build would corrupt its real-copy install/." >&2
+    echo "[build_autoware] unstage first (unstage_team.sh), or build with SYMLINK_INSTALL=0." >&2
+    echo "[build_autoware] see docs/spec/prestaged-submissions.md" >&2
+    exit 1
+fi
+
 colcon_args=(build)
 if [ "${SYMLINK_INSTALL}" != "0" ]; then
     colcon_args+=(--symlink-install)

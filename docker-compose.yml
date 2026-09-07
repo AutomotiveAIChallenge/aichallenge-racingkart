@@ -17,6 +17,7 @@ x-autoware-base: &autoware-base
     - SIM_MODE=${SIM_MODE:-}
     - CMD=${CMD:-}
     - COLCON_TRACE=${COLCON_TRACE:-}
+    - SYMLINK_INSTALL=${SYMLINK_INSTALL:-}
     - ROS_HOME=${ROS_HOME:-}
     - ROS_LOG_DIR=${ROS_LOG_DIR:-}
     - HOST_UID=${HOST_UID:-}
