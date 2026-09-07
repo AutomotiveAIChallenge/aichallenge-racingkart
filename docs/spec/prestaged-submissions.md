@@ -360,5 +360,7 @@ install/rl_train_controller/lib/.../rl_train_controller_node.py
 ダウンロードだけをローカル tar のコピーに差し替え、ビルド・ボールト・stage・`make autoware-simulator`・
 unstage は本物を使う。2026-09-07 の実行では stage 後に 25 ノード
 （`/localization/imu_gnss_poser`、`/planning/scenario_planning/simple_trajectory_generator`、`/mpc_controller` 等）
-が起動し、unstage 後に平文が残らないことを確認した。実行すると `aichallenge/workspace/src/aichallenge_submit`
+が起動し、unstage 後に平文が残らないことを確認した。同日、同じ実イメージで 2 チーム分の `teams.tsv`
+（空の `submission_id` 列 + label 列あり）を `prestage_all.sh` に流し、`2 ok`（計 76 s）になることも確認した
+（`docker compose run` がループの stdin を食って 2 チーム目以降が消える退行の再発防止。スタブテストでは検出できない）。実行すると `aichallenge/workspace/src/aichallenge_submit`
 を一時的に置き換えるため（終了時に git から復元）、未コミットの変更があるマシンでは実行しない。
