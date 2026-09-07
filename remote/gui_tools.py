@@ -396,7 +396,6 @@ COMMANDS: List[CommandSpec] = [
         role="stop",
         log_key="zenoh",
         kind="stop",
-        requires_vehicle=True,
         note="GUI で起動した Zenoh プロセスを終了します (Ctrl+C 相当)。",
     ),
     CommandSpec(
@@ -723,6 +722,17 @@ class RemoteGui:
     def _handle_command(self, spec: CommandSpec) -> None:
         vehicle_id = self.vehicle_id_var.get().strip()
 
+        # 停止は log_key で追跡中のプロセスを畳むだけで vehicle_id を使わない。
+        # Vehicle ID 検証より先に処理する: ID 欄は手入力できる (test-* のため) ので、
+        # 起動後に不正な値を打たれると検証で弾かれて Stop が押せなくなる。
+        if spec.kind == "stop":
+            if not spec.log_key:
+                return
+            self._update_preview(REMOTE_DIR, f"[Stop] {spec.log_key}", spec.note or "")
+            self._handle_stop_single(spec.log_key)
+            self._refresh_button_states()
+            return
+
         if spec.requires_vehicle:
             if not vehicle_id:
                 messagebox.showwarning("入力不足", "Vehicle ID を指定してください。")
@@ -734,14 +744,6 @@ class RemoteGui:
                     f"\n(入力値: {vehicle_id!r})",
                 )
                 return
-
-        if spec.kind == "stop":
-            if not spec.log_key:
-                return
-            self._update_preview(REMOTE_DIR, f"[Stop] {spec.log_key}", spec.note or "")
-            self._handle_stop_single(spec.log_key)
-            self._refresh_button_states()
-            return
 
         command_text = spec.render(vehicle_id)
         working_dir = REMOTE_DIR
