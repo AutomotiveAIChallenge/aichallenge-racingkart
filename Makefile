@@ -3,7 +3,7 @@ SHELL := /bin/bash
 
 .PHONY: autoware-build autoware-vehicle autoware-simulator autoware-request-initialpose autoware-request-control  awsim-request-start awsim-request-reset autoware-driver-zenoh autoware-driver-zenoh-rosbag setup-vehicle \
 	simulator dev dev2 dev3 dev4 driver zenoh download rviz2 down down_all ps autoware-attach autoware-bash eval e2e vehicle-tui \
-	prestage-build prestage-stage prestage-unstage prestage-test prestage-image-export prestage-image-import prestage-e2e
+	prestage-build prestage-stage prestage-unstage prestage-test prestage-image-export prestage-image-import prestage-e2e team-stage
 
 # Used by docker-compose.yml for build/eval artifact ownership.
 HOST_UID ?= $(shell id -u)
@@ -185,6 +185,11 @@ prestage-stage:
 	@[ -n "$(VAULT)" ] || { echo "VAULT=<cipherdir> is required"; exit 2; }
 	@[ -n "$(TEAM)" ] || { echo "TEAM=<team_id> is required"; exit 2; }
 	vehicle/prestage/stage_team.sh --vault "$(VAULT)" "$(TEAM)"
+
+# Stage the team named by TEAM_NAME in .env (VAULT_DIR, optional PASS_PHRASE).
+# A different staged team is unstaged first; the same team is a no-op.
+team-stage:
+	vehicle/prestage/stage_from_env.sh
 
 # Wipe the staged submission after a slot.
 # Usage: make prestage-unstage [KEEP_OUTPUT=<dir>]

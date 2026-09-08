@@ -83,6 +83,16 @@ make prestage-stage VAULT=/path/to/vault TEAM=general-03
 make prestage-unstage KEEP_OUTPUT=/path/to/logs
 ```
 
+`.env` の `TEAM_NAME` / `VAULT_DIR` を埋めておけば、`make team-stage` だけで同じことができる。
+別チームが staged なら先に `unstage_team.sh --yes` が走り（`output/` はその場に残る）、同じチームなら何もしない。
+`PASS_PHRASE` は空のままにしてパスフレーズを対話入力する。埋めるのは無人検証や自宅リハーサルに限る —
+会場 PC の `.env` に書くと docker グループの誰でも全チームのボールトを復号できる。
+
+```bash
+$EDITOR .env          # TEAM_NAME=general-03, VAULT_DIR=/path/to/vault
+make team-stage
+```
+
 `prestage-stage` はパスフレーズを対話入力させる（会場の PC 上に passfile は置かない）。
 展開は数秒（実測 2 秒）で終わる。
 
