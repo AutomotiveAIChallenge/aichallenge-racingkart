@@ -2,7 +2,7 @@
 SHELL := /bin/bash
 
 .PHONY: autoware-build autoware-vehicle autoware-simulator autoware-request-initialpose autoware-request-control  awsim-request-start awsim-request-reset autoware-driver-zenoh autoware-driver-zenoh-rosbag setup-vehicle \
-	simulator dev dev2 dev3 dev4 driver zenoh download rviz2 down down_all ps autoware-attach autoware-bash eval e2e vehicle-tui
+	simulator dev dev2 dev3 dev4 driver zenoh download rviz2 down down_all ps autoware-attach autoware-bash eval e2e vehicle-tui workspace
 
 # Used by docker-compose.yml for build/eval artifact ownership.
 HOST_UID ?= $(shell id -u)
@@ -170,3 +170,7 @@ download:
 # 再接続して同じターゲットを叩けば -A で同じセッションへアタッチする。
 vehicle-tui:
 	tmux new -A -s aic-vehicle "vehicle/tui.py"
+
+# 遠隔操作用ワークスペース。terminator を 4 分割 (車両 ssh×3 + remote/gui_tools.py) で開く。
+workspace:
+	remote/workspace.bash
