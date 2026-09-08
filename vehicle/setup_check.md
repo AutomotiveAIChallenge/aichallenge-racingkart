@@ -461,7 +461,7 @@ ros2 topic echo /sensing/gnss/navpvt
 ```bash
 # システム起動後の確認
 ros2 topic echo /racing_kart/vcu/status
-ros2 run joy joy_node --ros-args -r __ns:=/racing_kart
+ros2 run joy joy_node --ros-args -r __ns:=/racing_kart/sd
 ```
 
 ### ログ・記録確認
