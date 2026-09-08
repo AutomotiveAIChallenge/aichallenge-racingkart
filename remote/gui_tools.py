@@ -1054,7 +1054,13 @@ class RemoteGui:
         プロセスが立ち上がってしまう。
         """
         self._cancel_pending_launches()
-        for log_key in [key for key in self.processes if self._process_running(key)]:
+        # リーダースレッドが終了したプロセスを削除しても、走査中の辞書が変化しない
+        # ようにロック中にスナップショットを取る。
+        with self._processes_lock:
+            entries = list(self.processes.items())
+        for log_key, entry in entries:
+            if entry.process.poll() is not None:
+                continue
             self._append_log(log_key, "[stop all requested]\n")
             self._stop_process(log_key)
         self._refresh_button_states()
