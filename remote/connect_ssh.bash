@@ -3,14 +3,19 @@
 # 1. 接続先が指定されているかチェック
 if [ $# -lt 1 ]; then
     echo "エラー: 接続先を指定してください。"
-    echo "使用法: $0 [A2|A3|A6|A7|test] [ユーザー名] [実行するコマンド]"
+    echo "使用法: $0 [ユーザー名@]<A2|A3|A6|A7|test> [実行するコマンド]"
     echo "  ユーザー名を省略するとローカルのユーザー名 ($USER) で接続する"
     echo "  test: 踏み台を通さず localhost:22 へ接続する (動作確認用)"
     exit 1
 fi
 
+# 1番目の引数を ssh と同じ [ユーザー名@]接続先 として解釈する
+USERNAME=$USER
 TARGET_ID=$1
-USERNAME=${2:-$USER}
+if [[ $1 == *@* ]]; then
+    USERNAME=${1%@*}
+    TARGET_ID=${1#*@}
+fi
 host="zenoh.dev.aichallenge-board.jsae.or.jp"
 PORT=""
 
@@ -39,11 +44,11 @@ test)
     ;;
 esac
 
-# 接続先とユーザー名 (あれば) を引数リストから削除
-shift $(($# > 1 ? 2 : 1))
+# 接続先を引数リストから削除
+shift
 
 # 3. 選択されたポートとユーザーでautosshを実行
-# 3番目以降の引数（現在は "$@" に格納されている）があれば、それがリモートコマンドとして実行される
+# 2番目以降の引数（現在は "$@" に格納されている）があれば、それがリモートコマンドとして実行される
 if [ $# -gt 0 ]; then
     # コマンドが指定されている場合
     echo "Connecting to $TARGET_ID as $USERNAME to run command: '$*'"
@@ -56,4 +61,4 @@ autossh -AC -M 0 -p "$PORT" \
     -o ServerAliveInterval=60 \
     -o ServerAliveCountMax=3 \
     "${USERNAME}@${host}" \
-    "$@" # 3番目以降の引数をすべてコマンドとして渡す
+    "$@" # 2番目以降の引数をすべてコマンドとして渡す

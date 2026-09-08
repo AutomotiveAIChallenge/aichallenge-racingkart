@@ -4,7 +4,7 @@
 #   workspace.bash tui|monitor|spare|gui    各ペイン内で実行され、ヒントを表示して bash に移る
 set -euo pipefail
 
-CONNECT="./remote/connect_ssh.bash <A2|A3|A6|A7|test>"
+CONNECT="./remote/connect_ssh.bash [ユーザー名@]<A2|A3|A6|A7|test>"
 
 hint() {
     echo "================================================================"
