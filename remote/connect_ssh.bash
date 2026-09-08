@@ -11,7 +11,7 @@ fi
 
 TARGET_ID=$1
 USERNAME=${2:-$USER}
-HOST="zenoh.dev.aichallenge-board.jsae.or.jp"
+host="zenoh.dev.aichallenge-board.jsae.or.jp"
 PORT=""
 
 # 2. 引数に応じて接続先ホストとポート番号を設定
@@ -29,7 +29,7 @@ A7)
     PORT=10022
     ;;
 test)
-    HOST="localhost"
+    host="localhost"
     PORT=22
     ;;
 *)
@@ -39,9 +39,8 @@ test)
     ;;
 esac
 
-# 接続先とユーザー名を引数リストから削除
-shift
-[ $# -gt 0 ] && shift
+# 接続先とユーザー名 (あれば) を引数リストから削除
+shift $(($# > 1 ? 2 : 1))
 
 # 3. 選択されたポートとユーザーでautosshを実行
 # 3番目以降の引数（現在は "$@" に格納されている）があれば、それがリモートコマンドとして実行される
@@ -56,5 +55,5 @@ fi
 autossh -AC -M 0 -p "$PORT" \
     -o ServerAliveInterval=60 \
     -o ServerAliveCountMax=3 \
-    "${USERNAME}@${HOST}" \
+    "${USERNAME}@${host}" \
     "$@" # 3番目以降の引数をすべてコマンドとして渡す
