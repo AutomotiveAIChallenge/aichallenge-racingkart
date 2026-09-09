@@ -28,6 +28,8 @@ from tui_core import (
     REQUIRED_SERVICES,
     RUNNING,
     STEP_PREFLIGHT,
+    STEP_AUTOWARE_DOWN,
+    STEP_RESTART,
     STEP_TEARDOWN,
     STEP_UP,
     STEPS,
@@ -40,12 +42,14 @@ from tui_core import (
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 
-# 40x12 の内訳: header 1 + step 6 行 (縦 1 列) + failures 見出し 1 + failures 1
-# + log 見出し 1 + log 1 で 11 行。1 行余裕を見て 12。これ未満だと failures か
+# 40x15 の内訳: header 1 + step 9 行 (縦 1 列) + failures 見出し 1 + failures 1
+# + log 見出し 1 + log 1 で 14 行。1 行余裕を見て 15。これ未満だと failures か
 # log が 0 行になり、失敗を流さずに残すという狙いが成立しない。
-# 40 桁は最長セル "1 NG check preflight" の 20 文字に対する余裕。
+# ステップを増減させたらこの行数も直すこと（len(STEPS) から導くと、狭い端末で
+# ステップが増えたときに失敗表示が黙って潰れる側へ倒れる）。
+# 40 桁は最長セル "6 -  autoware restart dazr" の 25 文字に対する余裕。
 MIN_COLS = 40
-MIN_LINES = 12
+MIN_LINES = 15
 LOG_TAIL = 2000  # 保持するログ行数の上限。走行枠中に膨らみ続けないため。
 FAILURE_TAIL = 40  # failures 領域に retain する上限行数。
 FALLBACK_LINES = 5  # マーカーの無いステップが失敗したとき末尾から拾う行数。
@@ -114,10 +118,12 @@ def should_reobserve(busy: bool, now: float, observed_at: float) -> bool:
     return now - observed_at >= OBSERVE_INTERVAL_SEC
 
 
-def probe_workspace(repo_root: Path, services_running: frozenset) -> Workspace:
+def probe_workspace(
+    repo_root: Path, services_running: frozenset, workspace_pristine: bool = False
+) -> Workspace:
     """Sample the workspace on disk.
 
-    Filesystem only -- the docker query is passed in -- so this stays cheap
+    Filesystem only -- the docker and git queries are passed in -- so this stays cheap
     enough to call on every redraw and testable in a temp dir. A missing
     workspace reads as "nothing present", not an error: the console has to
     render before anything has been downloaded.
@@ -147,7 +153,30 @@ def probe_workspace(repo_root: Path, services_running: frozenset) -> Workspace:
         install_mtime=setup_bash.stat().st_mtime if install_present else None,
         submit_mtime=submit_dir.stat().st_mtime if submit_has_entries else None,
         services_running=services_running,
+        workspace_pristine=workspace_pristine,
     )
+
+
+def workspace_is_pristine(repo_root: Path) -> bool:
+    """Whether aichallenge/workspace/ matches the checkout exactly.
+
+    `git status --porcelain --ignored` on that path lists tracked changes,
+    untracked files and ignored artifacts (build/ install/ log/) alike; an
+    empty listing is the state `make workspace-clean` leaves behind. A git
+    failure reads as "not pristine" so cleanup is never shown as done on
+    evidence the console does not have.
+    """
+    try:
+        out = subprocess.run(
+            ["git", "status", "--porcelain", "--ignored", "--", "aichallenge/workspace"],
+            cwd=str(repo_root),
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return False
+    return out.returncode == 0 and not out.stdout.strip()
 
 
 def running_services(repo_root: Path) -> frozenset:
@@ -210,7 +239,9 @@ class Console:
 
     def observe(self) -> Workspace:
         self._observed_at = time.monotonic()
-        return probe_workspace(REPO_ROOT, running_services(REPO_ROOT))
+        return probe_workspace(
+            REPO_ROOT, running_services(REPO_ROOT), workspace_is_pristine(REPO_ROOT)
+        )
 
     def refresh_if_stale(self) -> None:
         """アイドルが続いても実測を追い続ける。"""
@@ -374,7 +405,7 @@ class Console:
 
         前提未達は _cell のマークで示すので、ここには出さない。
         """
-        if step.step_id in (STEP_UP, STEP_TEARDOWN):
+        if step.step_id in (STEP_UP, STEP_RESTART, STEP_AUTOWARE_DOWN, STEP_TEARDOWN):
             return " " + service_badge(self.ws.services_running)
         return ""
 

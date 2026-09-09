@@ -15,8 +15,11 @@ from tui_core import (  # noqa: E402
     FAILED,
     PENDING,
     RUNNING,
+    STEP_AUTOWARE_DOWN,
     STEP_BUILD,
+    STEP_CLEAN,
     STEP_PREFLIGHT,
+    STEP_RESTART,
     STEP_RUNTIME,
     STEP_SUBMISSION,
     STEP_TEARDOWN,
@@ -44,7 +47,7 @@ def built_ws(**kwargs):
 
 
 class TestSteps(unittest.TestCase):
-    def test_six_steps_in_execution_order(self):
+    def test_steps_in_execution_order(self):
         self.assertEqual(
             [s.step_id for s in STEPS],
             [
@@ -53,9 +56,27 @@ class TestSteps(unittest.TestCase):
                 STEP_BUILD,
                 STEP_UP,
                 STEP_RUNTIME,
+                STEP_RESTART,
+                STEP_AUTOWARE_DOWN,
                 STEP_TEARDOWN,
+                STEP_CLEAN,
             ],
         )
+
+    def test_autoware_steps_touch_only_the_autoware_container(self):
+        # driver / zenoh / rosbag は動かしたまま Autoware だけ入れ替えるための
+        # ステップ。make down を呼ぶようになったらスタックごと落ちてしまう。
+        self.assertEqual(
+            step_by_id(STEP_RESTART).command, ("make", "autoware-restart")
+        )
+        self.assertEqual(
+            step_by_id(STEP_AUTOWARE_DOWN).command, ("make", "autoware-down")
+        )
+
+    def test_cleanup_step_clears_the_workspace(self):
+        # cleanup は「ディレクトリを消す」担当。スタックの停止は down が持つ。
+        self.assertEqual(step_by_id(STEP_CLEAN).command, ("make", "workspace-clean"))
+        self.assertEqual(step_by_id(STEP_TEARDOWN).command, ("make", "down"))
 
     def test_download_step_is_interactive(self):
         # download_submission.sh reads a hidden password; the console has to
@@ -147,6 +168,33 @@ class TestStepStatus(unittest.TestCase):
     def test_teardown_pending_while_services_run(self):
         ws = built_ws(services_running=ALL_UP)
         self.assertEqual(step_status(STEP_TEARDOWN, ws, {}), PENDING)
+
+    def test_autoware_down_done_when_autoware_is_not_running(self):
+        # driver だけ生きていても autoware が落ちていれば済んでいる。
+        ws = built_ws(services_running=frozenset({"driver", "zenoh"}))
+        self.assertEqual(step_status(STEP_AUTOWARE_DOWN, ws, {}), DONE)
+
+    def test_autoware_down_pending_while_autoware_runs(self):
+        ws = built_ws(services_running=frozenset({"autoware"}))
+        self.assertEqual(step_status(STEP_AUTOWARE_DOWN, ws, {}), PENDING)
+
+    def test_restart_comes_from_the_session_not_the_services(self):
+        # autoware が running でも「入れ替えた」ことの証拠にはならない。
+        ws = built_ws(services_running=ALL_UP)
+        self.assertEqual(step_status(STEP_RESTART, ws, {}), PENDING)
+        self.assertEqual(step_status(STEP_RESTART, ws, {STEP_RESTART: DONE}), DONE)
+
+    def test_clean_done_when_workspace_is_pristine(self):
+        self.assertEqual(
+            step_status(STEP_CLEAN, Workspace(workspace_pristine=True), {}), DONE
+        )
+
+    def test_clean_pending_by_default(self):
+        # 観測できなかった場合に「済」と出してはいけない。
+        self.assertEqual(step_status(STEP_CLEAN, Workspace(), {}), PENDING)
+
+    def test_clean_pending_while_workspace_is_dirty(self):
+        self.assertEqual(step_status(STEP_CLEAN, built_ws(), {}), PENDING)
 
     def test_measured_step_ignores_a_stale_session_entry(self):
         # An external `make down` must show through even though this session

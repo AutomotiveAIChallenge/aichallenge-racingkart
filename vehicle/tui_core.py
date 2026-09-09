@@ -23,11 +23,17 @@ STEP_SUBMISSION = "submission"
 STEP_BUILD = "build"
 STEP_UP = "up"
 STEP_RUNTIME = "runtime"
+STEP_RESTART = "restart"
+STEP_AUTOWARE_DOWN = "autoware_down"
 STEP_TEARDOWN = "teardown"
+STEP_CLEAN = "clean"
 
 # autoware-driver-zenoh-rosbag が起動する compose サービス。この全部が running
 # ならスタックが上がっているとみなす。
 REQUIRED_SERVICES = ("driver", "autoware", "zenoh", "rosbag")
+# 単体で止めたり入れ替えたりする compose サービス。REQUIRED_SERVICES の一員でも
+# あるが、autoware だけを扱うステップがこの名前を直接必要とする。
+AUTOWARE_SERVICE = "autoware"
 
 
 @dataclass(frozen=True)
@@ -42,6 +48,10 @@ class Workspace:
     install_mtime: Optional[float] = None
     submit_mtime: Optional[float] = None
     services_running: FrozenSet[str] = field(default_factory=frozenset)
+    # aichallenge/workspace/ が checkout 直後の状態か（tracked に差分が無く、
+    # untracked も ignored な生成物も無い）。既定は False: 観測できなかったときに
+    # cleanup を「済」と見せてはいけない。
+    workspace_pristine: bool = False
 
 
 @dataclass(frozen=True)
@@ -98,9 +108,25 @@ STEPS = (
         requires=(STEP_UP,),
     ),
     Step(
+        step_id=STEP_RESTART,
+        title="autoware restart",
+        command=("make", "autoware-restart"),
+        requires=(STEP_UP,),
+    ),
+    Step(
+        step_id=STEP_AUTOWARE_DOWN,
+        title="autoware down",
+        command=("make", "autoware-down"),
+    ),
+    Step(
         step_id=STEP_TEARDOWN,
-        title="cleanup",
+        title="down all",
         command=("make", "down"),
+    ),
+    Step(
+        step_id=STEP_CLEAN,
+        title="cleanup",
+        command=("make", "workspace-clean"),
     ),
 )
 
@@ -113,7 +139,12 @@ _STEPS_BY_ID = {s.step_id: s for s in STEPS}
 # ダウンロード前から常に非空である。ディレクトリの有無は「取得済み」の
 # 証拠にならないので、実測ではなく session の記録（ダウンロードを実際に
 # 実行して成功したか）から状態を出す。うっかり実測へ戻さないこと。
-_MEASURED = frozenset({STEP_BUILD, STEP_UP, STEP_TEARDOWN})
+_MEASURED = frozenset(
+    {STEP_BUILD, STEP_UP, STEP_AUTOWARE_DOWN, STEP_TEARDOWN, STEP_CLEAN}
+)
+
+# STEP_RESTART は実測しない: 「入れ替え済み」は autoware が running かどうかでは
+# 区別できず（起動しっぱなしでも running）、成否は終了コードにしか現れない。
 
 
 def step_by_id(step_id: str) -> Step:
@@ -152,8 +183,14 @@ def _measured_done(step_id: str, ws: Workspace) -> bool:
         return build_done(ws)
     if step_id == STEP_UP:
         return all(name in ws.services_running for name in REQUIRED_SERVICES)
+    if step_id == STEP_AUTOWARE_DOWN:
+        return AUTOWARE_SERVICE not in ws.services_running
     if step_id == STEP_TEARDOWN:
         return not any(name in ws.services_running for name in REQUIRED_SERVICES)
+    if step_id == STEP_CLEAN:
+        # checkout 直後と同じなら済。提出物で上書きされた aichallenge_submit/ も、
+        # build/ install/ log/ も、どれか残っていれば未実行。
+        return ws.workspace_pristine
     raise KeyError(step_id)
 
 

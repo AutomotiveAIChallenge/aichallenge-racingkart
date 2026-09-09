@@ -58,6 +58,9 @@ service は「操作対象のまとまり」を表します（docker compose の
 - `rviz2` : 可視化（RViz2）
 - `driver` : racing_kart_interface
 - `zenoh` : Zenoh bridge
+- `workspace` : ホスト側の colcon ワークスペース `aichallenge/workspace/`（`workspace-clean`）。
+  既存の `make workspace`（遠隔操作用 terminator レイアウト）だけは同名で意味が違う既知の例外で、
+  `remote-workspace` へ寄せるのが本来だが互換のため据え置いている
 - `compose` : docker compose の直操作（`compose-ps` / `compose-down` など）
 - `system` : 実車/フル構成など一括起動（`system-up-*` など）
 
@@ -74,6 +77,7 @@ service は「操作対象のまとまり」を表します（docker compose の
 - `ps` : 状態表示
 - `logs` : ログ表示
 - `exec` / `shell` : コンテナ内でコマンド/シェル
+- `clean` : 生成物の削除（`workspace-clean` など。コンテナではなくファイルを消す）
 
 ## 5. variant（末尾サフィックス）
 

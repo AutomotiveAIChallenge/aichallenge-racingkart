@@ -2,6 +2,7 @@
 SHELL := /bin/bash
 
 .PHONY: autoware-build autoware-vehicle autoware-simulator autoware-request-initialpose autoware-request-control  awsim-request-start awsim-request-reset autoware-driver-zenoh autoware-driver-zenoh-rosbag setup-vehicle \
+	autoware-down autoware-restart workspace-clean \
 	simulator dev dev2 dev3 dev4 driver zenoh download rviz2 down down_all ps autoware-attach autoware-bash eval e2e vehicle-tui workspace
 
 # Used by docker-compose.yml for build/eval artifact ownership.
@@ -17,6 +18,8 @@ endif
 
 TIMESTAMP := $(shell date +%Y%m%d-%H%M%S)
 LOG_DIR := /output/$(TIMESTAMP)
+# ホスト側の colcon ワークスペース。workspace-clean が消す対象の親。
+WORKSPACE_DIR := aichallenge/workspace
 
 # make simulator-<mode>: <mode> は simulator_scripts/*.sh のファイル名
 SIM_MODES := $(notdir $(basename $(wildcard aichallenge/simulator_scripts/*.sh)))
@@ -38,6 +41,18 @@ autoware-build:
 # run autoware for vehicle
 autoware-vehicle:
 	@echo "Start Autoware for Vehicle"
+	@echo "Log dir: .$(LOG_DIR)"
+	LOG_DIR=$(LOG_DIR) RUN_MODE=vehicle docker compose up -d autoware
+
+# autoware コンテナだけを停止して削除する。driver / zenoh / rosbag は動かしたまま
+# 残すので、走行枠中にビルドし直した Autoware を入れ替えるときはこれと
+# autoware-restart を使う。スタックごと落とすのは make down。
+autoware-down:
+	docker compose down autoware
+
+# autoware コンテナだけを入れ替える。削除 -> vehicle モードで起動し直す。
+autoware-restart: autoware-down
+	@echo "Restart Autoware for Vehicle"
 	@echo "Log dir: .$(LOG_DIR)"
 	LOG_DIR=$(LOG_DIR) RUN_MODE=vehicle docker compose up -d autoware
 
@@ -122,6 +137,15 @@ autoware-driver-zenoh-rosbag:
 	LOG_DIR=$(LOG_DIR) RUN_MODE=vehicle docker compose up -d driver autoware rosbag
 	sleep 15
 	LOG_DIR=$(LOG_DIR) docker compose up -d zenoh
+
+# ワークスペースを checkout 直後の状態へ戻す。提出物で上書きされた src/aichallenge_submit/ を
+# HEAD に戻し、build/ install/ log/ と untracked ファイルを消す。git 操作はこのディレクトリに
+# 限定する（git stash のようにリポジトリ全体へ効かせると .env 以外のローカル変更も巻き込む）。
+# 次は make download からやり直すことになる。
+workspace-clean:
+	@echo "Clean $(WORKSPACE_DIR): restore src/aichallenge_submit/, remove build/ install/ log/ and untracked files"
+	git checkout -- $(WORKSPACE_DIR)/src/aichallenge_submit
+	git clean -fdx $(WORKSPACE_DIR)
 
 down:
 	@for p in 1 2 3 4; do docker compose -p $$p down --remove-orphans; done

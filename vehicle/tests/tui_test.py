@@ -5,6 +5,7 @@ Builds real directory trees in a temp dir; never touches docker or curses.
 Run with python3 -m unittest (no third-party runner).
 """
 import os
+import subprocess
 import sys
 import tempfile
 import unittest
@@ -13,14 +14,16 @@ from pathlib import Path
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
 
 from tui import (  # noqa: E402
+    MIN_LINES,
     is_failure_line,
     probe_workspace,
     service_badge,
     should_reobserve,
     terminal_too_small,
+    workspace_is_pristine,
     wrap_line,
 )
-from tui_core import REQUIRED_SERVICES, build_done  # noqa: E402
+from tui_core import REQUIRED_SERVICES, STEPS, build_done  # noqa: E402
 
 
 class TestProbeWorkspace(unittest.TestCase):
@@ -87,18 +90,70 @@ class TestProbeWorkspace(unittest.TestCase):
         self.assertIsNone(ws.submit_mtime)
 
 
+class TestWorkspaceIsPristine(unittest.TestCase):
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self._tmp.cleanup)
+        self.root = Path(self._tmp.name)
+        self.ws = self.root / "aichallenge" / "workspace"
+        (self.ws / "src").mkdir(parents=True)
+        (self.ws / "src" / "tracked.txt").write_text("x")
+        (self.ws / ".gitignore").write_text("/build\n/install\n/log\n")
+        self._git("init", "-q")
+        self._git("add", ".")
+        self._git("commit", "-q", "-m", "init")
+
+    def _git(self, *args):
+        subprocess.run(
+            ["git", "-c", "user.email=t@t", "-c", "user.name=t", *args],
+            cwd=str(self.root), check=True, capture_output=True,
+        )
+
+    def test_fresh_checkout_is_pristine(self):
+        self.assertTrue(workspace_is_pristine(self.root))
+
+    def test_ignored_build_artifacts_make_it_dirty(self):
+        # cleanup は build/ install/ log/ も消す対象なので、ignored でも「済」ではない。
+        (self.ws / "install").mkdir()
+        (self.ws / "install" / "setup.bash").write_text("")
+        self.assertFalse(workspace_is_pristine(self.root))
+
+    def test_untracked_file_makes_it_dirty(self):
+        (self.ws / "src" / "new.txt").write_text("")
+        self.assertFalse(workspace_is_pristine(self.root))
+
+    def test_modified_tracked_file_makes_it_dirty(self):
+        (self.ws / "src" / "tracked.txt").write_text("changed")
+        self.assertFalse(workspace_is_pristine(self.root))
+
+    def test_changes_outside_the_workspace_do_not_count(self):
+        # cleanup の責務は workspace 配下だけ。他のローカル変更は見ない。
+        (self.root / "notes.txt").write_text("")
+        self.assertTrue(workspace_is_pristine(self.root))
+
+    def test_not_a_repo_is_not_pristine(self):
+        with tempfile.TemporaryDirectory() as other:
+            self.assertFalse(workspace_is_pristine(Path(other)))
+
+
 class TestTerminalSize(unittest.TestCase):
     def test_exact_minimum_is_allowed(self):
-        self.assertFalse(terminal_too_small(40, 12))
+        self.assertFalse(terminal_too_small(40, 15))
 
     def test_larger_is_allowed(self):
         self.assertFalse(terminal_too_small(80, 24))
 
     def test_too_narrow_is_rejected(self):
-        self.assertTrue(terminal_too_small(39, 12))
+        self.assertTrue(terminal_too_small(39, 15))
 
     def test_too_short_is_rejected(self):
-        self.assertTrue(terminal_too_small(40, 11))
+        self.assertTrue(terminal_too_small(40, 14))
+
+    def test_minimum_leaves_a_row_for_failures_and_a_row_for_log(self):
+        # header 1 + STEPS + failures 見出し 1 + failures 1 + log 見出し 1 + log 1。
+        # ステップを足して MIN_LINES を直し忘れると、失敗を流さずに残すという
+        # 狙いが黙って壊れるので、ここで気付けるようにしておく。
+        self.assertGreaterEqual(MIN_LINES, 1 + len(STEPS) + 4)
 
 
 class TestServiceBadge(unittest.TestCase):

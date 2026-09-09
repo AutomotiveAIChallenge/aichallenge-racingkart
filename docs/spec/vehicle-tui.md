@@ -85,21 +85,56 @@
 | 3 | `build` | `make autoware-build` | 2 | `workspace/install/setup.bash` が存在し `src/` より新しい（実測） |
 | 4 | `autoware` | `make autoware-driver-zenoh-rosbag` | 3 | `driver` / `autoware` / `zenoh` / `rosbag` が compose 上で running（実測） |
 | 5 | `check runtime` | `./setup_check.sh --phase runtime` | 4 | 終了コード 0（セッション記憶） |
-| 6 | `cleanup` | `make down` | なし | 上記サービスがいずれも running でない（実測） |
+| 6 | `autoware restart` | `make autoware-restart` | 4 | 終了コード 0（セッション記憶） |
+| 7 | `autoware down` | `make autoware-down` | なし | `autoware` が running でない（実測） |
+| 8 | `down all` | `make down` | なし | 上記サービスがいずれも running でない（実測） |
+| 9 | `cleanup` | `make workspace-clean` | なし | `aichallenge/workspace/` が checkout と一致（`git status --porcelain --ignored` が空、実測） |
 
 チェックの 2 ステップは `check preflight` / `check runtime` と表示する。
 `setup_check.sh` の `--phase` の値をそのまま名前にしているので、画面の名前から
 実行されるコマンドが辿れる。内部のステップ ID は `preflight` / `submission` /
-`build` / `up` / `runtime` / `teardown` で、表示名とは別である。
+`build` / `up` / `runtime` / `restart` / `autoware_down` / `teardown` / `clean` で、
+表示名とは別である。
+
+### 停止の 3 段と cleanup の責務
+
+停止まわりを 1 つのステップに畳まない。落とす範囲が違い、走行枠中に使い分けるためである。
+
+| ステップ | 落ちるもの | 使う場面 |
+|----------|------------|----------|
+| `autoware restart` | `autoware` のみ（削除 → 起動） | ビルドし直した Autoware を入れ替える。`driver` / `zenoh` / `rosbag` は繋いだまま |
+| `autoware down` | `autoware` のみ（`docker compose down autoware`） | Autoware だけ落とす。車両側の driver は生かしておく |
+| `down all` | compose のスタック全部（プロジェクト 1〜4 を含む） | 走行枠の終わり |
+
+`cleanup` はコンテナを触らない。`aichallenge/workspace/` を checkout 直後の状態へ戻すだけである:
+提出物で上書きされた `src/aichallenge_submit/` を `git checkout -- <path>` で HEAD に戻し、
+`git clean -fdx aichallenge/workspace` で `build/` `install/` `log/`（ignored）と
+untracked ファイルを消す。これで `git status` に提出物の差分が残らず、
+次の `download` をまっさらな状態から始められる。
+
+git 操作は **このディレクトリに限定する**。`git stash` + `git stash drop` のように
+リポジトリ全体へ効かせると、車両 PC 上の `vehicle/zenoh.json5` や Makefile への
+ローカル変更まで巻き込む。しかも stash は目的に合っていない: `-u` を付けないと
+untracked な提出物ファイルは残り、付けても ignored な `build/` `install/` は残る。
+
+この分担は、提出物の取得側の責務が
+**「ダウンロードして展開するところまで」**と決まったことから来ている。
+`download_submission.sh` は tar.gz を取得し、既存の `aichallenge_submit/` を消して展開する。
+それ以外の後片付け（前回のビルド成果物を消す、提出物を消して checkout 状態へ戻す）は
+取得側ではなく `cleanup` が持つ。取得側に後片付けを足すと、
+「ダウンロードしたら build も消えた」という副作用を持つことになる。
 
 ### 実測とセッション記憶
 
-`build` / `autoware` / `cleanup` は環境から実測する。実測を優先するため、
-別のシェルで `make down` された場合も次の観測で反映され、TUI 内のキャッシュと
-実態が食い違うことがない。
+`build` / `autoware` / `autoware down` / `down all` / `cleanup` は環境から実測する
+（`cleanup` は `git status --porcelain --ignored -- aichallenge/workspace` が空か）。
+実測を優先するため、別のシェルで `make down` された場合も次の観測で反映され、
+TUI 内のキャッシュと実態が食い違うことがない。
 
-`preflight` / `download` / `doctor` は実測できない。合否は終了コードにしか現れず、
-後からファイルシステムを見て再現できないためである。
+`preflight` / `download` / `check runtime` / `autoware restart` は実測できない。
+合否は終了コードにしか現れず、後からファイルシステムを見て再現できないためである。
+`autoware restart` は特に、`autoware` が running でも「入れ替え済み」の証拠に
+ならない（起動しっぱなしでも running である）ため、実測に載せてはならない。
 
 `download` は特に注意が要る。`aichallenge/workspace/src/aichallenge_submit/` には
 **git 追跡された参加者パッケージが 15 個ある**ため、このディレクトリはチェックアウト時点で
@@ -130,12 +165,15 @@ GNSS の 8 秒待ち、13 topic ぶんの `docker compose exec` + ROS 環境の 
 
 ```
 vehicle console                              ↑↓ enter q
-1 NG preflight
+1 NG check preflight
 2 ?  download
 3 OK build
-4 -  autoware ----
-5 ?  doctor
-6 OK cleanup ----
+4 -  autoware dazr
+5 ?  check runtime
+6 -  autoware restart dazr
+7 -  autoware down dazr
+8 -  down all dazr
+9 -  cleanup
 -- failures (8) ------------------------------------------
 ❌ CAN interface can0 not found
 ❌ VCU directory missing: /dev/vcu
@@ -148,15 +186,17 @@ $ ./setup_check.sh --phase preflight
 
 - ヘッダは 1 行で、右端にキー操作を置く。
 - ステップは縦 1 列。印は 2 文字固定（`OK` / `NG` / `>>` 実行中 / `-` 未実行 / `?` 前提未達）。
-- `autoware` と `cleanup` の右のバッジは `driver` / `autoware` / `zenoh` / `rosbag` の
+- `autoware` / `autoware restart` / `autoware down` / `down all` の右のバッジは `driver` / `autoware` / `zenoh` / `rosbag` の
   状態を 1 文字ずつ並べたもの。起動中は頭文字、停止中は `-`（`dazr` / `da--` / `----`）。
   位置で意味が決まるので凡例が要らない。
 - **failures は log とは別領域**で、log が流れても内容を保つ。残り高さの 2/3 までを使う。
   ステップを実行し直すとクリアされ、常に「今の実行」の失敗を映す。
 - 長い行は折り返す。切り詰めると長いパスやコンパイラ出力の末尾が読めなくなる。
 - ステップ 1 は起動時に自動実行する。
-- 最低端末サイズは 40x12。内訳はヘッダ 1 + ステップ 6 + failures 見出し 1 + failures 1
-  + log 見出し 1 + log 1 で 11 行、1 行の余裕を見て 12。下回る場合は起動時に警告して終了する。
+- 最低端末サイズは 40x15。内訳はヘッダ 1 + ステップ 9 + failures 見出し 1 + failures 1
+  + log 見出し 1 + log 1 で 14 行、1 行の余裕を見て 15。下回る場合は起動時に警告して終了する。
+  ステップを増減させたら `MIN_LINES` も直す（`len(STEPS)` から導かない。狭い端末で
+  ステップが増えたとき、失敗表示が黙って潰れる側へ倒れる）。テストが下限を見張っている。
 
 ### 失敗行の判定
 
@@ -234,6 +274,13 @@ Python 3 標準ライブラリのみを使う（`curses` / `subprocess` / `threa
 | 観点 |
 |------|
 | ステップ数と実行順 |
+| `autoware restart` / `autoware down` が autoware コンテナだけを対象にすること |
+| `cleanup` がワークスペースの削除で、`down` がスタックの停止であること |
+| `autoware down` の完了判定が `autoware` だけを見ること |
+| `autoware restart` が実測ではなくセッション記憶であること |
+| `cleanup` の完了判定（`workspace_pristine` のときだけ完了、既定は未完了） |
+| `workspace_is_pristine` が tracked 差分・untracked・ignored 生成物のどれでも false になり、workspace 外の変更は見ないこと |
+| `MIN_LINES` がステップ数 + failures 1 行 + log 1 行を下回らないこと |
 | `download` ステップが対話扱いであること |
 | `autoware` ステップが起動ターゲットを呼ぶこと |
 | `install/` と `src/` の新旧による build の完了判定（同時刻を含む境界） |
@@ -249,6 +296,14 @@ Python 3 標準ライブラリのみを使う（`curses` / `subprocess` / `threa
 | アイドル中の再観測の判定（実行中は取り直さない・間隔の境界） |
 
 curses の描画、実車での疎通、`make` ターゲットの実行そのものは手動確認とする。
+
+## TODO
+
+- **チームごとの提出物の指定。** 現状の `download` は「そのユーザーの最新提出物（または
+  `SUBMISSION_ID` 指定）」を 1 つ取って `aichallenge_submit/` に展開するだけである。
+  実運用ではチームごとに、どのファイル（ファイル名）またはフォルダを取得して
+  どこへ展開するかを指定してダウンロード・展開する必要がある。`download_submission.sh` /
+  `make download` の引数設計と、TUI の `download` ステップでその指定をどう受け取るかは未決。
 
 ## スコープ外
 
