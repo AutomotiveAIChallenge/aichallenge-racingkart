@@ -45,6 +45,10 @@ class Workspace:
     install_mtime: Optional[float] = None
     submit_mtime: Optional[float] = None
     services_running: FrozenSet[str] = field(default_factory=frozenset)
+    # このリポジトリから compose で起動された running なコンテナの数。プロジェクトを
+    # 問わない（default も -p 1..4 も）。services_running は default プロジェクトしか
+    # 見ないので、make down が落とす範囲の「全部止まったか」はこちらで判る。
+    stack_containers: int = 0
     # aichallenge/workspace/ が checkout 直後の状態か（tracked に差分が無く、
     # untracked も ignored な生成物も無い）。既定は False: 観測できなかったときに
     # cleanup を「済」と見せてはいけない。
@@ -65,7 +69,11 @@ def _stack_up(ws: Workspace) -> bool:
 
 
 def _stack_down(ws: Workspace) -> bool:
-    return not any(name in ws.services_running for name in REQUIRED_SERVICES)
+    # make down は default と -p 1..4 の全コンテナを落とす。REQUIRED_SERVICES だけ
+    # 見ると simulator や別プロジェクトの autoware が残っていても OK と出てしまう。
+    return ws.stack_containers == 0 and not any(
+        name in ws.services_running for name in REQUIRED_SERVICES
+    )
 
 
 def _autoware_down(ws: Workspace) -> bool:

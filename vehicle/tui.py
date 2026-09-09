@@ -122,7 +122,10 @@ def should_reobserve(busy: bool, now: float, observed_at: float) -> bool:
 
 
 def probe_workspace(
-    repo_root: Path, services_running: frozenset, workspace_pristine: bool = False
+    repo_root: Path,
+    services_running: frozenset,
+    workspace_pristine: bool = False,
+    stack_containers: int = 0,
 ) -> Workspace:
     """Sample the workspace on disk.
 
@@ -156,6 +159,7 @@ def probe_workspace(
         install_mtime=setup_bash.stat().st_mtime if install_present else None,
         submit_mtime=submit_dir.stat().st_mtime if submit_has_entries else None,
         services_running=services_running,
+        stack_containers=stack_containers,
         workspace_pristine=workspace_pristine,
     )
 
@@ -196,6 +200,27 @@ def workspace_is_pristine(repo_root: Path) -> bool:
         repo_root,
     )
     return out is not None and not out.stdout.strip()
+
+
+def stack_containers(repo_root: Path) -> int:
+    """How many running containers compose has started from this repo.
+
+    Counts across every compose project (default and `-p 1..4`) via the
+    working_dir label compose stamps on each container, which is exactly the
+    set `make down` tears down. `docker compose ps` cannot do this: it sees
+    one project per call. A docker failure counts as zero, consistent with
+    running_services().
+    """
+    out = _run(
+        [
+            "docker", "ps", "--quiet",
+            "--filter", f"label=com.docker.compose.project.working_dir={repo_root}",
+        ],
+        repo_root,
+    )
+    if out is None:
+        return 0
+    return len(out.stdout.split())
 
 
 def running_services(repo_root: Path) -> frozenset:
@@ -249,7 +274,10 @@ class Console:
     def observe(self) -> Workspace:
         self._observed_at = time.monotonic()
         return probe_workspace(
-            REPO_ROOT, running_services(REPO_ROOT), workspace_is_pristine(REPO_ROOT)
+            REPO_ROOT,
+            running_services(REPO_ROOT),
+            workspace_is_pristine(REPO_ROOT),
+            stack_containers(REPO_ROOT),
         )
 
     def refresh_if_stale(self) -> None:

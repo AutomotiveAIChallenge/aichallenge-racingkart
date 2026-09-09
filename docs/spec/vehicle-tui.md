@@ -87,7 +87,7 @@
 | 5 | `check runtime` | `./setup_check.sh --phase runtime` | 4 | 終了コード 0（セッション記憶） |
 | 6 | `autoware restart` | `make autoware-restart` | 4 | 終了コード 0（セッション記憶） |
 | 7 | `autoware down` | `make autoware-down` | なし | `autoware` が running でない（実測） |
-| 8 | `down all` | `make down` | なし | 上記サービスがいずれも running でない（実測） |
+| 8 | `down all` | `make down` | なし | このリポジトリから compose で起動された running コンテナが 0（全プロジェクト、実測） |
 | 9 | `cleanup` | `make workspace-clean` | なし | `aichallenge/workspace/` が checkout と一致（`git status --porcelain --ignored` が空、実測） |
 
 チェックの 2 ステップは `check preflight` / `check runtime` と表示する。
@@ -107,7 +107,8 @@
 | `down all` | compose のスタック全部（プロジェクト 1〜4 を含む） | 走行枠の終わり |
 
 `cleanup` はコンテナを触らない。`aichallenge/workspace/` を checkout 直後の状態へ戻すだけである:
-提出物で上書きされた `src/aichallenge_submit/` を `git checkout -- <path>` で HEAD に戻し、
+提出物で上書きされた `src/aichallenge_submit/` を `git restore --source=HEAD --staged --worktree`
+で HEAD に戻し（`git checkout -- <path>` は index から戻すので stage 済みの提出物が残る）、
 `git clean -fdx aichallenge/workspace` で `build/` `install/` `log/`（ignored）と
 untracked ファイルを消す。これで `git status` に提出物の差分が残らず、
 次の `download` をまっさらな状態から始められる。
@@ -128,6 +129,10 @@ untracked な提出物ファイルは残り、付けても ignored な `build/` 
 
 `build` / `autoware` / `autoware down` / `down all` / `cleanup` は環境から実測する
 （`cleanup` は `git status --porcelain --ignored -- aichallenge/workspace` が空か）。
+`down all` は `docker compose ps` では判定できない: それは 1 プロジェクトしか見ないが、
+`make down` は default と `-p 1..4` の全部を落とす。compose が各コンテナに付ける
+`com.docker.compose.project.working_dir` ラベルでこのリポジトリ由来の running コンテナを
+数え、0 なら済とする。
 実測を優先するため、別のシェルで `make down` された場合も次の観測で反映され、
 TUI 内のキャッシュと実態が食い違うことがない。
 

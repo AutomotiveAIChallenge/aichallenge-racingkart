@@ -175,6 +175,12 @@ class TestStepStatus(unittest.TestCase):
         ws = built_ws(services_running=ALL_UP)
         self.assertEqual(step_status(STEP_TEARDOWN, ws, {}), PENDING)
 
+    def test_teardown_pending_while_another_project_still_runs(self):
+        # default プロジェクトの 4 サービスが落ちていても、simulator や -p 2 の
+        # autoware が残っていれば make down はまだ済んでいない。
+        ws = built_ws(services_running=frozenset(), stack_containers=1)
+        self.assertEqual(step_status(STEP_TEARDOWN, ws, {}), PENDING)
+
     def test_autoware_down_done_when_autoware_is_not_running(self):
         # driver だけ生きていても autoware が落ちていれば済んでいる。
         ws = built_ws(services_running=frozenset({"driver", "zenoh"}))

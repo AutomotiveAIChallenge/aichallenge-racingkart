@@ -136,12 +136,13 @@ autoware-driver-zenoh-rosbag:
 	LOG_DIR=$(LOG_DIR) docker compose up -d zenoh
 
 # ワークスペースを checkout 直後の状態へ戻す。提出物で上書きされた src/aichallenge_submit/ を
-# HEAD に戻し、build/ install/ log/ と untracked ファイルを消す。git 操作はこのディレクトリに
+# HEAD に戻し（index も含めて。`git checkout -- <path>` は index から戻すので、stage 済みの
+# 提出物が残る）、build/ install/ log/ と untracked ファイルを消す。git 操作はこのディレクトリに
 # 限定する（git stash のようにリポジトリ全体へ効かせると .env 以外のローカル変更も巻き込む）。
 # 次は make download からやり直すことになる。
 workspace-clean:
 	@echo "Clean $(WORKSPACE_DIR): restore src/aichallenge_submit/, remove build/ install/ log/ and untracked files"
-	git checkout -- $(WORKSPACE_DIR)/src/aichallenge_submit
+	git restore --source=HEAD --staged --worktree -- $(WORKSPACE_DIR)/src/aichallenge_submit
 	git clean -fdx $(WORKSPACE_DIR)
 
 down:
