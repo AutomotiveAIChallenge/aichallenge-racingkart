@@ -78,6 +78,12 @@ class TestSteps(unittest.TestCase):
         self.assertEqual(step_by_id(STEP_CLEAN).command, ("make", "workspace-clean"))
         self.assertEqual(step_by_id(STEP_TEARDOWN).command, ("make", "down"))
 
+    def test_service_badge_only_on_steps_that_touch_compose_services(self):
+        badged = {s.step_id for s in STEPS if s.shows_service_badge}
+        self.assertEqual(
+            badged, {STEP_UP, STEP_RESTART, STEP_AUTOWARE_DOWN, STEP_TEARDOWN}
+        )
+
     def test_download_step_is_interactive(self):
         # download_submission.sh reads a hidden password; the console has to
         # release the terminal for it.

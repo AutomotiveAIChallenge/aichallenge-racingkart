@@ -14,6 +14,7 @@ from pathlib import Path
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
 
 from tui import (  # noqa: E402
+    MIN_COLS,
     MIN_LINES,
     is_failure_line,
     probe_workspace,
@@ -62,7 +63,7 @@ class TestProbeWorkspace(unittest.TestCase):
     def test_populated_submit_dir_has_an_mtime(self):
         # submit_dir_populated is gone: aichallenge_submit/ ships tracked
         # packages, so its presence proves nothing about a download having
-        # run (see tui_core's _MEASURED comment). submit_mtime is still
+        # run (see the submission step's comment in tui_core). submit_mtime is still
         # sampled, though -- build_done() needs it to judge staleness.
         self.make_submission()
         ws = probe_workspace(self.root, frozenset())
@@ -114,9 +115,12 @@ class TestWorkspaceIsPristine(unittest.TestCase):
 
     def test_ignored_build_artifacts_make_it_dirty(self):
         # cleanup は build/ install/ log/ も消す対象なので、ignored でも「済」ではない。
-        (self.ws / "install").mkdir()
-        (self.ws / "install" / "setup.bash").write_text("")
-        self.assertFalse(workspace_is_pristine(self.root))
+        # 空ディレクトリでも false: git を呼ぶ前にディレクトリの有無で判っている。
+        for name in ("build", "install", "log"):
+            with self.subTest(name=name):
+                (self.ws / name).mkdir()
+                self.assertFalse(workspace_is_pristine(self.root))
+                (self.ws / name).rmdir()
 
     def test_untracked_file_makes_it_dirty(self):
         (self.ws / "src" / "new.txt").write_text("")
@@ -138,21 +142,19 @@ class TestWorkspaceIsPristine(unittest.TestCase):
 
 class TestTerminalSize(unittest.TestCase):
     def test_exact_minimum_is_allowed(self):
-        self.assertFalse(terminal_too_small(40, 15))
+        self.assertFalse(terminal_too_small(MIN_COLS, MIN_LINES))
 
     def test_larger_is_allowed(self):
         self.assertFalse(terminal_too_small(80, 24))
 
     def test_too_narrow_is_rejected(self):
-        self.assertTrue(terminal_too_small(39, 15))
+        self.assertTrue(terminal_too_small(MIN_COLS - 1, MIN_LINES))
 
     def test_too_short_is_rejected(self):
-        self.assertTrue(terminal_too_small(40, 14))
+        self.assertTrue(terminal_too_small(MIN_COLS, MIN_LINES - 1))
 
     def test_minimum_leaves_a_row_for_failures_and_a_row_for_log(self):
         # header 1 + STEPS + failures 見出し 1 + failures 1 + log 見出し 1 + log 1。
-        # ステップを足して MIN_LINES を直し忘れると、失敗を流さずに残すという
-        # 狙いが黙って壊れるので、ここで気付けるようにしておく。
         self.assertGreaterEqual(MIN_LINES, 1 + len(STEPS) + 4)
 
 

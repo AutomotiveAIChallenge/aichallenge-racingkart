@@ -41,15 +41,18 @@ from tui_core import (
 )
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
+# colcon ワークスペース。Makefile の WORKSPACE_DIR と同じ場所。
+WORKSPACE_REL = Path("aichallenge/workspace")
+# workspace-clean が消す ignored な生成物。どれかが在れば git を呼ぶ前に
+# 「未完了」と判れる。
+WORKSPACE_ARTIFACTS = ("build", "install", "log")
 
-# 40x15 の内訳: header 1 + step 9 行 (縦 1 列) + failures 見出し 1 + failures 1
-# + log 見出し 1 + log 1 で 14 行。1 行余裕を見て 15。これ未満だと failures か
-# log が 0 行になり、失敗を流さずに残すという狙いが成立しない。
-# ステップを増減させたらこの行数も直すこと（len(STEPS) から導くと、狭い端末で
-# ステップが増えたときに失敗表示が黙って潰れる側へ倒れる）。
-# 40 桁は最長セル "6 -  autoware restart dazr" の 25 文字に対する余裕。
+# 最低行数 = header 1 + ステップ数 + failures 見出し 1 + failures 1 + log 見出し 1
+# + log 1、に 1 行の余裕。これ未満だと failures か log が 0 行になり、失敗を流さずに
+# 残すという狙いが成立しない。40 桁は最長セル "6 -  autoware restart dazr" の
+# 25 文字に対する余裕。
 MIN_COLS = 40
-MIN_LINES = 15
+MIN_LINES = 1 + len(STEPS) + 4 + 1
 LOG_TAIL = 2000  # 保持するログ行数の上限。走行枠中に膨らみ続けないため。
 FAILURE_TAIL = 40  # failures 領域に retain する上限行数。
 FALLBACK_LINES = 5  # マーカーの無いステップが失敗したとき末尾から拾う行数。
@@ -137,12 +140,12 @@ def probe_workspace(
     Note: aichallenge_submit/ ships with 15 git-tracked participant packages,
     so it is never actually empty on a checkout -- whether it *has* entries
     proves nothing about whether a download has run. That is exactly why
-    the submission step is not in tui_core's _MEASURED set: its DONE/PENDING
+    the submission step has no `measure` in tui_core: its DONE/PENDING
     comes from the session (did `make download` exit 0 this run), not from
     this probe. submit_mtime is still sampled here because build_done() uses
     it to judge whether install/ is stale relative to the submission.
     """
-    ws_dir = repo_root / "aichallenge" / "workspace"
+    ws_dir = repo_root / WORKSPACE_REL
     setup_bash = ws_dir / "install" / "setup.bash"
     submit_dir = ws_dir / "src" / "aichallenge_submit"
 
@@ -157,6 +160,21 @@ def probe_workspace(
     )
 
 
+def _run(cmd, repo_root: Path):
+    """Run a probe command; None on any failure.
+
+    Probes must never raise: the console has to keep rendering on a machine
+    whose docker daemon is down or whose checkout is not a git repo.
+    """
+    try:
+        out = subprocess.run(
+            cmd, cwd=str(repo_root), capture_output=True, text=True, timeout=10
+        )
+    except (OSError, subprocess.SubprocessError):
+        return None
+    return out if out.returncode == 0 else None
+
+
 def workspace_is_pristine(repo_root: Path) -> bool:
     """Whether aichallenge/workspace/ matches the checkout exactly.
 
@@ -165,18 +183,19 @@ def workspace_is_pristine(repo_root: Path) -> bool:
     empty listing is the state `make workspace-clean` leaves behind. A git
     failure reads as "not pristine" so cleanup is never shown as done on
     evidence the console does not have.
+
+    The artifact directories are checked first: this runs every observe()
+    tick, and `--ignored` would otherwise walk the whole install/ tree
+    (thousands of files after a build) just to say "not clean".
     """
-    try:
-        out = subprocess.run(
-            ["git", "status", "--porcelain", "--ignored", "--", "aichallenge/workspace"],
-            cwd=str(repo_root),
-            capture_output=True,
-            text=True,
-            timeout=10,
-        )
-    except (OSError, subprocess.SubprocessError):
+    ws_dir = repo_root / WORKSPACE_REL
+    if any((ws_dir / name).exists() for name in WORKSPACE_ARTIFACTS):
         return False
-    return out.returncode == 0 and not out.stdout.strip()
+    out = _run(
+        ["git", "status", "--porcelain", "--ignored", "--", str(WORKSPACE_REL)],
+        repo_root,
+    )
+    return out is not None and not out.stdout.strip()
 
 
 def running_services(repo_root: Path) -> frozenset:
@@ -186,21 +205,11 @@ def running_services(repo_root: Path) -> frozenset:
     still render, and let the operator run preflight, on a machine whose
     daemon is down -- which is exactly when preflight is worth running.
     """
-    try:
-        out = subprocess.run(
-            [
-                "docker", "compose", "ps",
-                "--status", "running",
-                "--format", "{{.Service}}",
-            ],
-            cwd=str(repo_root),
-            capture_output=True,
-            text=True,
-            timeout=10,
-        )
-    except (OSError, subprocess.SubprocessError):
-        return frozenset()
-    if out.returncode != 0:
+    out = _run(
+        ["docker", "compose", "ps", "--status", "running", "--format", "{{.Service}}"],
+        repo_root,
+    )
+    if out is None:
         return frozenset()
     return frozenset(line.strip() for line in out.stdout.splitlines() if line.strip())
 
@@ -405,7 +414,7 @@ class Console:
 
         前提未達は _cell のマークで示すので、ここには出さない。
         """
-        if step.step_id in (STEP_UP, STEP_RESTART, STEP_AUTOWARE_DOWN, STEP_TEARDOWN):
+        if step.shows_service_badge:
             return " " + service_badge(self.ws.services_running)
         return ""
 

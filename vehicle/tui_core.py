@@ -9,7 +9,7 @@ rules can be tested without a terminal, a docker daemon or a built workspace.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Dict, FrozenSet, Optional, Tuple
+from typing import Callable, Dict, FrozenSet, Optional, Tuple
 
 # --- ステップの状態 ---------------------------------------------------------
 PENDING = "pending"
@@ -31,9 +31,6 @@ STEP_CLEAN = "clean"
 # autoware-driver-zenoh-rosbag が起動する compose サービス。この全部が running
 # ならスタックが上がっているとみなす。
 REQUIRED_SERVICES = ("driver", "autoware", "zenoh", "rosbag")
-# 単体で止めたり入れ替えたりする compose サービス。REQUIRED_SERVICES の一員でも
-# あるが、autoware だけを扱うステップがこの名前を直接必要とする。
-AUTOWARE_SERVICE = "autoware"
 
 
 @dataclass(frozen=True)
@@ -54,6 +51,33 @@ class Workspace:
     workspace_pristine: bool = False
 
 
+def build_done(ws: Workspace) -> bool:
+    """Whether install/ exists and is no older than the submission."""
+    if ws.install_mtime is None or ws.submit_mtime is None:
+        # Freshness is unprovable without both timestamps; report stale rather
+        # than let an old install/ pass as built.
+        return False
+    return ws.install_mtime >= ws.submit_mtime
+
+
+def _stack_up(ws: Workspace) -> bool:
+    return all(name in ws.services_running for name in REQUIRED_SERVICES)
+
+
+def _stack_down(ws: Workspace) -> bool:
+    return not any(name in ws.services_running for name in REQUIRED_SERVICES)
+
+
+def _autoware_down(ws: Workspace) -> bool:
+    return "autoware" not in ws.services_running
+
+
+def _workspace_pristine(ws: Workspace) -> bool:
+    # checkout 直後と同じなら済。提出物で上書きされた aichallenge_submit/ も、
+    # build/ install/ log/ も、どれか残っていれば未実行。
+    return ws.workspace_pristine
+
+
 @dataclass(frozen=True)
 class Step:
     """One row of the console.
@@ -70,6 +94,12 @@ class Step:
     # 実行するディレクトリ。リポジトリルートからの相対。コマンド名から推測すると
     # 将来のステップが黙って間違った cwd を継ぐので、ステップ側で宣言させる。
     cwd: str = "."
+    # 環境から完了を実測する述語。None なら実測できないステップで、合否は
+    # 終了コードにしか現れないので session の記録から状態を出す。
+    measure: Optional[Callable[[Workspace], bool]] = None
+    # 行の右に driver/autoware/zenoh/rosbag のバッジを出すか。compose サービスを
+    # 起動・停止するステップだけ True。
+    shows_service_badge: bool = False
 
 
 STEPS = (
@@ -87,18 +117,25 @@ STEPS = (
         # download_submission.sh prompts for username/password and
         # download_submission.py prompts for the submission to take.
         interactive=True,
+        # measure を持たせない: aichallenge_submit/ はこのリポジトリの checkout
+        # そのものに 15 個の tracked な参加者パッケージが入っており、ダウンロード前
+        # から常に非空である。ディレクトリの有無は「取得済み」の証拠にならない。
+        # うっかり実測へ戻さないこと。
     ),
     Step(
         step_id=STEP_BUILD,
         title="build",
         command=("make", "autoware-build"),
         requires=(STEP_SUBMISSION,),
+        measure=build_done,
     ),
     Step(
         step_id=STEP_UP,
         title="autoware",
         command=("make", "autoware-driver-zenoh-rosbag"),
         requires=(STEP_BUILD,),
+        measure=_stack_up,
+        shows_service_badge=True,
     ),
     Step(
         step_id=STEP_RUNTIME,
@@ -112,53 +149,37 @@ STEPS = (
         title="autoware restart",
         command=("make", "autoware-restart"),
         requires=(STEP_UP,),
+        # measure を持たせない: 「入れ替え済み」は autoware が running かどうかでは
+        # 区別できず（起動しっぱなしでも running）、成否は終了コードにしか現れない。
+        shows_service_badge=True,
     ),
     Step(
         step_id=STEP_AUTOWARE_DOWN,
         title="autoware down",
         command=("make", "autoware-down"),
+        measure=_autoware_down,
+        shows_service_badge=True,
     ),
     Step(
         step_id=STEP_TEARDOWN,
         title="down all",
         command=("make", "down"),
+        measure=_stack_down,
+        shows_service_badge=True,
     ),
     Step(
         step_id=STEP_CLEAN,
         title="cleanup",
         command=("make", "workspace-clean"),
+        measure=_workspace_pristine,
     ),
 )
 
 _STEPS_BY_ID = {s.step_id: s for s in STEPS}
 
-# 環境から実測できるステップ。session の記録より実測を優先する。
-#
-# STEP_SUBMISSION は含めない: aichallenge_submit/ はこのリポジトリの
-# checkout そのものに 15 個の tracked な参加者パッケージが入っており、
-# ダウンロード前から常に非空である。ディレクトリの有無は「取得済み」の
-# 証拠にならないので、実測ではなく session の記録（ダウンロードを実際に
-# 実行して成功したか）から状態を出す。うっかり実測へ戻さないこと。
-_MEASURED = frozenset(
-    {STEP_BUILD, STEP_UP, STEP_AUTOWARE_DOWN, STEP_TEARDOWN, STEP_CLEAN}
-)
-
-# STEP_RESTART は実測しない: 「入れ替え済み」は autoware が running かどうかでは
-# 区別できず（起動しっぱなしでも running）、成否は終了コードにしか現れない。
-
-
 def step_by_id(step_id: str) -> Step:
     """Look up a step, raising KeyError on an unknown id."""
     return _STEPS_BY_ID[step_id]
-
-
-def build_done(ws: Workspace) -> bool:
-    """Whether install/ exists and is no older than the submission."""
-    if ws.install_mtime is None or ws.submit_mtime is None:
-        # Freshness is unprovable without both timestamps; report stale rather
-        # than let an old install/ pass as built.
-        return False
-    return ws.install_mtime >= ws.submit_mtime
 
 
 def step_status(step_id: str, ws: Workspace, session: Dict[str, str]) -> str:
@@ -173,25 +194,10 @@ def step_status(step_id: str, ws: Workspace, session: Dict[str, str]) -> str:
     recorded = session.get(step_id)
     if recorded == RUNNING:
         return RUNNING
-    if step_id in _MEASURED:
-        return DONE if _measured_done(step_id, ws) else PENDING
+    measure = step_by_id(step_id).measure
+    if measure is not None:
+        return DONE if measure(ws) else PENDING
     return recorded or PENDING
-
-
-def _measured_done(step_id: str, ws: Workspace) -> bool:
-    if step_id == STEP_BUILD:
-        return build_done(ws)
-    if step_id == STEP_UP:
-        return all(name in ws.services_running for name in REQUIRED_SERVICES)
-    if step_id == STEP_AUTOWARE_DOWN:
-        return AUTOWARE_SERVICE not in ws.services_running
-    if step_id == STEP_TEARDOWN:
-        return not any(name in ws.services_running for name in REQUIRED_SERVICES)
-    if step_id == STEP_CLEAN:
-        # checkout 直後と同じなら済。提出物で上書きされた aichallenge_submit/ も、
-        # build/ install/ log/ も、どれか残っていれば未実行。
-        return ws.workspace_pristine
-    raise KeyError(step_id)
 
 
 def is_runnable(step_id: str, ws: Workspace, session: Dict[str, str]) -> bool:

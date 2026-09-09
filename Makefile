@@ -51,10 +51,7 @@ autoware-down:
 	docker compose down autoware
 
 # autoware コンテナだけを入れ替える。削除 -> vehicle モードで起動し直す。
-autoware-restart: autoware-down
-	@echo "Restart Autoware for Vehicle"
-	@echo "Log dir: .$(LOG_DIR)"
-	LOG_DIR=$(LOG_DIR) RUN_MODE=vehicle docker compose up -d autoware
+autoware-restart: autoware-down autoware-vehicle
 
 # run autoware for simulator
 autoware-simulator:
