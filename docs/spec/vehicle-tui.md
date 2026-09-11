@@ -76,10 +76,11 @@
 6. **純ロジックを分離する。** ステップの前提判定と状態遷移を curses から切り離し、
    端末もプロセスもなしにテストできるようにする。
 7. **役割でステップを出し分ける。** 参加者は autoware と提出物だけを触る。
-   driver / zenoh / rosbag の起動、提出物のダウンロード、スタック全体の停止は運営の仕事で、
+   driver / zenoh / rosbag の起動・停止、提出物のダウンロード、スタック全体の停止は運営の仕事で、
    参加者の画面には出さない（`--role participant|staff`、既定は participant）。
-   運営の画面は参加者の並びの後ろに運営用ステップを足したもので、
-   同じ番号が同じステップを指す。
+   運営の画面は参加者の並びとは独立の 4 ステップだけの画面で、preflight を含め
+   参加者用のステップは一切出さない。参加者と運営で番号は共有しない
+   （参加者の 1 と運営の 1 は別のステップを指す）。
 
 ## ステップ定義
 
@@ -90,35 +91,42 @@
 | 1 | `check preflight` | `./setup_check.sh --phase preflight` | なし | 終了コード 0（セッション記憶） |
 | 2 | `extract` | `make submission-extract`（`vehicle/submissions/<id>.zip` を ID とパスワードで展開し `src/aichallenge_submit/` を入れ替える） | 1 | 終了コード 0（セッション記憶） |
 | 3 | `build` | `make autoware-build` | 2 | `workspace/install/setup.bash` が存在し `src/` より新しい（実測） |
-| 4 | `autoware` | `make autoware-vehicle` | 3 | `autoware` が compose 上で running（実測。`driver` / `zenoh` / `rosbag` はバッジで見せるだけ） |
+| 4 | `autoware` | `make autoware-vehicle` | 3 | `autoware` が compose 上で running（実測。`driver` / `zenoh` / `rosbag` はサービス行で見せるだけ） |
 | 5 | `check runtime` | `./setup_check.sh --phase runtime` | 4 | 終了コード 0（セッション記憶） |
 | 6 | `autoware down` | `make autoware-down` | なし | `autoware` が running でない（実測） |
 | 7 | `cleanup` | `make workspace-clean` | なし | `aichallenge/workspace/` が checkout と一致（`git status --porcelain --ignored` が空、実測） |
 
-運営（`make vehicle-tui-staff`、`--role staff`）は上の 7 行に続けて次を出す。
+運営（`make vehicle-tui-staff`、`--role staff`）は参加者の並びとは独立の、次の 8 行だけの画面。
 
 | # | 表示名 | 実行するもの | 前提（助言） | 完了の判定 |
 |---|--------|--------------|--------------|------------|
-| 8 | `driver zenoh rosbag` | `make driver-zenoh-rosbag` | 1 | `driver` / `zenoh` / `rosbag` が running（実測） |
-| 9 | `autoware driver zenoh` | `make autoware-driver-zenoh`（運営の実験用） | 3 | `driver` / `autoware` / `zenoh` が running（実測） |
-| 10 | `download` | `make download` | 1 | 終了コード 0（セッション記憶） |
-| 11 | `down all` | `make down` | なし | このリポジトリから compose で起動された running コンテナが 0（全プロジェクト、実測） |
+| 1 | `download` | `make download` | なし | 終了コード 0（セッション記憶） |
+| 2 | `driver` | `make driver` | なし | `driver` が running（実測） |
+| 3 | `zenoh` | `make zenoh` | なし | `zenoh` が running（実測） |
+| 4 | `driver down` | `docker compose down driver` | なし | `driver` が running でない（実測） |
+| 5 | `zenoh down` | `docker compose down zenoh` | なし | `zenoh` が running でない（実測） |
+| 6 | `rosbag` | `make rosbag` | なし | `rosbag` が running（実測） |
+| 7 | `rosbag down` | `docker compose down rosbag` | なし | `rosbag` が running でない（実測） |
+| 8 | `down all` | `make down` | なし | このリポジトリから compose で起動された running コンテナが 0（全プロジェクト、実測） |
 
-走行枠の流れは、運営が 8 で土台を上げ、参加者が 1〜5 で autoware を上げて走り、
-6 で autoware を落とし、運営が 11 で全部を落として 7 で片付ける、である。
-Autoware を入れ替えるときは 6 → 4 と辿る（`autoware-restart` はこの 2 段と同じことをするので
-ステップにしない）。
+走行枠の流れは、運営が 2・3（`driver` / `zenoh`）で土台を上げ、6（`rosbag`）で記録を始め、
+参加者が 1〜5 で autoware を上げて走り、参加者の 6 で autoware を落とし、運営が 7（`rosbag down`）で
+記録を閉じて 8（`down all`）で全部を落とし、参加者の 7（`cleanup`）で片付ける、である。
+rosbag の 2 行を `down all` の直前に置くのは、記録の開始と終了が走行枠の前後に来る操作で、
+土台の上げ下げとは使う場面が違うからである。
+Autoware を入れ替えるときは参加者の 6 → 4 と辿る（`autoware-restart` はこの 2 段と同じことを
+するのでステップにしない）。土台のうち 1 サービスだけを入れ替えたいときは、運営がそのサービスの
+down → up と辿る（`driver` は 4 → 2、`zenoh` は 5 → 3、`rosbag` は 7 → 6）。
 
-`driver-zenoh-rosbag` に rosbag を含めるのは、`autoware-vehicle` も `autoware-driver-zenoh` も
-rosbag を上げないのに `check runtime` の必須サービスに rosbag が入っているためである。
-土台から rosbag を外すと 5 が必ず落ちる。9 は既存ターゲットのまま rosbag を含まないので、
-実験用と割り切り、記録が要る走行では使わない。
+`driver` / `zenoh` に加えて運営が `rosbag` も上げるのは、`autoware-vehicle` が rosbag を上げないのに
+`check runtime` の必須サービスに rosbag が入っているためである。運営が rosbag を上げ忘れると
+参加者の 5 が必ず落ちる。
 
 チェックの 2 ステップは `check preflight` / `check runtime` と表示する。
 `setup_check.sh` の `--phase` の値をそのまま名前にしているので、画面の名前から
 実行されるコマンドが辿れる。内部のステップ ID は `preflight` / `submission` /
-`build` / `up` / `runtime` / `autoware_down` / `clean` と運営用の `infra` / `staff_up` /
-`download` / `teardown` で、表示名とは別である。
+`build` / `up` / `runtime` / `autoware_down` / `clean` と運営用の `driver` / `zenoh` / `rosbag` /
+`driver_down` / `zenoh_down` / `rosbag_down` / `download` / `teardown` で、表示名とは別である。
 
 ### 停止の 2 段と cleanup の責務
 
@@ -127,6 +135,7 @@ rosbag を上げないのに `check runtime` の必須サービスに rosbag が
 | ステップ | 役割 | 落ちるもの | 使う場面 |
 |----------|------|------------|----------|
 | `autoware down` | 参加者 | `autoware` のみ（`docker compose down autoware`） | Autoware だけ落とす。`driver` / `zenoh` / `rosbag` は繋いだまま。入れ替えは続けて `autoware` |
+| `driver down` / `zenoh down` / `rosbag down` | 運営 | それぞれ 1 サービスだけ（`docker compose down driver` / `zenoh` / `rosbag`） | 土台のうち入れ替えたいサービスだけ落とすとき |
 | `down all` | 運営 | compose のスタック全部（プロジェクト 1〜4 を含む） | 走行枠の終わり |
 
 `cleanup` はコンテナを触らない。`aichallenge/workspace/` を checkout 直後の状態へ戻すだけである:
@@ -178,9 +187,9 @@ TUI 内のキャッシュと実態が食い違うことがない。
 合否は終了コードにしか現れず、後からファイルシステムを見て再現できないためである。
 
 `autoware` の完了は `autoware` だけで判定する。`autoware-vehicle` が上げるのは
-autoware だけで、`driver` / `zenoh` / `rosbag` は運営の `driver zenoh rosbag` の結果である。
+autoware だけで、`driver` / `zenoh` / `rosbag` は運営がそれぞれのステップで個別に上げた結果である。
 4 サービス全部で判定すると、参加者が正しく起動できても運営側の都合で「未完了」に見える。
-土台の欠けはバッジ（`-a--` など）で分かる。
+土台の欠けはサービス行（`stopped: driver zenoh rosbag` など）で分かる。
 
 `extract` は特に注意が要る。`aichallenge/workspace/src/aichallenge_submit/` には
 **git 追跡された参加者パッケージが 15 個ある**ため、このディレクトリはチェックアウト時点で
@@ -189,8 +198,9 @@ autoware だけで、`driver` / `zenoh` / `rosbag` は運営の `driver zenoh ro
 
 ### TUI が呼ぶ起動ターゲットはチェックを内包しない
 
-TUI の起動ステップは `autoware-vehicle`（参加者）と `driver-zenoh-rosbag`（運営）で、
-どちらもチェックを含まない。チェックは `check preflight` / `check runtime` が独立に担う。
+TUI の起動ステップは `autoware-vehicle`（参加者）と `driver` / `zenoh` / `rosbag`（運営、各 1
+サービスずつ）で、どれもチェックを含まない。チェックは `check preflight` / `check runtime` が
+独立に担う。
 
 以下は CLI 用に残している `autoware-driver-zenoh-rosbag` の経緯である。
 このターゲットは preflight と runtime の両方を内包していた。
@@ -215,12 +225,14 @@ GNSS の 8 秒待ち、13 topic ぶんの `docker compose exec` + ROS 環境の 
 
 ```
 vehicle console [participant]                ↑↓ enter q
+running: driver autoware
+stopped: zenoh rosbag
 1 NG check preflight
 2 ?  extract
 3 OK build
-4 -  autoware dazr
+4 -  autoware
 5 ?  check runtime
-6 -  autoware down dazr
+6 -  autoware down
 7 -  cleanup
 -- failures (8) ------------------------------------------
 ❌ CAN interface can0 not found
@@ -233,19 +245,23 @@ $ ./setup_check.sh --phase preflight
 ```
 
 - ヘッダは 1 行で、役割を `[participant]` / `[staff]` と示し、右端にキー操作を置く。
-  運営の画面は 7 行のあと `8 - driver zenoh rosbag dazr` / `9 - autoware driver zenoh dazr` /
-  `10 - download` / `11 - down all dazr` が続く。
+  その下の 2 行がサービス行（`running:` / `stopped:`）。運営の画面は参加者の並びとは別で、`1 - download` / `2 - driver` /
+  `3 - zenoh` / `4 - driver down` / `5 - zenoh down` / `6 - rosbag` / `7 - rosbag down` /
+  `8 - down all` の 8 行だけ。
 - ステップは縦 1 列。印は 2 文字固定（`OK` / `NG` / `>>` 実行中 / `-` 未実行 / `?` 前提未達）。
-- compose サービスを上げ下げするステップ（`autoware` / `autoware down` / `driver zenoh rosbag` /
-  `autoware driver zenoh` / `down all`）の右のバッジは `driver` / `autoware` / `zenoh` / `rosbag` の
-  状態を 1 文字ずつ並べたもの。起動中は頭文字、停止中は `-`（`dazr` / `da--` / `----`）。
-  位置で意味が決まるので凡例が要らない。
+- サービス行は `running: driver autoware` と `stopped: zenoh rosbag` の 2 行で、`driver` / `autoware` /
+  `zenoh` / `rosbag` を `REQUIRED_SERVICES` の順に running / stopped へ振り分けて名前のまま出す。
+  空側は `-`。画面に 1 箇所しか出さないので略さない（頭文字にすると凡例が要る）。
+  どのサービスの状態も画面全体で 1 つの事実なので、ステップ行ごとに繰り返さない。
 - **failures は log とは別領域**で、log が流れても内容を保つ。残り高さの 2/3 までを使う。
   ステップを実行し直すとクリアされ、常に「今の実行」の失敗を映す。
 - 長い行は折り返す。切り詰めると長いパスやコンパイラ出力の末尾が読めなくなる。
-- ステップ 1 は起動時に自動実行する。
-- 最低端末サイズは参加者 40x13、運営 40x17。内訳はヘッダ 1 + ステップ数（7 / 11）+ failures 見出し 1
-  + failures 1 + log 見出し 1 + log 1、に 1 行の余裕。下回る場合は起動時に警告して終了する。
+- 参加者のステップ 1（`check preflight`）は起動時に自動実行する。運営の画面には preflight が無く、
+  起動時の自動実行もしない。
+- 最低端末サイズは参加者 40x15、運営 40x16。行数の内訳はヘッダ 1 + サービス行 2 + ステップ数（7 / 8）
+  + failures 見出し 1 + failures 1 + log 見出し 1 + log 1、に 1 行の余裕。桁数はヘッダ
+  （役割名 + キー操作、40 文字）とサービス行の最長形 `stopped: driver autoware zenoh rosbag`
+  （37 文字）が収まる幅。下回る場合は起動時に警告して終了する。
   `min_lines()` は役割のステップ数から導くので、ステップを増減させても手で直す箇所は無い。
 
 ### 失敗行の判定
@@ -315,7 +331,7 @@ Python 3 標準ライブラリのみを使う（`curses` / `subprocess` / `threa
   まさにその状況こそ preflight を走らせたい場面である。
 - **ssh 切断**：tmux セッションが残る。再接続して `make vehicle-tui` を実行すると
   `-A` により同じセッションへアタッチする。実行中のステップは継続している。
-- **端末が狭い**：役割ごとの最低サイズ（参加者 40x13、運営 40x17）を下回る場合は起動時に警告して終了する。
+- **端末が狭い**：役割ごとの最低サイズ（参加者 40x15、運営 40x16）を下回る場合は起動時に警告して終了する。
 
 ## テスト方針
 
@@ -325,16 +341,16 @@ Python 3 標準ライブラリのみを使う（`curses` / `subprocess` / `threa
 | 観点 |
 |------|
 | ステップ数と実行順 |
-| 参加者の並びと、運営がその後ろに `driver zenoh rosbag` / `autoware driver zenoh` / `download` / `down all` を持つこと |
-| 参加者のステップに運営用（土台の起動・download・down all）が混ざらないこと。未知の役割は拒否 |
-| `autoware` / `autoware down` が autoware コンテナだけを対象にし、土台は `driver-zenoh-rosbag` が上げること |
+| 運営が参加者の並びとは独立に `download` / `driver` / `zenoh` / `rosbag` / `driver down` / `zenoh down` / `rosbag down` / `down all` の 8 ステップだけを持つこと |
+| 参加者のステップに運営用（土台の起動・停止・download・down all）が混ざらないこと。運営に参加者用ステップと preflight が混ざらないこと。未知の役割は拒否 |
+| `autoware` / `autoware down` が autoware コンテナだけを対象にし、土台は `driver` / `zenoh` / `rosbag` とその down ステップが 1 サービスずつ上げ下げすること |
 | `cleanup` がワークスペースの削除で、`down` がスタックの停止であること |
 | `autoware down` の完了判定が `autoware` だけを見ること |
 | `cleanup` の完了判定（`workspace_pristine` のときだけ完了、既定は未完了） |
 | `workspace_is_pristine` が tracked 差分・untracked・ignored 生成物のどれでも false になり、workspace 外の変更は見ないこと |
 | `MIN_LINES` がステップ数 + failures 1 行 + log 1 行を下回らないこと |
 | `extract` ステップが対話扱いで `make submission-extract` を呼ぶこと |
-| `autoware` の完了が autoware だけで決まり、`driver zenoh rosbag` が 3 サービス、`autoware driver zenoh` が rosbag 抜きで決まること |
+| `autoware` の完了が autoware だけで決まり、`driver` / `zenoh` / `rosbag` の各 up ステップがそのサービスだけの running で、各 down ステップがそのサービスだけの停止で決まること |
 | `download` が対話扱いで運営だけに出ること |
 | `install/` と `src/` の新旧による build の完了判定（同時刻を含む境界） |
 | 実測ステップが古いセッション記録より実測を優先すること |
@@ -342,7 +358,7 @@ Python 3 標準ライブラリのみを使う（`curses` / `subprocess` / `threa
 | 前提未達でもステップが実行可能であること |
 | 未達の前提を列挙できること |
 | 観測関数が一時ディレクトリの実体を正しく読むこと |
-| サービスバッジの位置が `REQUIRED_SERVICES` の順序に従うこと |
+| サービス行（running / stopped の 2 行）が `REQUIRED_SERVICES` の順で名前をそのまま出し、ヘッダにもステップ行にも出ないこと |
 | 失敗行の判定（インデントあり・警告と成功の除外） |
 | 折り返し（短い行の素通し・長い行の分割・空行の保持） |
 | 最低端末サイズの境界 |

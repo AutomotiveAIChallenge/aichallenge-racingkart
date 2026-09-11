@@ -47,18 +47,20 @@ WORKSPACE_REL = Path("aichallenge/workspace")
 # 「未完了」と判れる。
 WORKSPACE_ARTIFACTS = ("build", "install", "log")
 
-# 最低行数 = header 1 + ステップ数 + failures 見出し 1 + failures 1 + log 見出し 1
-# + log 1、に 1 行の余裕。これ未満だと failures か log が 0 行になり、失敗を流さずに
-# 残すという狙いが成立しない。40 桁は最長セル "9 -  autoware driver zenoh dazr" の
-# 30 文字に対する余裕。
+# 最低行数 = header 1 + services 2（running / stopped）+ ステップ数 + failures 見出し 1
+# + failures 1 + log 見出し 1 + log 1、に 1 行の余裕。これ未満だと failures か log が
+# 0 行になり、失敗を流さずに残すという狙いが成立しない。40 桁は画面中でいちばん幅を
+# 食う固定コンテンツである header 行（タイトル 29 文字 + 区切り 1 + ヒント 10 文字）と
+# services 行の最長形 "stopped: driver autoware zenoh rosbag"（37 文字）に対する余裕。
 MIN_COLS = 40
 
 
 def min_lines(n_steps: int) -> int:
-    return 1 + n_steps + 4 + 1
+    return 1 + 2 + n_steps + 4 + 1
 
 
-# 全ステップ（運営）ぶん。参加者は steps_for_role の本数で main が計算する。
+# 運営・参加者を合わせた全ステップぶん（後方互換のため残す）。実際の最低行数は
+# main が steps_for_role(role) の本数から役割ごとに計算する。
 MIN_LINES = min_lines(len(STEPS))
 LOG_TAIL = 2000  # 保持するログ行数の上限。走行枠中に膨らみ続けないため。
 FAILURE_TAIL = 40  # failures 領域に retain する上限行数。
@@ -76,15 +78,17 @@ def terminal_too_small(cols: int, lines: int, need_lines: int = MIN_LINES) -> bo
     return cols < MIN_COLS or lines < need_lines
 
 
-def service_badge(services_running) -> str:
-    """REQUIRED_SERVICES を 1 文字ずつ並べた位置固定のバッジ。
+def service_status_lines(services_running) -> tuple:
+    """REQUIRED_SERVICES を running / stopped の 2 行に分けてサービス名のまま並べる。
 
-    起動中はサービス名の頭文字、停止中は '-'。`driver off  autoware off ...`
-    が 47 文字だったのを 4 文字にする。位置で意味が決まるので凡例が要らない。
-    括弧を付けない: 40 桁の 2 列配置でセルに収める必要がある。
+    画面に 1 箇所しか出さないので略さない（`dazr` のような頭文字は凡例が要る）。
+    順序は REQUIRED_SERVICES に従い、空側は '-'。
     """
-    return "".join(
-        name[0] if name in services_running else "-" for name in REQUIRED_SERVICES
+    running = [n for n in REQUIRED_SERVICES if n in services_running]
+    stopped = [n for n in REQUIRED_SERVICES if n not in services_running]
+    return (
+        f"running: {' '.join(running) or '-'}",
+        f"stopped: {' '.join(stopped) or '-'}",
     )
 
 
@@ -402,8 +406,11 @@ class Console:
         title = f"vehicle console [{self.role}]"
         pad = max(1, width - len(title) - len(hints))
         self.screen.addnstr(0, 0, f"{title}{' ' * pad}{hints}", width, curses.A_BOLD)
+        # サービスの状態は画面全体で 1 つの事実なので、ステップ行ではなくここに 1 度だけ出す。
+        for i, text in enumerate(service_status_lines(self.ws.services_running)):
+            self.screen.addnstr(1 + i, 0, text, width)
 
-        row = self._draw_steps(1, lines, width)
+        row = self._draw_steps(3, lines, width)
 
         # failures は必要な分だけ。残りの 2/3 までに抑えて log を潰さない。
         # log より失敗のほうが読まれるべきなので log に多くは残さない。
@@ -444,16 +451,7 @@ class Console:
         ):
             # 前提未達。実行は妨げない（前提は助言）ので印だけ変える。
             mark = _MARK_UNMET
-        return f"{idx + 1} {mark} {step.title}{self._detail(step)}"
-
-    def _detail(self, step) -> str:
-        """セルの右に足す情報。桁を食わないものだけ。
-
-        前提未達は _cell のマークで示すので、ここには出さない。
-        """
-        if step.shows_service_badge:
-            return " " + service_badge(self.ws.services_running)
-        return ""
+        return f"{idx + 1} {mark} {step.title}"
 
     def _draw_region(
         self, top: int, label: str, wrapped: list, rows: int, width: int
@@ -506,8 +504,10 @@ def _loop(screen, role: str) -> int:
     console = Console(screen, steps_for_role(role), role)
     console.draw()  # docker を待たずにまず画面を出す
     console.ws = console.observe()
-    # preflight runs on open: a CAN or GNSS fault has to surface before a build.
-    console.run_step(STEP_PREFLIGHT)
+    if role == ROLE_PARTICIPANT:
+        # preflight runs on open: a CAN or GNSS fault has to surface before a
+        # build. Staff has no preflight row on screen, so it must not run here.
+        console.run_step(STEP_PREFLIGHT)
     while True:
         console.drain()
         console.refresh_if_stale()
@@ -525,7 +525,7 @@ def main(argv=None) -> int:
     parser = argparse.ArgumentParser(description="vehicle console")
     parser.add_argument(
         "--role", choices=ROLES, default=ROLE_PARTICIPANT,
-        help="participant: autoware と提出物だけ / staff: driver・zenoh・rosbag・download・down all も出す",
+        help="participant: autoware と提出物だけ / staff: download・driver/zenoh/rosbag の個別起動・停止・down all だけの独立画面",
     )
     args = parser.parse_args(argv)
     need = min_lines(len(steps_for_role(args.role)))

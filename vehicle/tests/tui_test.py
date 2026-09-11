@@ -14,17 +14,25 @@ from pathlib import Path
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
 
 from tui import (  # noqa: E402
+    Console,
     MIN_COLS,
     MIN_LINES,
     is_failure_line,
     probe_workspace,
-    service_badge,
+    service_status_lines,
     should_reobserve,
     terminal_too_small,
     workspace_is_pristine,
     wrap_line,
 )
-from tui_core import REQUIRED_SERVICES, STEPS, build_done  # noqa: E402
+from tui_core import (  # noqa: E402
+    PARTICIPANT_STEPS,
+    REQUIRED_SERVICES,
+    ROLE_PARTICIPANT,
+    STEPS,
+    Workspace,
+    build_done,
+)
 
 
 class TestProbeWorkspace(unittest.TestCase):
@@ -154,32 +162,39 @@ class TestTerminalSize(unittest.TestCase):
         self.assertTrue(terminal_too_small(MIN_COLS, MIN_LINES - 1))
 
     def test_minimum_leaves_a_row_for_failures_and_a_row_for_log(self):
-        # header 1 + STEPS + failures 見出し 1 + failures 1 + log 見出し 1 + log 1。
-        self.assertGreaterEqual(MIN_LINES, 1 + len(STEPS) + 4)
+        # header 1 + services 2 + STEPS + failures 見出し 1 + failures 1 + log 見出し 1 + log 1。
+        self.assertGreaterEqual(MIN_LINES, 3 + len(STEPS) + 4)
 
 
-class TestServiceBadge(unittest.TestCase):
+class TestServiceStatusLines(unittest.TestCase):
     def test_all_down(self):
-        self.assertEqual(service_badge(frozenset()), "----")
+        self.assertEqual(
+            service_status_lines(frozenset()),
+            ("running: -", "stopped: driver autoware zenoh rosbag"),
+        )
 
     def test_all_up(self):
         self.assertEqual(
-            service_badge(frozenset(REQUIRED_SERVICES)), "dazr"
+            service_status_lines(frozenset(REQUIRED_SERVICES)),
+            ("running: driver autoware zenoh rosbag", "stopped: -"),
         )
 
-    def test_partial(self):
+    def test_partial_keeps_required_services_order(self):
         self.assertEqual(
-            service_badge(frozenset({"driver", "autoware"})), "da--"
+            service_status_lines(frozenset({"zenoh", "driver"})),
+            ("running: driver zenoh", "stopped: autoware rosbag"),
         )
 
-    def test_position_follows_required_services(self):
-        # A reordering of REQUIRED_SERVICES must not silently scramble the
-        # badge: position is what carries the meaning.
-        for idx, name in enumerate(REQUIRED_SERVICES):
-            with self.subTest(service=name):
-                badge = service_badge(frozenset({name}))
-                self.assertEqual(badge[idx], name[0])
-                self.assertEqual(badge.count("-"), len(REQUIRED_SERVICES) - 1)
+    def test_names_are_not_abbreviated(self):
+        joined = " ".join(service_status_lines(frozenset({"driver"})))
+        for name in REQUIRED_SERVICES:
+            self.assertIn(name, joined)
+
+    def test_longest_form_fits_min_cols(self):
+        for line in service_status_lines(frozenset()) + service_status_lines(
+            frozenset(REQUIRED_SERVICES)
+        ):
+            self.assertLessEqual(len(line), MIN_COLS - 1)
 
 
 class TestIsFailureLine(unittest.TestCase):
@@ -219,6 +234,62 @@ class TestWrapLine(unittest.TestCase):
     def test_zero_width_yields_nothing(self):
         self.assertEqual(wrap_line("anything", 0), [])
 
+
+class FakeScreen:
+    """Just enough of a curses window for Console.draw() to run headless.
+
+    Records what was written at each row so tests can inspect the header
+    without a real terminal (curses.doupdate() needs one).
+    """
+
+    def __init__(self, lines=24, cols=80):
+        self._lines = lines
+        self._cols = cols
+        self.rows = {}
+
+    def getmaxyx(self):
+        return self._lines, self._cols
+
+    def erase(self):
+        self.rows = {}
+
+    def addnstr(self, y, x, text, n, attr=0):
+        self.rows[y] = text[:n]
+
+    def noutrefresh(self):
+        pass
+
+
+class TestServiceLinePlacement(unittest.TestCase):
+    """The service status appears exactly once: two lines under the header."""
+
+    def _console(self, services_running=frozenset()):
+        from unittest import mock
+
+        screen = FakeScreen()
+        console = Console(screen, steps=PARTICIPANT_STEPS, role=ROLE_PARTICIPANT)
+        console.ws = Workspace(services_running=services_running)
+        with mock.patch("tui.curses.doupdate"):
+            console.draw()
+        return console, screen
+
+    def test_rows_1_and_2_are_running_and_stopped(self):
+        _, screen = self._console(frozenset({"driver", "autoware"}))
+        self.assertEqual(screen.rows[1].rstrip(), "running: driver autoware")
+        self.assertEqual(screen.rows[2].rstrip(), "stopped: zenoh rosbag")
+
+    def test_header_has_no_service_names(self):
+        _, screen = self._console(frozenset(REQUIRED_SERVICES))
+        for name in REQUIRED_SERVICES:
+            self.assertNotIn(name, screen.rows[0])
+
+    def test_steps_start_on_fourth_row_without_service_names(self):
+        _, screen = self._console(frozenset(REQUIRED_SERVICES))
+        self.assertIn("check preflight", screen.rows[3])
+        for idx in range(3, len(PARTICIPANT_STEPS) + 3):
+            self.assertNotIn("running:", screen.rows[idx])
+            self.assertNotIn("stopped:", screen.rows[idx])
+            self.assertNotIn("rosbag", screen.rows[idx])
 
 class TestShouldReobserve(unittest.TestCase):
     def test_not_while_a_step_is_running(self):
