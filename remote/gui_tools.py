@@ -17,8 +17,32 @@ from tkinter.scrolledtext import ScrolledText
 ROOT_DIR = Path(__file__).resolve().parent
 REMOTE_DIR = ROOT_DIR
 
-DEFAULT_VEHICLE_ID = "A2"
+# リポジトリ直下の .env (車両 PC と同じ書式)。VEHICLE_ID があればそれを接続先の初期値にする。
+ENV_FILE = ROOT_DIR.parent / ".env"
+DEFAULT_VEHICLE_ID = "A2"  # .env に VEHICLE_ID が無い場合のフォールバック
 DEFAULT_USERNAME = ""  # Deprecated: SSH User input removed.
+
+
+def read_env_vehicle_id(env_file: Path) -> Optional[str]:
+    """Return VEHICLE_ID from a dotenv-style file, or None if absent/blank."""
+    try:
+        lines = env_file.read_text().splitlines()
+    except OSError:
+        return None
+    value: Optional[str] = None
+    for line in lines:
+        line = line.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        key, raw = line.split("=", 1)
+        if key.strip() != "VEHICLE_ID":
+            continue
+        value = raw.strip().strip("\"'").strip() or None
+    return value
+
+
+def default_vehicle_id(env_file: Path = ENV_FILE) -> str:
+    return read_env_vehicle_id(env_file) or DEFAULT_VEHICLE_ID
 
 
 # --- Devias Material Kit Pro: Chateau Green palette (approx) ---
@@ -359,7 +383,7 @@ class RemoteGui:
             )
             raise SystemExit(1)
 
-        self.vehicle_id_var = tk.StringVar(value=DEFAULT_VEHICLE_ID)
+        self.vehicle_id_var = tk.StringVar(value=default_vehicle_id())
         # SSH user was removed from UI; keep empty string for compatibility.
 
         self.processes: Dict[str, subprocess.Popen[str]] = {}
