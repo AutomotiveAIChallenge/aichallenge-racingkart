@@ -27,8 +27,12 @@ STEP_AUTOWARE_DOWN = "autoware_down"
 STEP_TEARDOWN = "teardown"
 STEP_CLEAN = "clean"
 # 運営だけに出すステップ
-STEP_INFRA = "infra"          # driver / zenoh / rosbag（参加者が触らない土台）
-STEP_STAFF_UP = "staff_up"    # autoware-driver-zenoh（運営の実験用）
+STEP_DRIVER = "driver"        # 土台: racing_kart_interface
+STEP_ZENOH = "zenoh"          # 土台: Zenoh bridge
+STEP_ROSBAG = "rosbag"        # 土台: all-topic rosbag
+STEP_DRIVER_DOWN = "driver_down"
+STEP_ZENOH_DOWN = "zenoh_down"
+STEP_ROSBAG_DOWN = "rosbag_down"
 STEP_DOWNLOAD = "download"    # 提出物を board から取る
 
 # --- 役割 ------------------------------------------------------------------
@@ -38,10 +42,8 @@ ROLE_PARTICIPANT = "participant"
 ROLE_STAFF = "staff"
 ROLES = (ROLE_PARTICIPANT, ROLE_STAFF)
 
-# 実車スタックの compose サービス。バッジはこの順で 1 文字ずつ並べる。
+# 実車スタックの compose サービス。ヘッダのバッジはこの順で 1 文字ずつ並べる。
 REQUIRED_SERVICES = ("driver", "autoware", "zenoh", "rosbag")
-# 運営が driver-zenoh-rosbag で上げる土台。
-INFRA_SERVICES = ("driver", "zenoh", "rosbag")
 
 
 @dataclass(frozen=True)
@@ -81,13 +83,12 @@ def _autoware_up(ws: Workspace) -> bool:
     return "autoware" in ws.services_running
 
 
-def _infra_up(ws: Workspace) -> bool:
-    return all(name in ws.services_running for name in INFRA_SERVICES)
+def _service_up(name: str) -> Callable[[Workspace], bool]:
+    return lambda ws: name in ws.services_running
 
 
-def _staff_stack_up(ws: Workspace) -> bool:
-    # autoware-driver-zenoh は rosbag を含まない。
-    return all(name in ws.services_running for name in ("driver", "autoware", "zenoh"))
+def _service_down(name: str) -> Callable[[Workspace], bool]:
+    return lambda ws: name not in ws.services_running
 
 
 def _stack_down(ws: Workspace) -> bool:
@@ -127,12 +128,9 @@ class Step:
     # 環境から完了を実測する述語。None なら実測できないステップで、合否は
     # 終了コードにしか現れないので session の記録から状態を出す。
     measure: Optional[Callable[[Workspace], bool]] = None
-    # 行の右に driver/autoware/zenoh/rosbag のバッジを出すか。compose サービスを
-    # 起動・停止するステップだけ True。
-    shows_service_badge: bool = False
 
 
-# 参加者の並び。運営はこの後ろに STAFF_ONLY_STEPS が続く。
+# 参加者の並び。運営は STAFF_STEPS を別画面として持つ（参加者の続きではない）。
 PARTICIPANT_STEPS = (
     Step(
         step_id=STEP_PREFLIGHT,
@@ -165,7 +163,6 @@ PARTICIPANT_STEPS = (
         command=("make", "autoware-vehicle"),
         requires=(STEP_BUILD,),
         measure=_autoware_up,
-        shows_service_badge=True,
     ),
     Step(
         step_id=STEP_RUNTIME,
@@ -179,7 +176,6 @@ PARTICIPANT_STEPS = (
         title="autoware down",
         command=("make", "autoware-down"),
         measure=_autoware_down,
-        shows_service_badge=True,
     ),
     Step(
         step_id=STEP_CLEAN,
@@ -189,43 +185,63 @@ PARTICIPANT_STEPS = (
     ),
 )
 
-STAFF_ONLY_STEPS = (
-    Step(
-        step_id=STEP_INFRA,
-        title="driver zenoh rosbag",
-        command=("make", "driver-zenoh-rosbag"),
-        requires=(STEP_PREFLIGHT,),
-        measure=_infra_up,
-        shows_service_badge=True,
-    ),
-    Step(
-        step_id=STEP_STAFF_UP,
-        title="autoware driver zenoh",
-        command=("make", "autoware-driver-zenoh"),
-        requires=(STEP_BUILD,),
-        measure=_staff_stack_up,
-        shows_service_badge=True,
-    ),
+# 運営の並び。参加者の画面には出さない: download、土台サービスの個別の上げ下げ、
+# スタック全体の停止は運営の仕事で、参加者の並びとは独立した 8 ステップだけの画面。
+STAFF_STEPS = (
     Step(
         step_id=STEP_DOWNLOAD,
         title="download",
         command=("make", "download"),
-        requires=(STEP_PREFLIGHT,),
         # download_submission.sh prompts for username/password and
         # download_submission.py prompts for the submission to take.
         interactive=True,
+    ),
+    Step(
+        step_id=STEP_DRIVER,
+        title="driver",
+        command=("make", "driver"),
+        measure=_service_up("driver"),
+    ),
+    Step(
+        step_id=STEP_ZENOH,
+        title="zenoh",
+        command=("make", "zenoh"),
+        measure=_service_up("zenoh"),
+    ),
+    Step(
+        step_id=STEP_DRIVER_DOWN,
+        title="driver down",
+        command=("docker", "compose", "down", "driver"),
+        measure=_service_down("driver"),
+    ),
+    Step(
+        step_id=STEP_ZENOH_DOWN,
+        title="zenoh down",
+        command=("docker", "compose", "down", "zenoh"),
+        measure=_service_down("zenoh"),
+    ),
+    Step(
+        step_id=STEP_ROSBAG,
+        title="rosbag",
+        command=("make", "rosbag"),
+        measure=_service_up("rosbag"),
+    ),
+    Step(
+        step_id=STEP_ROSBAG_DOWN,
+        title="rosbag down",
+        command=("docker", "compose", "down", "rosbag"),
+        measure=_service_down("rosbag"),
     ),
     Step(
         step_id=STEP_TEARDOWN,
         title="down all",
         command=("make", "down"),
         measure=_stack_down,
-        shows_service_badge=True,
     ),
 )
 
-# 全ステップ。step_by_id と最低端末サイズはこちらを見る。
-STEPS = PARTICIPANT_STEPS + STAFF_ONLY_STEPS
+# 全ステップ。step_by_id はこちらを見る（参加者用と運営用の和集合）。
+STEPS = PARTICIPANT_STEPS + STAFF_STEPS
 
 _STEPS_BY_ID = {s.step_id: s for s in STEPS}
 
@@ -235,7 +251,7 @@ def steps_for_role(role: str) -> Tuple[Step, ...]:
     if role == ROLE_PARTICIPANT:
         return PARTICIPANT_STEPS
     if role == ROLE_STAFF:
-        return STEPS
+        return STAFF_STEPS
     raise ValueError(f"unknown role: {role!r} (expected one of {ROLES})")
 
 def step_by_id(step_id: str) -> Step:

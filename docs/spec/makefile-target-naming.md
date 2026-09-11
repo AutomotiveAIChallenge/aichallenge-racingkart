@@ -24,6 +24,7 @@
 - `autoware-command`（単発コマンド実行用）
 - `driver`
 - `zenoh`
+- `rosbag`
 - `rviz2`
 
 ターゲット名の例（compose サービス名に対応）:
@@ -58,6 +59,7 @@ service は「操作対象のまとまり」を表します（docker compose の
 - `rviz2` : 可視化（RViz2）
 - `driver` : racing_kart_interface
 - `zenoh` : Zenoh bridge
+- `rosbag` : all-topic rosbag 記録
 - `workspace` : ホスト側の colcon ワークスペース `aichallenge/workspace/`（`workspace-clean`）。
   既存の `make workspace`（遠隔操作用 terminator レイアウト）だけは同名で意味が違う既知の例外で、
   `remote-workspace` へ寄せるのが本来だが互換のため据え置いている

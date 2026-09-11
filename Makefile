@@ -3,7 +3,7 @@ SHELL := /bin/bash
 
 .PHONY: autoware-build autoware-vehicle autoware-simulator autoware-request-initialpose autoware-request-control  awsim-request-start awsim-request-reset autoware-driver-zenoh autoware-driver-zenoh-rosbag setup-vehicle \
 	autoware-down autoware-restart workspace-clean \
-	simulator dev dev2 dev3 dev4 driver zenoh download submission-extract driver-zenoh-rosbag rviz2 down down_all ps autoware-attach autoware-bash eval e2e vehicle-tui vehicle-tui-staff workspace
+	simulator dev dev2 dev3 dev4 driver zenoh rosbag download submission-extract driver-zenoh-rosbag rviz2 down down_all ps autoware-attach autoware-bash eval e2e vehicle-tui vehicle-tui-staff workspace
 
 # Used by docker-compose.yml for build/eval artifact ownership.
 HOST_UID ?= $(shell id -u)
@@ -86,6 +86,10 @@ driver:
 # zenoh (docker compose up -d zenoh)
 zenoh:
 	docker compose up -d zenoh
+
+# all-topic rosbag (docker compose up -d rosbag)
+rosbag:
+	LOG_DIR=$(LOG_DIR) docker compose up -d rosbag
 
 dev: SIM_MODE := dev
 dev: simulator autoware-simulator

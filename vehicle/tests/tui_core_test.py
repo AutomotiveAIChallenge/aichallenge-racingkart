@@ -21,15 +21,19 @@ from tui_core import (  # noqa: E402
     PARTICIPANT_STEPS,
     ROLE_PARTICIPANT,
     ROLE_STAFF,
+    STAFF_STEPS,
     STEP_DOWNLOAD,
-    STEP_INFRA,
+    STEP_DRIVER,
+    STEP_DRIVER_DOWN,
+    STEP_ZENOH,
+    STEP_ZENOH_DOWN,
+    STEP_ROSBAG,
+    STEP_ROSBAG_DOWN,
     STEP_PREFLIGHT,
     STEP_RUNTIME,
-    STEP_STAFF_UP,
     STEP_SUBMISSION,
     STEP_TEARDOWN,
     STEP_UP,
-    STEPS,
     Workspace,
     build_done,
     is_runnable,
@@ -67,18 +71,45 @@ class TestSteps(unittest.TestCase):
             ],
         )
 
-    def test_staff_sees_participant_steps_then_staff_only_ones(self):
+    def test_staff_sees_exactly_download_per_service_up_down_teardown(self):
         staff = [s.step_id for s in steps_for_role(ROLE_STAFF)]
-        self.assertEqual(staff[: len(PARTICIPANT_STEPS)], [s.step_id for s in PARTICIPANT_STEPS])
         self.assertEqual(
-            staff[len(PARTICIPANT_STEPS):],
-            [STEP_INFRA, STEP_STAFF_UP, STEP_DOWNLOAD, STEP_TEARDOWN],
+            staff,
+            [
+                STEP_DOWNLOAD,
+                STEP_DRIVER,
+                STEP_ZENOH,
+                STEP_DRIVER_DOWN,
+                STEP_ZENOH_DOWN,
+                # rosbag は記録の開始・終了なので down all の直前にまとめる
+                STEP_ROSBAG,
+                STEP_ROSBAG_DOWN,
+                STEP_TEARDOWN,
+            ],
         )
 
+    def test_staff_has_no_participant_steps_and_no_preflight(self):
+        staff = {s.step_id for s in steps_for_role(ROLE_STAFF)}
+        participant_ids = {s.step_id for s in PARTICIPANT_STEPS}
+        self.assertFalse(staff & participant_ids)
+        self.assertNotIn(STEP_PREFLIGHT, staff)
+
     def test_participant_never_touches_the_infra_or_the_whole_stack(self):
-        # driver / zenoh / rosbag の起動、download、make down は運営の仕事。
+        # driver / zenoh / rosbag の起動・停止、download、make down は運営の仕事。
         participant = {s.step_id for s in steps_for_role(ROLE_PARTICIPANT)}
-        self.assertFalse(participant & {STEP_INFRA, STEP_STAFF_UP, STEP_DOWNLOAD, STEP_TEARDOWN})
+        self.assertFalse(
+            participant
+            & {
+                STEP_DRIVER,
+                STEP_ZENOH,
+                STEP_ROSBAG,
+                STEP_DRIVER_DOWN,
+                STEP_ZENOH_DOWN,
+                STEP_ROSBAG_DOWN,
+                STEP_DOWNLOAD,
+                STEP_TEARDOWN,
+            }
+        )
 
     def test_unknown_role_is_rejected(self):
         with self.assertRaises(ValueError):
@@ -86,24 +117,28 @@ class TestSteps(unittest.TestCase):
 
     def test_autoware_steps_touch_only_the_autoware_container(self):
         # 参加者の autoware / autoware down は driver / zenoh / rosbag を動かしたまま
-        # autoware だけを上げ下げする。土台を触るのは運営の driver zenoh rosbag。
+        # autoware だけを上げ下げする。土台を触るのは運営の driver / zenoh / rosbag。
         self.assertEqual(step_by_id(STEP_UP).command, ("make", "autoware-vehicle"))
         self.assertEqual(
             step_by_id(STEP_AUTOWARE_DOWN).command, ("make", "autoware-down")
         )
-        self.assertEqual(step_by_id(STEP_INFRA).command, ("make", "driver-zenoh-rosbag"))
+        self.assertEqual(step_by_id(STEP_DRIVER).command, ("make", "driver"))
+        self.assertEqual(step_by_id(STEP_ZENOH).command, ("make", "zenoh"))
+        self.assertEqual(step_by_id(STEP_ROSBAG).command, ("make", "rosbag"))
+        self.assertEqual(
+            step_by_id(STEP_DRIVER_DOWN).command, ("docker", "compose", "down", "driver")
+        )
+        self.assertEqual(
+            step_by_id(STEP_ZENOH_DOWN).command, ("docker", "compose", "down", "zenoh")
+        )
+        self.assertEqual(
+            step_by_id(STEP_ROSBAG_DOWN).command, ("docker", "compose", "down", "rosbag")
+        )
 
     def test_cleanup_step_clears_the_workspace(self):
         # cleanup は「ディレクトリを消す」担当。スタックの停止は down が持つ。
         self.assertEqual(step_by_id(STEP_CLEAN).command, ("make", "workspace-clean"))
         self.assertEqual(step_by_id(STEP_TEARDOWN).command, ("make", "down"))
-
-    def test_service_badge_only_on_steps_that_touch_compose_services(self):
-        badged = {s.step_id for s in STEPS if s.shows_service_badge}
-        self.assertEqual(
-            badged,
-            {STEP_UP, STEP_AUTOWARE_DOWN, STEP_TEARDOWN, STEP_INFRA, STEP_STAFF_UP},
-        )
 
     def test_extract_step_is_interactive(self):
         # extract_submission.py asks for the team id and a hidden password; the
@@ -192,15 +227,24 @@ class TestStepStatus(unittest.TestCase):
         ws = built_ws(services_running=frozenset({"driver", "zenoh", "rosbag"}))
         self.assertEqual(step_status(STEP_UP, ws, {}), PENDING)
 
-    def test_infra_done_when_driver_zenoh_rosbag_run(self):
-        ws = built_ws(services_running=frozenset({"driver", "zenoh", "rosbag"}))
-        self.assertEqual(step_status(STEP_INFRA, ws, {}), DONE)
-        ws = built_ws(services_running=frozenset({"driver", "zenoh"}))
-        self.assertEqual(step_status(STEP_INFRA, ws, {}), PENDING)
+    def test_per_service_up_done_only_when_that_service_runs(self):
+        # 各サービスの up は自分だけを見る。他が動いていても関係ない。
+        ws = built_ws(services_running=frozenset({"driver"}))
+        self.assertEqual(step_status(STEP_DRIVER, ws, {}), DONE)
+        self.assertEqual(step_status(STEP_ZENOH, ws, {}), PENDING)
+        self.assertEqual(step_status(STEP_ROSBAG, ws, {}), PENDING)
 
-    def test_staff_up_does_not_need_rosbag(self):
-        ws = built_ws(services_running=frozenset({"driver", "autoware", "zenoh"}))
-        self.assertEqual(step_status(STEP_STAFF_UP, ws, {}), DONE)
+    def test_per_service_down_pending_while_that_service_runs(self):
+        ws = built_ws(services_running=frozenset({"driver"}))
+        self.assertEqual(step_status(STEP_DRIVER_DOWN, ws, {}), PENDING)
+        self.assertEqual(step_status(STEP_ZENOH_DOWN, ws, {}), DONE)
+        self.assertEqual(step_status(STEP_ROSBAG_DOWN, ws, {}), DONE)
+
+    def test_per_service_down_done_when_nothing_runs(self):
+        ws = built_ws()
+        self.assertEqual(step_status(STEP_DRIVER_DOWN, ws, {}), DONE)
+        self.assertEqual(step_status(STEP_ZENOH_DOWN, ws, {}), DONE)
+        self.assertEqual(step_status(STEP_ROSBAG_DOWN, ws, {}), DONE)
 
     def test_teardown_done_when_nothing_runs(self):
         self.assertEqual(step_status(STEP_TEARDOWN, built_ws(), {}), DONE)
