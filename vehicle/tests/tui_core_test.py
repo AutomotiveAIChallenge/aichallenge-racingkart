@@ -18,9 +18,14 @@ from tui_core import (  # noqa: E402
     STEP_AUTOWARE_DOWN,
     STEP_BUILD,
     STEP_CLEAN,
+    PARTICIPANT_STEPS,
+    ROLE_PARTICIPANT,
+    ROLE_STAFF,
+    STEP_DOWNLOAD,
+    STEP_INFRA,
     STEP_PREFLIGHT,
-    STEP_RESTART,
     STEP_RUNTIME,
+    STEP_STAFF_UP,
     STEP_SUBMISSION,
     STEP_TEARDOWN,
     STEP_UP,
@@ -30,6 +35,7 @@ from tui_core import (  # noqa: E402
     is_runnable,
     step_by_id,
     step_status,
+    steps_for_role,
     has_unmet_requirement,
 )
 
@@ -47,31 +53,45 @@ def built_ws(**kwargs):
 
 
 class TestSteps(unittest.TestCase):
-    def test_steps_in_execution_order(self):
+    def test_participant_steps_in_execution_order(self):
         self.assertEqual(
-            [s.step_id for s in STEPS],
+            [s.step_id for s in PARTICIPANT_STEPS],
             [
                 STEP_PREFLIGHT,
                 STEP_SUBMISSION,
                 STEP_BUILD,
                 STEP_UP,
                 STEP_RUNTIME,
-                STEP_RESTART,
                 STEP_AUTOWARE_DOWN,
-                STEP_TEARDOWN,
                 STEP_CLEAN,
             ],
         )
 
-    def test_autoware_steps_touch_only_the_autoware_container(self):
-        # driver / zenoh / rosbag は動かしたまま Autoware だけ入れ替えるための
-        # ステップ。make down を呼ぶようになったらスタックごと落ちてしまう。
+    def test_staff_sees_participant_steps_then_staff_only_ones(self):
+        staff = [s.step_id for s in steps_for_role(ROLE_STAFF)]
+        self.assertEqual(staff[: len(PARTICIPANT_STEPS)], [s.step_id for s in PARTICIPANT_STEPS])
         self.assertEqual(
-            step_by_id(STEP_RESTART).command, ("make", "autoware-restart")
+            staff[len(PARTICIPANT_STEPS):],
+            [STEP_INFRA, STEP_STAFF_UP, STEP_DOWNLOAD, STEP_TEARDOWN],
         )
+
+    def test_participant_never_touches_the_infra_or_the_whole_stack(self):
+        # driver / zenoh / rosbag の起動、download、make down は運営の仕事。
+        participant = {s.step_id for s in steps_for_role(ROLE_PARTICIPANT)}
+        self.assertFalse(participant & {STEP_INFRA, STEP_STAFF_UP, STEP_DOWNLOAD, STEP_TEARDOWN})
+
+    def test_unknown_role_is_rejected(self):
+        with self.assertRaises(ValueError):
+            steps_for_role("admin")
+
+    def test_autoware_steps_touch_only_the_autoware_container(self):
+        # 参加者の autoware / autoware down は driver / zenoh / rosbag を動かしたまま
+        # autoware だけを上げ下げする。土台を触るのは運営の driver zenoh rosbag。
+        self.assertEqual(step_by_id(STEP_UP).command, ("make", "autoware-vehicle"))
         self.assertEqual(
             step_by_id(STEP_AUTOWARE_DOWN).command, ("make", "autoware-down")
         )
+        self.assertEqual(step_by_id(STEP_INFRA).command, ("make", "driver-zenoh-rosbag"))
 
     def test_cleanup_step_clears_the_workspace(self):
         # cleanup は「ディレクトリを消す」担当。スタックの停止は down が持つ。
@@ -81,24 +101,26 @@ class TestSteps(unittest.TestCase):
     def test_service_badge_only_on_steps_that_touch_compose_services(self):
         badged = {s.step_id for s in STEPS if s.shows_service_badge}
         self.assertEqual(
-            badged, {STEP_UP, STEP_RESTART, STEP_AUTOWARE_DOWN, STEP_TEARDOWN}
+            badged,
+            {STEP_UP, STEP_AUTOWARE_DOWN, STEP_TEARDOWN, STEP_INFRA, STEP_STAFF_UP},
         )
 
-    def test_download_step_is_interactive(self):
-        # download_submission.sh reads a hidden password; the console has to
-        # release the terminal for it.
+    def test_extract_step_is_interactive(self):
+        # extract_submission.py asks for the team id and a hidden password; the
+        # console has to release the terminal for it.
         self.assertTrue(step_by_id(STEP_SUBMISSION).interactive)
+
+    def test_extract_step_swaps_the_submission_from_a_zip(self):
+        self.assertEqual(
+            step_by_id(STEP_SUBMISSION).command, ("make", "submission-extract")
+        )
 
     def test_preflight_step_is_not_interactive(self):
         self.assertFalse(step_by_id(STEP_PREFLIGHT).interactive)
 
-    def test_up_step_only_brings_the_stack_up(self):
-        # The target carries no checks: the console runs preflight and doctor
-        # as their own steps, and `make setup-vehicle` covers the CLI case.
-        self.assertEqual(
-            step_by_id(STEP_UP).command,
-            ("make", "autoware-driver-zenoh-rosbag"),
-        )
+    def test_download_step_is_interactive_and_staff_only(self):
+        self.assertTrue(step_by_id(STEP_DOWNLOAD).interactive)
+        self.assertEqual(step_by_id(STEP_DOWNLOAD).command, ("make", "download"))
 
     def test_step_by_id_rejects_unknown(self):
         with self.assertRaises(KeyError):
@@ -161,12 +183,24 @@ class TestStepStatus(unittest.TestCase):
             step_status(STEP_BUILD, built_ws(install_mtime=50.0), {}), PENDING
         )
 
-    def test_up_done_when_all_required_services_run(self):
-        self.assertEqual(step_status(STEP_UP, built_ws(services_running=ALL_UP), {}), DONE)
+    def test_up_done_when_autoware_runs_even_without_the_infra(self):
+        # autoware-vehicle が上げるのは autoware だけ。土台の有無はバッジで見せる。
+        ws = built_ws(services_running=frozenset({"autoware"}))
+        self.assertEqual(step_status(STEP_UP, ws, {}), DONE)
 
-    def test_up_pending_when_a_service_is_missing(self):
-        ws = built_ws(services_running=frozenset({"driver", "autoware", "zenoh"}))
+    def test_up_pending_when_autoware_is_missing(self):
+        ws = built_ws(services_running=frozenset({"driver", "zenoh", "rosbag"}))
         self.assertEqual(step_status(STEP_UP, ws, {}), PENDING)
+
+    def test_infra_done_when_driver_zenoh_rosbag_run(self):
+        ws = built_ws(services_running=frozenset({"driver", "zenoh", "rosbag"}))
+        self.assertEqual(step_status(STEP_INFRA, ws, {}), DONE)
+        ws = built_ws(services_running=frozenset({"driver", "zenoh"}))
+        self.assertEqual(step_status(STEP_INFRA, ws, {}), PENDING)
+
+    def test_staff_up_does_not_need_rosbag(self):
+        ws = built_ws(services_running=frozenset({"driver", "autoware", "zenoh"}))
+        self.assertEqual(step_status(STEP_STAFF_UP, ws, {}), DONE)
 
     def test_teardown_done_when_nothing_runs(self):
         self.assertEqual(step_status(STEP_TEARDOWN, built_ws(), {}), DONE)
@@ -189,12 +223,6 @@ class TestStepStatus(unittest.TestCase):
     def test_autoware_down_pending_while_autoware_runs(self):
         ws = built_ws(services_running=frozenset({"autoware"}))
         self.assertEqual(step_status(STEP_AUTOWARE_DOWN, ws, {}), PENDING)
-
-    def test_restart_comes_from_the_session_not_the_services(self):
-        # autoware が running でも「入れ替えた」ことの証拠にはならない。
-        ws = built_ws(services_running=ALL_UP)
-        self.assertEqual(step_status(STEP_RESTART, ws, {}), PENDING)
-        self.assertEqual(step_status(STEP_RESTART, ws, {STEP_RESTART: DONE}), DONE)
 
     def test_clean_done_when_workspace_is_pristine(self):
         self.assertEqual(

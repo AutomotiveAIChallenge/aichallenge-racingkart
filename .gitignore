@@ -10,6 +10,8 @@ rosbag2*/
 *.zstd
 .env
 vehicle/.env
+# 運営が事前に置く提出物 zip（make submission-extract が読む）
+vehicle/submissions/
 metadata.yaml
 output/
 outputs/

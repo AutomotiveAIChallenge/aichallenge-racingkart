@@ -23,14 +23,25 @@ STEP_SUBMISSION = "submission"
 STEP_BUILD = "build"
 STEP_UP = "up"
 STEP_RUNTIME = "runtime"
-STEP_RESTART = "restart"
 STEP_AUTOWARE_DOWN = "autoware_down"
 STEP_TEARDOWN = "teardown"
 STEP_CLEAN = "clean"
+# 運営だけに出すステップ
+STEP_INFRA = "infra"          # driver / zenoh / rosbag（参加者が触らない土台）
+STEP_STAFF_UP = "staff_up"    # autoware-driver-zenoh（運営の実験用）
+STEP_DOWNLOAD = "download"    # 提出物を board から取る
 
-# autoware-driver-zenoh-rosbag が起動する compose サービス。この全部が running
-# ならスタックが上がっているとみなす。
+# --- 役割 ------------------------------------------------------------------
+# 参加者は autoware と提出物だけを触る。driver / zenoh / rosbag の起動・停止、
+# 提出物のダウンロード、スタック全体の停止は運営のステップ。
+ROLE_PARTICIPANT = "participant"
+ROLE_STAFF = "staff"
+ROLES = (ROLE_PARTICIPANT, ROLE_STAFF)
+
+# 実車スタックの compose サービス。バッジはこの順で 1 文字ずつ並べる。
 REQUIRED_SERVICES = ("driver", "autoware", "zenoh", "rosbag")
+# 運営が driver-zenoh-rosbag で上げる土台。
+INFRA_SERVICES = ("driver", "zenoh", "rosbag")
 
 
 @dataclass(frozen=True)
@@ -64,8 +75,19 @@ def build_done(ws: Workspace) -> bool:
     return ws.install_mtime >= ws.submit_mtime
 
 
-def _stack_up(ws: Workspace) -> bool:
-    return all(name in ws.services_running for name in REQUIRED_SERVICES)
+def _autoware_up(ws: Workspace) -> bool:
+    # autoware-vehicle が上げるのは autoware だけ。driver / zenoh / rosbag の状態は
+    # バッジで見せ、完了判定には入れない（運営側の作業に参加者の印が左右されない）。
+    return "autoware" in ws.services_running
+
+
+def _infra_up(ws: Workspace) -> bool:
+    return all(name in ws.services_running for name in INFRA_SERVICES)
+
+
+def _staff_stack_up(ws: Workspace) -> bool:
+    # autoware-driver-zenoh は rosbag を含まない。
+    return all(name in ws.services_running for name in ("driver", "autoware", "zenoh"))
 
 
 def _stack_down(ws: Workspace) -> bool:
@@ -110,7 +132,8 @@ class Step:
     shows_service_badge: bool = False
 
 
-STEPS = (
+# 参加者の並び。運営はこの後ろに STAFF_ONLY_STEPS が続く。
+PARTICIPANT_STEPS = (
     Step(
         step_id=STEP_PREFLIGHT,
         title="check preflight",
@@ -119,15 +142,14 @@ STEPS = (
     ),
     Step(
         step_id=STEP_SUBMISSION,
-        title="download",
-        command=("make", "download"),
+        title="extract",
+        command=("make", "submission-extract"),
         requires=(STEP_PREFLIGHT,),
-        # download_submission.sh prompts for username/password and
-        # download_submission.py prompts for the submission to take.
+        # extract_submission.py prompts for the team id and the zip password.
         interactive=True,
         # measure を持たせない: aichallenge_submit/ はこのリポジトリの checkout
-        # そのものに 15 個の tracked な参加者パッケージが入っており、ダウンロード前
-        # から常に非空である。ディレクトリの有無は「取得済み」の証拠にならない。
+        # そのものに 15 個の tracked な参加者パッケージが入っており、展開前
+        # から常に非空である。ディレクトリの有無は「入れ替え済み」の証拠にならない。
         # うっかり実測へ戻さないこと。
     ),
     Step(
@@ -140,9 +162,9 @@ STEPS = (
     Step(
         step_id=STEP_UP,
         title="autoware",
-        command=("make", "autoware-driver-zenoh-rosbag"),
+        command=("make", "autoware-vehicle"),
         requires=(STEP_BUILD,),
-        measure=_stack_up,
+        measure=_autoware_up,
         shows_service_badge=True,
     ),
     Step(
@@ -153,26 +175,10 @@ STEPS = (
         requires=(STEP_UP,),
     ),
     Step(
-        step_id=STEP_RESTART,
-        title="autoware restart",
-        command=("make", "autoware-restart"),
-        requires=(STEP_UP,),
-        # measure を持たせない: 「入れ替え済み」は autoware が running かどうかでは
-        # 区別できず（起動しっぱなしでも running）、成否は終了コードにしか現れない。
-        shows_service_badge=True,
-    ),
-    Step(
         step_id=STEP_AUTOWARE_DOWN,
         title="autoware down",
         command=("make", "autoware-down"),
         measure=_autoware_down,
-        shows_service_badge=True,
-    ),
-    Step(
-        step_id=STEP_TEARDOWN,
-        title="down all",
-        command=("make", "down"),
-        measure=_stack_down,
         shows_service_badge=True,
     ),
     Step(
@@ -183,7 +189,54 @@ STEPS = (
     ),
 )
 
+STAFF_ONLY_STEPS = (
+    Step(
+        step_id=STEP_INFRA,
+        title="driver zenoh rosbag",
+        command=("make", "driver-zenoh-rosbag"),
+        requires=(STEP_PREFLIGHT,),
+        measure=_infra_up,
+        shows_service_badge=True,
+    ),
+    Step(
+        step_id=STEP_STAFF_UP,
+        title="autoware driver zenoh",
+        command=("make", "autoware-driver-zenoh"),
+        requires=(STEP_BUILD,),
+        measure=_staff_stack_up,
+        shows_service_badge=True,
+    ),
+    Step(
+        step_id=STEP_DOWNLOAD,
+        title="download",
+        command=("make", "download"),
+        requires=(STEP_PREFLIGHT,),
+        # download_submission.sh prompts for username/password and
+        # download_submission.py prompts for the submission to take.
+        interactive=True,
+    ),
+    Step(
+        step_id=STEP_TEARDOWN,
+        title="down all",
+        command=("make", "down"),
+        measure=_stack_down,
+        shows_service_badge=True,
+    ),
+)
+
+# 全ステップ。step_by_id と最低端末サイズはこちらを見る。
+STEPS = PARTICIPANT_STEPS + STAFF_ONLY_STEPS
+
 _STEPS_BY_ID = {s.step_id: s for s in STEPS}
+
+
+def steps_for_role(role: str) -> Tuple[Step, ...]:
+    """The rows the console shows for a role; ValueError on an unknown role."""
+    if role == ROLE_PARTICIPANT:
+        return PARTICIPANT_STEPS
+    if role == ROLE_STAFF:
+        return STEPS
+    raise ValueError(f"unknown role: {role!r} (expected one of {ROLES})")
 
 def step_by_id(step_id: str) -> Step:
     """Look up a step, raising KeyError on an unknown id."""

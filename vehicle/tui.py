@@ -12,6 +12,7 @@ Usage:
 """
 from __future__ import annotations
 
+import argparse
 import curses
 import queue
 import shutil
@@ -27,16 +28,15 @@ from tui_core import (
     PENDING,
     REQUIRED_SERVICES,
     RUNNING,
+    ROLE_PARTICIPANT,
+    ROLES,
     STEP_PREFLIGHT,
-    STEP_AUTOWARE_DOWN,
-    STEP_RESTART,
-    STEP_TEARDOWN,
-    STEP_UP,
     STEPS,
     Workspace,
     is_runnable,
     step_by_id,
     step_status,
+    steps_for_role,
     has_unmet_requirement,
 )
 
@@ -49,10 +49,17 @@ WORKSPACE_ARTIFACTS = ("build", "install", "log")
 
 # 最低行数 = header 1 + ステップ数 + failures 見出し 1 + failures 1 + log 見出し 1
 # + log 1、に 1 行の余裕。これ未満だと failures か log が 0 行になり、失敗を流さずに
-# 残すという狙いが成立しない。40 桁は最長セル "6 -  autoware restart dazr" の
-# 25 文字に対する余裕。
+# 残すという狙いが成立しない。40 桁は最長セル "9 -  autoware driver zenoh dazr" の
+# 30 文字に対する余裕。
 MIN_COLS = 40
-MIN_LINES = 1 + len(STEPS) + 4 + 1
+
+
+def min_lines(n_steps: int) -> int:
+    return 1 + n_steps + 4 + 1
+
+
+# 全ステップ（運営）ぶん。参加者は steps_for_role の本数で main が計算する。
+MIN_LINES = min_lines(len(STEPS))
 LOG_TAIL = 2000  # 保持するログ行数の上限。走行枠中に膨らみ続けないため。
 FAILURE_TAIL = 40  # failures 領域に retain する上限行数。
 FALLBACK_LINES = 5  # マーカーの無いステップが失敗したとき末尾から拾う行数。
@@ -64,9 +71,9 @@ OBSERVE_INTERVAL_SEC = 2.0
 _MARK = {DONE: "OK", FAILED: "NG", RUNNING: ">>", PENDING: "- "}
 _MARK_UNMET = "? "
 
-def terminal_too_small(cols: int, lines: int) -> bool:
+def terminal_too_small(cols: int, lines: int, need_lines: int = MIN_LINES) -> bool:
     """Whether the terminal is below the minimum the layout needs."""
-    return cols < MIN_COLS or lines < MIN_LINES
+    return cols < MIN_COLS or lines < need_lines
 
 
 def service_badge(services_running) -> str:
@@ -247,8 +254,10 @@ class Console:
     (which exist solely as an exit code) are remembered here.
     """
 
-    def __init__(self, screen) -> None:
+    def __init__(self, screen, steps=STEPS, role: str = ROLE_PARTICIPANT) -> None:
         self.screen = screen
+        self.steps = steps
+        self.role = role
         self.session: dict = {}
         self.log: list = []
         # 失敗行は log とは別に retain する。log は tail しか見えないので、
@@ -390,7 +399,7 @@ class Console:
         width = max(1, cols - 1)
 
         hints = "↑↓ enter q"
-        title = "vehicle console"
+        title = f"vehicle console [{self.role}]"
         pad = max(1, width - len(title) - len(hints))
         self.screen.addnstr(0, 0, f"{title}{' ' * pad}{hints}", width, curses.A_BOLD)
 
@@ -418,7 +427,7 @@ class Console:
     def _draw_steps(self, top: int, lines: int, width: int) -> int:
         """ステップを縦 1 列に並べ、次に使える行番号を返す。"""
         used = 0
-        for idx, step in enumerate(STEPS):
+        for idx, step in enumerate(self.steps):
             y = top + idx
             if y >= lines:
                 break
@@ -482,19 +491,19 @@ class Console:
         if key == curses.KEY_UP:
             self.cursor = max(0, self.cursor - 1)
         elif key == curses.KEY_DOWN:
-            self.cursor = min(len(STEPS) - 1, self.cursor + 1)
+            self.cursor = min(len(self.steps) - 1, self.cursor + 1)
         elif key in (curses.KEY_ENTER, ord("\n"), ord("\r")):
             if not self.busy:
-                step = STEPS[self.cursor]
+                step = self.steps[self.cursor]
                 if is_runnable(step.step_id, self.ws, self.session):
                     self.run_step(step.step_id)
         return True
 
 
-def _loop(screen) -> int:
+def _loop(screen, role: str) -> int:
     curses.curs_set(0)
     screen.nodelay(True)
-    console = Console(screen)
+    console = Console(screen, steps_for_role(role), role)
     console.draw()  # docker を待たずにまず画面を出す
     console.ws = console.observe()
     # preflight runs on open: a CAN or GNSS fault has to surface before a build.
@@ -512,16 +521,23 @@ def _loop(screen) -> int:
         curses.napms(120)
 
 
-def main() -> int:
+def main(argv=None) -> int:
+    parser = argparse.ArgumentParser(description="vehicle console")
+    parser.add_argument(
+        "--role", choices=ROLES, default=ROLE_PARTICIPANT,
+        help="participant: autoware と提出物だけ / staff: driver・zenoh・rosbag・download・down all も出す",
+    )
+    args = parser.parse_args(argv)
+    need = min_lines(len(steps_for_role(args.role)))
     size = shutil.get_terminal_size(fallback=(0, 0))
-    if terminal_too_small(size.columns, size.lines):
+    if terminal_too_small(size.columns, size.lines, need):
         print(
             f"端末が狭すぎます（{size.columns}x{size.lines}）。"
-            f"最低 {MIN_COLS}x{MIN_LINES} が必要です。",
+            f"最低 {MIN_COLS}x{need} が必要です。",
             flush=True,
         )
         return 2
-    return curses.wrapper(_loop)
+    return curses.wrapper(_loop, args.role)
 
 
 if __name__ == "__main__":
