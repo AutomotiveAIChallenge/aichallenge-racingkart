@@ -72,10 +72,33 @@ if [ "$target" = "eval" ] && [ -n "${SUBMIT_TAR}" ]; then
         echo "[ERROR] submit file not found: ${SUBMIT_TAR}" >&2
         exit 1
     fi
+    # The Dockerfile COPYs SUBMIT_TAR from the build context (repo root minus .dockerignore).
+    # Accept an absolute path inside the repo by making it relative; reject anything docker
+    # cannot see, instead of failing with "not found" after the no-cache build has started.
+    repo_real="$(realpath .)"
+    submit_real="$(realpath "${SUBMIT_TAR}")"
+    case "${submit_real}" in
+    "${repo_real}"/output/* | "${repo_real}"/outputs/* | "${repo_real}"/.git/*)
+        echo "[ERROR] ${SUBMIT_TAR} is excluded from the build context by .dockerignore." >&2
+        echo "        Copy it to submit/ and pass: --submit submit/$(basename "${SUBMIT_TAR}")" >&2
+        exit 1
+        ;;
+    "${repo_real}"/*)
+        SUBMIT_TAR="${submit_real#"${repo_real}"/}"
+        ;;
+    *)
+        echo "[ERROR] ${SUBMIT_TAR} is outside the repository, so docker build cannot COPY it." >&2
+        echo "        Copy it to submit/ and pass: --submit submit/$(basename "${SUBMIT_TAR}")" >&2
+        exit 1
+        ;;
+    esac
     BUILD_ARGS+=(--build-arg "SUBMIT_TAR=${SUBMIT_TAR}")
     echo "[INFO] Using submit tar: ${SUBMIT_TAR}"
 elif [ "$target" != "eval" ] && [ -n "${SUBMIT_TAR}" ]; then
     echo "[WARN] --submit is only used for target=eval (ignored): ${SUBMIT_TAR}" >&2
+elif [ "$target" = "eval" ] && [ ! -f "${DEFAULT_SUBMIT_TAR}" ]; then
+    echo "[ERROR] ${DEFAULT_SUBMIT_TAR} not found. Run ./create_submit_file.bash first, or pass --submit <file>." >&2
+    exit 1
 fi
 
 # shellcheck disable=SC2086
