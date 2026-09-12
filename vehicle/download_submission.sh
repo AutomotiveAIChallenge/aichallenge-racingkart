@@ -202,6 +202,12 @@ main() {
         print_info "  Submission ID: $SUBMISSION_ID"
     fi
 
+    # download_submission.py saves into $DOWNLOAD_DIR, and the tarball is only deleted after a
+    # successful extraction. Remove leftovers of interrupted runs first, so the extraction below
+    # can only pick the tarball downloaded by THIS run (find | head -1 is in directory order).
+    DOWNLOAD_DIR="$SCRIPT_DIR/download"
+    rm -f "$DOWNLOAD_DIR"/*.tar.gz
+
     # Run the Python script
     if [ -n "$SUBMISSION_ID" ]; then
         print_info "Downloading submission by ID..."
