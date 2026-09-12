@@ -82,10 +82,9 @@ void SimplePurePursuit::onTimer()
   //// calc lookahead distance
   double lookahead_distance = lookahead_gain_ * target_longitudinal_vel + lookahead_min_distance_;
   //// calc center coordinate of rear wheel
-  double rear_x = odometry_->pose.pose.position.x -
-                  wheel_base_ / 2.0 * std::cos(odometry_->pose.pose.orientation.z);
-  double rear_y = odometry_->pose.pose.position.y -
-                  wheel_base_ / 2.0 * std::sin(odometry_->pose.pose.orientation.z);
+  const double yaw = tf2::getYaw(odometry_->pose.pose.orientation);
+  double rear_x = odometry_->pose.pose.position.x - wheel_base_ / 2.0 * std::cos(yaw);
+  double rear_y = odometry_->pose.pose.position.y - wheel_base_ / 2.0 * std::sin(yaw);
   //// search lookahead point
   auto lookahead_point_itr = std::find_if(
     trajectory_->points.begin() + closet_traj_point_idx, trajectory_->points.end(),
