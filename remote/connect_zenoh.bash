@@ -62,6 +62,8 @@ A8)
 test-remote)
     ENDPOINT="${ZENOH_LOCAL_ENDPOINT:-tcp/127.0.0.1:7448}"
     echo "Connecting Zenoh. Target Vehicle: 'local' - Endpoint ${ENDPOINT}"
+    echo "Router: run './connect_zenoh.bash test-server' in another terminal first."
+    echo "Vehicle side: run 'VEHICLE_ID=test make zenoh' on the kart PC (or this machine)."
     RUST_BACKTRACE=1 zenoh-bridge-ros2dds client \
         -e "${ENDPOINT}" \
         -n /A2 \

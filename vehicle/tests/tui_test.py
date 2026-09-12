@@ -17,7 +17,11 @@ from tui import (  # noqa: E402
     Console,
     MIN_COLS,
     MIN_LINES,
+    driver_image_date,
     is_failure_line,
+    min_lines,
+    repo_commit,
+    version_line,
     probe_workspace,
     service_status_lines,
     should_reobserve,
@@ -164,6 +168,58 @@ class TestTerminalSize(unittest.TestCase):
     def test_minimum_leaves_a_row_for_failures_and_a_row_for_log(self):
         # header 1 + services 2 + STEPS + failures 見出し 1 + failures 1 + log 見出し 1 + log 1。
         self.assertGreaterEqual(MIN_LINES, 3 + len(STEPS) + 4)
+
+
+class TestVersionLine(unittest.TestCase):
+    def test_shows_image_date_and_commit(self):
+        self.assertEqual(
+            version_line("2026-09-01", "bd9c626"),
+            "driver image: 2026-09-01  aic commit: bd9c626",
+        )
+
+    def test_missing_values_read_as_unknown_not_as_blank(self):
+        self.assertEqual(
+            version_line(None, None),
+            "driver image: unknown  aic commit: unknown",
+        )
+
+    def test_longest_form_fits_min_cols(self):
+        self.assertLessEqual(len(version_line("2026-09-01", "bd9c626")), MIN_COLS)
+
+    def test_labels_say_which_repository_each_value_comes_from(self):
+        line = version_line("2026-09-01", "bd9c626")
+        self.assertIn("driver image:", line)
+        self.assertIn("aic commit:", line)
+
+    def test_staff_row_is_accounted_for_in_the_minimum_height(self):
+        self.assertEqual(min_lines(8, extra=1), min_lines(8) + 1)
+
+
+class TestVersionProbes(unittest.TestCase):
+    def test_commit_of_a_real_repo_is_a_short_hash(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            subprocess.run(["git", "init", "-q"], cwd=root, check=True)
+            (root / "f").write_text("x")
+            subprocess.run(["git", "add", "f"], cwd=root, check=True)
+            subprocess.run(
+                ["git", "-c", "user.email=t@e", "-c", "user.name=t",
+                 "commit", "-qm", "c"],
+                cwd=root, check=True,
+            )
+            commit = repo_commit(root)
+            self.assertIsNotNone(commit)
+            self.assertRegex(commit, r"^[0-9a-f]{7,}$")
+
+    def test_commit_outside_a_repo_is_none_not_a_crash(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            self.assertIsNone(repo_commit(Path(tmp)))
+
+    def test_unknown_image_is_none_not_a_crash(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            self.assertIsNone(
+                driver_image_date(Path(tmp), image="no-such-image:does-not-exist")
+            )
 
 
 class TestServiceStatusLines(unittest.TestCase):

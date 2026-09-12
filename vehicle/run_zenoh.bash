@@ -9,10 +9,11 @@ script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source-path=SCRIPTDIR source=vehicle_ports.sh
 source "${script_dir}/vehicle_ports.sh"
 
-if ! PORT="$(zenoh_port_for_vehicle_id "${vehicle_id}")"; then
+if ! ENDPOINT="$(zenoh_endpoint_for_vehicle_id "${vehicle_id}")"; then
     echo "Invalid VEHICLE_ID: ${vehicle_id:-(empty)} (valid: ${VEHICLE_ID_VALID_LIST})"
     exit 1
 fi
+NAMESPACE="$(zenoh_namespace_for_vehicle_id "${vehicle_id}")"
 
 export ROS_DOMAIN_ID=$id
 
@@ -22,7 +23,8 @@ exec >"${out_dir}/zenoh.log" 2>&1
 cd "${out_dir}" || exit
 
 while true; do
-    zenoh-bridge-ros2dds client -e "tls/zenoh.dev.aichallenge-board.jsae.or.jp:${PORT}" -c /vehicle/zenoh.json5 -n "/${vehicle_id}"
+    echo "Connecting Zenoh. VEHICLE_ID=${vehicle_id} endpoint=${ENDPOINT} namespace=${NAMESPACE}"
+    zenoh-bridge-ros2dds client -e "${ENDPOINT}" -c /vehicle/zenoh.json5 -n "${NAMESPACE}"
     status=$?
     echo "zenoh-bridge-ros2dds exited with status ${status}; retrying in 5s..."
     sleep 5

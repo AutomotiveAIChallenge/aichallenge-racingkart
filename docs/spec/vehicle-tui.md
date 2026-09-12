@@ -251,6 +251,11 @@ $ ./setup_check.sh --phase preflight
 - ステップは縦 1 列。印は 2 文字固定（`OK` / `NG` / `>>` 実行中 / `-` 未実行 / `?` 前提未達）。
 - サービス行は `running: driver autoware` と `stopped: zenoh rosbag` の 2 行で、`driver` / `autoware` /
   `zenoh` / `rosbag` を `REQUIRED_SERVICES` の順に running / stopped へ振り分けて名前のまま出す。
+- 運営の画面だけ、サービス行の下に version 行を 1 行置く
+  （`driver image: 2025-09-04  aic commit: bd9c626`）。`driver image` は driver サービスが使う
+  `ghcr.io/tier4/racing_kart_interface` イメージの作成日、`aic commit` はこのリポジトリの短縮 hash。
+  由来が別リポジトリなので、ラベルはどちらが何か単体で判る形にする。起動時に 1 度だけ採り、
+  取れなければ `unknown` と出す（黙って省くと古いイメージのまま走っていることに気付けない）。
   空側は `-`。画面に 1 箇所しか出さないので略さない（頭文字にすると凡例が要る）。
   どのサービスの状態も画面全体で 1 つの事実なので、ステップ行ごとに繰り返さない。
 - **failures は log とは別領域**で、log が流れても内容を保つ。残り高さの 2/3 までを使う。

@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import argparse
 import curses
+import json
 import queue
 import shutil
 import subprocess
@@ -29,6 +30,7 @@ from tui_core import (
     REQUIRED_SERVICES,
     RUNNING,
     ROLE_PARTICIPANT,
+    ROLE_STAFF,
     ROLES,
     STEP_PREFLIGHT,
     STEPS,
@@ -49,14 +51,20 @@ WORKSPACE_ARTIFACTS = ("build", "install", "log")
 
 # 最低行数 = header 1 + services 2（running / stopped）+ ステップ数 + failures 見出し 1
 # + failures 1 + log 見出し 1 + log 1、に 1 行の余裕。これ未満だと failures か log が
-# 0 行になり、失敗を流さずに残すという狙いが成立しない。40 桁は画面中でいちばん幅を
-# 食う固定コンテンツである header 行（タイトル 29 文字 + 区切り 1 + ヒント 10 文字）と
-# services 行の最長形 "stopped: driver autoware zenoh rosbag"（37 文字）に対する余裕。
-MIN_COLS = 40
+# 0 行になり、失敗を流さずに残すという狙いが成立しない。46 桁は画面中でいちばん幅を
+# 食う固定行 "driver image: YYYY-MM-DD  aic commit: xxxxxxx"（45 文字）に対する余裕。
+# これは運営の画面にしか出ない行だが、役割で最低幅を変えると tmux を役割ごとに
+# 張り替える羽目になるので、幅は共通で広いほうに合わせる。
+MIN_COLS = 46
 
 
-def min_lines(n_steps: int) -> int:
-    return 1 + 2 + n_steps + 4 + 1
+def has_version_line(role: str) -> bool:
+    """version 行を出す役割か。min_lines と Console の両方がこの 1 つの事実を使う。"""
+    return role == ROLE_STAFF
+
+
+def min_lines(n_steps: int, extra: int = 0) -> int:
+    return 1 + 2 + extra + n_steps + 4 + 1
 
 
 # 運営・参加者を合わせた全ステップぶん（後方互換のため残す）。実際の最低行数は
@@ -89,6 +97,17 @@ def service_status_lines(services_running) -> tuple:
     return (
         f"running: {' '.join(running) or '-'}",
         f"stopped: {' '.join(stopped) or '-'}",
+    )
+
+
+def version_line(image_date, commit) -> str:
+    """driver イメージの日付とこのリポジトリの commit を 1 行にする。
+
+    観測できなかった側は省かず unknown と出す（理由は docs/spec/vehicle-tui.md）。
+    """
+    return (
+        f"driver image: {image_date or 'unknown'}"
+        f"  aic commit: {commit or 'unknown'}"
     )
 
 
@@ -175,7 +194,7 @@ def probe_workspace(
     )
 
 
-def _run(cmd, repo_root: Path):
+def _run(cmd, repo_root: Path, timeout: float = 10):
     """Run a probe command; None on any failure.
 
     Probes must never raise: the console has to keep rendering on a machine
@@ -183,11 +202,52 @@ def _run(cmd, repo_root: Path):
     """
     try:
         out = subprocess.run(
-            cmd, cwd=str(repo_root), capture_output=True, text=True, timeout=10
+            cmd, cwd=str(repo_root), capture_output=True, text=True, timeout=timeout
         )
     except (OSError, subprocess.SubprocessError):
         return None
     return out if out.returncode == 0 else None
+
+
+def driver_image(repo_root: Path):
+    """docker-compose.yml が driver サービスに与えているイメージ。無ければ None。
+
+    タグを tui.py 側に写すと compose を変えたときに黙ってずれるので compose に訊く。
+    """
+    out = _run(["docker", "compose", "config", "--format", "json"], repo_root, timeout=5)
+    if out is None:
+        return None
+    try:
+        return json.loads(out.stdout)["services"]["driver"]["image"] or None
+    except (ValueError, TypeError, KeyError):
+        return None
+
+
+def driver_image_date(repo_root: Path, image=None):
+    """driver イメージの作成日 (YYYY-MM-DD)。無ければ None。
+
+    タグではなくイメージの作成日を見る: latest-experiment は動かないタグなので、
+    タグ名からは手元にいつ pull したものが載っているか判らない。
+    """
+    image = image or driver_image(repo_root)
+    if image is None:
+        return None
+    out = _run(
+        ["docker", "image", "inspect", image, "--format", "{{.Created}}"],
+        repo_root, timeout=5,
+    )
+    if out is None:
+        return None
+    created = out.stdout.strip()
+    return created[:10] or None
+
+
+def repo_commit(repo_root: Path):
+    """このリポジトリの短縮 commit hash。git が失敗したら None。"""
+    out = _run(["git", "rev-parse", "--short", "HEAD"], repo_root, timeout=5)
+    if out is None:
+        return None
+    return out.stdout.strip() or None
 
 
 def workspace_is_pristine(repo_root: Path) -> bool:
@@ -274,6 +334,9 @@ class Console:
         # 既定値で始める。observe() は docker compose ps を待つので、
         # 最初の 1 フレームを描いたあとに _loop が呼ぶ。
         self.ws = Workspace()
+        # unknown で場所だけ確保しておき、実測は最初の 1 フレームのあとに
+        # observe_version() が入れ替える。docker を待って画面を白いままにしない。
+        self.version = version_line(None, None) if has_version_line(role) else None
 
     @property
     def busy(self) -> bool:
@@ -292,6 +355,13 @@ class Console:
             workspace_is_pristine(REPO_ROOT),
             stack_containers(REPO_ROOT),
         )
+
+    def observe_version(self) -> None:
+        """起動時に 1 度だけ採る。イメージも checkout も走行枠の途中では変わらない。"""
+        if self.version is not None:
+            self.version = version_line(
+                driver_image_date(REPO_ROOT), repo_commit(REPO_ROOT)
+            )
 
     def refresh_if_stale(self) -> None:
         """アイドルが続いても実測を追い続ける。"""
@@ -410,7 +480,11 @@ class Console:
         for i, text in enumerate(service_status_lines(self.ws.services_running)):
             self.screen.addnstr(1 + i, 0, text, width)
 
-        row = self._draw_steps(3, lines, width)
+        row = 3
+        if self.version is not None:
+            self.screen.addnstr(row, 0, self.version, width, curses.A_DIM)
+            row += 1
+        row = self._draw_steps(row, lines, width)
 
         # failures は必要な分だけ。残りの 2/3 までに抑えて log を潰さない。
         # log より失敗のほうが読まれるべきなので log に多くは残さない。
@@ -504,6 +578,7 @@ def _loop(screen, role: str) -> int:
     console = Console(screen, steps_for_role(role), role)
     console.draw()  # docker を待たずにまず画面を出す
     console.ws = console.observe()
+    console.observe_version()
     if role == ROLE_PARTICIPANT:
         # preflight runs on open: a CAN or GNSS fault has to surface before a
         # build. Staff has no preflight row on screen, so it must not run here.
@@ -528,7 +603,9 @@ def main(argv=None) -> int:
         help="participant: autoware と提出物だけ / staff: download・driver/zenoh/rosbag の個別起動・停止・down all だけの独立画面",
     )
     args = parser.parse_args(argv)
-    need = min_lines(len(steps_for_role(args.role)))
+    need = min_lines(
+        len(steps_for_role(args.role)), extra=1 if has_version_line(args.role) else 0
+    )
     size = shutil.get_terminal_size(fallback=(0, 0))
     if terminal_too_small(size.columns, size.lines, need):
         print(

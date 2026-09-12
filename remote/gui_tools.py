@@ -51,11 +51,6 @@ STOP_ESCALATE_INTERVAL_MS = 200  # SIGTERM 送信後、生存確認をポーリ�
 STOP_ESCALATE_TIMEOUT_MS = 3000  # この時間を過ぎても生きていたら SIGKILL に昇格
 
 
-# --- Devias Kit Pro: Neon Blue / dark palette (approx) ---
-# These values are offline approximations of the "Neon Blue" preset on the dark
-# theme (neonBlue + neutral scales). Adjust here if you have exact tokens from
-# the design kit.
-
 # リポジトリ直下の .env (車両 PC と同じ書式)。VEHICLE_ID があればそれを接続先の初期値にする。
 ENV_FILE = ROOT_DIR.parent / ".env"
 # 車両側 .env の VEHICLE_ID -> GUI の Vehicle ID。車両側は run_zenoh.bash が読む値で、
@@ -96,9 +91,10 @@ def default_vehicle_id(env_file: Path = ENV_FILE) -> str:
     return value if value in VALID_VEHICLE_IDS else DEFAULT_VEHICLE_ID
 
 
-# --- Devias Material Kit Pro: Chateau Green palette (approx) ---
-# These values are offline approximations of the "Chateau Green" theme.
-# Adjust here if you have exact tokens from the design kit.
+# --- Devias Kit Pro: Neon Blue / dark palette (approx) ---
+# These values are offline approximations of the "Neon Blue" preset on the dark
+# theme (neonBlue + neutral scales). Adjust here if you have exact tokens from
+# the design kit.
 PALETTE = {
     "bg": "#0B0F19",           # app background   (neutral 950)
     "surface": "#111927",      # cards / frames   (neutral 900)

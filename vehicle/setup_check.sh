@@ -490,22 +490,29 @@ check_network() {
         fi
     fi
 
-    # Zenohサーバー疎通確認。run_zenoh.bash と同じ VEHICLE_ID -> port 対応を使う。
-    local zenoh_host="${ZENOH_HOST:-zenoh.dev.aichallenge-board.jsae.or.jp}"
+    # Zenohサーバー疎通確認。run_zenoh.bash と同じ VEHICLE_ID -> endpoint 対応を使う。
     local vehicle_id_for_zenoh
-    local zenoh_port
+    local zenoh_endpoint zenoh_host zenoh_port
     vehicle_id_for_zenoh="$(detect_vehicle_id)"
     if [ -z "${vehicle_id_for_zenoh}" ]; then
         log "${FAIL} VEHICLE_ID is not set; cannot choose Zenoh endpoint"
         log "   Fix: export VEHICLE_ID=A6 or add VEHICLE_ID=A6 to .env"
         record_result "fail"
-    elif zenoh_port="$(zenoh_port_for_vehicle_id "${vehicle_id_for_zenoh}")"; then
+    elif zenoh_endpoint="$(zenoh_endpoint_for_vehicle_id "${vehicle_id_for_zenoh}")"; then
+        # "tls/host:port" / "tcp/host:port" -> host, port。ZENOH_HOST は host だけの差し替え。
+        zenoh_host="${zenoh_endpoint#*/}"
+        zenoh_port="${zenoh_host##*:}"
+        zenoh_host="${ZENOH_HOST:-${zenoh_host%:*}}"
         if timeout 5 bash -c "echo >/dev/tcp/${zenoh_host}/${zenoh_port}" 2>/dev/null; then
             log "${OK} Zenoh endpoint connectivity (${vehicle_id_for_zenoh}: ${zenoh_host}:${zenoh_port})"
             record_result "pass"
         else
             log "${FAIL} Cannot reach Zenoh endpoint (${vehicle_id_for_zenoh}: ${zenoh_host}:${zenoh_port})"
-            log "   Check: VEHICLE_ID, internet route, firewall, and server-side tunnel/port availability."
+            if [ "${vehicle_id_for_zenoh}" = "test" ]; then
+                log "   Start a local server first: cd remote && ./connect_zenoh.bash test-server"
+            else
+                log "   Check: VEHICLE_ID, internet route, firewall, and server-side tunnel/port availability."
+            fi
             record_result "fail"
         fi
     else
