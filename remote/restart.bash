@@ -5,7 +5,7 @@ set -euo pipefail
 
 ./rviz.bash &
 
-echo "5秒待機しzenohに接続します..."
+echo "5秒待機しzenohに接続します... / Waiting 5 s, then connecting to zenoh..."
 sleep 5
 
 SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
