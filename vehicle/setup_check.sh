@@ -508,11 +508,7 @@ check_network() {
             record_result "pass"
         else
             log "${FAIL} Cannot reach Zenoh endpoint (${vehicle_id_for_zenoh}: ${zenoh_host}:${zenoh_port})"
-            if [ "${vehicle_id_for_zenoh}" = "test" ]; then
-                log "   Start a local server first: cd remote && ./connect_zenoh.bash test-server"
-            else
-                log "   Check: VEHICLE_ID, internet route, firewall, and server-side tunnel/port availability."
-            fi
+            log "   Check: VEHICLE_ID, internet route, firewall, and server-side tunnel/port availability."
             record_result "fail"
         fi
     else
