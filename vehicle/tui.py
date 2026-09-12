@@ -43,7 +43,7 @@ from tui_core import (
 )
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
-# colcon ワークスペース。Makefile の WORKSPACE_DIR と同じ場所。
+# colcon ワークスペース。make workspace-clean が消す対象。
 WORKSPACE_REL = Path("aichallenge/workspace")
 # workspace-clean が消す ignored な生成物。どれかが在れば git を呼ぶ前に
 # 「未完了」と判れる。

@@ -159,7 +159,7 @@ PARTICIPANT_STEPS = (
     ),
     Step(
         step_id=STEP_UP,
-        title="autoware",
+        title="autoware-vehicle",
         command=("make", "autoware-vehicle"),
         requires=(STEP_BUILD,),
         measure=_autoware_up,
@@ -173,7 +173,7 @@ PARTICIPANT_STEPS = (
     ),
     Step(
         step_id=STEP_AUTOWARE_DOWN,
-        title="autoware down",
+        title="autoware-vehicle down",
         command=("docker", "compose", "down", "autoware"),
         measure=_autoware_down,
     ),

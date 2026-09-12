@@ -3,7 +3,7 @@ SHELL := /bin/bash
 
 .PHONY: autoware-build autoware-vehicle autoware-simulator autoware-request-initialpose autoware-request-control  awsim-request-start awsim-request-reset autoware-driver-zenoh autoware-driver-zenoh-rosbag setup-vehicle \
 	autoware-down autoware-restart workspace-clean \
-	simulator dev dev2 dev3 dev4 driver zenoh rosbag download submission-extract driver-zenoh-rosbag rviz2 down down_all ps autoware-attach autoware-bash eval e2e vehicle-tui vehicle-tui-staff workspace
+	simulator dev dev2 dev3 dev4 driver zenoh rosbag download submission-extract rviz2 down down_all ps autoware-attach autoware-bash eval e2e vehicle-tui vehicle-tui-staff workspace
 
 # Used by docker-compose.yml for build/eval artifact ownership.
 HOST_UID ?= $(shell id -u)
@@ -18,9 +18,6 @@ endif
 
 TIMESTAMP := $(shell date +%Y%m%d-%H%M%S)
 LOG_DIR := /output/$(TIMESTAMP)
-# ホスト側の colcon ワークスペース。workspace-clean が消す対象の親。
-WORKSPACE_DIR := aichallenge/workspace
-
 # make simulator-<mode>: <mode> は simulator_scripts/*.sh のファイル名
 SIM_MODES := $(notdir $(basename $(wildcard aichallenge/simulator_scripts/*.sh)))
 # dev<N>（車両数、2..4）は run_simulator.bash が展開するエイリアス
@@ -131,12 +128,6 @@ setup-vehicle:
 	@echo "Run vehicle setup check"
 	@cd vehicle && ./setup_check.sh
 
-# 運営が走行枠の最初に上げる土台: driver + all-topic rosbag + zenoh（autoware は参加者が autoware-vehicle で上げる）
-driver-zenoh-rosbag:
-	LOG_DIR=$(LOG_DIR) docker compose up -d driver rosbag
-	sleep 15
-	LOG_DIR=$(LOG_DIR) docker compose up -d zenoh
-
 # driver + autoware + all-topic rosbag + zenoh
 autoware-driver-zenoh-rosbag:
 	@echo "Run vehicle setup preflight check"
@@ -145,15 +136,12 @@ autoware-driver-zenoh-rosbag:
 	sleep 15
 	LOG_DIR=$(LOG_DIR) docker compose up -d zenoh
 
-# ワークスペースを checkout 直後の状態へ戻す。提出物で上書きされた src/aichallenge_submit/ を
-# HEAD に戻し（index も含めて。`git checkout -- <path>` は index から戻すので、stage 済みの
-# 提出物が残る）、build/ install/ log/ と untracked ファイルを消す。git 操作はこのディレクトリに
-# 限定する（git stash のようにリポジトリ全体へ効かせると .env 以外のローカル変更も巻き込む）。
-# 次は make submission-extract からやり直すことになる。
+# --staged も戻すのは stage 済みの提出物を残さないため。パスを限定するのは
+# リポジトリ全体のローカル変更を巻き込まないため。
 workspace-clean:
-	@echo "Clean $(WORKSPACE_DIR): restore src/aichallenge_submit/, remove build/ install/ log/ and untracked files"
-	git restore --source=HEAD --staged --worktree -- $(WORKSPACE_DIR)/src/aichallenge_submit
-	git clean -fdx $(WORKSPACE_DIR)
+	@echo "Clean aichallenge/workspace: restore src/aichallenge_submit/, remove build/ install/ log/ and untracked files"
+	git restore --source=HEAD --staged --worktree -- aichallenge/workspace/src/aichallenge_submit
+	git clean -fdx aichallenge/workspace
 
 down:
 	@for p in 1 2 3 4; do docker compose -p $$p down --remove-orphans; done

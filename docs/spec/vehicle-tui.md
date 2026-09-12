@@ -78,7 +78,7 @@
 7. **役割でステップを出し分ける。** 参加者は autoware と提出物だけを触る。
    driver / zenoh / rosbag の起動・停止、提出物のダウンロード、スタック全体の停止は運営の仕事で、
    参加者の画面には出さない（`--role participant|staff`、既定は participant）。
-   運営の画面は参加者の並びとは独立の 4 ステップだけの画面で、preflight を含め
+   運営の画面は参加者の並びとは独立の 8 ステップだけの画面で、preflight を含め
    参加者用のステップは一切出さない。参加者と運営で番号は共有しない
    （参加者の 1 と運営の 1 は別のステップを指す）。
 
@@ -91,9 +91,9 @@
 | 1 | `check preflight` | `./setup_check.sh --phase preflight` | なし | 終了コード 0（セッション記憶） |
 | 2 | `extract` | `make submission-extract`（`vehicle/submissions/<id>.zip` を ID とパスワードで展開し `src/aichallenge_submit/` を入れ替える） | 1 | 終了コード 0（セッション記憶） |
 | 3 | `build` | `make autoware-build` | 2 | `workspace/install/setup.bash` が存在し `src/` より新しい（実測） |
-| 4 | `autoware` | `make autoware-vehicle` | 3 | `autoware` が compose 上で running（実測。`driver` / `zenoh` / `rosbag` はサービス行で見せるだけ） |
+| 4 | `autoware-vehicle` | `make autoware-vehicle` | 3 | `autoware` が compose 上で running（実測。`driver` / `zenoh` / `rosbag` はサービス行で見せるだけ） |
 | 5 | `check runtime` | `./setup_check.sh --phase runtime` | 4 | 終了コード 0（セッション記憶） |
-| 6 | `autoware down` | `docker compose down autoware` | なし | `autoware` が running でない（実測） |
+| 6 | `autoware-vehicle down` | `docker compose down autoware` | なし | `autoware` が running でない（実測） |
 | 7 | `cleanup` | `make workspace-clean` | なし | `aichallenge/workspace/` が checkout と一致（`git status --porcelain --ignored` が空、実測） |
 
 運営（`make vehicle-tui-staff`、`--role staff`）は参加者の並びとは独立の、次の 8 行だけの画面。
@@ -134,7 +134,7 @@ down → up と辿る（`driver` は 4 → 2、`zenoh` は 5 → 3、`rosbag` �
 
 | ステップ | 役割 | 落ちるもの | 使う場面 |
 |----------|------|------------|----------|
-| `autoware down` | 参加者 | `autoware` のみ（`docker compose down autoware`） | Autoware だけ落とす。`driver` / `zenoh` / `rosbag` は繋いだまま。入れ替えは続けて `autoware` |
+| `autoware-vehicle down` | 参加者 | `autoware` のみ（`docker compose down autoware`） | Autoware だけ落とす。`driver` / `zenoh` / `rosbag` は繋いだまま。入れ替えは続けて `autoware-vehicle` |
 | `driver down` / `zenoh down` / `rosbag down` | 運営 | それぞれ 1 サービスだけ（`docker compose down driver` / `zenoh` / `rosbag`） | 土台のうち入れ替えたいサービスだけ落とすとき |
 | `down all` | 運営 | compose のスタック全部（プロジェクト 1〜4 を含む） | 走行枠の終わり |
 
@@ -230,9 +230,9 @@ stopped: zenoh rosbag
 1 NG check preflight
 2 ?  extract
 3 OK build
-4 -  autoware
+4 -  autoware-vehicle
 5 ?  check runtime
-6 -  autoware down
+6 -  autoware-vehicle down
 7 -  cleanup
 -- failures (8) ------------------------------------------
 ❌ CAN interface can0 not found
@@ -263,10 +263,13 @@ $ ./setup_check.sh --phase preflight
 - 長い行は折り返す。切り詰めると長いパスやコンパイラ出力の末尾が読めなくなる。
 - 参加者のステップ 1（`check preflight`）は起動時に自動実行する。運営の画面には preflight が無く、
   起動時の自動実行もしない。
-- 最低端末サイズは参加者 40x15、運営 40x16。行数の内訳はヘッダ 1 + サービス行 2 + ステップ数（7 / 8）
-  + failures 見出し 1 + failures 1 + log 見出し 1 + log 1、に 1 行の余裕。桁数はヘッダ
-  （役割名 + キー操作、40 文字）とサービス行の最長形 `stopped: driver autoware zenoh rosbag`
-  （37 文字）が収まる幅。下回る場合は起動時に警告して終了する。
+- 最低端末サイズは参加者 46x15、運営 46x17（桁数は参加者・運営共通）。行数の内訳は
+  ヘッダ 1 + サービス行 2 + ステップ数（7 / 8）+ version 行（運営のみ 1）
+  + failures 見出し 1 + failures 1 + log 見出し 1 + log 1、に 1 行の余裕。桁数は画面中で
+  いちばん幅を食う固定行、version 行 `driver image: YYYY-MM-DD  aic commit: xxxxxxx`
+  （45 文字）が収まる幅に 1 文字の余裕を足したもの。version 行は運営の画面にしか出ないが、
+  役割で最低幅を変えると tmux を役割ごとに張り替える羽目になるので幅は共通にしている。
+  下回る場合は起動時に警告して終了する。
   `min_lines()` は役割のステップ数から導くので、ステップを増減させても手で直す箇所は無い。
 
 ### 失敗行の判定
@@ -336,7 +339,7 @@ Python 3 標準ライブラリのみを使う（`curses` / `subprocess` / `threa
   まさにその状況こそ preflight を走らせたい場面である。
 - **ssh 切断**：tmux セッションが残る。再接続して `make vehicle-tui` を実行すると
   `-A` により同じセッションへアタッチする。実行中のステップは継続している。
-- **端末が狭い**：役割ごとの最低サイズ（参加者 40x15、運営 40x16）を下回る場合は起動時に警告して終了する。
+- **端末が狭い**：役割ごとの最低サイズ（参加者 46x15、運営 46x17）を下回る場合は起動時に警告して終了する。
 
 ## テスト方針
 

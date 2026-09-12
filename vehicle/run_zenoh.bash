@@ -23,7 +23,6 @@ exec >"${out_dir}/zenoh.log" 2>&1
 cd "${out_dir}" || exit
 
 while true; do
-    echo "Connecting Zenoh. VEHICLE_ID=${vehicle_id} endpoint=${ENDPOINT} namespace=${NAMESPACE}"
     zenoh-bridge-ros2dds client -e "${ENDPOINT}" -c /vehicle/zenoh.json5 -n "${NAMESPACE}"
     status=$?
     echo "zenoh-bridge-ros2dds exited with status ${status}; retrying in 5s..."
