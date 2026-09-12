@@ -48,6 +48,24 @@ LOG_FILE="output/docker/${ts}-docker_build-$$.log"
 mkdir -p output/docker output/latest
 ln -sfn "${PWD}/${LOG_FILE}" output/latest/docker_build.log
 
+# The default tarball is only as fresh as the last ./create_submit_file.bash run. Warn when the
+# source tree has changed since, so an eval build does not silently test an old submission.
+# AIC_STRICT_SUBMIT=1 turns the warning into an error.
+DEFAULT_SUBMIT_TAR="submit/aichallenge_submit.tar.gz"
+SUBMIT_SRC_DIR="aichallenge/workspace/src/aichallenge_submit"
+if [ "$target" = "eval" ] && [ "${SUBMIT_TAR:-${DEFAULT_SUBMIT_TAR}}" = "${DEFAULT_SUBMIT_TAR}" ] &&
+    [ -f "${DEFAULT_SUBMIT_TAR}" ] && [ -d "${SUBMIT_SRC_DIR}" ]; then
+    newer_file="$(find "${SUBMIT_SRC_DIR}" -type f -newer "${DEFAULT_SUBMIT_TAR}" -not -path '*/__pycache__/*' -print -quit)"
+    if [ -n "${newer_file}" ]; then
+        echo "[WARN] ${DEFAULT_SUBMIT_TAR} is older than ${newer_file}" >&2
+        echo "[WARN] The eval image will contain the submission as it was when the tarball was made." >&2
+        echo "[WARN] Run ./create_submit_file.bash first to evaluate your current code." >&2
+        if [ "${AIC_STRICT_SUBMIT:-0}" = "1" ]; then
+            exit 1
+        fi
+    fi
+fi
+
 BUILD_ARGS=()
 if [ "$target" = "eval" ] && [ -n "${SUBMIT_TAR}" ]; then
     if [ ! -f "${SUBMIT_TAR}" ]; then
