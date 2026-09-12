@@ -55,8 +55,11 @@ autoware-request-control:
 	CMD="ros2 topic pub -1 /awsim/control_mode_request_topic std_msgs/msg/Bool '{data: true}'" docker compose run --rm --no-deps autoware-command
 
 # awsim admin service use ROS_DOMAIN_ID 0
+# `ros2 topic pub -1` waits for a subscriber with no upper bound. Bound it so a dead AWSIM
+# (e.g. eval container exited) fails instead of hanging. AWSIM_START_TIMEOUT=0 waits forever.
+AWSIM_START_TIMEOUT ?= 300
 awsim-request-start:
-	CMD="env ROS_DOMAIN_ID=0 ros2 topic pub -1 /admin/awsim/start std_msgs/msg/Bool '{data: true}'" docker compose run --rm --no-deps autoware-command
+	CMD="env ROS_DOMAIN_ID=0 timeout $(AWSIM_START_TIMEOUT) ros2 topic pub -1 /admin/awsim/start std_msgs/msg/Bool '{data: true}'" docker compose run --rm --no-deps autoware-command
 
 awsim-request-reset:
 	CMD="env ROS_DOMAIN_ID=0 ros2 topic pub -1 /admin/awsim/reset std_msgs/msg/Empty '{}'" docker compose run --rm --no-deps autoware-command
@@ -97,7 +100,12 @@ gate%:
 eval:
 	@echo "Start evaluation simulation (AWSIM + Autoware)"
 	docker compose up -d autoware-simulator-evaluation
-	$(MAKE) awsim-request-start
+	@$(MAKE) awsim-request-start || { \
+		echo "[eval] AWSIM did not subscribe to /admin/awsim/start within $(AWSIM_START_TIMEOUT)s." >&2; \
+		echo "[eval] Evaluation container status and last log lines:" >&2; \
+		docker compose ps -a autoware-simulator-evaluation >&2; \
+		docker compose logs --tail 30 autoware-simulator-evaluation >&2; \
+		exit 1; }
 	@echo "To stop: make down  (docker compose down --remove-orphans)"
 
 # remote operation (docker compose up -d rviz2)
