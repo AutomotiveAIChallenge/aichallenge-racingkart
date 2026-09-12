@@ -134,8 +134,6 @@ workspace-clean:
 	git restore --source=HEAD --staged --worktree -- aichallenge/workspace/src/aichallenge_submit
 	git clean -fdx aichallenge/workspace
 
-# driver / zenoh を含めてスタックごと落とす。この 2 つは走行枠の間ずっと上げたまま
-# にするものなので、走行枠の終わりにだけ使う。
 down:
 	@for p in 1 2 3 4; do docker compose -p $$p down --remove-orphans; done
 	@docker compose down --remove-orphans

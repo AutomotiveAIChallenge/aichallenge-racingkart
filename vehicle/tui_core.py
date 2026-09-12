@@ -211,15 +211,12 @@ STAFF_STEPS = (
     Step(
         step_id=STEP_DRIVER_DOWN,
         title="driver down",
-        # driver は走行枠の間ずっと上げたままにする。落とすのは撤収か、
-        # driver 自体を入れ替えるときだけ。参加者の autoware 再起動では触らない。
         command=("docker", "compose", "down", "driver"),
         measure=_service_down("driver"),
     ),
     Step(
         step_id=STEP_ZENOH_DOWN,
         title="zenoh down",
-        # zenoh も同じく上げたままにする。落とすと遠隔からの監視が切れる。
         command=("docker", "compose", "down", "zenoh"),
         measure=_service_down("zenoh"),
     ),
@@ -238,7 +235,6 @@ STAFF_STEPS = (
     Step(
         step_id=STEP_TEARDOWN,
         title="down all",
-        # driver / zenoh を含めて全部落とすので、走行枠の終わりにだけ使う。
         command=("make", "down"),
         measure=_stack_down,
     ),

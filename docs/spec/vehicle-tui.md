@@ -117,6 +117,11 @@ rosbag の 2 行を `down all` の直前に置くのは、記録の開始と終�
 Autoware を入れ替えるときは参加者の 6 → 4 と辿る。土台のうち 1 サービスだけを入れ替えたいときは、運営がそのサービスの
 down → up と辿る（`driver` は 4 → 2、`zenoh` は 5 → 3、`rosbag` は 7 → 6）。
 
+`driver` / `zenoh` は走行枠の間ずっと上げたままにする。落とすのは撤収（8 `down all`）か、
+そのサービス自体を入れ替えるときだけである。4 `driver down` / 5 `zenoh down` / 8 `down all`
+は画面に並んでいるが、走行中に押すものではない。`zenoh` を落とすと遠隔からの監視が切れ、
+`driver` を落とすと車両が動かなくなる。参加者の `autoware-vehicle down` はこの 2 つを触らない。
+
 `driver` / `zenoh` に加えて運営が `rosbag` も上げるのは、`autoware-vehicle` が rosbag を上げないのに
 `check runtime` の必須サービスに rosbag が入っているためである。運営が rosbag を上げ忘れると
 参加者の 5 が必ず落ちる。
