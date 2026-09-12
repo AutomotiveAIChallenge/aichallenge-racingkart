@@ -99,6 +99,8 @@ class AutostartOrchestrator(Node):
         self.declare_parameter("initial_pose_service_timeout_sec", 120.0)
         # capture停止(別スレッド)のjoin上限秒。0以下で無限待ち。
         self.declare_parameter("capture_stop_timeout_sec", 60.0)
+        # capture サービス待ち/呼び出しの上限秒。0以下で無限待ち。
+        self.declare_parameter("capture_service_timeout_sec", 10.0)
 
         vehicle_state_topic = str(self.get_parameter("vehicle_state_topic").value).strip()
         if not vehicle_state_topic:
@@ -935,12 +937,17 @@ class AutostartOrchestrator(Node):
         if (not start) and (not self._capture_started):
             return
 
-        if not self._wait_for_service(self._cli_capture):
+        try:
+            timeout = float(self.get_parameter("capture_service_timeout_sec").value)
+        except (TypeError, ValueError):
+            timeout = 10.0
+        timeout_arg = timeout if timeout > 0.0 else None
+        if not self._wait_for_service(self._cli_capture, timeout_sec=timeout_arg):
             self.get_logger().warn(f"skip capture {'start' if start else 'stop'} (service not found)")
             if not start:
                 self._capture_started = False
             return
-        ok, msg = self._call_trigger(self._cli_capture)
+        ok, msg = self._call_trigger(self._cli_capture, timeout_sec=timeout_arg)
         level = "info" if ok else "warn"
         getattr(self.get_logger(), level)(f"capture {'start' if start else 'stop'}: success={ok} msg={msg}")
         if ok:
