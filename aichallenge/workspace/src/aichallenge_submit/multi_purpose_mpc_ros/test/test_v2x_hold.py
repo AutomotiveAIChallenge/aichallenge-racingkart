@@ -27,8 +27,16 @@ class _V:
         self.position = type("P", (), {"x": x, "y": y, "z": 0.0})()
 
 
-def _msg(*vs):
-    return type("M", (), {"vehicles": list(vs)})()
+def _msg(*vs, header_t=None):
+    """Build a fake V2XVehiclePositionArray. ``header_t`` defaults to the
+    latest per-vehicle stamp (preserving old tests' semantics for non-empty
+    messages); pass it explicitly to simulate an empty-vehicles frame whose
+    array header still advances the clock."""
+    if header_t is None:
+        header_t = max((v.header.stamp.sec + v.header.stamp.nanosec * 1e-9
+                         for v in vs), default=0.0)
+    header = type("H", (), {"stamp": _Stamp(header_t)})()
+    return type("M", (), {"vehicles": list(vs), "header": header})()
 
 
 def _tracker(hold):
@@ -99,6 +107,18 @@ def test_a_returning_vehicle_resumes_normally():
     tr.update(_msg(_V("d3", 0.4, 1.6, 0.0), _V("d2", 0.4, -50.0, 0.0)))
     assert tr.held_vehicle_ids() == []
     assert sorted(tr.active_vehicle_ids()) == ["d2", "d3"]
+
+
+def test_empty_frames_still_expire_a_hold():
+    """The tracker clock must advance from the array header even when
+    ``vehicles`` is empty, otherwise a held vehicle never ages out and
+    becomes a permanent ghost obstacle."""
+    tr = _tracker(0.5)
+    tr.update(_msg(_V("d3", 0.0, 0.0, 0.0)))
+    for t in (0.2, 0.4, 0.6):
+        tr.update(_msg(header_t=t))                   # empty vehicles list
+    assert "d3" not in tr.active_vehicle_ids()
+    assert "d3" not in tr.predict_all([0.0])
 
 
 def test_a_negative_hold_is_clamped_to_off():

@@ -37,6 +37,13 @@ class V2XVehicleTracker:
 
     def update(self, msg) -> None:
         active: List[str] = []
+        # Advance the tracker clock from the array header even when
+        # ``vehicles`` is empty, so held vehicles can still expire. Per-vehicle
+        # stamps (used for velocity) are tracked separately below.
+        # vehicles が空でも配列ヘッダーの時刻で時計を進め、保持中の車両を失効させる。
+        header_t = _stamp_to_seconds(msg.header.stamp)
+        if header_t > self._newest_t:
+            self._newest_t = header_t
         for v in msg.vehicles:
             vid = v.vehicle_id
             t = _stamp_to_seconds(v.header.stamp)
