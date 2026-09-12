@@ -202,11 +202,13 @@ main() {
         print_info "  Submission ID: $SUBMISSION_ID"
     fi
 
-    # download_submission.py saves into $DOWNLOAD_DIR, and the tarball is only deleted after a
-    # successful extraction. Remove leftovers of interrupted runs first, so the extraction below
-    # can only pick the tarball downloaded by THIS run (find | head -1 is in directory order).
-    DOWNLOAD_DIR="$SCRIPT_DIR/download"
-    rm -f "$DOWNLOAD_DIR"/*.tar.gz
+    # Give this invocation its own download directory under vehicle/download, so a
+    # leftover tarball from an interrupted prior run, or a tarball from a concurrent
+    # invocation, can never be picked up here (find | head -1 previously raced on a
+    # single shared directory). Nothing about a prior run's archive is touched.
+    DOWNLOAD_BASE_DIR="$SCRIPT_DIR/download"
+    mkdir -p "$DOWNLOAD_BASE_DIR"
+    DOWNLOAD_DIR=$(mktemp -d "$DOWNLOAD_BASE_DIR/tmp.XXXXXXXX")
 
     # Run the Python script
     if [ -n "$SUBMISSION_ID" ]; then
@@ -218,7 +220,7 @@ main() {
     API_BASE_URL="$API_BASE_URL" python3 "$PYTHON_SCRIPT" \
         --username "$USERNAME" \
         --password "$PASSWORD" \
-        --output "$OUTPUT_DIR" \
+        --output "$DOWNLOAD_DIR" \
         ${SUBMISSION_ID:+--submission-id "$SUBMISSION_ID"} \
         ${USER_ID:+--user-id "$USER_ID"} \
         $VERBOSE
@@ -229,12 +231,14 @@ main() {
         print_success "Script completed successfully!"
     else
         print_error "Script failed with exit code: $exit_code"
+        # Nothing usable landed in this invocation's own temp directory; remove it
+        # without touching any other invocation's archive.
+        rmdir "${DOWNLOAD_DIR:?}" 2>/dev/null || true
         exit $exit_code
     fi
 
-    # Extract downloaded tar.gz file from download folder to the output directory
-    DOWNLOAD_DIR="$SCRIPT_DIR/download"
-    TAR_FILE=$(find "$DOWNLOAD_DIR" -name "*.tar.gz" -type f | head -1)
+    # Extract the tarball this invocation downloaded (and only this one).
+    TAR_FILE=$(find "$DOWNLOAD_DIR" -maxdepth 1 -name "*.tar.gz" -type f | head -1)
 
     if [ -z "$TAR_FILE" ]; then
         print_error "No tar.gz file found in download directory: $DOWNLOAD_DIR"
@@ -253,9 +257,11 @@ main() {
     if tar -xzf "$TAR_FILE" -C "$OUTPUT_DIR"; then
         print_success "Extraction completed successfully!"
 
-        # Clean up the original tar.gz file
+        # Clean up this invocation's tar.gz and its now-empty temp directory. Other
+        # invocations' directories and archives are untouched.
         print_info "Cleaning up original tar.gz file..."
         rm -f "$TAR_FILE"
+        rmdir "${DOWNLOAD_DIR:?}" 2>/dev/null || true
         print_success "Cleanup completed successfully!"
     else
         print_error "Extraction failed!"
