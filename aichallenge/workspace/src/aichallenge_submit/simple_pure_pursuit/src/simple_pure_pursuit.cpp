@@ -93,6 +93,9 @@ void SimplePurePursuit::onTimer()
       return std::hypot(point.pose.position.x - rear_x, point.pose.position.y - rear_y) >=
              lookahead_distance;
     });
+  if (lookahead_point_itr == trajectory_->points.end()) {
+    lookahead_point_itr = std::prev(trajectory_->points.end());  // no point beyond L: use last
+  }
   double lookahead_point_x = lookahead_point_itr->pose.position.x;
   double lookahead_point_y = lookahead_point_itr->pose.position.y;
 
