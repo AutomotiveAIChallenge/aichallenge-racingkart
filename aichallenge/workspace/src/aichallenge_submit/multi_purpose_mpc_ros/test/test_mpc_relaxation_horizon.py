@@ -9,6 +9,7 @@ get_control enters the relaxation loop.
 import numpy as np
 
 import mpc_fixture as F
+from multi_purpose_mpc_ros.core import MPC as mpc_module
 
 WP = 10
 E_Y, E_PSI = 2.3, 0.45
@@ -34,6 +35,50 @@ def test_relaxation_keeps_the_horizon_anchored_to_the_car():
     mpc.get_control()
 
     # One control-delay offset, however many relaxation retries ran.
+    assert mpc.model.wp_id == base + F.WP_ID_OFFSET
+
+
+def test_relaxation_retry_is_exercised_and_horizon_stays_anchored(monkeypatch):
+    """The previous version of this test relied on OSQP 0.6.7 happening to
+    return an all-None ``x`` for a primal-infeasible QP (which ``np.all``
+    treats as falsy), so the retry loop ran only incidentally. That is not
+    a stable contract across osqp versions/results, so force the retry path
+    explicitly: rig the first solve's control signals to be all-zero
+    steering (the loop's own "unusable" predicate) regardless of what OSQP
+    itself returns, then assert a retry actually happened and wp_id stayed
+    anchored to the car afterward.
+    """
+    mpc = F.make_mpc()
+    F.place_car(mpc, WP, 0.0, 0.0)  # an otherwise-feasible starting state
+    mpc.model.get_current_waypoint()
+    base = mpc.model.wp_id
+
+    calls = {"n": 0}
+    orig_solve = mpc_module.osqp.OSQP.solve
+    nu = mpc.nu
+    tail = -(F.N * nu)
+
+    class _RiggedResult:
+        """``result.x`` is read-only on the real OSQP result, so wrap it in a
+        proxy that exposes a rigged ``x`` alongside the real ``info``."""
+        def __init__(self, x, info):
+            self.x = x
+            self.info = info
+
+    def spy_solve(self):
+        calls["n"] += 1
+        result = orig_solve(self)
+        if calls["n"] == 1:
+            x = np.array(result.x, dtype=float)
+            x[tail + 1::2] = 0.0  # force the "unusable" (falsy) predicate
+            return _RiggedResult(x, result.info)
+        return result
+
+    monkeypatch.setattr(mpc_module.osqp.OSQP, "solve", spy_solve)
+
+    mpc.get_control()
+
+    assert calls["n"] >= 2, "get_control did not retry after the forced-unusable first solve"
     assert mpc.model.wp_id == base + F.WP_ID_OFFSET
 
 
