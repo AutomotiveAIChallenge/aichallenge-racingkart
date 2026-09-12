@@ -174,7 +174,7 @@ PARTICIPANT_STEPS = (
     Step(
         step_id=STEP_AUTOWARE_DOWN,
         title="autoware down",
-        command=("make", "autoware-down"),
+        command=("docker", "compose", "down", "autoware"),
         measure=_autoware_down,
     ),
     Step(

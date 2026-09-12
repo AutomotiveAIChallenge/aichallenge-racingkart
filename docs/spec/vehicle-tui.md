@@ -93,7 +93,7 @@
 | 3 | `build` | `make autoware-build` | 2 | `workspace/install/setup.bash` が存在し `src/` より新しい（実測） |
 | 4 | `autoware` | `make autoware-vehicle` | 3 | `autoware` が compose 上で running（実測。`driver` / `zenoh` / `rosbag` はサービス行で見せるだけ） |
 | 5 | `check runtime` | `./setup_check.sh --phase runtime` | 4 | 終了コード 0（セッション記憶） |
-| 6 | `autoware down` | `make autoware-down` | なし | `autoware` が running でない（実測） |
+| 6 | `autoware down` | `docker compose down autoware` | なし | `autoware` が running でない（実測） |
 | 7 | `cleanup` | `make workspace-clean` | なし | `aichallenge/workspace/` が checkout と一致（`git status --porcelain --ignored` が空、実測） |
 
 運営（`make vehicle-tui-staff`、`--role staff`）は参加者の並びとは独立の、次の 8 行だけの画面。

@@ -120,7 +120,8 @@ class TestSteps(unittest.TestCase):
         # autoware だけを上げ下げする。土台を触るのは運営の driver / zenoh / rosbag。
         self.assertEqual(step_by_id(STEP_UP).command, ("make", "autoware-vehicle"))
         self.assertEqual(
-            step_by_id(STEP_AUTOWARE_DOWN).command, ("make", "autoware-down")
+            step_by_id(STEP_AUTOWARE_DOWN).command,
+            ("docker", "compose", "down", "autoware"),
         )
         self.assertEqual(step_by_id(STEP_DRIVER).command, ("make", "driver"))
         self.assertEqual(step_by_id(STEP_ZENOH).command, ("make", "zenoh"))
