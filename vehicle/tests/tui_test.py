@@ -35,8 +35,11 @@ from tui_core import (  # noqa: E402
     ROLE_PARTICIPANT,
     STAFF_STEPS,
     STEP_BUILD,
+    STEP_DRIVER,
     STEP_DRIVER_DOWN,
+    STEP_ROSBAG_DOWN,
     STEP_TEARDOWN,
+    STEP_ZENOH,
     STEP_ZENOH_DOWN,
     STEPS,
     Workspace,
@@ -181,8 +184,11 @@ class TestStepNote(unittest.TestCase):
         note = f"  ({step.note})" if step.note else ""
         return f"{idx + 1} OK {step.title}{note}"
 
-    def test_the_down_steps_that_should_stay_up_carry_a_note(self):
-        for step_id in (STEP_DRIVER_DOWN, STEP_ZENOH_DOWN, STEP_TEARDOWN):
+    def test_the_steps_whose_timing_is_not_obvious_carry_a_note(self):
+        for step_id in (
+            STEP_DRIVER, STEP_ZENOH,
+            STEP_DRIVER_DOWN, STEP_ZENOH_DOWN, STEP_ROSBAG_DOWN, STEP_TEARDOWN,
+        ):
             with self.subTest(step_id=step_id):
                 self.assertTrue(step_by_id(step_id).note)
 
