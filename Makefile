@@ -2,7 +2,7 @@
 SHELL := /bin/bash
 
 .PHONY: autoware-build autoware-vehicle autoware-simulator autoware-request-initialpose autoware-request-control  awsim-request-start awsim-request-reset autoware-driver-zenoh autoware-driver-zenoh-rosbag setup-vehicle \
-	autoware-down autoware-restart workspace-clean \
+	workspace-clean \
 	simulator dev dev2 dev3 dev4 driver zenoh rosbag download submission-extract rviz2 down down_all ps autoware-attach autoware-bash eval e2e vehicle-tui vehicle-tui-staff workspace
 
 # Used by docker-compose.yml for build/eval artifact ownership.
@@ -40,15 +40,6 @@ autoware-vehicle:
 	@echo "Start Autoware for Vehicle"
 	@echo "Log dir: .$(LOG_DIR)"
 	LOG_DIR=$(LOG_DIR) RUN_MODE=vehicle docker compose up -d autoware
-
-# autoware コンテナだけを停止して削除する。driver / zenoh / rosbag は動かしたまま
-# 残すので、走行枠中にビルドし直した Autoware を入れ替えるときはこれと
-# autoware-restart を使う。スタックごと落とすのは make down。
-autoware-down:
-	docker compose down autoware
-
-# autoware コンテナだけを入れ替える。削除 -> vehicle モードで起動し直す。
-autoware-restart: autoware-down autoware-vehicle
 
 # run autoware for simulator
 autoware-simulator:

@@ -53,11 +53,6 @@ STOP_ESCALATE_TIMEOUT_MS = 3000  # この時間を過ぎても生きていたら
 
 # リポジトリ直下の .env (車両 PC と同じ書式)。VEHICLE_ID があればそれを接続先の初期値にする。
 ENV_FILE = ROOT_DIR.parent / ".env"
-# 車両側 .env の VEHICLE_ID -> GUI の Vehicle ID。車両側は run_zenoh.bash が読む値で、
-# ローカル検証を "test" の 1 語で表す。遠隔側の同じ構成は connect_zenoh.bash の
-# test-remote（ローカル zenohd へ user 設定で繋ぐ側）なので、そこへ写す。
-# 写さないと "test" がそのまま Combobox に入り、押した時点で「不正」と弾かれる。
-ENV_VEHICLE_ID_ALIASES = {"test": "test-remote"}
 
 
 def read_env_vehicle_id(env_file: Path) -> Optional[str]:
@@ -79,15 +74,14 @@ def read_env_vehicle_id(env_file: Path) -> Optional[str]:
 
 
 def default_vehicle_id(env_file: Path = ENV_FILE) -> str:
-    """Initial Vehicle ID: the repo .env, mapped onto an ID this GUI accepts.
+    """Initial Vehicle ID: the repo .env, when this GUI can actually run it.
 
-    A value the GUI cannot run (.env.example ships VEHICLE_ID=A0, and the
-    vehicle side allows IDs this GUI has no case for) falls back to the
-    default instead of being pre-filled: the Combobox must never start on a
-    value that fails validation the moment a button is pressed.
+    .env.example ships VEHICLE_ID=A0, which the GUI has no case for. Such a
+    value falls back to the default instead of being pre-filled: the Combobox
+    must never start on a value that fails validation the moment a button is
+    pressed.
     """
     value = read_env_vehicle_id(env_file)
-    value = ENV_VEHICLE_ID_ALIASES.get(value, value)
     return value if value in VALID_VEHICLE_IDS else DEFAULT_VEHICLE_ID
 
 

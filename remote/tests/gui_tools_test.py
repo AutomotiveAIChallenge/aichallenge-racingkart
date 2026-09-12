@@ -53,10 +53,6 @@ class TestDefaultVehicleId(unittest.TestCase):
     def test_falls_back_when_missing(self):
         self.assertEqual(default_vehicle_id(Path(tempfile.mkdtemp()) / ".env"), DEFAULT_VEHICLE_ID)
 
-    def test_vehicle_side_test_maps_onto_the_remote_test_id(self):
-        # 車両側 .env の "test" は connect_zenoh.bash の test-remote に当たる。
-        self.assertEqual(default_vehicle_id(_write_env("VEHICLE_ID=test\n")), "test-remote")
-
     def test_id_this_gui_cannot_run_falls_back(self):
         # .env.example は VEHICLE_ID=A0。GUI に case が無いので初期値にはしない。
         self.assertEqual(
@@ -64,7 +60,7 @@ class TestDefaultVehicleId(unittest.TestCase):
         )
 
     def test_every_reachable_default_is_selectable(self):
-        for value in ("A7", "test", "A0", ""):
+        for value in ("A7", "A0", ""):
             with self.subTest(value=value):
                 got = default_vehicle_id(_write_env(f"VEHICLE_ID={value}\n"))
                 self.assertIn(got, VALID_VEHICLE_IDS)
