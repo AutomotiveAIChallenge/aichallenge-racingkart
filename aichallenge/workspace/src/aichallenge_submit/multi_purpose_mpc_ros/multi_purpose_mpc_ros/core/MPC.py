@@ -11,13 +11,21 @@ PREDICTION = '#BA4A00'
 # problem osqp 0.6 returns x = [None, ...] but osqp >= 1.0 returns a finite,
 # meaningless iterate, so the status (not the values) must decide.
 # infeasible 時の x は osqp のバージョンで None/有限値と異なるため status で判定する。
-USABLE_OSQP_STATUSES = ('solved', 'solved inaccurate', 'maximum iterations reached')
+# Only a fully converged solve is trusted. "solved inaccurate" and
+# "maximum iterations reached" do not guarantee feasibility/convergence and
+# an unconverged primal iterate (e.g. a straight-segment partial iterate with
+# a zero steering entry) must not be published as a control command.
+USABLE_OSQP_STATUSES = ('solved',)
 
 
 def _is_usable_solution(result) -> bool:
     if result.info.status not in USABLE_OSQP_STATUSES:
         return False
-    return bool(np.all(np.isfinite(np.asarray(result.x, dtype=float))))
+    try:
+        x = np.asarray(result.x, dtype=float)
+    except (TypeError, ValueError):
+        return False
+    return bool(np.all(np.isfinite(x)))
 
 ##################
 # MPC Controller #
@@ -263,6 +271,10 @@ class MPC:
             dec = self.optimizer.solve()
             control_signals = np.array(dec.x[-N*nu:])
 
+            # NOTE: each retry below calls _init_problem() again, which
+            # advances self.model.wp_id (see wp_id_offset). Keeping the
+            # horizon anchored to the pre-retry waypoint across these
+            # retries is handled separately in PR #324; not duplicated here.
             if not _is_usable_solution(dec):
                 for i in range(1, 6):
                     relaxed_safety_margin = self.model.safety_margin * ((5-i) / 5.0)
