@@ -66,6 +66,40 @@ if [ "$target" = "eval" ] && [ "${SUBMIT_TAR:-${DEFAULT_SUBMIT_TAR}}" = "${DEFAU
     fi
 fi
 
+# Check whether a path relative to the repo root is excluded from the docker build context by
+# .dockerignore. Handles the pattern shapes actually used in that file: a bare directory/path
+# prefix (matches itself and everything under it), the same prefix with a trailing "/**", and a
+# "**/<name>"-style pattern (matches any path component equal to <name>, or a glob against the
+# basename when <name> itself contains a wildcard, e.g. "**/*.pyc").
+path_excluded_by_dockerignore() {
+    local path="$1" ignore_file="${repo_real}/.dockerignore"
+    [ -f "${ignore_file}" ] || return 1
+    local pat sub base
+    while IFS= read -r pat; do
+        pat="${pat%$'\r'}"
+        # Trim leading/trailing whitespace.
+        pat="${pat#"${pat%%[![:space:]]*}"}"
+        pat="${pat%"${pat##*[![:space:]]}"}"
+        [ -z "${pat}" ] && continue
+        case "${pat}" in '#'*) continue ;; esac
+        pat="${pat%/\*\*}"
+        pat="${pat#./}"
+        if [[ ${pat} == \*\*/* ]]; then
+            sub="${pat#\*\*/}"
+            if [[ ${sub} == *'*'* ]]; then
+                base="${path##*/}"
+                # shellcheck disable=SC2053 # intentional glob match: sub is a pattern like "*.pyc"
+                [[ ${base} == ${sub} ]] && return 0
+            else
+                case "/${path}/" in */"${sub}"/*) return 0 ;; esac
+            fi
+        else
+            [[ ${path} == "${pat}" || ${path} == "${pat}"/* ]] && return 0
+        fi
+    done <"${ignore_file}"
+    return 1
+}
+
 BUILD_ARGS=()
 if [ "$target" = "eval" ] && [ -n "${SUBMIT_TAR}" ]; then
     if [ ! -f "${SUBMIT_TAR}" ]; then
@@ -78,13 +112,14 @@ if [ "$target" = "eval" ] && [ -n "${SUBMIT_TAR}" ]; then
     repo_real="$(realpath .)"
     submit_real="$(realpath "${SUBMIT_TAR}")"
     case "${submit_real}" in
-    "${repo_real}"/output/* | "${repo_real}"/outputs/* | "${repo_real}"/.git/*)
-        echo "[ERROR] ${SUBMIT_TAR} is excluded from the build context by .dockerignore." >&2
-        echo "        Copy it to submit/ and pass: --submit submit/$(basename "${SUBMIT_TAR}")" >&2
-        exit 1
-        ;;
     "${repo_real}"/*)
-        SUBMIT_TAR="${submit_real#"${repo_real}"/}"
+        submit_rel="${submit_real#"${repo_real}"/}"
+        if path_excluded_by_dockerignore "${submit_rel}"; then
+            echo "[ERROR] ${SUBMIT_TAR} is excluded from the build context by .dockerignore." >&2
+            echo "        Copy it to submit/ and pass: --submit submit/$(basename "${SUBMIT_TAR}")" >&2
+            exit 1
+        fi
+        SUBMIT_TAR="${submit_rel}"
         ;;
     *)
         echo "[ERROR] ${SUBMIT_TAR} is outside the repository, so docker build cannot COPY it." >&2
