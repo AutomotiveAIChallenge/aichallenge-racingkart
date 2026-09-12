@@ -10,12 +10,15 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
 
 from tui import (  # noqa: E402
     Console,
     MIN_COLS,
+    header_title,
+    vehicle_id,
     MIN_LINES,
     driver_image_date,
     is_failure_line,
@@ -210,6 +213,41 @@ class TestStepNote(unittest.TestCase):
         for step in STEPS:
             with self.subTest(step_id=step.step_id):
                 self.assertTrue(step.note.isascii())
+
+
+class TestHeaderTitle(unittest.TestCase):
+    def test_shows_the_vehicle_then_the_role(self):
+        self.assertEqual(header_title("staff", "A2"), "[A2]vehicle console [staff]")
+
+    def test_longest_form_fits_min_cols_with_the_hints(self):
+        # header は「タイトル + 区切り 1 + ヒント 10」。最長の役割と ID で測る。
+        longest = header_title(ROLE_PARTICIPANT, "test")
+        self.assertLessEqual(len(longest) + 1 + len("↑↓ enter q"), MIN_COLS)
+
+
+class TestVehicleId(unittest.TestCase):
+    def test_environment_wins_over_the_env_file(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            (Path(tmp) / ".env").write_text("VEHICLE_ID=A3\n")
+            with mock.patch.dict(os.environ, {"VEHICLE_ID": "A6"}):
+                self.assertEqual(vehicle_id(Path(tmp)), "A6")
+
+    def test_reads_the_env_file_when_the_environment_is_empty(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            (Path(tmp) / ".env").write_text('# VEHICLE_ID=A1\nexport VEHICLE_ID="A3" \n')
+            with mock.patch.dict(os.environ, {"VEHICLE_ID": ""}):
+                self.assertEqual(vehicle_id(Path(tmp)), "A3")
+
+    def test_last_assignment_wins(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            (Path(tmp) / ".env").write_text("VEHICLE_ID=A1\nVEHICLE_ID=A2\n")
+            with mock.patch.dict(os.environ, {"VEHICLE_ID": ""}):
+                self.assertEqual(vehicle_id(Path(tmp)), "A2")
+
+    def test_unknown_reads_as_a_dash_not_as_a_blank(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            with mock.patch.dict(os.environ, {"VEHICLE_ID": ""}):
+                self.assertEqual(vehicle_id(Path(tmp)), "-")
 
 
 class TestVersionLine(unittest.TestCase):

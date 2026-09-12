@@ -15,6 +15,7 @@ from __future__ import annotations
 import argparse
 import curses
 import json
+import os
 import queue
 import shutil
 import subprocess
@@ -52,9 +53,10 @@ WORKSPACE_ARTIFACTS = ("build", "install", "log")
 # 最低行数 = header 1 + services 2（running / stopped）+ ステップ数 + failures 見出し 1
 # + failures 1 + log 見出し 1 + log 1、に 1 行の余裕。これ未満だと failures か log が
 # 0 行になり、失敗を流さずに残すという狙いが成立しない。46 桁は画面中でいちばん幅を
-# 食う固定行 "driver image: YYYY-MM-DD  aic commit: xxxxxxx"（45 文字）に対する余裕。
-# これは運営の画面にしか出ない行だが、役割で最低幅を変えると tmux を役割ごとに
-# 張り替える羽目になるので、幅は共通で広いほうに合わせる。
+# 食う固定行に合わせた値。header の最長形 "[test]vehicle console [participant]"
+# + 区切り 1 + ヒント 10 でちょうど 46、version 行は 45。version 行は運営の画面に
+# しか出ないが、役割で最低幅を変えると tmux を役割ごとに張り替える羽目になるので、
+# 幅は共通で広いほうに合わせる。
 MIN_COLS = 46
 
 
@@ -98,6 +100,38 @@ def service_status_lines(services_running) -> tuple:
         f"running: {' '.join(running) or '-'}",
         f"stopped: {' '.join(stopped) or '-'}",
     )
+
+
+def vehicle_id(repo_root: Path) -> str:
+    """走らせている車両の VEHICLE_ID。環境変数 -> リポジトリ直下の .env の順に見る。
+
+    setup_check.sh の detect_vehicle_id と同じ優先順だが、hostname からの引き当ては
+    持たない。その対応表は vehicle_ports.sh にあり、ここへ写すと表が二重になる。
+    取れなければ "-"（画面は必ず何か出す。空欄だと見落とす）。
+    """
+    value = os.environ.get("VEHICLE_ID", "").strip()
+    if value:
+        return value
+    try:
+        lines = (repo_root / ".env").read_text().splitlines()
+    except OSError:
+        return "-"
+    for line in lines:
+        line = line.strip()
+        if line.startswith("export "):
+            line = line[len("export "):].strip()
+        if line.startswith("#") or "=" not in line:
+            continue
+        key, raw = line.split("=", 1)
+        if key.strip() == "VEHICLE_ID":
+            # 最後の代入が勝つ。setup_check.sh の read_env_value と同じ。
+            value = raw.strip().strip("\"'").strip()
+    return value or "-"
+
+
+def header_title(role: str, vid: str) -> str:
+    """ヘッダ左側。どの役割でどの車両を動かしているかを 1 行目で見せる。"""
+    return f"[{vid}]vehicle console [{role}]"
 
 
 def version_line(image_date, commit) -> str:
@@ -337,6 +371,8 @@ class Console:
         # unknown で場所だけ確保しておき、実測は最初の 1 フレームのあとに
         # observe_version() が入れ替える。docker を待って画面を白いままにしない。
         self.version = version_line(None, None) if has_version_line(role) else None
+        # 走行枠の途中で .env が変わることはないので 1 度だけ読む。
+        self.vehicle_id = vehicle_id(REPO_ROOT)
 
     @property
     def busy(self) -> bool:
@@ -473,7 +509,7 @@ class Console:
         width = max(1, cols - 1)
 
         hints = "↑↓ enter q"
-        title = f"vehicle console [{self.role}]"
+        title = header_title(self.role, self.vehicle_id)
         pad = max(1, width - len(title) - len(hints))
         self.screen.addnstr(0, 0, f"{title}{' ' * pad}{hints}", width, curses.A_BOLD)
         # サービスの状態は画面全体で 1 つの事実なので、ステップ行ではなくここに 1 度だけ出す。

@@ -227,7 +227,7 @@ GNSS の 8 秒待ち、13 topic ぶんの `docker compose exec` + ROS 環境の 
 ## 画面設計
 
 ```
-vehicle console [participant]                ↑↓ enter q
+[A2]vehicle console [participant]            ↑↓ enter q
 running: driver autoware
 stopped: zenoh rosbag
 1 NG check preflight
@@ -248,7 +248,7 @@ $ ./setup_check.sh --phase preflight
 ```
 
 ```
-vehicle console [staff]                      ↑↓ enter q
+[A2]vehicle console [staff]                  ↑↓ enter q
 running: driver zenoh
 stopped: autoware rosbag
 driver image: 2025-09-04  aic commit: bd9c626
@@ -263,7 +263,11 @@ driver image: 2025-09-04  aic commit: bd9c626
 -- log ---------------------------------------------------
 ```
 
-- ヘッダは 1 行で、役割を `[participant]` / `[staff]` と示し、右端にキー操作を置く。
+- ヘッダは 1 行で、左端に動かしている車両を `[A2]`、続けて役割を `[participant]` /
+  `[staff]` と示し、右端にキー操作を置く。車両は環境変数 `VEHICLE_ID` →
+  リポジトリ直下の `.env` の順に読み、取れなければ `[-]` と出す（空欄だと見落とす）。
+  hostname からの引き当ては持たない。その対応表は `vehicle_ports.sh` にあり、
+  ここへ写すと表が二重になる。
   その下の 2 行がサービス行（`running:` / `stopped:`）。運営の画面は参加者の並びとは別で、`1 - download` / `2 - driver` /
   `3 - zenoh` / `4 - driver down` / `5 - zenoh down` / `6 - rosbag` / `7 - rosbag down` /
   `8 - down all` の 8 行だけ。
