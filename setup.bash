@@ -1192,9 +1192,9 @@ doctor() {
     echo "${INFO} 3) Download AWSIM:     ./setup.bash download awsim"
     echo "${INFO} 4) Build image:        ./docker_build.sh dev"
     echo "${INFO} 5) Build Autoware:     make autoware-build && docker compose logs -f autoware-build"
-    echo "${INFO} 6) Run evaluation:     ./run_evaluation.bash  (optional: ROSBAG=true CAPTURE=true)"
+    echo "${INFO} 6) Run evaluation:     ./create_submit_file.bash && ./docker_build.sh eval && make eval"
     echo "${INFO} 7) Start dev:          make dev   (ROS_DOMAIN_ID is read from .env)"
-    echo "${INFO} 8) Dev shell:          docker compose run --rm -it --entrypoint bash autoware"
+    echo "${INFO} 8) Dev shell:          make autoware-bash"
 
     return "$failed"
 }
