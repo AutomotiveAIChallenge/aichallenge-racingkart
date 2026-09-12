@@ -118,7 +118,7 @@ Autoware を入れ替えるときは参加者の 6 → 4 と辿る。土台の�
 down → up と辿る（`driver` は 4 → 2、`zenoh` は 5 → 3、`rosbag` は 7 → 6）。
 
 `driver` / `zenoh` は常時 ON で、落とすのは異常時だけである。`zenoh` を落とすと遠隔からの
-監視が切れ、`driver` を落とすと車両が動かなくなる。`rosbag down` は大会中は押さない。
+監視が切れ、`driver` を落とすと車両が動かなくなる。`rosbag` / `rosbag down` は大会中は押さない。
 `down all` は 1 日の終わりに使う。参加者の `autoware-vehicle down` はこの 3 つを触らない。
 
 `driver` / `zenoh` に加えて運営が `rosbag` も上げるのは、`autoware-vehicle` が rosbag を上げないのに
@@ -257,7 +257,7 @@ driver image: 2025-09-04  aic commit: bd9c626
 3 OK zenoh  (always on)
 4 -  driver down  (on faults only)
 5 -  zenoh down  (on faults only)
-6 -  rosbag
+6 -  rosbag  (not during the event)
 7 -  rosbag down  (not during the event)
 8 -  down all  (end of the day)
 -- log ---------------------------------------------------
@@ -270,8 +270,8 @@ driver image: 2025-09-04  aic commit: bd9c626
 - ステップは縦 1 列。印は 2 文字固定（`OK` / `NG` / `>>` 実行中 / `-` 未実行 / `?` 前提未達）。
 - 押してよい場面が題名から読み取れないステップは、行末に括弧書きで一言添える。
   `driver` / `zenoh` は `always on`（走行枠の間ずっと上げたまま）、`driver down` /
-  `zenoh down` は `on faults only`（異常時だけ）、`rosbag down` は
-  `not during the event`（大会中は止めない）、`down all` は `end of the day`。
+  `zenoh down` は `on faults only`（異常時だけ）、`rosbag` / `rosbag down` は
+  `not during the event`（大会中は触らない）、`down all` は `end of the day`。
   行の幅計算は文字数なので注釈は ASCII で書き、注釈込みでも 46 桁に収まる長さにする。
 - サービス行は `running: driver autoware` と `stopped: zenoh rosbag` の 2 行で、`driver` / `autoware` /
   `zenoh` / `rosbag` を `REQUIRED_SERVICES` の順に running / stopped へ振り分けて名前のまま出す。

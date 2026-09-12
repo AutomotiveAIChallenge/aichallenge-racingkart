@@ -231,6 +231,7 @@ STAFF_STEPS = (
     Step(
         step_id=STEP_ROSBAG,
         title="rosbag",
+        note="not during the event",
         command=("make", "rosbag"),
         measure=_service_up("rosbag"),
     ),

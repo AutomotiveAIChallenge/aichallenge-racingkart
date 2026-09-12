@@ -37,6 +37,7 @@ from tui_core import (  # noqa: E402
     STEP_BUILD,
     STEP_DRIVER,
     STEP_DRIVER_DOWN,
+    STEP_ROSBAG,
     STEP_ROSBAG_DOWN,
     STEP_TEARDOWN,
     STEP_ZENOH,
@@ -187,7 +188,8 @@ class TestStepNote(unittest.TestCase):
     def test_the_steps_whose_timing_is_not_obvious_carry_a_note(self):
         for step_id in (
             STEP_DRIVER, STEP_ZENOH,
-            STEP_DRIVER_DOWN, STEP_ZENOH_DOWN, STEP_ROSBAG_DOWN, STEP_TEARDOWN,
+            STEP_DRIVER_DOWN, STEP_ZENOH_DOWN,
+            STEP_ROSBAG, STEP_ROSBAG_DOWN, STEP_TEARDOWN,
         ):
             with self.subTest(step_id=step_id):
                 self.assertTrue(step_by_id(step_id).note)
