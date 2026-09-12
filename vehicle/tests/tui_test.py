@@ -217,7 +217,7 @@ class TestStepNote(unittest.TestCase):
 
 class TestHeaderTitle(unittest.TestCase):
     def test_shows_the_vehicle_then_the_role(self):
-        self.assertEqual(header_title("staff", "A2"), "[A2]vehicle console [staff]")
+        self.assertEqual(header_title("staff", "A2"), "[A2] vehicle console [staff]")
 
     def test_longest_form_fits_min_cols_with_the_hints(self):
         # header は「タイトル + 区切り 1 + ヒント 10」。最長の役割と ID で測る。

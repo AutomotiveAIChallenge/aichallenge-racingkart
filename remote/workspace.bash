@@ -15,7 +15,7 @@ if [ -n "$VEHICLE_ID" ]; then
 else
     TARGET="接続先: 未設定 (.env に VEHICLE_ID がない。connect_ssh.bash に引数で渡す)"
 fi
-CONNECT="./remote/connect_ssh.bash            (別の車両へは引数で A2|A3|A6|A7|test)"
+CONNECT="遠隔ssh操作：./remote/connect_ssh.bash"
 
 hint() {
     echo "================================================================"

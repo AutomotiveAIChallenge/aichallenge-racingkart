@@ -227,7 +227,7 @@ GNSS の 8 秒待ち、13 topic ぶんの `docker compose exec` + ROS 環境の 
 ## 画面設計
 
 ```
-[A2]vehicle console [participant]            ↑↓ enter q
+[A2] vehicle console [participant]           ↑↓ enter q
 running: driver autoware
 stopped: zenoh rosbag
 1 NG check preflight
@@ -248,7 +248,7 @@ $ ./setup_check.sh --phase preflight
 ```
 
 ```
-[A2]vehicle console [staff]                  ↑↓ enter q
+[A2] vehicle console [staff]                 ↑↓ enter q
 running: driver zenoh
 stopped: autoware rosbag
 driver image: 2025-09-04  aic commit: bd9c626
@@ -276,7 +276,7 @@ driver image: 2025-09-04  aic commit: bd9c626
   `driver` / `zenoh` は `always on`（走行枠の間ずっと上げたまま）、`driver down` /
   `zenoh down` は `on faults only`（異常時だけ）、`rosbag` / `rosbag down` は
   `not during the event`（大会中は触らない）、`down all` は `end of the day`。
-  行の幅計算は文字数なので注釈は ASCII で書き、注釈込みでも 46 桁に収まる長さにする。
+  行の幅計算は文字数なので注釈は ASCII で書き、注釈込みでも 47 桁に収まる長さにする。
 - サービス行は `running: driver autoware` と `stopped: zenoh rosbag` の 2 行で、`driver` / `autoware` /
   `zenoh` / `rosbag` を `REQUIRED_SERVICES` の順に running / stopped へ振り分けて名前のまま出す。
 - 運営の画面だけ、サービス行の下に version 行を 1 行置く
@@ -291,12 +291,12 @@ driver image: 2025-09-04  aic commit: bd9c626
 - 長い行は折り返す。切り詰めると長いパスやコンパイラ出力の末尾が読めなくなる。
 - 参加者のステップ 1（`check preflight`）は起動時に自動実行する。運営の画面には preflight が無く、
   起動時の自動実行もしない。
-- 最低端末サイズは参加者 46x15、運営 46x17（桁数は参加者・運営共通）。行数の内訳は
+- 最低端末サイズは参加者 47x15、運営 47x17（桁数は参加者・運営共通）。行数の内訳は
   ヘッダ 1 + サービス行 2 + ステップ数（7 / 8）+ version 行（運営のみ 1）
   + failures 見出し 1 + failures 1 + log 見出し 1 + log 1、に 1 行の余裕。桁数は画面中で
-  いちばん幅を食う固定行、version 行 `driver image: YYYY-MM-DD  aic commit: xxxxxxx`
-  （45 文字）が収まる幅に 1 文字の余裕を足したもの。version 行は運営の画面にしか出ないが、
-  役割で最低幅を変えると tmux を役割ごとに張り替える羽目になるので幅は共通にしている。
+  いちばん幅を食う固定行、ヘッダの最長形 `[test] vehicle console [participant]` + 区切り 1
+  + キー操作 10 = 47 桁に合わせたもの（version 行は 45 桁）。version 行は運営の画面にしか
+  出ないが、役割で最低幅を変えると tmux を役割ごとに張り替える羽目になるので幅は共通にしている。
   下回る場合は起動時に警告して終了する。
   `min_lines()` は役割のステップ数から導くので、ステップを増減させても手で直す箇所は無い。
 
@@ -367,7 +367,7 @@ Python 3 標準ライブラリのみを使う（`curses` / `subprocess` / `threa
   まさにその状況こそ preflight を走らせたい場面である。
 - **ssh 切断**：tmux セッションが残る。再接続して `make vehicle-tui` を実行すると
   `-A` により同じセッションへアタッチする。実行中のステップは継続している。
-- **端末が狭い**：役割ごとの最低サイズ（参加者 46x15、運営 46x17）を下回る場合は起動時に警告して終了する。
+- **端末が狭い**：役割ごとの最低サイズ（参加者 47x15、運営 47x17）を下回る場合は起動時に警告して終了する。
 
 ## テスト方針
 
