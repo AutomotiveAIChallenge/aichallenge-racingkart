@@ -7,6 +7,18 @@ import matplotlib.pyplot as plt
 # Colors
 PREDICTION = '#BA4A00'
 
+# OSQP statuses whose primal iterate may be used as a plan. For an infeasible
+# problem osqp 0.6 returns x = [None, ...] but osqp >= 1.0 returns a finite,
+# meaningless iterate, so the status (not the values) must decide.
+# infeasible 時の x は osqp のバージョンで None/有限値と異なるため status で判定する。
+USABLE_OSQP_STATUSES = ('solved', 'solved inaccurate', 'maximum iterations reached')
+
+
+def _is_usable_solution(result) -> bool:
+    if result.info.status not in USABLE_OSQP_STATUSES:
+        return False
+    return bool(np.all(np.isfinite(np.asarray(result.x, dtype=float))))
+
 ##################
 # MPC Controller #
 ##################
@@ -250,20 +262,21 @@ class MPC:
         try:
             dec = self.optimizer.solve()
             control_signals = np.array(dec.x[-N*nu:])
-            use_control_signals = control_signals[1::2]
 
-            if not np.all(use_control_signals):
+            if not _is_usable_solution(dec):
                 for i in range(1, 6):
                     relaxed_safety_margin = self.model.safety_margin * ((5-i) / 5.0)
                     self._init_problem(N, relaxed_safety_margin)
                     dec = self.optimizer.solve()
                     control_signals = np.array(dec.x[-N*nu:])
-                    use_control_signals = control_signals[1::2]
 
-                    if self.infeasibility_counter == 0 and np.all(use_control_signals):
+                    if self.infeasibility_counter == 0 and _is_usable_solution(dec):
                         if self.last_solved_wp_id != self.model.wp_id:
                             print(f"Relaxed safety margin by {relaxed_safety_margin} ({5-i}/5) to solve the problem")
                         break
+
+            if not _is_usable_solution(dec):
+                raise ValueError(f"OSQP returned no usable solution ({dec.info.status})")
 
             # ステア角の計算と保存
             control_signals[1::2] = np.arctan(control_signals[1::2] * self.model.length)
@@ -292,7 +305,7 @@ class MPC:
             self.infeasibility_counter = 0
             self.last_solved_wp_id = self.model.wp_id
 
-        except TypeError or ValueError:
+        except (TypeError, ValueError):
             id = nu * (self.infeasibility_counter + 1)
             if id + 2 < len(self.current_control):
                 u = np.array(self.current_control[id:id+2])
