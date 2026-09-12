@@ -6,6 +6,7 @@
 #include <tf2/utils.h>
 
 #include <algorithm>
+#include <iterator>
 
 namespace simple_pure_pursuit
 {
@@ -87,14 +88,54 @@ void SimplePurePursuit::onTimer()
   double rear_y = odometry_->pose.pose.position.y -
                   wheel_base_ / 2.0 * std::sin(odometry_->pose.pose.orientation.z);
   //// search lookahead point
+  const auto & traj_points = trajectory_->points;
+  auto is_beyond_lookahead = [&](const TrajectoryPoint & point) {
+    return std::hypot(point.pose.position.x - rear_x, point.pose.position.y - rear_y) >=
+           lookahead_distance;
+  };
   auto lookahead_point_itr = std::find_if(
-    trajectory_->points.begin() + closet_traj_point_idx, trajectory_->points.end(),
-    [&](const TrajectoryPoint & point) {
-      return std::hypot(point.pose.position.x - rear_x, point.pose.position.y - rear_y) >=
-             lookahead_distance;
-    });
-  double lookahead_point_x = lookahead_point_itr->pose.position.x;
-  double lookahead_point_y = lookahead_point_itr->pose.position.y;
+    traj_points.begin() + closet_traj_point_idx, traj_points.end(), is_beyond_lookahead);
+
+  double lookahead_point_x;
+  double lookahead_point_y;
+  if (lookahead_point_itr != traj_points.end()) {
+    lookahead_point_x = lookahead_point_itr->pose.position.x;
+    lookahead_point_y = lookahead_point_itr->pose.position.y;
+  } else {
+    // No point from closet_traj_point_idx to the end reaches the lookahead
+    // distance. For a closed (looped) trajectory -- first and last points
+    // within ~2x the point spacing of each other -- wrap the search through
+    // the beginning instead of pinning to the terminal point: otherwise the
+    // controller steers toward an increasingly nearby endpoint for the
+    // whole end-of-lap segment rather than the upcoming part of the loop.
+    bool is_closed = false;
+    if (traj_points.size() >= 2) {
+      const double point_spacing = std::hypot(
+        traj_points[1].pose.position.x - traj_points[0].pose.position.x,
+        traj_points[1].pose.position.y - traj_points[0].pose.position.y);
+      const double end_gap = std::hypot(
+        traj_points.back().pose.position.x - traj_points.front().pose.position.x,
+        traj_points.back().pose.position.y - traj_points.front().pose.position.y);
+      is_closed = end_gap < 1.5 && end_gap < 2.0 * point_spacing;
+    }
+
+    auto wrapped_itr = traj_points.end();
+    if (is_closed) {
+      wrapped_itr = std::find_if(
+        traj_points.begin(), traj_points.begin() + closet_traj_point_idx, is_beyond_lookahead);
+    }
+
+    if (is_closed && wrapped_itr != traj_points.begin() + closet_traj_point_idx) {
+      lookahead_point_x = wrapped_itr->pose.position.x;
+      lookahead_point_y = wrapped_itr->pose.position.y;
+    } else {
+      // Open trajectory (or a closed one with no qualifying point anywhere):
+      // clamp to the last point rather than dereferencing end().
+      auto last_itr = std::prev(traj_points.end());
+      lookahead_point_x = last_itr->pose.position.x;
+      lookahead_point_y = last_itr->pose.position.y;
+    }
+  }
 
   geometry_msgs::msg::PointStamped lookahead_point_msg;
   lookahead_point_msg.header.stamp = get_clock()->now();
