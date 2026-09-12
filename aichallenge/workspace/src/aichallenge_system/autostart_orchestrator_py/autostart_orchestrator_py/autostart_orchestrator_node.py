@@ -942,12 +942,17 @@ class AutostartOrchestrator(Node):
         except (TypeError, ValueError):
             timeout = 10.0
         timeout_arg = timeout if timeout > 0.0 else None
+        # One deadline bounds the whole step (as with initial pose above):
+        # wait_for_service consumes part of it, and the trigger call only
+        # gets the remainder, so the total wait cannot exceed timeout_arg.
+        deadline = None if timeout_arg is None else time.monotonic() + timeout_arg
         if not self._wait_for_service(self._cli_capture, timeout_sec=timeout_arg):
             self.get_logger().warn(f"skip capture {'start' if start else 'stop'} (service not found)")
             if not start:
                 self._capture_started = False
             return
-        ok, msg = self._call_trigger(self._cli_capture, timeout_sec=timeout_arg)
+        remaining = None if deadline is None else max(0.0, deadline - time.monotonic())
+        ok, msg = self._call_trigger(self._cli_capture, timeout_sec=remaining)
         level = "info" if ok else "warn"
         getattr(self.get_logger(), level)(f"capture {'start' if start else 'stop'}: success={ok} msg={msg}")
         if ok:
