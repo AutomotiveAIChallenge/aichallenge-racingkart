@@ -101,7 +101,8 @@ eval:
 	@echo "Start evaluation simulation (AWSIM + Autoware)"
 	docker compose up -d autoware-simulator-evaluation
 	@$(MAKE) awsim-request-start || { \
-		echo "[eval] AWSIM did not subscribe to /admin/awsim/start within $(AWSIM_START_TIMEOUT)s." >&2; \
+		echo "[eval] AWSIM start request failed." >&2; \
+		echo "[eval] Configured AWSIM_START_TIMEOUT=$(AWSIM_START_TIMEOUT)s." >&2; \
 		echo "[eval] Evaluation container status and last log lines:" >&2; \
 		docker compose ps -a autoware-simulator-evaluation >&2; \
 		docker compose logs --tail 30 autoware-simulator-evaluation >&2; \
