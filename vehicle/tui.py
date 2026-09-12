@@ -525,7 +525,8 @@ class Console:
         ):
             # 前提未達。実行は妨げない（前提は助言）ので印だけ変える。
             mark = _MARK_UNMET
-        return f"{idx + 1} {mark} {step.title}"
+        note = f"  ({step.note})" if step.note else ""
+        return f"{idx + 1} {mark} {step.title}{note}"
 
     def _draw_region(
         self, top: int, label: str, wrapped: list, rows: int, width: int

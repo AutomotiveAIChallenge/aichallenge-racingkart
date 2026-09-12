@@ -248,11 +248,31 @@ $ ./setup_check.sh --phase preflight
 [preflight] exit 1
 ```
 
+```
+vehicle console [staff]                      ↑↓ enter q
+running: driver zenoh
+stopped: autoware rosbag
+driver image: 2025-09-04  aic commit: bd9c626
+1 -  download
+2 OK driver
+3 OK zenoh
+4 -  driver down  (normally stays up)
+5 -  zenoh down  (normally stays up)
+6 -  rosbag
+7 -  rosbag down
+8 -  down all  (end of session)
+-- log ---------------------------------------------------
+```
+
 - ヘッダは 1 行で、役割を `[participant]` / `[staff]` と示し、右端にキー操作を置く。
   その下の 2 行がサービス行（`running:` / `stopped:`）。運営の画面は参加者の並びとは別で、`1 - download` / `2 - driver` /
   `3 - zenoh` / `4 - driver down` / `5 - zenoh down` / `6 - rosbag` / `7 - rosbag down` /
   `8 - down all` の 8 行だけ。
 - ステップは縦 1 列。印は 2 文字固定（`OK` / `NG` / `>>` 実行中 / `-` 未実行 / `?` 前提未達）。
+- 押してよい場面が題名から読み取れないステップは、行末に括弧書きで一言添える
+  （`4 -  driver down  (normally stays up)` / `5 -  zenoh down  (normally stays up)` /
+  `8 -  down all  (end of session)`）。行の幅計算は文字数なので注釈は ASCII で書き、
+  注釈込みでも 46 桁に収まる長さにする。
 - サービス行は `running: driver autoware` と `stopped: zenoh rosbag` の 2 行で、`driver` / `autoware` /
   `zenoh` / `rosbag` を `REQUIRED_SERVICES` の順に running / stopped へ振り分けて名前のまま出す。
 - 運営の画面だけ、サービス行の下に version 行を 1 行置く

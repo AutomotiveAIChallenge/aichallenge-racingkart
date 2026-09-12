@@ -33,9 +33,15 @@ from tui_core import (  # noqa: E402
     PARTICIPANT_STEPS,
     REQUIRED_SERVICES,
     ROLE_PARTICIPANT,
+    STAFF_STEPS,
+    STEP_BUILD,
+    STEP_DRIVER_DOWN,
+    STEP_TEARDOWN,
+    STEP_ZENOH_DOWN,
     STEPS,
     Workspace,
     build_done,
+    step_by_id,
 )
 
 
@@ -168,6 +174,34 @@ class TestTerminalSize(unittest.TestCase):
     def test_minimum_leaves_a_row_for_failures_and_a_row_for_log(self):
         # header 1 + services 2 + STEPS + failures 見出し 1 + failures 1 + log 見出し 1 + log 1。
         self.assertGreaterEqual(MIN_LINES, 3 + len(STEPS) + 4)
+
+
+class TestStepNote(unittest.TestCase):
+    def _row(self, step, idx=0):
+        note = f"  ({step.note})" if step.note else ""
+        return f"{idx + 1} OK {step.title}{note}"
+
+    def test_the_down_steps_that_should_stay_up_carry_a_note(self):
+        for step_id in (STEP_DRIVER_DOWN, STEP_ZENOH_DOWN, STEP_TEARDOWN):
+            with self.subTest(step_id=step_id):
+                self.assertTrue(step_by_id(step_id).note)
+
+    def test_a_step_without_a_note_renders_the_title_alone(self):
+        step = step_by_id(STEP_BUILD)
+        self.assertEqual(self._row(step), f"1 OK {step.title}")
+
+    def test_every_row_fits_min_cols(self):
+        # 注釈を足しても端末の最低幅に収まること。はみ出すと行末が切れる。
+        for steps in (PARTICIPANT_STEPS, STAFF_STEPS):
+            for idx, step in enumerate(steps):
+                with self.subTest(step_id=step.step_id):
+                    self.assertLessEqual(len(self._row(step, idx)), MIN_COLS)
+
+    def test_notes_are_ascii(self):
+        # 画面の幅計算は文字数なので、全角が混ざると行末がずれる。
+        for step in STEPS:
+            with self.subTest(step_id=step.step_id):
+                self.assertTrue(step.note.isascii())
 
 
 class TestVersionLine(unittest.TestCase):

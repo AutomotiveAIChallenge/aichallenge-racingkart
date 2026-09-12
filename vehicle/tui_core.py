@@ -128,6 +128,10 @@ class Step:
     # 環境から完了を実測する述語。None なら実測できないステップで、合否は
     # 終了コードにしか現れないので session の記録から状態を出す。
     measure: Optional[Callable[[Workspace], bool]] = None
+    # 行の末尾に括弧書きで出す一言。押してよい場面が題名から読み取れない
+    # ステップにだけ付ける。端末は 46 桁しかないので短く、幅計算が狂わないよう
+    # ASCII で書く。
+    note: str = ""
 
 
 # 参加者の並び。運営は STAFF_STEPS を別画面として持つ（参加者の続きではない）。
@@ -211,12 +215,14 @@ STAFF_STEPS = (
     Step(
         step_id=STEP_DRIVER_DOWN,
         title="driver down",
+        note="normally stays up",
         command=("docker", "compose", "down", "driver"),
         measure=_service_down("driver"),
     ),
     Step(
         step_id=STEP_ZENOH_DOWN,
         title="zenoh down",
+        note="normally stays up",
         command=("docker", "compose", "down", "zenoh"),
         measure=_service_down("zenoh"),
     ),
@@ -235,6 +241,7 @@ STAFF_STEPS = (
     Step(
         step_id=STEP_TEARDOWN,
         title="down all",
+        note="end of session",
         command=("make", "down"),
         measure=_stack_down,
     ),
