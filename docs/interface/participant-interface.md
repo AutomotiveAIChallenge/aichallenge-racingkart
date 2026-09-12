@@ -42,7 +42,10 @@
 `create_submit_file.bash` は次のコマンドで tar を生成します。
 
 ```bash
-tar zcvf submit/aichallenge_submit.tar.gz -C ./aichallenge/workspace/src aichallenge_submit
+tar zcvf submit/aichallenge_submit.tar.gz \
+    --exclude='__pycache__' \
+    --exclude='*.pyc' \
+    -C ./aichallenge/workspace/src aichallenge_submit
 ```
 
 tar 内の最上位エントリは `aichallenge_submit/` のみです。独自に tar を生成する場合も、内側の最上位ディレクトリ名は **必ず `aichallenge_submit/`** にしてください。
