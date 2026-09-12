@@ -110,3 +110,4 @@ v2x_obstacle_avoidance:
   vehicle_radius: 0.5          # [m]
   v_max_safety: 30.0           # [m/s]
   position_jump_threshold: 5.0 # [m]
+  hold_time_s: 0.0             # [s] keep a vehicle missing from the latest V2X message this long (0.0 = off)
