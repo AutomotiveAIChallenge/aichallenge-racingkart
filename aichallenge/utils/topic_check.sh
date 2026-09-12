@@ -75,7 +75,7 @@ EOF
 
 require_cmd() {
     if ! command -v "$1" >/dev/null 2>&1; then
-        echo "[ERROR] '$1' が見つかりません。コンテナ内で実行し、ROS 2 環境を source 済みか確認してください。" >&2
+        echo "[ERROR] '$1' が見つかりません。コンテナ内で実行し、ROS 2 環境を source 済みか確認してください。 / not found. Run this inside the container with the ROS 2 environment sourced." >&2
         exit 127
     fi
 }
@@ -119,7 +119,7 @@ parse_args() {
             exit 0
             ;;
         *)
-            echo "不明な引数: $1"
+            echo "不明な引数 / Unknown argument: $1"
             usage
             exit 2
             ;;
@@ -248,12 +248,12 @@ main() {
     require_cmd ros2
     log_init
 
-    echo "[INFO] 必須トピックの出現を最大 ${TIMEOUT}s 待機します…"
+    echo "[INFO] 必須トピックの出現を最大 ${TIMEOUT}s 待機します… / Waiting up to ${TIMEOUT}s for the required topics..."
     local listed
     if listed=$(all_required_present_within_timeout); then
-        echo "[OK] 必須トピックは全て一覧に存在します。"
+        echo "[OK] 必須トピックは全て一覧に存在します。 / All required topics are present."
     else
-        echo "[ERROR] 必須トピックの一部が見つかりません。"
+        echo "[ERROR] 必須トピックの一部が見つかりません。 / Some required topics are missing."
     fi
 
     local -a missing_required=()
@@ -264,13 +264,13 @@ main() {
     done
 
     if ((${#missing_required[@]} > 0)); then
-        echo "[MISSING] 必須トピック（不足）:"
+        echo "[MISSING] 必須トピック（不足） / Missing required topics:"
         printf '  %s\n' "${missing_required[@]}"
     fi
 
     # Hz 計測（存在する対象のみ）
     echo ""
-    echo "[INFO] Hz 計測（約 ${HZ_SECS}s 観測, window=${HZ_WINDOW}、閾値: ${THRESHOLD_HZ}Hz）"
+    echo "[INFO] Hz 計測（約 ${HZ_SECS}s 観測, window=${HZ_WINDOW}、閾値: ${THRESHOLD_HZ}Hz） / Measuring rates (about ${HZ_SECS}s, window=${HZ_WINDOW}, threshold ${THRESHOLD_HZ} Hz)"
     printf '%-50s %-10s %s\n' "Topic" "Hz" ">= ${THRESHOLD_HZ}"
     printf '%-50s %-10s %s\n' "-----" "-----" "---------"
     slow_count=0
@@ -295,14 +295,14 @@ main() {
     done
     # actuation_cmd の内容チェック
     echo ""
-    echo "[INFO] actuation_cmd 内容チェック（accel_cmd > 0 かつ brake_cmd = 0.0）"
+    echo "[INFO] actuation_cmd 内容チェック（accel_cmd > 0 かつ brake_cmd = 0.0） / Checking actuation_cmd content (accel_cmd > 0 and brake_cmd = 0.0)"
     actuation_result=$(check_actuation_cmd) || true
     actuation_rc=$?
     printf '%-50s %s\n' "/control/command/actuation_cmd" "$actuation_result"
 
     # awsim トピックチェック
     echo ""
-    echo "[INFO] AWSIM トピックチェック（実車環境確認）"
+    echo "[INFO] AWSIM トピックチェック（実車環境確認） / Checking for AWSIM topics (real-vehicle environment check)"
     awsim_result=$(check_awsim_topics) || true
     awsim_rc=$?
     printf '%-50s %s\n' "AWSIM topics absence" "$awsim_result"
@@ -312,7 +312,7 @@ main() {
     echo "Required missing : ${#missing_required[@]}"
     echo "Hz window/sec  : ${HZ_WINDOW}/${HZ_SECS}"
     echo "Hz threshold   : ${THRESHOLD_HZ}"
-    echo "Hz < threshold : ${slow_count} (NA含む: ${na_count})"
+    echo "Hz < threshold : ${slow_count} (NA含む / incl. NA: ${na_count})"
     echo "Actuation check : $(if ((actuation_rc == 0)); then echo "PASS"; else echo "FAIL"; fi)"
     echo "AWSIM check     : $(if ((awsim_rc == 0)); then echo "PASS"; else echo "FAIL"; fi)"
     echo "Log file        : $LOG_FILE"

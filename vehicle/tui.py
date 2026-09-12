@@ -264,7 +264,7 @@ class Console:
         try:
             code = subprocess.call(list(step.command), cwd=str(self._cwd_for(step)))
         except OSError as exc:
-            print(f"起動できません: {exc}", flush=True)
+            print(f"起動できません / Cannot start: {exc}", flush=True)
             code = 127
         input("\n[Enter] でコンソールに戻ります ")
         self.session[step.step_id] = DONE if code == 0 else FAILED

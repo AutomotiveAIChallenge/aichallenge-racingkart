@@ -2,8 +2,8 @@
 
 # スクリプトに引数が1つだけ渡されているかチェック
 if [ "$#" -ne 1 ]; then
-    echo "エラー: Vechicle IDを指定してください。" >&2
-    echo "使用法: $0 {A1|A2|A3|A5|A6|A7|A8|test-*}" >&2
+    echo "エラー: Vechicle IDを指定してください。 / Error: specify a vehicle ID." >&2
+    echo "使用法 / Usage: $0 {A1|A2|A3|A5|A6|A7|A8|test-*}" >&2
     exit 1
 fi
 
@@ -79,8 +79,8 @@ test-server)
     zenohd --listen tcp/127.0.0.1:7448
     ;;
 *)
-    echo "エラー: 無効な名前空間です: '$NAMESPACE'" >&2
-    echo "A1, A2, A3, A5, A6, A7, A8, test-* のいずれかを指定してください。" >&2
+    echo "エラー: 無効な名前空間です / Error: invalid namespace: '$NAMESPACE'" >&2
+    echo "A1, A2, A3, A5, A6, A7, A8, test-* のいずれかを指定してください。 / Specify one of A1, A2, A3, A5, A6, A7, A8, test-*." >&2
     exit 1
     ;;
 esac
