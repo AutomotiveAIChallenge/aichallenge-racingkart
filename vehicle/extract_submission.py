@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Swap aichallenge/workspace/src/aichallenge_submit/ with a password-protected zip.
 
-Operators place every team's submission as <id>.zip under the submissions
+Operators place every team's submission as <id>.zip under the .submissions
 directory beforehand. On the vehicle the operator types the team id and the
 zip password; the archive's top-level aichallenge_submit/ replaces the one in
 the workspace.
@@ -28,7 +28,7 @@ from pathlib import Path
 FAIL = "❌"
 SUBMIT_DIR = "aichallenge_submit"
 REPO_ROOT = Path(__file__).resolve().parent.parent
-DEFAULT_ZIP_DIR = REPO_ROOT / "vehicle" / "submissions"
+DEFAULT_ZIP_DIR = REPO_ROOT / "vehicle" / ".submissions"
 DEFAULT_OUTPUT = REPO_ROOT / "aichallenge" / "workspace" / "src"
 
 

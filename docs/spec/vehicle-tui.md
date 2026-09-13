@@ -89,7 +89,7 @@
 | # | 表示名 | 実行するもの | 前提（助言） | 完了の判定 |
 |---|--------|--------------|--------------|------------|
 | 1 | `check preflight` | `./setup_check.sh --phase preflight` | なし | 終了コード 0（セッション記憶） |
-| 2 | `extract` | `make submission-extract`（`vehicle/submissions/<id>.zip` を ID とパスワードで展開し `src/aichallenge_submit/` を入れ替える） | 1 | 終了コード 0（セッション記憶） |
+| 2 | `extract` | `make submission-extract`（`vehicle/.submissions/<id>.zip` を ID とパスワードで展開し `src/aichallenge_submit/` を入れ替える） | 1 | 終了コード 0（セッション記憶） |
 | 3 | `build` | `make autoware-build` | 2 | `workspace/install/setup.bash` が存在し `src/` より新しい（実測） |
 | 4 | `autoware-vehicle` | `make autoware-vehicle` | 3 | `autoware` が compose 上で running（実測。`driver` / `zenoh` / `rosbag` はサービス行で見せるだけ） |
 | 5 | `check runtime` | `./setup_check.sh --phase runtime` | 4 | 終了コード 0（セッション記憶） |
@@ -162,9 +162,9 @@ untracked な提出物ファイルは残り、付けても ignored な `build/` 
 
 ### 提出物 zip の置き場と形式
 
-運営は走行枠の前に全チームの提出物を `vehicle/submissions/<id>.zip` として車両 PC に置く。
+運営は走行枠の前に全チームの提出物を `vehicle/.submissions/<id>.zip` として車両 PC に置く。
 `aichallenge/workspace/` の外に置くのは、`cleanup` の `git clean -fdx aichallenge/workspace`
-で消えないようにするためである（`vehicle/submissions/` は `.gitignore` 済み）。
+で消えないようにするためである（`vehicle/.submissions/` は `.gitignore` 済み）。
 
 zip は **トップレベルが `aichallenge_submit/` だけ**で、**従来の PKZIP 暗号**
 （`cd <提出物の親> && zip -er <id>.zip aichallenge_submit`）で作る。
@@ -404,7 +404,7 @@ curses の描画、実車での疎通、`make` ターゲットの実行そのも
 
 ## TODO
 
-- **zip の配布手順。** `vehicle/submissions/<id>.zip` を車両 PC へ置く手段（scp か、
+- **zip の配布手順。** `vehicle/.submissions/<id>.zip` を車両 PC へ置く手段（scp か、
   `make download` で取った tar.gz から運営が zip を作り直すか）と、パスワードの受け渡しは未決。
   `make download`（`download_submission.sh`）は運営用にそのまま残している。
 
