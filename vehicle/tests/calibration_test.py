@@ -191,10 +191,18 @@ class CalibrationTest(unittest.TestCase):
         self.assertEqual(sorted(p.name for p in self.calibration.iterdir()),
                          ["accel_map.csv", "brake_map.csv", "imu_bias.yaml"])
 
-    def test_repository_maps_match_supported_format(self):
+    def test_repository_maps_and_vehicle_profiles_match_supported_format(self):
         submit = Path(__file__).resolve().parents[2] / "aichallenge/workspace/src/aichallenge_submit"
         for name in ("accel_map.csv", "brake_map.csv"):
             self.assertTrue(read_map(submit / MAP_DIR / name))
+        profiles = Path(__file__).resolve().parents[1] / ".calibration"
+        for vehicle in ("A2", "A3", "A4", "A6", "A7", "test"):
+            with self.subTest(vehicle=vehicle):
+                for name in ("accel_map.csv", "brake_map.csv"):
+                    self.assertTrue(read_map(profiles / vehicle / name))
+                self.assertEqual(set(parse_offsets(
+                    (profiles / vehicle / "imu_bias.yaml").read_text(), flat=True
+                )), {"x", "y", "z"})
 
 
 if __name__ == "__main__":

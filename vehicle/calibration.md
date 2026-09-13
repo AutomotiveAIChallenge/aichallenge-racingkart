@@ -18,9 +18,13 @@ vehicle/.calibration/
 車両を推測するフォールバックはありません。ID が未設定・不正な場合は失敗します。
 `test` も独立した保存ディレクトリを使います。
 
-保存元は `.gitignore` 対象で、`aichallenge/workspace/` の外にあるため
-`make workspace-clean` では消えません。運営が各車両 PC に実測値を配置してください。
-この変更には校正値そのものや配布機能は含めません。
+保存元は Git 管理対象で、`aichallenge/workspace/` の外にあるため
+`make workspace-clean` では消えません。
+A2・A3・A4・A6・A7・test には `experiment` の共通 map と IMU バイアスを
+初期データとして同じ値で配置しています。車両別の実測校正値ではありません。
+`test` は動作確認用の保存先です。
+IMU バイアスは既定値の 0 であり、車両別の値への更新は別 PR で行います。
+runtime の再計測で保存元を更新すると、その車両の `imu_bias.yaml` にローカル差分が残ります。
 
 `imu_bias.yaml` は次の **3 キーだけ**を持つフラットな YAML です。
 値は有限の数値で、単位は rad/s。以下は形式の例で、実測値ではありません。
@@ -32,6 +36,9 @@ angular_velocity_offset_z: 0.003
 ```
 
 ## 初回配置
+
+A2・A3・A4・A6・A7・test の初期データは配置済みです。
+車両別の校正値への更新や、その他の車両を追加する場合は以下の手順を使います。
 
 1. `.env` の `VEHICLE_ID` を実際の車両に合わせる。
 2. `vehicle/.calibration/<VEHICLE_ID>/` を作り、その車両で校正した
