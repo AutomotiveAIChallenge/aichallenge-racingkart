@@ -776,9 +776,10 @@ class RemoteGui:
         logs_frame.rowconfigure(0, weight=1)
 
     def _handle_stop_single(self, log_key: str) -> None:
-        if not self._process_running(log_key):
-            self._append_log(log_key, '[no running process]\n')
-            return
+        # _process_running() で先に弾くと、GUI が追跡していない孤児 (RC13) は
+        # 「動いていない」ことになって _stop_process 自体に届かず、Restart だけ
+        # 掃除できて Stop では掃除できないという食い違いになる。追跡の有無に
+        # 関わらず _stop_process に任せ、孤児の掃除も同じ経路を通す。
         self._append_log(log_key, '[stop requested]\n')
         self._stop_process(log_key)
 
@@ -951,8 +952,10 @@ class RemoteGui:
         with self._processes_lock:
             entry = self.processes.pop(log_key, None)
         if entry is None:
-            # 追跡が無くても実機には孤児が残っているかもしれない (RC13)。
-            self._reap_orphan(log_key)
+            # 追跡が無くても実機には孤児が残っているかもしれない (RC13)。「Stop」も
+            # ここを通すので、追跡していないというだけで掃除をスキップしない。
+            if not self._reap_orphan(log_key):
+                self._append_log(log_key, "[no running process]\n")
             self._refresh_button_states()
             if on_terminated is not None:
                 on_terminated()
@@ -1011,8 +1014,8 @@ class RemoteGui:
             # ウィンドウが既に破棄されている場合は諦める (_on_close / _terminate_all 側で後始末される)
             pass
 
-    def _reap_orphan(self, log_key: str) -> None:
-        """GUI が追跡していない同種プロセスを掃除する (RC13)。
+    def _reap_orphan(self, log_key: str) -> bool:
+        """GUI が追跡していない同種プロセスを掃除する (RC13)。戻り値は掃除できたか。
 
         対象は ORPHAN_KILL_PATTERNS に明示登録された log_key だけに限定し、
         無関係なプロセスを巻き込まない。pkill は数十 ms で戻るのでメインスレッドで
@@ -1022,12 +1025,13 @@ class RemoteGui:
             killed = kill_orphan_pattern(log_key)
         except Exception as exc:  # pragma: no cover - defensive
             self._append_log(log_key, f"[orphan cleanup failed: {exc}]\n")
-            return
+            return False
         if killed:
             pattern = ORPHAN_KILL_PATTERNS[log_key]
             self._append_log(
                 log_key, f"[orphan cleanup: killed stray process matching {pattern!r}]\n"
             )
+        return killed
 
     @staticmethod
     def _signal_process_group(process: subprocess.Popen[str], sig: int) -> None:
