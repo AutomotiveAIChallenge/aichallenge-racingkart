@@ -1,7 +1,6 @@
 #!/bin/bash
-# 遠隔操作用ワークスペース。terminator を 4 分割 (ssh×3 + GUI tools) で立ち上げる。
-#   workspace.bash                          terminator を起動 (make workspace から呼ばれる)
-#   workspace.bash tui|monitor|staff|gui    各ペイン内で実行され、ヒントを表示して bash に移る
+# 遠隔操作用ワークスペース。引数なしで terminator を 4 分割 (ssh×3 + GUI tools) で起動する。
+# tui|monitor|staff|gui は各ペイン内で実行され、ヒントを表示して bash に移る。
 set -euo pipefail
 
 # 接続予定の車両。connect_ssh.bash が引数なしのとき見るのと同じ .env の VEHICLE_ID。

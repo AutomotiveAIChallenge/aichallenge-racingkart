@@ -86,10 +86,8 @@ class TestProbeWorkspace(unittest.TestCase):
         self.assertIsNone(ws.install_mtime)
 
     def test_populated_submit_dir_has_an_mtime(self):
-        # submit_dir_populated is gone: aichallenge_submit/ ships tracked
-        # packages, so its presence proves nothing about a download having
-        # run (see the submission step's comment in tui_core). submit_mtime is still
-        # sampled, though -- build_done() needs it to judge staleness.
+        # submit_dir_populated is gone: aichallenge_submit/ ships tracked packages, so its
+        # presence proves nothing. submit_mtime stays -- build_done() needs it for staleness.
         self.make_submission()
         ws = probe_workspace(self.root, frozenset())
         self.assertIsNotNone(ws.submit_mtime)

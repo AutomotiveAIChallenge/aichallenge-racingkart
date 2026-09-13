@@ -36,8 +36,7 @@ STEP_ROSBAG_DOWN = "rosbag_down"
 STEP_DOWNLOAD = "download"    # 提出物を board から取る
 
 # --- 役割 ------------------------------------------------------------------
-# 参加者は autoware と提出物だけを触る。driver / zenoh / rosbag の起動・停止、
-# 提出物のダウンロード、スタック全体の停止は運営のステップ。
+# 参加者は autoware と提出物だけを触る。driver / zenoh / rosbag、ダウンロード、全体停止は運営。
 ROLE_PARTICIPANT = "participant"
 ROLE_STAFF = "staff"
 ROLES = (ROLE_PARTICIPANT, ROLE_STAFF)
@@ -58,12 +57,10 @@ class Workspace:
     install_mtime: Optional[float] = None
     submit_mtime: Optional[float] = None
     services_running: FrozenSet[str] = field(default_factory=frozenset)
-    # このリポジトリから compose で起動された running なコンテナの数。プロジェクトを
-    # 問わない（default も -p 1..4 も）。services_running は default プロジェクトしか
-    # 見ないので、make down が落とす範囲の「全部止まったか」はこちらで判る。
+    # このリポジトリから compose で起動された running なコンテナ数（プロジェクト不問）。
+    # services_running は default しか見ないので、make down の「全部止まったか」はこちら。
     stack_containers: int = 0
-    # aichallenge/workspace/ が checkout 直後の状態か（tracked に差分が無く、
-    # untracked も ignored な生成物も無い）。既定は False: 観測できなかったときに
+    # aichallenge/workspace/ が checkout 直後の状態か。既定は False: 観測できなかったときに
     # cleanup を「済」と見せてはいけない。
     workspace_pristine: bool = False
 
@@ -128,9 +125,8 @@ class Step:
     # 環境から完了を実測する述語。None なら実測できないステップで、合否は
     # 終了コードにしか現れないので session の記録から状態を出す。
     measure: Optional[Callable[[Workspace], bool]] = None
-    # 行の末尾に括弧書きで出す一言。押してよい場面が題名から読み取れない
-    # ステップにだけ付ける。端末は 46 桁しかないので短く、幅計算が狂わないよう
-    # ASCII で書く。
+    # 行末に括弧書きで出す一言。押してよい場面が題名から読めないステップにだけ付ける。
+    # 端末は 46 桁しかないので短く、幅計算が狂わないよう ASCII で書く。
     note: str = ""
 
 
@@ -149,10 +145,8 @@ PARTICIPANT_STEPS = (
         requires=(STEP_PREFLIGHT,),
         # extract_submission.py prompts for the team id and the zip password.
         interactive=True,
-        # measure を持たせない: aichallenge_submit/ はこのリポジトリの checkout
-        # そのものに 15 個の tracked な参加者パッケージが入っており、展開前
-        # から常に非空である。ディレクトリの有無は「入れ替え済み」の証拠にならない。
-        # うっかり実測へ戻さないこと。
+        # measure を持たせない: aichallenge_submit/ は checkout 時点で 15 個の tracked な
+        # パッケージが入っており常に非空。ディレクトリの有無は入れ替えの証拠にならない。
     ),
     Step(
         step_id=STEP_BUILD,

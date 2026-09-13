@@ -20,16 +20,13 @@ from tkinter.scrolledtext import ScrolledText
 ROOT_DIR = Path(__file__).resolve().parent
 REMOTE_DIR = ROOT_DIR
 
-# connect_zenoh.bash の case が受理する Vehicle ID。A4 は無い点に注意。
-# ここを緩くするとスクリプト側で「無効な名前空間です」と落ちるだけになるので、
-# 候補一覧と検証を同じ定義から導いて食い違わないようにする。
+# connect_zenoh.bash の case が受理する Vehicle ID (A4 は無い)。緩くしてもスクリプト側で
+# 落ちるだけなので、候補一覧と検証を同じ定義から導いて食い違わないようにする。
 VEHICLE_IDS = ["A1", "A2", "A3", "A5", "A6", "A7", "A8"]
 TEST_VEHICLE_IDS = ["test-remote", "test-vehicle", "test-server"]
 VALID_VEHICLE_IDS = VEHICLE_IDS + TEST_VEHICLE_IDS
 # 車両側 (vehicle/vehicle_ports.sh) の VEHICLE_ID を GUI 側の ID に読み替える表。
-# あちらの "test" はローカル zenohd (tcp/127.0.0.1:7448) を指し、その remote 側の
-# 対向は test-remote。読み替えないと "test" が未知の値のまま初期値に入り、
-# ボタンを押すたびに弾かれる。
+# あちらの "test" はローカル zenohd 向けで、remote 側の対向は test-remote。
 VEHICLE_ID_ALIASES = {"test": "test-remote"}
 # Combobox に出す候補 (実車 ID を先に、test-* を後ろに)。
 VEHICLE_ID_CHOICES = VALID_VEHICLE_IDS
@@ -39,8 +36,7 @@ WINDOW_GEOMETRY = "1100x680"
 WINDOW_MIN_SIZE = (900, 540)
 
 # --- ログ処理まわりの定数 ---
-# chatty な子プロセス (zenoh-bridge, rviz, joy など) がログを高速に吐いても
-# Tk のメインループを飢餓状態にしないための上限・予算値。
+# chatty な子プロセスがログを高速に吐いても Tk のメインループを飢餓状態にしない上限・予算値。
 MAX_LOG_LINES = 2000  # 各ログウィジェットが保持する最大行数
 LOG_QUEUE_MAXSIZE = 10000  # ログキューの上限。超えたら行を捨てる (producer は絶対にブロックしない)
 POLL_BUDGET_SECONDS = 0.01  # 1回の _poll_log_queue にかける壁時計予算 (約10ms)
@@ -98,9 +94,7 @@ def default_vehicle_id(env_file: Path = ENV_FILE) -> str:
 
 
 # --- Devias Kit Pro: Neon Blue / dark palette (approx) ---
-# These values are offline approximations of the "Neon Blue" preset on the dark
-# theme (neonBlue + neutral scales). Adjust here if you have exact tokens from
-# the design kit.
+# Offline approximations of the dark-theme preset. Replace with exact design-kit tokens.
 PALETTE = {
     "bg": "#0B0F19",           # app background   (neutral 950)
     "surface": "#111927",      # cards / frames   (neutral 900)
@@ -418,9 +412,8 @@ class CommandSpec:
     stop_before: bool = False
     note: str | None = None
     kind: str = "command"  # command, stop, stop_all
-    # UI 上の役割。ボタンの色と有効/無効の判定はこれだけを見る。表示ラベルの文字列を
-    # 条件に使うと、文言を変えただけで挙動が壊れる。kind とは独立している点に注意:
-    # "Stop RViz" は `./rviz.bash down` を実行する kind="command" だが role="stop"。
+    # ボタンの色と有効/無効はこれだけを見る (ラベル文字列を条件に使うと文言変更で壊れる)。
+    # kind とは独立: "Stop RViz" は `./rviz.bash down` を走らせる kind="command" だが role="stop"。
     role: str = "start"  # start, stop, restart
 
     def render(self, vehicle_id: str) -> str:
@@ -567,9 +560,8 @@ class RemoteGui:
         # SSH user input was removed from the UI entirely; there is nothing to keep here anymore.
 
         self.processes: Dict[str, _ProcessEntry] = {}
-        # self.processes への「世代を見てから消す」操作はリーダースレッドとメイン
-        # スレッドの双方から走る。get と pop の間に別スレッドが新しいプロセスを
-        # 登録すると、世代チェックを通り抜けて新プロセスを消してしまうので排他する。
+        # self.processes の「世代を見てから消す」操作は両スレッドから走る。get と pop の間に
+        # 新しいプロセスが登録されると、世代チェックを通り抜けてそれを消すので排他する。
         self._processes_lock = threading.Lock()
         self.log_queue: "queue.Queue[tuple[str, str]]" = queue.Queue(maxsize=LOG_QUEUE_MAXSIZE)
         self._log_dropped: Dict[str, int] = {}
@@ -578,11 +570,11 @@ class RemoteGui:
         self.buttons: Dict[str, ttk.Button] = {}
         self.status_labels: Dict[str, ttk.Label] = {}
         self.autoscroll_vars: Dict[str, tk.BooleanVar] = {}
-        # 適用済みの状態を Python 側に持つ。ttk の cget() は Tcl への往復で、
-        # 100ms ごとに全ボタン分を問い合わせると flood 時の描画予算を食い潰す。
-        # 予約中の _poll_log_queue の after id。閉じるときに取り消さないと、
-        # destroy 済みの root 上でコールバックが発火して Tcl エラーが端末に出る。
+        # 予約中の _poll_log_queue の after id。閉じるときに取り消さないと、destroy 済みの
+        # root 上でコールバックが発火して Tcl エラーが端末に出る。
         self._poll_after_id: Optional[str] = None
+        # 適用済みの状態を Python 側に持つ。ttk の cget() は Tcl への往復で、100ms ごとに
+        # 全ボタン分を問い合わせると flood 時の描画予算を食い潰す。
         self._button_state_cache: Dict[str, str] = {}
         self._status_cache: Dict[str, str] = {}
 
@@ -594,9 +586,8 @@ class RemoteGui:
         # Restart 系 (stop_before=True) で、旧プロセスの終了待ちの間 True になる (RC12)。
         # このフラグが立っている log_key の Start/Restart ボタンは _refresh_button_states で無効化する。
         self._pending_launch: Dict[str, bool] = {}
-        # _poll_stop_escalation で SIGTERM/SIGKILL の生存確認をポーリング中のプロセス。
-        # _on_close / _terminate_all がウィンドウを閉じる際、self.processes から既に
-        # 取り除かれてしまった (停止処理の途中の) プロセスも確実に畳めるようにするための保険 (RC12)。
+        # _poll_stop_escalation で生存確認中のプロセス。停止処理の途中で self.processes から
+        # 外れたものも _on_close / _terminate_all が確実に畳めるようにする保険 (RC12)。
         self._escalating: Dict[str, List[subprocess.Popen[str]]] = {}
 
         self._build_ui()
@@ -768,9 +759,8 @@ class RemoteGui:
     def _handle_command(self, spec: CommandSpec) -> None:
         vehicle_id = self.vehicle_id_var.get().strip()
 
-        # 停止は log_key で追跡中のプロセスを畳むだけで vehicle_id を使わない。
-        # Vehicle ID 検証より先に処理する: ID 欄は手入力できる (test-* のため) ので、
-        # 起動後に不正な値を打たれると検証で弾かれて Stop が押せなくなる。
+        # 停止は log_key で追跡中のプロセスを畳むだけで vehicle_id を使わない。ID 欄は手入力
+        # できるので、検証より先に処理しないと不正な値を打たれた時点で Stop が押せなくなる。
         if spec.kind == "stop":
             if not spec.log_key:
                 return
@@ -801,9 +791,8 @@ class RemoteGui:
             return
 
         if spec.stop_before:
-            # 旧プロセスの終了を待ってから新プロセスを起動する (RC12)。
-            # メインスレッドはブロックしない: _stop_process は非ブロッキングで、
-            # 実際の起動 (_launch) は終了確認後に _poll_stop_escalation からコールバックされる。
+            # 旧プロセスの終了を待ってから新プロセスを起動する (RC12)。_stop_process は非
+            # ブロッキングで、_launch は終了確認後に _poll_stop_escalation から呼ばれる。
             self._pending_launch[log_key] = True
             self._append_log(log_key, "[restart: waiting for previous process to exit]\n")
             self._refresh_button_states()
@@ -858,11 +847,8 @@ class RemoteGui:
                 stderr=subprocess.STDOUT,
                 text=True,
                 bufsize=1,
-                # 起動するのは bash -> スクリプト -> ros2 run -> 実体 の多段で、
-                # ros2 run は joy_node を別プロセスとして起こす。専用のプロセス
-                # グループに入れておかないと、停止時に親だけが死んで実体が孤児
-                # として残り (親が systemd に引き取られる)、GUI から止められなく
-                # なる。同じ理由で scripts/run_remote.bash もグループで畳んでいる。
+                # bash -> スクリプト -> ros2 run -> 実体 の多段で、ros2 run は joy_node を別
+                # プロセスに起こす。専用グループに入れないと停止時に実体が孤児として残る。
                 start_new_session=True,
             )
         except FileNotFoundError:
@@ -947,9 +933,8 @@ class RemoteGui:
         if process.poll() is None:
             self._signal_process_group(process, signal.SIGTERM)
             self._append_log(log_key, "[stop: SIGTERM sent]\n")
-            # process.wait() はメインスレッドをブロックするので使わず、after で非同期に監視する (RC3)
-            # 登録はボタン状態の更新より先に行う。順序を逆にすると、その瞬間だけ
-            # 「実行中でも停止中でもない」と見えて Start が有効に戻ってしまう。
+            # process.wait() はメインスレッドを止めるので after で非同期に監視する (RC3)。
+            # 登録はボタン状態の更新より先に: 逆だとその瞬間だけ Start が有効に戻る。
             self._escalating.setdefault(log_key, []).append(process)
             self._refresh_button_states()
             self.root.after(
@@ -1131,9 +1116,8 @@ class RemoteGui:
         widget = self.log_widgets.get(log_key)
         if not widget:
             return
-        # 挿入前に「最下部までスクロールされているか」を判定しておく。
-        # ユーザーが上にスクロールして読んでいる場合、勝手に末尾へ飛ばさない。
-        # Autoscroll を OFF にしている場合は、最下部にいても追従しない (RC14)。
+        # 挿入前に最下部にいるかを判定する。上にスクロールして読んでいる間は末尾へ飛ばさない。
+        # Autoscroll が OFF なら、最下部にいても追従しない (RC14)。
         autoscroll_var = self.autoscroll_vars.get(log_key)
         autoscroll_on = autoscroll_var.get() if autoscroll_var is not None else True
         was_at_bottom = autoscroll_on and widget.yview()[1] >= 0.999
@@ -1212,9 +1196,8 @@ class RemoteGui:
             if process.poll() is None:
                 self._signal_process_group(process, signal.SIGTERM)
                 still_running.append(process)
-        # RC12: Restart の「旧プロセス終了待ち」中は self.processes から既に外れているが、
-        # まだ生きている可能性があるプロセスが self._escalating に残っている。
-        # ここで回収しないと、ウィンドウを閉じたときにそれらだけ後始末されずに孤児化する。
+        # RC12: Restart の終了待ち中のプロセスは self.processes から外れて _escalating に残る。
+        # ここで回収しないと、ウィンドウを閉じたときにそれらだけ孤児化する。
         for log_key, processes in list(self._escalating.items()):
             self._escalating.pop(log_key, None)
             for process in processes:
@@ -1296,9 +1279,8 @@ def main() -> None:
     app = RemoteGui(root)
 
     def _handle_termination_signal(signum: int, frame: object) -> None:
-        # シグナルハンドラの中で Tk API (root.quit() など) を直接叩くのは避け、
-        # フラグを立てるだけにする。実際の後始末は root.after で常時回っている
-        # _poll_log_queue がフラグを見て _on_close 経由で行う (RC10)。
+        # シグナルハンドラ内で Tk API を直接叩かず、フラグを立てるだけにする。実際の後始末は
+        # 常時回っている _poll_log_queue がフラグを見て _on_close 経由で行う (RC10)。
         app._pending_shutdown = True
 
     signal.signal(signal.SIGINT, _handle_termination_signal)
@@ -1314,10 +1296,8 @@ def main() -> None:
         except tk.TclError:
             pass
     finally:
-        # Ctrl+C (SIGINT)・SIGTERM・ウィンドウを閉じ忘れた異常系のいずれでも、
-        # 子プロセスグループを確実に畳んでからプロセスを終了する (RC10)。
-        # _on_close 経由の後始末が既に完了していれば self.processes は空なので、
-        # ここは安全に no-op になる。
+        # SIGINT / SIGTERM / 閉じ忘れのいずれでも、子プロセスグループを畳んでから終了する (RC10)。
+        # _on_close 経由の後始末が済んでいれば self.processes は空で、ここは no-op になる。
         app._terminate_all(blocking=True)
 
 if __name__ == "__main__":

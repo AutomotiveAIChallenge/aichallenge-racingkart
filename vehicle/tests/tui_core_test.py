@@ -326,11 +326,8 @@ class TestRunnable(unittest.TestCase):
         self.assertTrue(is_runnable(STEP_UP, built_ws(), session))
 
     def test_restart_with_empty_session_still_allows_up_once_built(self):
-        # Console restarted: session is empty, so STEP_SUBMISSION reads
-        # PENDING again even though a submission was downloaded and built in
-        # an earlier session. STEP_BUILD and STEP_UP are measured from disk,
-        # not from the session, so a fresh install/ still reports built and
-        # the stack can still be brought up without re-running download.
+        # Console restarted: the session is empty, so STEP_SUBMISSION reads PENDING again.
+        # STEP_BUILD and STEP_UP are measured from disk, so they still report built and up.
         ws = built_ws()
         self.assertEqual(step_status(STEP_SUBMISSION, ws, {}), PENDING)
         self.assertEqual(step_status(STEP_BUILD, ws, {}), DONE)

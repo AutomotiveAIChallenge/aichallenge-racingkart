@@ -50,13 +50,8 @@ WORKSPACE_REL = Path("aichallenge/workspace")
 # 「未完了」と判れる。
 WORKSPACE_ARTIFACTS = ("build", "install", "log")
 
-# 最低行数 = header 1 + services 2（running / stopped）+ ステップ数 + failures 見出し 1
-# + failures 1 + log 見出し 1 + log 1、に 1 行の余裕。これ未満だと failures か log が
-# 0 行になり、失敗を流さずに残すという狙いが成立しない。47 桁は画面中でいちばん幅を
-# 食う固定行に合わせた値。header の最長形 "[test] vehicle console [participant]"
-# + 区切り 1 + ヒント 10 でちょうど 47、version 行は 45。version 行は運営の画面に
-# しか出ないが、役割で最低幅を変えると tmux を役割ごとに張り替える羽目になるので、
-# 幅は共通で広いほうに合わせる。
+# 最低行数 = header 1 + services 2 + ステップ数 + 見出し 2 + failures 1 + log 1 + 余裕 1。
+# 47 桁は最長の header 行に合わせた共通幅（役割で変えると tmux を張り替える羽目になる）。
 MIN_COLS = 47
 
 

@@ -24,9 +24,8 @@ zenoh_port_for_vehicle_id() {
     esac
 }
 
-# VEHICLE_ID -> Zenoh endpoint the vehicle bridge connects to. "test" is not a
-# real kart: it targets a local zenohd (remote/connect_zenoh.bash test-server)
-# so the bridge can be exercised without the tournament server.
+# VEHICLE_ID -> Zenoh endpoint the vehicle bridge connects to. "test" is not a real kart:
+# it targets a local zenohd (remote/connect_zenoh.bash test-server) instead.
 zenoh_endpoint_for_vehicle_id() {
     local port
     case "$1" in
