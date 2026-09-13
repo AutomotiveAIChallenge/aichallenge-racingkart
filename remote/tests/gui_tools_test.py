@@ -12,7 +12,6 @@ from pathlib import Path
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
 
 from gui_tools import (  # noqa: E402
-    DEFAULT_VEHICLE_ID,
     VALID_VEHICLE_IDS,
     default_vehicle_id,
     read_env_vehicle_id,
@@ -50,20 +49,27 @@ class TestDefaultVehicleId(unittest.TestCase):
     def test_uses_env_value(self):
         self.assertEqual(default_vehicle_id(_write_env("VEHICLE_ID=A7\n")), "A7")
 
-    def test_falls_back_when_missing(self):
-        self.assertEqual(default_vehicle_id(Path(tempfile.mkdtemp()) / ".env"), DEFAULT_VEHICLE_ID)
+    def test_missing_env_leaves_the_field_empty(self):
+        # 繋ぎ先は .env が決める。書かれていないなら初期値も無い。
+        self.assertEqual(default_vehicle_id(Path(tempfile.mkdtemp()) / ".env"), "")
+        self.assertEqual(default_vehicle_id(_write_env("VEHICLE_ID=\n")), "")
 
-    def test_id_this_gui_cannot_run_falls_back(self):
-        # .env.example は VEHICLE_ID=A0。GUI に case が無いので初期値にはしない。
-        self.assertEqual(
-            default_vehicle_id(_write_env("VEHICLE_ID=A0\n")), DEFAULT_VEHICLE_ID
-        )
+    def test_id_this_gui_cannot_run_is_shown_as_is(self):
+        # .env.example は VEHICLE_ID=A0。GUI に case は無いが、実車 ID に差し替えると
+        # 設定ミスが見えなくなるので、そのまま出して _run_spec の検証に名指しさせる。
+        self.assertEqual(default_vehicle_id(_write_env("VEHICLE_ID=A0\n")), "A0")
 
-    def test_every_reachable_default_is_selectable(self):
-        for value in ("A7", "A0", ""):
+    def test_vehicle_side_test_id_maps_to_test_remote(self):
+        # 車両側 vehicle_ports.sh の "test" はローカル zenohd 向け。GUI 側の対向は
+        # test-remote。読み替えないと毎回手で直すことになる。
+        self.assertEqual(default_vehicle_id(_write_env("VEHICLE_ID=test\n")), "test-remote")
+
+    def test_never_substitutes_a_reachable_vehicle(self):
+        # 初期値に出てよい実車 ID は .env がそう書いたときだけ。
+        for value in ("A0", "test-nope", ""):
             with self.subTest(value=value):
                 got = default_vehicle_id(_write_env(f"VEHICLE_ID={value}\n"))
-                self.assertIn(got, VALID_VEHICLE_IDS)
+                self.assertNotIn(got, VALID_VEHICLE_IDS)
 
 
 if __name__ == "__main__":

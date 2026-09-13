@@ -20,13 +20,17 @@ from tkinter.scrolledtext import ScrolledText
 ROOT_DIR = Path(__file__).resolve().parent
 REMOTE_DIR = ROOT_DIR
 
-DEFAULT_VEHICLE_ID = "A2"
 # connect_zenoh.bash の case が受理する Vehicle ID。A4 は無い点に注意。
 # ここを緩くするとスクリプト側で「無効な名前空間です」と落ちるだけになるので、
 # 候補一覧と検証を同じ定義から導いて食い違わないようにする。
 VEHICLE_IDS = ["A1", "A2", "A3", "A5", "A6", "A7", "A8"]
 TEST_VEHICLE_IDS = ["test-remote", "test-vehicle", "test-server"]
 VALID_VEHICLE_IDS = VEHICLE_IDS + TEST_VEHICLE_IDS
+# 車両側 (vehicle/vehicle_ports.sh) の VEHICLE_ID を GUI 側の ID に読み替える表。
+# あちらの "test" はローカル zenohd (tcp/127.0.0.1:7448) を指し、その remote 側の
+# 対向は test-remote。読み替えないと "test" が未知の値のまま初期値に入り、
+# ボタンを押すたびに弾かれる。
+VEHICLE_ID_ALIASES = {"test": "test-remote"}
 # Combobox に出す候補 (実車 ID を先に、test-* を後ろに)。
 VEHICLE_ID_CHOICES = VALID_VEHICLE_IDS
 
@@ -74,15 +78,23 @@ def read_env_vehicle_id(env_file: Path) -> Optional[str]:
 
 
 def default_vehicle_id(env_file: Path = ENV_FILE) -> str:
-    """Initial Vehicle ID: the repo .env, when this GUI can actually run it.
+    """Initial Vehicle ID: whatever the repo .env names, aliases applied.
 
-    .env.example ships VEHICLE_ID=A0, which the GUI has no case for. Such a
-    value falls back to the default instead of being pre-filled: the Combobox
-    must never start on a value that fails validation the moment a button is
-    pressed.
+    This GUI only ever targets the vehicle the .env names, so there is no
+    default to fall back to. An ID the GUI has no case for (.env.example ships
+    VEHICLE_ID=A0) is pre-filled as-is and a missing one leaves the field
+    empty; either way the check in _run_spec names the problem on the first
+    button press. Substituting a real, reachable vehicle would instead hide the
+    misconfiguration behind a kart nobody asked for.
+
+    Vehicle-side IDs that do have a GUI counterpart go through
+    VEHICLE_ID_ALIASES first, so sharing one .env with the kart does not
+    silently re-target the GUI at a different vehicle.
     """
     value = read_env_vehicle_id(env_file)
-    return value if value in VALID_VEHICLE_IDS else DEFAULT_VEHICLE_ID
+    if value is None:
+        return ""
+    return VEHICLE_ID_ALIASES.get(value, value)
 
 
 # --- Devias Kit Pro: Neon Blue / dark palette (approx) ---
