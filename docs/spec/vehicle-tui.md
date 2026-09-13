@@ -89,7 +89,7 @@
 | # | 表示名 | 実行するもの | 前提（助言） | 完了の判定 |
 |---|--------|--------------|--------------|------------|
 | 1 | `check preflight` | `./setup_check.sh --phase preflight` | なし | 終了コード 0（セッション記憶） |
-| 2 | `extract` | `make submission-extract`（`vehicle/.submissions/<id>.zip` を ID とパスワードで展開し `src/aichallenge_submit/` を入れ替える） | 1 | 終了コード 0（セッション記憶） |
+| 2 | `extract` | `make submission-extract`（`vehicle/.submissions/<id>.zip` を ID とパスワードで `src/aichallenge_submit/` に直接展開する。既存の `aichallenge_submit/` は展開前に削除） | 1 | 終了コード 0（セッション記憶） |
 | 3 | `build` | `make autoware-build` | 2 | `workspace/install/setup.bash` が存在し `src/` より新しい（実測） |
 | 4 | `autoware-vehicle` | `make autoware-vehicle` | 3 | `autoware` が compose 上で running（実測。`driver` / `zenoh` / `rosbag` はサービス行で見せるだけ） |
 | 5 | `check runtime` | `./setup_check.sh --phase runtime` | 4 | 終了コード 0（セッション記憶） |
@@ -154,10 +154,10 @@ git 操作は **このディレクトリに限定する**。`git stash` + `git s
 untracked な提出物ファイルは残り、付けても ignored な `build/` `install/` は残る。
 
 この分担は、提出物を置く側の責務が
-**「`aichallenge_submit/` を入れ替えるところまで」**と決まったことから来ている。
-`extract_submission.py` は zip の中の `aichallenge_submit/` で既存のフォルダを入れ替えるだけで、
-それ以外の後片付け（前回のビルド成果物を消す、提出物を消して checkout 状態へ戻す）は
-展開側ではなく `cleanup` が持つ。展開側に後片付けを足すと、
+**「`aichallenge_submit/` を展開するところまで」**と決まったことから来ている。
+`extract_submission.py` は既存の `aichallenge_submit/` を削除し、zip の中の
+`aichallenge_submit/` を直接展開するだけで、それ以外の後片付け（前回のビルド成果物を消す、
+提出物を消して checkout 状態へ戻す）は展開側ではなく `cleanup` が持つ。展開側に後片付けを足すと、
 「展開したら build も消えた」という副作用を持つことになる。
 
 ### 提出物 zip の置き場と形式
