@@ -10,6 +10,9 @@ The zip must be encrypted with traditional PKZIP encryption (`zip -er
 <id>.zip aichallenge_submit`): Python's zipfile cannot decrypt AES entries.
 Extraction happens into a sibling temp directory first, so a wrong password or
 a malformed archive leaves the current aichallenge_submit/ untouched.
+Before replacement, ask for participant approval to copy the common accel/brake
+maps from aichallenge_awsim_adapter/data/. Declining preserves participant maps.
+IMU offsets are retained; runtime measurement proposes their update separately.
 
 Failures print a line starting with the FAIL marker so vehicle/tui.py retains
 them in its failures pane.
@@ -24,6 +27,8 @@ import sys
 import tempfile
 import zipfile
 from pathlib import Path
+
+from calibration import MAP_DIR, apply_maps, confirm_update
 
 FAIL = "❌"
 SUBMIT_DIR = "aichallenge_submit"
@@ -96,6 +101,23 @@ def extract(zip_path: Path, password: str, output: Path) -> int:
                 return fail(f"corrupt zip {zip_path.name}: {exc}")
             _restore_unix_permissions(zf, Path(tmp))
             extracted = Path(tmp) / SUBMIT_DIR
+            names = []
+            for name in ("accel_map.csv", "brake_map.csv"):
+                if (extracted / MAP_DIR / name).is_file():
+                    names.append(name)
+                else:
+                    print(f"⚠️ Submission has no {MAP_DIR / name}; skipping its map update.")
+            try:
+                if names and confirm_update(
+                    "提出物の accel/brake map を AWSIM adapter の共通mapで上書きしますか？\n"
+                    "参加者の承認を確認してください。 [y/N]: "
+                ):
+                    apply_maps(extracted, names)
+                    print(f"Updated common maps: {', '.join(names)}")
+                elif names:
+                    print("Map update declined; participant maps retained.")
+            except (OSError, ValueError) as exc:
+                return fail(f"cannot apply common maps: {exc}")
             if target.exists():
                 shutil.rmtree(target)
             os.replace(extracted, target)

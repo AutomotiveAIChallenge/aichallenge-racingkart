@@ -713,6 +713,15 @@ check_runtime_ros_topics() {
 check_imu_bias() {
     print_section "IMU Gyro Bias Check (stationary)"
 
+    local calibration_vehicle_id
+    calibration_vehicle_id="$(detect_vehicle_id)"
+    local bias_output_arg=""
+    if zenoh_endpoint_for_vehicle_id "${calibration_vehicle_id}" >/dev/null; then
+        bias_output_arg="--bias-output '/vehicle/.calibration/${calibration_vehicle_id}/imu_bias.yaml'"
+    else
+        log "${WARN} VEHICLE_ID is missing or unknown; measuring IMU without vehicle bias storage"
+    fi
+
     if ! is_compose_service_running "autoware"; then
         log "${FAIL} IMU bias check: autoware service is not running"
         record_result "fail"
@@ -748,13 +757,21 @@ check_imu_bias() {
     local output
     local rc
     local attempt=1
+    local proposal_file
+    if ! proposal_file="$(mktemp "${SCRIPT_DIR}/.imu-bias-XXXXXX.json")"; then
+        log "${FAIL} Could not create temporary IMU proposal"
+        record_result "fail"
+        return 0
+    fi
+    local proposal_path="/vehicle/${proposal_file##*/}"
     output="$(docker compose -f "${REPO_ROOT}/docker-compose.yml" exec -T autoware bash -lc "
         ${setup_cmd}
         python3 /vehicle/check_imu_bias.py \
             --duration '${IMU_BIAS_DURATION_SEC}' \
             --warmup '${IMU_BIAS_WARMUP_SEC}' \
             --velocity-threshold '${IMU_BIAS_VELOCITY_THRESHOLD}' \
-            --std-threshold '${IMU_BIAS_STD_THRESHOLD}'
+            --std-threshold '${IMU_BIAS_STD_THRESHOLD}' \
+            --proposal-output '${proposal_path}'
     " 2>&1)"
     rc=$?
     log "${output}"
@@ -775,23 +792,47 @@ check_imu_bias() {
                 --duration '${IMU_BIAS_DURATION_SEC}' \
                 --warmup '${IMU_BIAS_WARMUP_SEC}' \
                 --velocity-threshold '${IMU_BIAS_VELOCITY_THRESHOLD}' \
-                --std-threshold '${IMU_BIAS_STD_THRESHOLD}'
+                --std-threshold '${IMU_BIAS_STD_THRESHOLD}' \
+                --proposal-output '${proposal_path}'
         " 2>&1)"
         rc=$?
         log "${output}"
     done
 
+    if [ "${rc}" = "0" ]; then
+        local update_answer=""
+        read -r -p "実測値で上書きしますか？ 参加者の承認を確認してください。 [y/N]: " update_answer
+        case "${update_answer}" in
+        y | Y | yes | YES)
+            output="$(docker compose -f "${REPO_ROOT}/docker-compose.yml" exec -T autoware bash -lc "
+                ${setup_cmd}
+                python3 /vehicle/check_imu_bias.py \
+                    --apply-proposal '${proposal_path}' \
+                    ${bias_output_arg}
+            " 2>&1)"
+            rc=$?
+            log "${output}"
+            ;;
+        *) rc=5 ;;
+        esac
+    fi
+    rm -f "${proposal_file}"
+
     case "${rc}" in
     0)
-        log "${OK} IMU gyro bias measured and imu_corrector.param.yaml updated (restart autoware to apply)"
+        log "${OK} Participant-approved IMU bias applied (restart autoware to apply; see above for vehicle storage)"
         record_result "pass"
         ;;
     4)
         log "${WARN} IMU gyro bias check: gave up on noisy measurement (see above; not written)"
         record_result "warn"
         ;;
+    5)
+        log "${WARN} IMU update skipped; participant settings and saved bias retained"
+        record_result "warn"
+        ;;
     *)
-        log "${FAIL} IMU gyro bias check failed (rc=${rc}; measurement not completed, not written)"
+        log "${FAIL} IMU gyro bias check failed (rc=${rc}; see above for measurement/write status)"
         record_result "fail"
         ;;
     esac

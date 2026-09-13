@@ -241,10 +241,18 @@ docker compose -f ../docker-compose.yml exec -T driver bash -lc \
 ### runtime: 5. IMUジャイロバイアス計測
 
 autoware 起動後に **車両が静止している状態の** ジャイロバイアスを推定し、静止時ノイズが
-十分小さければ `imu_corrector.param.yaml` の `angular_velocity_offset_*` を測定値でそのまま
-上書きします（乖離の大小による閾値判定はなく、無条件に書き込みます）。imu_corrector は
+十分小さければ現在値・実測値・差分（実測値 − 現在値）を表示し、参加者の承認を確認します。
+`[y/N]` に明示的に `y` と答えた場合だけ `imu_corrector.param.yaml` の
+`angular_velocity_offset_*` を実測値で上書きします。拒否・空回答・入力終了では保持します。imu_corrector は
 パラメータを起動時に一度だけ読むため、**書き換えても今動いている autoware には反映されません。
 次回 autoware を再起動したときから新しい値が使われます。**
+
+承認したバイアスは `vehicle/.calibration/<VEHICLE_ID>/imu_bias.yaml` にも保存します。
+次の提出物へ自動適用はしません。ID は環境変数 → リポジトリ直下の `.env` →
+既存のホスト名対応の順で取得します。未設定・未知の ID では警告して車両別保存だけ省略します。
+ノイズ超過・計測不能・更新見送りでは保存元を変更しません。
+対象設定や対応する 3 軸オフセットがない独自補正の提出物は、警告して IMU 更新をスキップします。
+配置・適用手順は [車両別校正値](calibration.md) を参照してください。
 
 ```bash
 # runtime フェーズの一部として実行される
