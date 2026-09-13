@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Swap aichallenge/workspace/src/aichallenge_submit/ with a password-protected zip.
 
-Operators place every team's submission as <id>.zip under the submissions
+Operators place every team's submission as <id>.zip under the .submissions
 directory beforehand. On the vehicle the operator types the team id and the
 zip password; the archive's top-level aichallenge_submit/ replaces the one in
 the workspace.
@@ -28,7 +28,7 @@ from pathlib import Path
 FAIL = "❌"
 SUBMIT_DIR = "aichallenge_submit"
 REPO_ROOT = Path(__file__).resolve().parent.parent
-DEFAULT_ZIP_DIR = REPO_ROOT / "vehicle" / "submissions"
+DEFAULT_ZIP_DIR = REPO_ROOT / "vehicle" / ".submissions"
 DEFAULT_OUTPUT = REPO_ROOT / "aichallenge" / "workspace" / "src"
 
 
@@ -56,6 +56,24 @@ def check_layout(zf: zipfile.ZipFile) -> str:
     return ""
 
 
+def _restore_unix_permissions(zf: zipfile.ZipFile, output: Path) -> None:
+    """zipfile.extractall() drops the Unix mode bits zip stores per entry.
+
+    Without this, a submission's launch scripts silently lose their execute
+    bit on extraction and fail at run time with no obvious cause. The mode
+    lives in the upper 16 bits of external_attr and is 0 for entries added on
+    a non-Unix system (nothing to restore then). Plain chmod: the files are
+    already owned by the current user, so this never needs sudo.
+    """
+    for info in zf.infolist():
+        mode = (info.external_attr >> 16) & 0o777
+        if not mode:
+            continue
+        path = output / info.filename
+        if path.is_file():
+            os.chmod(path, mode)
+
+
 def extract(zip_path: Path, password: str, output: Path) -> int:
     target = output / SUBMIT_DIR
     with zipfile.ZipFile(zip_path) as zf:
@@ -76,6 +94,7 @@ def extract(zip_path: Path, password: str, output: Path) -> int:
                 )
             except zipfile.BadZipFile as exc:
                 return fail(f"corrupt zip {zip_path.name}: {exc}")
+            _restore_unix_permissions(zf, Path(tmp))
             extracted = Path(tmp) / SUBMIT_DIR
             if target.exists():
                 shutil.rmtree(target)
