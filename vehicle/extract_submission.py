@@ -121,12 +121,10 @@ def main() -> int:
                     help=f"directory holding <id>.zip files (default: {DEFAULT_ZIP_DIR})")
     ap.add_argument("--output", type=Path, default=DEFAULT_OUTPUT,
                     help=f"directory whose {SUBMIT_DIR}/ gets replaced (default: {DEFAULT_OUTPUT})")
-    ap.add_argument("--calibration-root", type=Path, default=DEFAULT_CALIBRATION_DIR,
-                    help="vehicle calibration root; selects its VEHICLE_ID subdirectory")
     args = ap.parse_args()
 
     try:
-        calibration_dir = args.calibration_root / vehicle_id(REPO_ROOT)
+        calibration_dir = DEFAULT_CALIBRATION_DIR / vehicle_id(REPO_ROOT)
     except (OSError, ValueError) as exc:
         return fail(str(exc))
 

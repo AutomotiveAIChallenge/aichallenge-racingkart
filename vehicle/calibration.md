@@ -85,9 +85,6 @@ map は `default` ヘッダ、長方形の数値テーブル、有限値、速�
 その間のプロセス中断からの復旧は保証しません。
 ビルド成果物の削除は引き続き `workspace-clean` の責務です。
 
-検証用の配置場所はスクリプトの `--calibration-root <directory>` で変更できます。
-その場合も `<directory>/<VEHICLE_ID>/` を選びます。
-
 ## IMU 再計測時の更新
 
 runtime チェックは既存の静止確認・ノイズ検証後、正常な測定値を

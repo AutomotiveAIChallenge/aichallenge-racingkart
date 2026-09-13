@@ -126,10 +126,11 @@ class CalibrationTest(unittest.TestCase):
         save_bias(other / "imu_bias.yaml", alternate)
         (self.root / ".env").write_text("VEHICLE_ID=A2\n")
         argv = ["extract_submission.py", "--id", "submission", "--zip-dir", str(self.root),
-                "--output", str(self.output), "--calibration-root", str(self.calibration.parent)]
+                "--output", str(self.output)]
         for env, expected in (("", OFFSETS), ("A3", alternate)):
             with self.subTest(env=env), patch.dict(os.environ, {"VEHICLE_ID": env}), \
                     patch("extract_submission.REPO_ROOT", self.root), patch.object(sys, "argv", argv), \
+                    patch("extract_submission.DEFAULT_CALIBRATION_DIR", self.calibration.parent), \
                     patch("extract_submission.getpass.getpass", return_value="password"), \
                     contextlib.redirect_stdout(io.StringIO()):
                 self.assertEqual(main(), 0)
