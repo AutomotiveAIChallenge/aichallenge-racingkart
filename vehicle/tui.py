@@ -243,7 +243,7 @@ class Console:
                 bufsize=1,
             )
         except OSError as exc:
-            self.log_queue.put(("line", f"起動できません: {exc}"))
+            self.log_queue.put(("line", f"起動できません / Cannot start: {exc}"))
             self.log_queue.put(("exit", (step.step_id, 127)))
             return
         assert proc.stdout is not None

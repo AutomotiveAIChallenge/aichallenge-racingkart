@@ -2,7 +2,7 @@
 
 # スクリプトに引数が1つだけ渡されているかチェック
 if [ "$#" -ne 1 ]; then
-    echo "エラー: Vechicle IDを指定してください。 / Error: specify a vehicle ID." >&2
+    echo "エラー: Vehicle IDを指定してください。 / Error: specify a vehicle ID." >&2
     echo "使用法 / Usage: $0 {A1|A2|A3|A5|A6|A7|A8|test-*}" >&2
     exit 1
 fi
