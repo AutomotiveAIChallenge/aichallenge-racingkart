@@ -146,7 +146,7 @@ class TestSteps(unittest.TestCase):
         # console has to release the terminal for it.
         self.assertTrue(step_by_id(STEP_SUBMISSION).interactive)
 
-    def test_extract_step_swaps_the_submission_from_a_zip(self):
+    def test_extract_step_extracts_the_submission_from_a_zip(self):
         self.assertEqual(
             step_by_id(STEP_SUBMISSION).command, ("make", "submission-extract")
         )

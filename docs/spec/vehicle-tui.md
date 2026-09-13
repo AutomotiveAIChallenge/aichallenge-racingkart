@@ -171,9 +171,11 @@ zip は **トップレベルが `aichallenge_submit/` だけ**で、**従来の 
 `extract_submission.py` は Python 標準の `zipfile` で復号するため AES 暗号（7-Zip の既定など）は
 開けず、その場合は `❌ unsupported zip encryption` として失敗する。
 
-展開は `src/` 直下の一時ディレクトリへ行い、成功してから既存の `aichallenge_submit/` を消して
-`os.replace` で入れ替える。パスワード違い・レイアウト違い・破損 zip のいずれでも、
-既存の `aichallenge_submit/` は触られない。
+レイアウト検証（トップレベルが `aichallenge_submit/` だけか）を通ったら、既存の
+`aichallenge_submit/` を削除してから zip を `src/` へ直接展開する。したがって
+パスワード違いや破損 zip はレイアウト検証の後で失敗し得て、その場合
+`aichallenge_submit/` が消えたまま、または展開途中の状態で残る
+（`cleanup` で戻してから再実行する）。
 
 ### 実測とセッション記憶
 
