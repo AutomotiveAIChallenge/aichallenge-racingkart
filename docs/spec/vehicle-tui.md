@@ -155,7 +155,7 @@ untracked な提出物ファイルは残り、付けても ignored な `build/` 
 
 この分担は、提出物を置く側の責務が
 **「`aichallenge_submit/` を入れ替えるところまで」**と決まったことから来ている。
-`extract_submission.py` は zip の中の `aichallenge_submit/` で既存のフォルダを入れ替えるだけで、
+`extract_submission.py` は zip に車両別校正値を適用して既存の `aichallenge_submit/` を入れ替える。
 それ以外の後片付け（前回のビルド成果物を消す、提出物を消して checkout 状態へ戻す）は
 展開側ではなく `cleanup` が持つ。展開側に後片付けを足すと、
 「展開したら build も消えた」という副作用を持つことになる。
@@ -176,6 +176,9 @@ zip は **トップレベルが `aichallenge_submit/` だけ**で、**従来の 
 既存の `aichallenge_submit/` は触られない。
 
 ### 実測とセッション記憶
+
+展開時の accel/brake map と IMU バイアスの適用、保存元の初回配置、
+runtime 再計測時の保存については [車両別校正値](../../vehicle/calibration.md) を参照する。
 
 `build` / `autoware` / `autoware down` / `down all` / `cleanup` は環境から実測する
 （`cleanup` は `git status --porcelain --ignored -- aichallenge/workspace` が空か）。
