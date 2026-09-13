@@ -11,9 +11,13 @@ from pathlib import Path
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
 
+from unittest import mock  # noqa: E402
+
 from gui_tools import (  # noqa: E402
+    ORPHAN_KILL_PATTERNS,
     VALID_VEHICLE_IDS,
     default_vehicle_id,
+    kill_orphan_pattern,
     read_env_vehicle_id,
 )
 
@@ -70,6 +74,31 @@ class TestDefaultVehicleId(unittest.TestCase):
             with self.subTest(value=value):
                 got = default_vehicle_id(_write_env(f"VEHICLE_ID={value}\n"))
                 self.assertNotIn(got, VALID_VEHICLE_IDS)
+
+
+class TestKillOrphanPattern(unittest.TestCase):
+    def test_unregistered_log_key_does_not_call_pkill(self):
+        # zenoh/rviz は明示登録が無い。無関係なプロセスを巻き込まないよう pkill 自体を
+        # 呼ばない (RC13)。
+        with mock.patch("gui_tools.subprocess.run") as run:
+            self.assertFalse(kill_orphan_pattern("rviz"))
+        run.assert_not_called()
+
+    def test_joy_is_registered_and_uses_pkill_dash_f(self):
+        self.assertIn("joy", ORPHAN_KILL_PATTERNS)
+        completed = mock.Mock(returncode=0)
+        with mock.patch("gui_tools.subprocess.run", return_value=completed) as run:
+            self.assertTrue(kill_orphan_pattern("joy"))
+        run.assert_called_once()
+        args, kwargs = run.call_args
+        self.assertEqual(args[0], ["pkill", "-f", ORPHAN_KILL_PATTERNS["joy"]])
+        self.assertEqual(kwargs.get("timeout"), 3.0)
+
+    def test_no_match_returns_false(self):
+        # pkill は該当プロセスが無いと非0を返す。誤って「掃除した」とログしないための境界。
+        completed = mock.Mock(returncode=1)
+        with mock.patch("gui_tools.subprocess.run", return_value=completed):
+            self.assertFalse(kill_orphan_pattern("joy"))
 
 
 if __name__ == "__main__":

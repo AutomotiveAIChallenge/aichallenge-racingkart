@@ -501,6 +501,32 @@ COMMANDS: List[CommandSpec] = [
 
 SPEC_MAP: Dict[str, CommandSpec] = {spec.label: spec for spec in COMMANDS}
 
+# self.processes は GUI 自身が起動したプロセスしか把握できない。前回セッションの
+# クラッシュや手動起動で残った同種プロセスは Stop/Restart を押しても消せず、
+# Restart Joy が孤児に加えてもう1つ ros2 run joy joy_node を起こしてしまう (RC13)。
+# 巻き込み事故を避けるため、パターンをここで明示登録した log_key だけ pkill で掃除する。
+ORPHAN_KILL_PATTERNS: Dict[str, str] = {
+    "joy": "ros2 run joy joy_node",
+}
+
+
+def kill_orphan_pattern(log_key: str, timeout: float = 3.0) -> bool:
+    """log_key に登録された pattern で pkill する。登録が無ければ何もしない。
+
+    戻り値は「一致するプロセスを見つけて killed した (pkill の終了コード 0)」かどうか。
+    Tk に依存しないのでテストしやすいよう、GUI クラスから切り出してある。
+    """
+    pattern = ORPHAN_KILL_PATTERNS.get(log_key)
+    if pattern is None:
+        return False
+    result = subprocess.run(
+        ["pkill", "-f", pattern],
+        capture_output=True,
+        text=True,
+        timeout=timeout,
+    )
+    return result.returncode == 0
+
 COLUMN_LAYOUT = [
     ("Zenoh", ["Start Zenoh", "Stop Zenoh", "Restart Zenoh"]),
     ("RViz", ["Start RViz", "Stop RViz", "Restart RViz"]),
@@ -750,9 +776,10 @@ class RemoteGui:
         logs_frame.rowconfigure(0, weight=1)
 
     def _handle_stop_single(self, log_key: str) -> None:
-        if not self._process_running(log_key):
-            self._append_log(log_key, '[no running process]\n')
-            return
+        # _process_running() で先に弾くと、GUI が追跡していない孤児 (RC13) は
+        # 「動いていない」ことになって _stop_process 自体に届かず、Restart だけ
+        # 掃除できて Stop では掃除できないという食い違いになる。追跡の有無に
+        # 関わらず _stop_process に任せ、孤児の掃除も同じ経路を通す。
         self._append_log(log_key, '[stop requested]\n')
         self._stop_process(log_key)
 
@@ -925,6 +952,10 @@ class RemoteGui:
         with self._processes_lock:
             entry = self.processes.pop(log_key, None)
         if entry is None:
+            # 追跡が無くても実機には孤児が残っているかもしれない (RC13)。「Stop」も
+            # ここを通すので、追跡していないというだけで掃除をスキップしない。
+            if not self._reap_orphan(log_key):
+                self._append_log(log_key, "[no running process]\n")
             self._refresh_button_states()
             if on_terminated is not None:
                 on_terminated()
@@ -982,6 +1013,25 @@ class RemoteGui:
         except tk.TclError:
             # ウィンドウが既に破棄されている場合は諦める (_on_close / _terminate_all 側で後始末される)
             pass
+
+    def _reap_orphan(self, log_key: str) -> bool:
+        """GUI が追跡していない同種プロセスを掃除する (RC13)。戻り値は掃除できたか。
+
+        対象は ORPHAN_KILL_PATTERNS に明示登録された log_key だけに限定し、
+        無関係なプロセスを巻き込まない。pkill は数十 ms で戻るのでメインスレッドで
+        同期的に呼んでも UI をブロックしない。
+        """
+        try:
+            killed = kill_orphan_pattern(log_key)
+        except Exception as exc:  # pragma: no cover - defensive
+            self._append_log(log_key, f"[orphan cleanup failed: {exc}]\n")
+            return False
+        if killed:
+            pattern = ORPHAN_KILL_PATTERNS[log_key]
+            self._append_log(
+                log_key, f"[orphan cleanup: killed stray process matching {pattern!r}]\n"
+            )
+        return killed
 
     @staticmethod
     def _signal_process_group(process: subprocess.Popen[str], sig: int) -> None:
