@@ -177,7 +177,7 @@ download:
 		fi; \
 	fi
 
-# 事前に置いた vehicle/.submissions/<id>.zip（パスワード付き）を src/aichallenge_submit/ に直接展開する。
+# 事前に置いた vehicle/.submissions/<id>.zip（パスワード付き）で src/aichallenge_submit/ を入れ替える。
 # ID とパスワードは対話で聞く（SUBMISSION_ID で ID を先渡し可）。
 submission-extract:
 	vehicle/extract_submission.py $(if $(SUBMISSION_ID),--id $(SUBMISSION_ID))

@@ -1,18 +1,15 @@
 #!/usr/bin/env python3
-"""Extract a password-protected zip into aichallenge/workspace/src/.
+"""Swap aichallenge/workspace/src/aichallenge_submit/ with a password-protected zip.
 
 Operators place every team's submission as <id>.zip under the .submissions
 directory beforehand. On the vehicle the operator types the team id and the
-zip password; the archive's top-level aichallenge_submit/ is extracted
-straight into the workspace, after removing whatever aichallenge_submit/ is
-already there.
+zip password; the archive's top-level aichallenge_submit/ replaces the one in
+the workspace.
 
 The zip must be encrypted with traditional PKZIP encryption (`zip -er
 <id>.zip aichallenge_submit`): Python's zipfile cannot decrypt AES entries.
-The existing aichallenge_submit/ is removed before extraction, so a wrong
-password or a malformed archive can leave aichallenge_submit/ missing or
-partially extracted; a `cleanup` (`make workspace-clean`) followed by a
-retry recovers.
+Extraction happens into a sibling temp directory first, so a wrong password or
+a malformed archive leaves the current aichallenge_submit/ untouched.
 
 Failures print a line starting with the FAIL marker so vehicle/tui.py retains
 them in its failures pane.
@@ -24,6 +21,7 @@ import getpass
 import os
 import shutil
 import sys
+import tempfile
 import zipfile
 from pathlib import Path
 
@@ -82,22 +80,26 @@ def extract(zip_path: Path, password: str, output: Path) -> int:
         err = check_layout(zf)
         if err:
             return fail(err)
-        if target.exists():
-            shutil.rmtree(target)
-        try:
-            zf.extractall(output, pwd=password.encode())
-        except RuntimeError as exc:
-            # zipfile reports a wrong password as RuntimeError("Bad password ...").
-            return fail(f"cannot decrypt {zip_path.name}: {exc}")
-        except NotImplementedError as exc:
-            return fail(
-                f"unsupported zip encryption/compression in {zip_path.name}: {exc} "
-                "(create with `zip -er`, not AES)"
-            )
-        except zipfile.BadZipFile as exc:
-            return fail(f"corrupt zip {zip_path.name}: {exc}")
-        _restore_unix_permissions(zf, output)
-    print(f"extracted {zip_path.name} into {target}")
+        # Same parent as the target so the final move is a rename, not a copy.
+        with tempfile.TemporaryDirectory(prefix=".submit-", dir=output) as tmp:
+            try:
+                zf.extractall(tmp, pwd=password.encode())
+            except RuntimeError as exc:
+                # zipfile reports a wrong password as RuntimeError("Bad password ...").
+                return fail(f"cannot decrypt {zip_path.name}: {exc}")
+            except NotImplementedError as exc:
+                return fail(
+                    f"unsupported zip encryption/compression in {zip_path.name}: {exc} "
+                    "(create with `zip -er`, not AES)"
+                )
+            except zipfile.BadZipFile as exc:
+                return fail(f"corrupt zip {zip_path.name}: {exc}")
+            _restore_unix_permissions(zf, Path(tmp))
+            extracted = Path(tmp) / SUBMIT_DIR
+            if target.exists():
+                shutil.rmtree(target)
+            os.replace(extracted, target)
+    print(f"replaced {target} with {zip_path.name}")
     return 0
 
 
@@ -108,7 +110,7 @@ def main() -> int:
     ap.add_argument("--zip-dir", type=Path, default=DEFAULT_ZIP_DIR,
                     help=f"directory holding <id>.zip files (default: {DEFAULT_ZIP_DIR})")
     ap.add_argument("--output", type=Path, default=DEFAULT_OUTPUT,
-                    help=f"directory to extract {SUBMIT_DIR}/ into (default: {DEFAULT_OUTPUT})")
+                    help=f"directory whose {SUBMIT_DIR}/ gets replaced (default: {DEFAULT_OUTPUT})")
     args = ap.parse_args()
 
     ids = list_ids(args.zip_dir)
