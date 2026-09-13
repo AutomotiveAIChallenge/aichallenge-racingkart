@@ -6,6 +6,8 @@ autoware 起動後（setup_check.sh --phase runtime のタイミング）に、�
 静止時バイアス（3 軸平均）を測る。静止時ノイズ（std）が十分小さければ、
 imu_corrector.param.yaml に書かれている現在の angular_velocity_offset_* を
 測定値でそのまま上書きする（乖離の大小によらず、閾値判定はしない）。
+runtimeチェックでは --bias-output で指定した車両別 imu_bias.yaml にも保存し、
+次の提出物の展開時に同じ校正値を適用できるようにする。
 
 符号について（imu_corrector のソースから）:
     imu_corrector は  output = raw - angular_velocity_offset  で補正する。
@@ -39,16 +41,17 @@ imu_corrector.param.yaml に書かれている現在の angular_velocity_offset_
 from __future__ import annotations
 
 import argparse
-import os
-import re
 import statistics
 import sys
 import time
+from pathlib import Path
 
 import rclpy
 from rclpy.node import Node
 from rclpy.qos import qos_profile_sensor_data
 from sensor_msgs.msg import Imu
+
+from calibration import AXES, read_current_offsets, save_bias, write_new_offsets
 
 # VelocityReport はディストリ/世代で名前空間が変わるため両対応で import する。
 try:  # 新しめの Autoware
@@ -63,79 +66,9 @@ EXIT_OK = 0
 EXIT_MEASURE_FAIL = 3
 EXIT_NOISY = 4
 
-AXES = ("x", "y", "z")
-
 # stddev が意味を持つ最小サンプル数。1 サンプルしか取れない（IMU がほぼ来ていない）と
 # std=0.0 になり、静止時ノイズチェックをすり抜けてしまう。
 MIN_SAMPLES = 10
-
-# param.yaml の対象3行にだけマッチする（インデント・コメントはそのまま残すため
-# yaml ライブラリでの読み書きはせず、数値部分だけを直接置換する）。
-_OFFSET_LINE_RE = {
-    axis: re.compile(
-        r"^\s*angular_velocity_offset_" + axis + r"\s*:\s*"
-        r"(?P<value>[-+]?\d+(?:\.\d+)?(?:[eE][-+]?\d+)?)"
-    )
-    for axis in AXES
-}
-
-
-def read_current_offsets(param_yaml_path: str) -> dict[str, float] | None:
-    """param.yaml から angular_velocity_offset_* の現在値を直接読む."""
-    try:
-        with open(param_yaml_path, encoding="utf-8") as f:
-            lines = f.readlines()
-    except OSError:
-        return None
-
-    offsets: dict[str, float] = {}
-    for line in lines:
-        for axis, pattern in _OFFSET_LINE_RE.items():
-            m = pattern.match(line)
-            if m:
-                offsets[axis] = float(m.group("value"))
-    if len(offsets) != len(AXES):
-        return None
-    return offsets
-
-
-def write_new_offsets(param_yaml_path: str, new_offsets: dict[str, float]) -> bool:
-    """param.yaml の angular_velocity_offset_* 3行だけを新しい測定値で上書きする."""
-    try:
-        with open(param_yaml_path, encoding="utf-8") as f:
-            lines = f.readlines()
-    except OSError:
-        return False
-
-    updated_axes: set[str] = set()
-    for i, line in enumerate(lines):
-        for axis, pattern in _OFFSET_LINE_RE.items():
-            m = pattern.match(line)
-            if m:
-                start, end = m.span("value")
-                lines[i] = f"{line[:start]}{new_offsets[axis]:.6f}{line[end:]}"
-                updated_axes.add(axis)
-
-    if updated_axes != set(AXES):
-        return False
-
-    # 途中で落ちても param.yaml が半端に残らないよう、同じディレクトリに一時ファイルを書いて
-    # から atomic に差し替える。symlink を渡された場合も実体を差し替える。
-    target = os.path.realpath(param_yaml_path)
-    tmp_path = f"{target}.tmp"
-    try:
-        with open(tmp_path, "w", encoding="utf-8") as f:
-            f.writelines(lines)
-            f.flush()
-            os.fsync(f.fileno())
-        os.replace(tmp_path, target)
-    except OSError:
-        try:
-            os.unlink(tmp_path)
-        except OSError:
-            pass
-        return False
-    return True
 
 
 class ImuBiasChecker(Node):
@@ -220,6 +153,8 @@ def main() -> int:
                         default="/aichallenge/workspace/src/aichallenge_submit/"
                                 "imu_corrector/config/imu_corrector.param.yaml",
                         help="書き換え対象の param.yaml パス（コンテナ内の絶対パス）")
+    parser.add_argument("--bias-output", type=Path,
+                        help="成功した測定値を保存する車両別 imu_bias.yaml（runtimeチェックが指定）")
     args = parser.parse_args()
 
     rclpy.init()
@@ -303,6 +238,16 @@ def main() -> int:
         node.destroy_node()
         rclpy.shutdown()
         return EXIT_MEASURE_FAIL
+
+    if args.bias_output is not None:
+        try:
+            save_bias(args.bias_output, new_offsets)
+        except (OSError, ValueError) as exc:
+            print(f"❌ param.yaml updated, but failed to save vehicle IMU bias: {exc}")
+            node.destroy_node()
+            rclpy.shutdown()
+            return EXIT_MEASURE_FAIL
+        print(f"Saved vehicle IMU bias: {args.bias_output}")
 
     print(f"Updated {args.param_yaml}:")
     cmp_header = f"{'axis':4}  {'old[rad/s]':>12}  {'new[rad/s]':>12}"

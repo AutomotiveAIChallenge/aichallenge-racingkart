@@ -10,6 +10,9 @@ The zip must be encrypted with traditional PKZIP encryption (`zip -er
 <id>.zip aichallenge_submit`): Python's zipfile cannot decrypt AES entries.
 Extraction happens into a sibling temp directory first, so a wrong password or
 a malformed archive leaves the current aichallenge_submit/ untouched.
+Before replacement, vehicle/.calibration/<VEHICLE_ID>/ supplies the accel/brake
+maps and three IMU gyro offsets. Missing or invalid calibration also leaves
+the existing submission untouched.
 
 Failures print a line starting with the FAIL marker so vehicle/tui.py retains
 them in its failures pane.
@@ -24,6 +27,8 @@ import sys
 import tempfile
 import zipfile
 from pathlib import Path
+
+from calibration import DEFAULT_CALIBRATION_DIR, apply_calibration, vehicle_id
 
 FAIL = "❌"
 SUBMIT_DIR = "aichallenge_submit"
@@ -74,7 +79,7 @@ def _restore_unix_permissions(zf: zipfile.ZipFile, output: Path) -> None:
             os.chmod(path, mode)
 
 
-def extract(zip_path: Path, password: str, output: Path) -> int:
+def extract(zip_path: Path, password: str, output: Path, calibration_dir: Path) -> int:
     target = output / SUBMIT_DIR
     with zipfile.ZipFile(zip_path) as zf:
         err = check_layout(zf)
@@ -96,10 +101,15 @@ def extract(zip_path: Path, password: str, output: Path) -> int:
                 return fail(f"corrupt zip {zip_path.name}: {exc}")
             _restore_unix_permissions(zf, Path(tmp))
             extracted = Path(tmp) / SUBMIT_DIR
+            try:
+                apply_calibration(extracted, calibration_dir)
+            except (OSError, ValueError) as exc:
+                return fail(f"cannot apply vehicle calibration from {calibration_dir}: {exc}")
             if target.exists():
                 shutil.rmtree(target)
             os.replace(extracted, target)
     print(f"replaced {target} with {zip_path.name}")
+    print(f"applied vehicle calibration: {calibration_dir}")
     return 0
 
 
@@ -111,7 +121,14 @@ def main() -> int:
                     help=f"directory holding <id>.zip files (default: {DEFAULT_ZIP_DIR})")
     ap.add_argument("--output", type=Path, default=DEFAULT_OUTPUT,
                     help=f"directory whose {SUBMIT_DIR}/ gets replaced (default: {DEFAULT_OUTPUT})")
+    ap.add_argument("--calibration-root", type=Path, default=DEFAULT_CALIBRATION_DIR,
+                    help="vehicle calibration root; selects its VEHICLE_ID subdirectory")
     args = ap.parse_args()
+
+    try:
+        calibration_dir = args.calibration_root / vehicle_id(REPO_ROOT)
+    except (OSError, ValueError) as exc:
+        return fail(str(exc))
 
     ids = list_ids(args.zip_dir)
     if not ids:
@@ -124,7 +141,7 @@ def main() -> int:
     if not password:
         return fail("empty password")
     try:
-        return extract(args.zip_dir / f"{team}.zip", password, args.output)
+        return extract(args.zip_dir / f"{team}.zip", password, args.output, calibration_dir)
     except (OSError, zipfile.BadZipFile) as exc:
         return fail(f"extract failed: {exc}")
 

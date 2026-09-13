@@ -713,6 +713,16 @@ check_runtime_ros_topics() {
 check_imu_bias() {
     print_section "IMU Gyro Bias Check (stationary)"
 
+    local calibration_vehicle_id
+    calibration_vehicle_id="${VEHICLE_ID:-$(read_env_value VEHICLE_ID)}"
+    if [[ ! ${calibration_vehicle_id} =~ ^[A-Za-z0-9][A-Za-z0-9_-]*$ ]]; then
+        log "${FAIL} IMU bias check: VEHICLE_ID is missing or invalid; cannot save vehicle calibration"
+        record_result "fail"
+        log ""
+        return 0
+    fi
+    local bias_output="/vehicle/.calibration/${calibration_vehicle_id}/imu_bias.yaml"
+
     if ! is_compose_service_running "autoware"; then
         log "${FAIL} IMU bias check: autoware service is not running"
         record_result "fail"
@@ -754,7 +764,8 @@ check_imu_bias() {
             --duration '${IMU_BIAS_DURATION_SEC}' \
             --warmup '${IMU_BIAS_WARMUP_SEC}' \
             --velocity-threshold '${IMU_BIAS_VELOCITY_THRESHOLD}' \
-            --std-threshold '${IMU_BIAS_STD_THRESHOLD}'
+            --std-threshold '${IMU_BIAS_STD_THRESHOLD}' \
+            --bias-output '${bias_output}'
     " 2>&1)"
     rc=$?
     log "${output}"
@@ -775,7 +786,8 @@ check_imu_bias() {
                 --duration '${IMU_BIAS_DURATION_SEC}' \
                 --warmup '${IMU_BIAS_WARMUP_SEC}' \
                 --velocity-threshold '${IMU_BIAS_VELOCITY_THRESHOLD}' \
-                --std-threshold '${IMU_BIAS_STD_THRESHOLD}'
+                --std-threshold '${IMU_BIAS_STD_THRESHOLD}' \
+                --bias-output '${bias_output}'
         " 2>&1)"
         rc=$?
         log "${output}"
@@ -783,7 +795,7 @@ check_imu_bias() {
 
     case "${rc}" in
     0)
-        log "${OK} IMU gyro bias measured and imu_corrector.param.yaml updated (restart autoware to apply)"
+        log "${OK} IMU gyro bias measured, param.yaml updated and vehicle calibration saved (restart autoware to apply)"
         record_result "pass"
         ;;
     4)
@@ -791,7 +803,7 @@ check_imu_bias() {
         record_result "warn"
         ;;
     *)
-        log "${FAIL} IMU gyro bias check failed (rc=${rc}; measurement not completed, not written)"
+        log "${FAIL} IMU gyro bias check failed (rc=${rc}; see above for measurement/write status)"
         record_result "fail"
         ;;
     esac

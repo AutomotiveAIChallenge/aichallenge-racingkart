@@ -12,6 +12,8 @@ rosbag2*/
 vehicle/.env
 # 運営が事前に置く提出物 zip（make submission-extract が読む）
 vehicle/.submissions/
+# 車両別の実測校正値（提出物の展開時に適用）
+vehicle/.calibration/
 metadata.yaml
 output/
 outputs/
