@@ -2,8 +2,8 @@
 
 # 1. 引数が2つ以上指定されているかチェック
 if [ $# -lt 2 ]; then
-    echo "エラー: 接続先とユーザー名を指定してください。"
-    echo "使用法: $0 [A2|A3|A6|A7] ユーザー名 [実行するコマンド]"
+    echo "エラー: 接続先とユーザー名を指定してください。 / Error: specify the target and the user name."
+    echo "使用法 / Usage: $0 [A2|A3|A6|A7] ユーザー名/user [実行するコマンド/command]"
     exit 1
 fi
 
@@ -26,8 +26,8 @@ A7)
     PORT=10022
     ;;
 *)
-    echo "エラー: 不明な接続先です: $TARGET_ID"
-    echo "利用可能な接続先: A2, A3, A6, A7"
+    echo "エラー: 不明な接続先です / Error: unknown target: $TARGET_ID"
+    echo "利用可能な接続先 / Available targets: A2, A3, A6, A7"
     exit 1
     ;;
 esac
