@@ -49,9 +49,8 @@ fi
 # shellcheck source-path=SCRIPTDIR source=vehicle_ports.sh
 source "${SCRIPT_DIR}/vehicle_ports.sh"
 
-# ログの実パスを決める。呼び出し元の cwd に散らさないため、常に vehicle/logs/
-# 配下に置く。ディレクトリが作れない環境では log() の tee が黙って落ちるので、
-# 画面出力だけが残る。
+# ログの実パス。呼び出し元の cwd に散らさないため常に vehicle/logs/ 配下に置く。
+# ディレクトリが作れない環境では log() の tee が黙って落ち、画面出力だけが残る。
 LOG_FILE="${SCRIPT_DIR}/logs/setup_check_$(date +'%Y%m%d_%H%M%S').log"
 mkdir -p "${SCRIPT_DIR}/logs" 2>/dev/null || true
 
@@ -490,16 +489,19 @@ check_network() {
         fi
     fi
 
-    # Zenohサーバー疎通確認。run_zenoh.bash と同じ VEHICLE_ID -> port 対応を使う。
-    local zenoh_host="${ZENOH_HOST:-zenoh.dev.aichallenge-board.jsae.or.jp}"
+    # Zenohサーバー疎通確認。run_zenoh.bash と同じ VEHICLE_ID -> endpoint 対応を使う。
     local vehicle_id_for_zenoh
-    local zenoh_port
+    local zenoh_endpoint zenoh_host zenoh_port
     vehicle_id_for_zenoh="$(detect_vehicle_id)"
     if [ -z "${vehicle_id_for_zenoh}" ]; then
         log "${FAIL} VEHICLE_ID is not set; cannot choose Zenoh endpoint"
         log "   Fix: export VEHICLE_ID=A6 or add VEHICLE_ID=A6 to .env"
         record_result "fail"
-    elif zenoh_port="$(zenoh_port_for_vehicle_id "${vehicle_id_for_zenoh}")"; then
+    elif zenoh_endpoint="$(zenoh_endpoint_for_vehicle_id "${vehicle_id_for_zenoh}")"; then
+        # "tls/host:port" / "tcp/host:port" -> host, port。ZENOH_HOST は host だけの差し替え。
+        zenoh_host="${zenoh_endpoint#*/}"
+        zenoh_port="${zenoh_host##*:}"
+        zenoh_host="${ZENOH_HOST:-${zenoh_host%:*}}"
         if timeout 5 bash -c "echo >/dev/tcp/${zenoh_host}/${zenoh_port}" 2>/dev/null; then
             log "${OK} Zenoh endpoint connectivity (${vehicle_id_for_zenoh}: ${zenoh_host}:${zenoh_port})"
             record_result "pass"
@@ -718,8 +720,7 @@ check_imu_bias() {
         return 0
     fi
 
-    # 静止確認。バイアス推定は車両が完全に静止していることが前提なので、
-    # y/N で明示確認する。誤って走行中に測ると黙って誤ったバイアスを書き込むので、
+    # 静止確認。走行中に測ると誤ったバイアスを黙って書き込むので y/N で明示確認する。
     # タイムアウトは付けず回答があるまで待つ。
     local answer=""
     read -r -p "$(echo -e "${WARN} Vehicle must be COMPLETELY stationary for IMU bias check. Proceed? [y/N]: ")" answer
@@ -743,10 +744,7 @@ check_imu_bias() {
     fi
 
     # check_imu_bias.py は ./vehicle:/vehicle マウント経由でコンテナから見える。
-    # rc=4 は「静止時ノイズが大きく、バイアス推定値が信用できない」の意味で、
-    # ここ（bash 側）で人間に再計測してよいか毎回確認してから再実行する。
-    # python 側では自動リトライしない。
-    # y と答え続ける限り上限なく再計測する。
+    # rc=4（静止時ノイズ過大）は python 側では自動リトライせず、ここで毎回確認して再実行する。
     local output
     local rc
     local attempt=1
@@ -842,9 +840,8 @@ check_execution_readiness() {
 print_summary() {
     log ""
     log "📊 ${TOTAL_CHECKS} checks: ${PASSED_CHECKS} ok, ${WARNING_CHECKS} warn, ${FAILED_CHECKS} fail"
-    # 判定を 1 行だけ添える。スクリプトを直接叩いた人が末尾で結論を得られるように。
-    # 行頭に ${FAIL} / ${WARN} を置かないこと: TUI が行頭のマーカーで失敗行を
-    # 拾うため、判定行まで failures 領域に混ざる。
+    # 判定を 1 行だけ添える。行頭に ${FAIL} / ${WARN} を置かないこと: TUI が行頭のマーカーで
+    # 失敗行を拾うため、判定行まで failures 領域に混ざる。
     if [ "${FAILED_CHECKS}" -gt 0 ]; then
         log "   失敗あり。上の失敗項目を直して再実行してください。"
         exit 1

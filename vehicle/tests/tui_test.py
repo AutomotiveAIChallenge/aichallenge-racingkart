@@ -5,22 +5,51 @@ Builds real directory trees in a temp dir; never touches docker or curses.
 Run with python3 -m unittest (no third-party runner).
 """
 import os
+import subprocess
 import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
 
 from tui import (  # noqa: E402
+    Console,
+    MIN_COLS,
+    header_title,
+    vehicle_id,
+    MIN_LINES,
+    driver_image_date,
     is_failure_line,
+    min_lines,
+    repo_commit,
+    version_line,
     probe_workspace,
-    service_badge,
+    service_status_lines,
     should_reobserve,
     terminal_too_small,
+    workspace_is_pristine,
     wrap_line,
 )
-from tui_core import REQUIRED_SERVICES, build_done  # noqa: E402
+from tui_core import (  # noqa: E402
+    PARTICIPANT_STEPS,
+    REQUIRED_SERVICES,
+    ROLE_PARTICIPANT,
+    STAFF_STEPS,
+    STEP_BUILD,
+    STEP_DRIVER,
+    STEP_DRIVER_DOWN,
+    STEP_ROSBAG,
+    STEP_ROSBAG_DOWN,
+    STEP_TEARDOWN,
+    STEP_ZENOH,
+    STEP_ZENOH_DOWN,
+    STEPS,
+    Workspace,
+    build_done,
+    step_by_id,
+)
 
 
 class TestProbeWorkspace(unittest.TestCase):
@@ -57,10 +86,8 @@ class TestProbeWorkspace(unittest.TestCase):
         self.assertIsNone(ws.install_mtime)
 
     def test_populated_submit_dir_has_an_mtime(self):
-        # submit_dir_populated is gone: aichallenge_submit/ ships tracked
-        # packages, so its presence proves nothing about a download having
-        # run (see tui_core's _MEASURED comment). submit_mtime is still
-        # sampled, though -- build_done() needs it to judge staleness.
+        # submit_dir_populated is gone: aichallenge_submit/ ships tracked packages, so its
+        # presence proves nothing. submit_mtime stays -- build_done() needs it for staleness.
         self.make_submission()
         ws = probe_workspace(self.root, frozenset())
         self.assertIsNotNone(ws.submit_mtime)
@@ -87,42 +114,221 @@ class TestProbeWorkspace(unittest.TestCase):
         self.assertIsNone(ws.submit_mtime)
 
 
+class TestWorkspaceIsPristine(unittest.TestCase):
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self._tmp.cleanup)
+        self.root = Path(self._tmp.name)
+        self.ws = self.root / "aichallenge" / "workspace"
+        (self.ws / "src").mkdir(parents=True)
+        (self.ws / "src" / "tracked.txt").write_text("x")
+        (self.ws / ".gitignore").write_text("/build\n/install\n/log\n")
+        self._git("init", "-q")
+        self._git("add", ".")
+        self._git("commit", "-q", "-m", "init")
+
+    def _git(self, *args):
+        subprocess.run(
+            ["git", "-c", "user.email=t@t", "-c", "user.name=t", *args],
+            cwd=str(self.root), check=True, capture_output=True,
+        )
+
+    def test_fresh_checkout_is_pristine(self):
+        self.assertTrue(workspace_is_pristine(self.root))
+
+    def test_ignored_build_artifacts_make_it_dirty(self):
+        # cleanup は build/ install/ log/ も消す対象なので、ignored でも「済」ではない。
+        # 空ディレクトリでも false: git を呼ぶ前にディレクトリの有無で判っている。
+        for name in ("build", "install", "log"):
+            with self.subTest(name=name):
+                (self.ws / name).mkdir()
+                self.assertFalse(workspace_is_pristine(self.root))
+                (self.ws / name).rmdir()
+
+    def test_untracked_file_makes_it_dirty(self):
+        (self.ws / "src" / "new.txt").write_text("")
+        self.assertFalse(workspace_is_pristine(self.root))
+
+    def test_modified_tracked_file_makes_it_dirty(self):
+        (self.ws / "src" / "tracked.txt").write_text("changed")
+        self.assertFalse(workspace_is_pristine(self.root))
+
+    def test_changes_outside_the_workspace_do_not_count(self):
+        # cleanup の責務は workspace 配下だけ。他のローカル変更は見ない。
+        (self.root / "notes.txt").write_text("")
+        self.assertTrue(workspace_is_pristine(self.root))
+
+    def test_not_a_repo_is_not_pristine(self):
+        with tempfile.TemporaryDirectory() as other:
+            self.assertFalse(workspace_is_pristine(Path(other)))
+
+
 class TestTerminalSize(unittest.TestCase):
     def test_exact_minimum_is_allowed(self):
-        self.assertFalse(terminal_too_small(40, 12))
+        self.assertFalse(terminal_too_small(MIN_COLS, MIN_LINES))
 
     def test_larger_is_allowed(self):
         self.assertFalse(terminal_too_small(80, 24))
 
     def test_too_narrow_is_rejected(self):
-        self.assertTrue(terminal_too_small(39, 12))
+        self.assertTrue(terminal_too_small(MIN_COLS - 1, MIN_LINES))
 
     def test_too_short_is_rejected(self):
-        self.assertTrue(terminal_too_small(40, 11))
+        self.assertTrue(terminal_too_small(MIN_COLS, MIN_LINES - 1))
+
+    def test_minimum_leaves_a_row_for_failures_and_a_row_for_log(self):
+        # header 1 + services 2 + STEPS + failures 見出し 1 + failures 1 + log 見出し 1 + log 1。
+        self.assertGreaterEqual(MIN_LINES, 3 + len(STEPS) + 4)
 
 
-class TestServiceBadge(unittest.TestCase):
+class TestStepNote(unittest.TestCase):
+    def _row(self, step, idx=0):
+        note = f"  ({step.note})" if step.note else ""
+        return f"{idx + 1} OK {step.title}{note}"
+
+    def test_the_steps_whose_timing_is_not_obvious_carry_a_note(self):
+        for step_id in (
+            STEP_DRIVER, STEP_ZENOH,
+            STEP_DRIVER_DOWN, STEP_ZENOH_DOWN,
+            STEP_ROSBAG, STEP_ROSBAG_DOWN, STEP_TEARDOWN,
+        ):
+            with self.subTest(step_id=step_id):
+                self.assertTrue(step_by_id(step_id).note)
+
+    def test_a_step_without_a_note_renders_the_title_alone(self):
+        step = step_by_id(STEP_BUILD)
+        self.assertEqual(self._row(step), f"1 OK {step.title}")
+
+    def test_every_row_fits_min_cols(self):
+        # 注釈を足しても端末の最低幅に収まること。はみ出すと行末が切れる。
+        for steps in (PARTICIPANT_STEPS, STAFF_STEPS):
+            for idx, step in enumerate(steps):
+                with self.subTest(step_id=step.step_id):
+                    self.assertLessEqual(len(self._row(step, idx)), MIN_COLS)
+
+    def test_notes_are_ascii(self):
+        # 画面の幅計算は文字数なので、全角が混ざると行末がずれる。
+        for step in STEPS:
+            with self.subTest(step_id=step.step_id):
+                self.assertTrue(step.note.isascii())
+
+
+class TestHeaderTitle(unittest.TestCase):
+    def test_shows_the_vehicle_then_the_role(self):
+        self.assertEqual(header_title("staff", "A2"), "[A2] vehicle console [staff]")
+
+    def test_longest_form_fits_min_cols_with_the_hints(self):
+        # header は「タイトル + 区切り 1 + ヒント 10」。最長の役割と ID で測る。
+        longest = header_title(ROLE_PARTICIPANT, "test")
+        self.assertLessEqual(len(longest) + 1 + len("↑↓ enter q"), MIN_COLS)
+
+
+class TestVehicleId(unittest.TestCase):
+    def test_environment_wins_over_the_env_file(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            (Path(tmp) / ".env").write_text("VEHICLE_ID=A3\n")
+            with mock.patch.dict(os.environ, {"VEHICLE_ID": "A6"}):
+                self.assertEqual(vehicle_id(Path(tmp)), "A6")
+
+    def test_reads_the_env_file_when_the_environment_is_empty(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            (Path(tmp) / ".env").write_text('# VEHICLE_ID=A1\nexport VEHICLE_ID="A3" \n')
+            with mock.patch.dict(os.environ, {"VEHICLE_ID": ""}):
+                self.assertEqual(vehicle_id(Path(tmp)), "A3")
+
+    def test_last_assignment_wins(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            (Path(tmp) / ".env").write_text("VEHICLE_ID=A1\nVEHICLE_ID=A2\n")
+            with mock.patch.dict(os.environ, {"VEHICLE_ID": ""}):
+                self.assertEqual(vehicle_id(Path(tmp)), "A2")
+
+    def test_unknown_reads_as_a_dash_not_as_a_blank(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            with mock.patch.dict(os.environ, {"VEHICLE_ID": ""}):
+                self.assertEqual(vehicle_id(Path(tmp)), "-")
+
+
+class TestVersionLine(unittest.TestCase):
+    def test_shows_image_date_and_commit(self):
+        self.assertEqual(
+            version_line("2026-09-01", "bd9c626"),
+            "driver image: 2026-09-01  aic commit: bd9c626",
+        )
+
+    def test_missing_values_read_as_unknown_not_as_blank(self):
+        self.assertEqual(
+            version_line(None, None),
+            "driver image: unknown  aic commit: unknown",
+        )
+
+    def test_longest_form_fits_min_cols(self):
+        self.assertLessEqual(len(version_line("2026-09-01", "bd9c626")), MIN_COLS)
+
+    def test_labels_say_which_repository_each_value_comes_from(self):
+        line = version_line("2026-09-01", "bd9c626")
+        self.assertIn("driver image:", line)
+        self.assertIn("aic commit:", line)
+
+    def test_staff_row_is_accounted_for_in_the_minimum_height(self):
+        self.assertEqual(min_lines(8, extra=1), min_lines(8) + 1)
+
+
+class TestVersionProbes(unittest.TestCase):
+    def test_commit_of_a_real_repo_is_a_short_hash(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            subprocess.run(["git", "init", "-q"], cwd=root, check=True)
+            (root / "f").write_text("x")
+            subprocess.run(["git", "add", "f"], cwd=root, check=True)
+            subprocess.run(
+                ["git", "-c", "user.email=t@e", "-c", "user.name=t",
+                 "commit", "-qm", "c"],
+                cwd=root, check=True,
+            )
+            commit = repo_commit(root)
+            self.assertIsNotNone(commit)
+            self.assertRegex(commit, r"^[0-9a-f]{7,}$")
+
+    def test_commit_outside_a_repo_is_none_not_a_crash(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            self.assertIsNone(repo_commit(Path(tmp)))
+
+    def test_unknown_image_is_none_not_a_crash(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            self.assertIsNone(
+                driver_image_date(Path(tmp), image="no-such-image:does-not-exist")
+            )
+
+
+class TestServiceStatusLines(unittest.TestCase):
     def test_all_down(self):
-        self.assertEqual(service_badge(frozenset()), "----")
+        self.assertEqual(
+            service_status_lines(frozenset()),
+            ("running: -", "stopped: driver autoware zenoh rosbag"),
+        )
 
     def test_all_up(self):
         self.assertEqual(
-            service_badge(frozenset(REQUIRED_SERVICES)), "dazr"
+            service_status_lines(frozenset(REQUIRED_SERVICES)),
+            ("running: driver autoware zenoh rosbag", "stopped: -"),
         )
 
-    def test_partial(self):
+    def test_partial_keeps_required_services_order(self):
         self.assertEqual(
-            service_badge(frozenset({"driver", "autoware"})), "da--"
+            service_status_lines(frozenset({"zenoh", "driver"})),
+            ("running: driver zenoh", "stopped: autoware rosbag"),
         )
 
-    def test_position_follows_required_services(self):
-        # A reordering of REQUIRED_SERVICES must not silently scramble the
-        # badge: position is what carries the meaning.
-        for idx, name in enumerate(REQUIRED_SERVICES):
-            with self.subTest(service=name):
-                badge = service_badge(frozenset({name}))
-                self.assertEqual(badge[idx], name[0])
-                self.assertEqual(badge.count("-"), len(REQUIRED_SERVICES) - 1)
+    def test_names_are_not_abbreviated(self):
+        joined = " ".join(service_status_lines(frozenset({"driver"})))
+        for name in REQUIRED_SERVICES:
+            self.assertIn(name, joined)
+
+    def test_longest_form_fits_min_cols(self):
+        for line in service_status_lines(frozenset()) + service_status_lines(
+            frozenset(REQUIRED_SERVICES)
+        ):
+            self.assertLessEqual(len(line), MIN_COLS - 1)
 
 
 class TestIsFailureLine(unittest.TestCase):
@@ -162,6 +368,62 @@ class TestWrapLine(unittest.TestCase):
     def test_zero_width_yields_nothing(self):
         self.assertEqual(wrap_line("anything", 0), [])
 
+
+class FakeScreen:
+    """Just enough of a curses window for Console.draw() to run headless.
+
+    Records what was written at each row so tests can inspect the header
+    without a real terminal (curses.doupdate() needs one).
+    """
+
+    def __init__(self, lines=24, cols=80):
+        self._lines = lines
+        self._cols = cols
+        self.rows = {}
+
+    def getmaxyx(self):
+        return self._lines, self._cols
+
+    def erase(self):
+        self.rows = {}
+
+    def addnstr(self, y, x, text, n, attr=0):
+        self.rows[y] = text[:n]
+
+    def noutrefresh(self):
+        pass
+
+
+class TestServiceLinePlacement(unittest.TestCase):
+    """The service status appears exactly once: two lines under the header."""
+
+    def _console(self, services_running=frozenset()):
+        from unittest import mock
+
+        screen = FakeScreen()
+        console = Console(screen, steps=PARTICIPANT_STEPS, role=ROLE_PARTICIPANT)
+        console.ws = Workspace(services_running=services_running)
+        with mock.patch("tui.curses.doupdate"):
+            console.draw()
+        return console, screen
+
+    def test_rows_1_and_2_are_running_and_stopped(self):
+        _, screen = self._console(frozenset({"driver", "autoware"}))
+        self.assertEqual(screen.rows[1].rstrip(), "running: driver autoware")
+        self.assertEqual(screen.rows[2].rstrip(), "stopped: zenoh rosbag")
+
+    def test_header_has_no_service_names(self):
+        _, screen = self._console(frozenset(REQUIRED_SERVICES))
+        for name in REQUIRED_SERVICES:
+            self.assertNotIn(name, screen.rows[0])
+
+    def test_steps_start_on_fourth_row_without_service_names(self):
+        _, screen = self._console(frozenset(REQUIRED_SERVICES))
+        self.assertIn("check preflight", screen.rows[3])
+        for idx in range(3, len(PARTICIPANT_STEPS) + 3):
+            self.assertNotIn("running:", screen.rows[idx])
+            self.assertNotIn("stopped:", screen.rows[idx])
+            self.assertNotIn("rosbag", screen.rows[idx])
 
 class TestShouldReobserve(unittest.TestCase):
     def test_not_while_a_step_is_running(self):
