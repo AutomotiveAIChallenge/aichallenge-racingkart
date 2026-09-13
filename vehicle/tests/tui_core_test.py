@@ -154,6 +154,12 @@ class TestSteps(unittest.TestCase):
     def test_preflight_step_is_not_interactive(self):
         self.assertFalse(step_by_id(STEP_PREFLIGHT).interactive)
 
+    def test_runtime_step_is_interactive(self):
+        # check_imu_bias() が停止確認の y/N プロンプトを出す。console が端末を
+        # 明け渡さないと、curses の getch() とプロンプトの read が同じ tty を
+        # 取り合い応答不能でハングする。
+        self.assertTrue(step_by_id(STEP_RUNTIME).interactive)
+
     def test_download_step_is_interactive_and_staff_only(self):
         self.assertTrue(step_by_id(STEP_DOWNLOAD).interactive)
         self.assertEqual(step_by_id(STEP_DOWNLOAD).command, ("make", "download"))

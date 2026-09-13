@@ -168,6 +168,10 @@ PARTICIPANT_STEPS = (
         command=("./setup_check.sh", "--phase", "runtime"),
         cwd="vehicle",
         requires=(STEP_UP,),
+        # check_imu_bias() が停止確認の y/N プロンプトを出す。端末を明け渡さないと
+        # curses の getch() とプロンプトの read が同じ tty を取り合い、
+        # 操作者に見えないまま応答不能でハングする。
+        interactive=True,
     ),
     Step(
         step_id=STEP_AUTOWARE_DOWN,
