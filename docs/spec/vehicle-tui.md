@@ -177,8 +177,10 @@ zip は **トップレベルが `aichallenge_submit/` だけ**で、**従来の 
 
 ### 実測とセッション記憶
 
-展開時の accel/brake map と IMU バイアスの適用、保存元の初回配置、
-runtime 再計測時の保存については [車両別校正値](../../vehicle/calibration.md) を参照する。
+展開時は accel/brake map の上書きについて参加者の承認を確認する。
+IMU バイアスは展開時に保持し、runtime の静止計測後に現在値・実測値・差分を表示して
+承認後だけ更新する。拒否・入力終了では設定を保持する。
+詳細は [車両別校正値](../../vehicle/calibration.md) を参照する。
 
 `build` / `autoware` / `autoware down` / `down all` / `cleanup` は環境から実測する
 （`cleanup` は `git status --porcelain --ignored -- aichallenge/workspace` が空か）。

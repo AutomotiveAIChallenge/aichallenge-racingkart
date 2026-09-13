@@ -71,6 +71,15 @@ aichallenge_submit.launch.xml
 
 `aichallenge_submit_launch` パッケージを提出物に含めない、または `aichallenge_submit.launch.xml` を削除すると、評価の launch ツリーが起動できません。
 
+### 実車での map・IMU バイアス更新
+
+実車の `make submission-extract` は、提出物の accel/brake map を AWSIM adapter の
+共通 map で上書きしてよいか参加者の承認を確認します。拒否した場合は提出物の値を保持します。
+IMU バイアスは展開時には変更せず、runtime の静止計測後に現在値・実測値・差分を示して
+承認後だけ更新します。独自補正などで対象ファイルがない場合は警告してその項目をスキップします。
+更新した IMU バイアスの反映には Autoware の再起動が必要です。
+詳細は [車両別校正値と提出物の展開](../../vehicle/calibration.md) を参照してください。
+
 ---
 
 ## 3. 制御方式の選択
