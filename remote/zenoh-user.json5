@@ -55,7 +55,7 @@
       allow: {
         publishers: [
           "/initialpose",
-          "/racing_kart/joy"
+          "/racing_kart/so/joy"
         ],
         subscribers: [
           "/control/command/control_cmd",
@@ -103,7 +103,7 @@
       ////                   to create a bigger batch of messages. This usually has a positive impact on latency for the topic
       ////                   but a negative impact on the general throughput, as more overhead is used for those topics.
       pub_priorities: [
-        "/racing_kart/joy=1:express",
+        "/racing_kart/so/joy=1:express",
         "/initialpose=1:express",
       ],
 
