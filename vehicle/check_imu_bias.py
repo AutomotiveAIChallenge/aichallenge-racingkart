@@ -5,9 +5,10 @@ autoware 起動後（setup_check.sh --phase runtime のタイミング）に、�
 完全に静止している状態で /sensing/imu/imu_raw の角速度を数秒サンプリングし、
 静止時バイアス（3 軸平均）を測る。静止時ノイズ（std）が十分小さければ、
 imu_corrector.param.yaml に書かれている現在の angular_velocity_offset_* を
-測定値でそのまま上書きする（乖離の大小によらず、閾値判定はしない）。
-runtimeチェックでは --bias-output で指定した車両別 imu_bias.yaml にも保存し、
-次の提出物の展開時に同じ校正値を適用できるようにする。
+現在値・実測値・差分を表示し、参加者の承認を確認した場合だけ上書きする。
+runtimeチェックでは測定結果を --proposal-output に一時保存し、ホスト側で承認後に
+--apply-proposal で適用する。--bias-output の車両別保存元も承認後だけ更新する。
+保存元の値は次の提出物へ自動適用しない。
 
 符号について（imu_corrector のソースから）:
     imu_corrector は  output = raw - angular_velocity_offset  で補正する。
@@ -31,16 +32,17 @@ runtimeチェックでは --bias-output で指定した車両別 imu_bias.yaml �
     （exit 4）で返し、呼び出し側が確認の上で再実行できるようにしている。
 
 終了コード:
-    0 : 測定成功。param.yaml の angular_velocity_offset_* を新しい値で上書きした
-    3 : 測定不能（サンプリング中に車両が動いた / imu_raw が来ない /
-        param.yaml を読めなかった）
+    0 : 承認後の更新成功、または --proposal-output による測定結果の保存成功
+    3 : 計測・保存・適用失敗（移動 / サンプル不足 / 読み書き失敗 / 計測後の設定変更）
     4 : 静止時ノイズが大きい（バイアス推定値が信用できないので書き込まず、
         再計測を促す）
+    5 : 更新見送り（承認なし / 対象設定なし）
 """
 
 from __future__ import annotations
 
 import argparse
+import json
 import statistics
 import sys
 import time
@@ -51,7 +53,7 @@ from rclpy.node import Node
 from rclpy.qos import qos_profile_sensor_data
 from sensor_msgs.msg import Imu
 
-from calibration import AXES, read_current_offsets, save_bias, write_new_offsets
+from calibration import AXES, atomic_write, confirm_update, parse_offsets, replace_offsets, save_bias
 
 # VelocityReport はディストリ/世代で名前空間が変わるため両対応で import する。
 try:  # 新しめの Autoware
@@ -65,10 +67,39 @@ except ImportError:  # 旧 autoware_auto 系
 EXIT_OK = 0
 EXIT_MEASURE_FAIL = 3
 EXIT_NOISY = 4
+EXIT_SKIPPED = 5
 
 # stddev が意味を持つ最小サンプル数。1 サンプルしか取れない（IMU がほぼ来ていない）と
 # std=0.0 になり、静止時ノイズチェックをすり抜けてしまう。
 MIN_SAMPLES = 10
+
+
+def apply_proposal(proposal: dict, bias_output: Path | None) -> int:
+    """Apply the approved measurement only if the participant settings are still current."""
+    try:
+        param = Path(proposal["param_yaml"])
+        before = param.read_text(encoding="utf-8")
+        if before != proposal["current_text"]:
+            raise ValueError("participant IMU settings changed after measurement; re-measure")
+        updated = replace_offsets(before, proposal["offsets"])
+        atomic_write(param, updated)
+        if bias_output is not None:
+            try:
+                save_bias(bias_output, proposal["offsets"])
+            except (OSError, ValueError):
+                try:
+                    atomic_write(param, before)
+                except OSError as rollback_error:
+                    print(f"❌ Failed to restore param.yaml after bias save failure: {rollback_error}")
+                raise
+    except (OSError, ValueError, KeyError, TypeError) as exc:
+        print(f"❌ Failed to apply approved IMU bias: {exc}")
+        return EXIT_MEASURE_FAIL
+    print("✅ imu_corrector.param.yaml updated (participant approved).")
+    if bias_output is not None:
+        print(f"Saved vehicle IMU bias: {bias_output}")
+    print("Restart autoware to apply the new offsets.")
+    return EXIT_OK
 
 
 class ImuBiasChecker(Node):
@@ -154,8 +185,25 @@ def main() -> int:
                                 "imu_corrector/config/imu_corrector.param.yaml",
                         help="書き換え対象の param.yaml パス（コンテナ内の絶対パス）")
     parser.add_argument("--bias-output", type=Path,
-                        help="成功した測定値を保存する車両別 imu_bias.yaml（runtimeチェックが指定）")
+                        help="承認後の測定値を保存する車両別 imu_bias.yaml")
+    proposal_mode = parser.add_mutually_exclusive_group()
+    proposal_mode.add_argument("--proposal-output", type=Path,
+                               help="設定を変更せず、承認用の測定結果を一時保存する")
+    proposal_mode.add_argument("--apply-proposal", type=Path,
+                               help="参加者の承認後に一時保存した測定結果を適用する")
     args = parser.parse_args()
+
+    if args.apply_proposal is not None:
+        try:
+            proposal = json.loads(args.apply_proposal.read_text(encoding="utf-8"))
+        except (OSError, ValueError) as exc:
+            print(f"❌ Could not read IMU proposal: {exc}")
+            return EXIT_MEASURE_FAIL
+        return apply_proposal(proposal, args.bias_output)
+
+    if not Path(args.param_yaml).is_file():
+        print(f"⚠️ No IMU correction settings at {args.param_yaml}; skipping IMU update.")
+        return EXIT_SKIPPED
 
     rclpy.init()
     node = ImuBiasChecker(args)
@@ -225,44 +273,40 @@ def main() -> int:
         rclpy.shutdown()
         return EXIT_NOISY
 
-    current_offsets = read_current_offsets(args.param_yaml)
-    if current_offsets is None:
-        print(f"{'':2}❌ Could not read angular_velocity_offset_* from {args.param_yaml}.")
-        node.destroy_node()
-        rclpy.shutdown()
+    node.destroy_node()
+    rclpy.shutdown()
+    try:
+        current_text = Path(args.param_yaml).read_text(encoding="utf-8")
+        current_offsets = parse_offsets(current_text)
+    except OSError as exc:
+        print(f"❌ Could not read IMU settings: {exc}")
         return EXIT_MEASURE_FAIL
+    except ValueError as exc:
+        print(f"⚠️ No supported IMU offsets; skipping IMU update: {exc}")
+        return EXIT_SKIPPED
 
     new_offsets = {axis: stats[axis][0] for axis in AXES}
-    if not write_new_offsets(args.param_yaml, new_offsets):
-        print(f"{'':2}❌ Failed to write new offsets to {args.param_yaml}.")
-        node.destroy_node()
-        rclpy.shutdown()
-        return EXIT_MEASURE_FAIL
-
-    if args.bias_output is not None:
-        try:
-            save_bias(args.bias_output, new_offsets)
-        except (OSError, ValueError) as exc:
-            print(f"❌ param.yaml updated, but failed to save vehicle IMU bias: {exc}")
-            node.destroy_node()
-            rclpy.shutdown()
-            return EXIT_MEASURE_FAIL
-        print(f"Saved vehicle IMU bias: {args.bias_output}")
-
-    print(f"Updated {args.param_yaml}:")
-    cmp_header = f"{'axis':4}  {'old[rad/s]':>12}  {'new[rad/s]':>12}"
+    print(f"IMUジャイロバイアス [rad/s]: {args.param_yaml}")
+    cmp_header = f"{'軸':4}  {'現在値':>12}  {'実測値':>12}  {'差分(実測値−現在値)':>18}"
     print(cmp_header)
     print("-" * len(cmp_header))
     for axis in AXES:
-        print(f"{axis:4}  {current_offsets[axis]:+.6f}  {new_offsets[axis]:+.6f}")
+        print(f"{axis:4}  {current_offsets[axis]:+.6f}  {new_offsets[axis]:+.6f}  "
+              f"{new_offsets[axis] - current_offsets[axis]:+.6f}")
     print("")
-    print("✅ imu_corrector.param.yaml updated.")
-    print("   This bias will not take effect until autoware is restarted")
-    print("   (imu_corrector reads the parameter once at startup).")
-
-    node.destroy_node()
-    rclpy.shutdown()
-    return EXIT_OK
+    proposal = {"param_yaml": args.param_yaml, "current_text": current_text, "offsets": new_offsets}
+    if args.proposal_output is not None:
+        try:
+            atomic_write(args.proposal_output, json.dumps(proposal, ensure_ascii=False) + "\n")
+        except OSError as exc:
+            print(f"❌ Could not save IMU proposal: {exc}")
+            return EXIT_MEASURE_FAIL
+        print("IMU measurement complete; settings have not been changed.")
+        return EXIT_OK
+    if not confirm_update("実測値で上書きしますか？\n参加者の承認を確認してください。 [y/N]: "):
+        print("⚠️ IMU measured; update declined. Participant settings and saved bias retained.")
+        return EXIT_SKIPPED
+    return apply_proposal(proposal, args.bias_output)
 
 
 if __name__ == "__main__":

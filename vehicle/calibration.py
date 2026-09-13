@@ -11,32 +11,15 @@ from pathlib import Path
 AXES = ("x", "y", "z")
 MAP_DIR = Path("aichallenge_submit_launch/data")
 IMU_PARAM = Path("imu_corrector/config/imu_corrector.param.yaml")
-DEFAULT_CALIBRATION_DIR = Path(__file__).resolve().parent / ".calibration"
+DEFAULT_MAP_DIR = (
+    Path(__file__).resolve().parent.parent
+    / "aichallenge/workspace/src/aichallenge_system/aichallenge_awsim_adapter/data"
+)
 _OFFSET_LINE = re.compile(
     r"^(?P<prefix>\s*angular_velocity_offset_(?P<axis>[xyz])\s*:\s*)"
     r"(?P<value>[-+]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][-+]?\d+)?)"
     r"(?P<suffix>\s*(?:#.*)?)$"
 )
-
-
-def vehicle_id(repo_root: Path) -> str:
-    """Read environment, then repo .env; never guess a vehicle."""
-    value = os.environ.get("VEHICLE_ID", "").strip()
-    if not value:
-        try:
-            lines = (repo_root / ".env").read_text().splitlines()
-        except FileNotFoundError:
-            lines = []
-        for line in lines:
-            line = line.strip().removeprefix("export ").strip()
-            if not line or line.startswith("#") or "=" not in line:
-                continue
-            key, raw = line.split("=", 1)
-            if key.strip() == "VEHICLE_ID":
-                value = raw.strip().strip("\"'").strip()
-    if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_-]*", value):
-        raise ValueError("VEHICLE_ID is missing or invalid; set it in the environment or .env")
-    return value
 
 
 def parse_offsets(text: str, *, flat: bool = False) -> dict[str, float]:
@@ -93,22 +76,6 @@ def atomic_write(path: Path, text: str) -> None:
             os.unlink(tmp)
 
 
-def read_current_offsets(param_yaml_path: str) -> dict[str, float] | None:
-    try:
-        return parse_offsets(Path(param_yaml_path).read_text(encoding="utf-8"))
-    except (OSError, ValueError):
-        return None
-
-
-def write_new_offsets(param_yaml_path: str, offsets: dict[str, float]) -> bool:
-    try:
-        path = Path(param_yaml_path)
-        atomic_write(path, replace_offsets(path.read_text(encoding="utf-8"), offsets))
-        return True
-    except (OSError, ValueError):
-        return False
-
-
 def save_bias(path: Path, offsets: dict[str, float]) -> None:
     text = "".join(f"angular_velocity_offset_{axis}: {offsets[axis]:.6f}\n" for axis in AXES)
     parse_offsets(text, flat=True)
@@ -142,15 +109,16 @@ def read_map(path: Path) -> bytes:
     return data
 
 
-def apply_calibration(submit: Path, directory: Path) -> None:
-    """Validate all inputs before applying calibration to a disposable submission."""
-    maps = {name: read_map(directory / name) for name in ("accel_map.csv", "brake_map.csv")}
-    offsets = parse_offsets((directory / "imu_bias.yaml").read_text(encoding="utf-8"), flat=True)
-    param = submit / IMU_PARAM
-    updated = replace_offsets(param.read_text(encoding="utf-8"), offsets)
-    for name in maps:
-        if not (submit / MAP_DIR / name).is_file():
-            raise ValueError(f"submission is missing {MAP_DIR / name}")
+def apply_maps(submit: Path, names: list[str]) -> None:
+    """Validate selected adapter maps before replacing files in a disposable submission."""
+    maps = {name: read_map(DEFAULT_MAP_DIR / name) for name in names}
     for name, data in maps.items():
-        (submit / MAP_DIR / name).write_bytes(data)
-    param.write_text(updated, encoding="utf-8")
+        atomic_write(submit / MAP_DIR / name, data.decode("utf-8"))
+
+
+def confirm_update(prompt: str) -> bool:
+    """Only an explicit yes authorizes an update; EOF also retains current settings."""
+    try:
+        return input(prompt).strip().lower() in ("y", "yes")
+    except EOFError:
+        return False

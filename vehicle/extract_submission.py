@@ -10,9 +10,9 @@ The zip must be encrypted with traditional PKZIP encryption (`zip -er
 <id>.zip aichallenge_submit`): Python's zipfile cannot decrypt AES entries.
 Extraction happens into a sibling temp directory first, so a wrong password or
 a malformed archive leaves the current aichallenge_submit/ untouched.
-Before replacement, vehicle/.calibration/<VEHICLE_ID>/ supplies the accel/brake
-maps and three IMU gyro offsets. Missing or invalid calibration also leaves
-the existing submission untouched.
+Before replacement, ask for participant approval to copy the common accel/brake
+maps from aichallenge_awsim_adapter/data/. Declining preserves participant maps.
+IMU offsets are retained; runtime measurement proposes their update separately.
 
 Failures print a line starting with the FAIL marker so vehicle/tui.py retains
 them in its failures pane.
@@ -28,7 +28,7 @@ import tempfile
 import zipfile
 from pathlib import Path
 
-from calibration import DEFAULT_CALIBRATION_DIR, apply_calibration, vehicle_id
+from calibration import MAP_DIR, apply_maps, confirm_update
 
 FAIL = "❌"
 SUBMIT_DIR = "aichallenge_submit"
@@ -79,7 +79,7 @@ def _restore_unix_permissions(zf: zipfile.ZipFile, output: Path) -> None:
             os.chmod(path, mode)
 
 
-def extract(zip_path: Path, password: str, output: Path, calibration_dir: Path) -> int:
+def extract(zip_path: Path, password: str, output: Path) -> int:
     target = output / SUBMIT_DIR
     with zipfile.ZipFile(zip_path) as zf:
         err = check_layout(zf)
@@ -101,15 +101,27 @@ def extract(zip_path: Path, password: str, output: Path, calibration_dir: Path) 
                 return fail(f"corrupt zip {zip_path.name}: {exc}")
             _restore_unix_permissions(zf, Path(tmp))
             extracted = Path(tmp) / SUBMIT_DIR
+            names = []
+            for name in ("accel_map.csv", "brake_map.csv"):
+                if (extracted / MAP_DIR / name).is_file():
+                    names.append(name)
+                else:
+                    print(f"⚠️ Submission has no {MAP_DIR / name}; skipping its map update.")
             try:
-                apply_calibration(extracted, calibration_dir)
+                if names and confirm_update(
+                    "提出物の accel/brake map を AWSIM adapter の共通mapで上書きしますか？\n"
+                    "参加者の承認を確認してください。 [y/N]: "
+                ):
+                    apply_maps(extracted, names)
+                    print(f"Updated common maps: {', '.join(names)}")
+                elif names:
+                    print("Map update declined; participant maps retained.")
             except (OSError, ValueError) as exc:
-                return fail(f"cannot apply vehicle calibration from {calibration_dir}: {exc}")
+                return fail(f"cannot apply common maps: {exc}")
             if target.exists():
                 shutil.rmtree(target)
             os.replace(extracted, target)
     print(f"replaced {target} with {zip_path.name}")
-    print(f"applied vehicle calibration: {calibration_dir}")
     return 0
 
 
@@ -123,11 +135,6 @@ def main() -> int:
                     help=f"directory whose {SUBMIT_DIR}/ gets replaced (default: {DEFAULT_OUTPUT})")
     args = ap.parse_args()
 
-    try:
-        calibration_dir = DEFAULT_CALIBRATION_DIR / vehicle_id(REPO_ROOT)
-    except (OSError, ValueError) as exc:
-        return fail(str(exc))
-
     ids = list_ids(args.zip_dir)
     if not ids:
         return fail(f"no *.zip in {args.zip_dir}")
@@ -139,7 +146,7 @@ def main() -> int:
     if not password:
         return fail("empty password")
     try:
-        return extract(args.zip_dir / f"{team}.zip", password, args.output, calibration_dir)
+        return extract(args.zip_dir / f"{team}.zip", password, args.output)
     except (OSError, zipfile.BadZipFile) as exc:
         return fail(f"extract failed: {exc}")
 

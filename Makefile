@@ -179,7 +179,7 @@ download:
 
 # 事前に置いた vehicle/.submissions/<id>.zip（パスワード付き）で src/aichallenge_submit/ を入れ替える。
 # ID とパスワードは対話で聞く（SUBMISSION_ID で ID を先渡し可）。
-# VEHICLE_ID（環境変数 / .env）の vehicle/.calibration/<VEHICLE_ID>/ を展開後に適用する。
+# 展開後に参加者の承認を確認して AWSIM adapter の共通 map を適用する。IMU は runtime で別途確認する。
 submission-extract:
 	vehicle/extract_submission.py $(if $(SUBMISSION_ID),--id $(SUBMISSION_ID))
 
