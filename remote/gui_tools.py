@@ -20,9 +20,9 @@ from tkinter.scrolledtext import ScrolledText
 ROOT_DIR = Path(__file__).resolve().parent
 REMOTE_DIR = ROOT_DIR
 
-# connect_zenoh.bash の case が受理する Vehicle ID (A4 は無い)。緩くしてもスクリプト側で
-# 落ちるだけなので、候補一覧と検証を同じ定義から導いて食い違わないようにする。
-VEHICLE_IDS = ["A1", "A2", "A3", "A5", "A6", "A7", "A8"]
+# connect_zenoh.bash の case が受理する Vehicle ID。
+# 候補一覧と検証を同じ定義から導いて食い違わないようにする。
+VEHICLE_IDS = ["A1", "A2", "A3", "A4", "A5", "A6", "A7", "A8"]
 TEST_VEHICLE_IDS = ["test-remote", "test-vehicle", "test-server"]
 VALID_VEHICLE_IDS = VEHICLE_IDS + TEST_VEHICLE_IDS
 # 車両側 (vehicle/vehicle_ports.sh) の VEHICLE_ID を GUI 側の ID に読み替える表。
