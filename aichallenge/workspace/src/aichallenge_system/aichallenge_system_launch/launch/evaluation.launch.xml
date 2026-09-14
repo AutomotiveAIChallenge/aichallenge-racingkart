@@ -8,6 +8,8 @@
     <arg name="simulation" default="true"/>
     <arg name="use_sim_time" default="true"/>
     <arg name="run_rviz" default="true"/>
+    <!-- Debug visualization / motion analytics (awsim.launch.xml); independent of rviz. -->
+    <arg name="debug" default="$(var run_rviz)"/>
 
     <log message="Launching evaluation bundle (simulator + autoware)."/>
     <log message=" - domain_id: $(var domain_id)"/>
@@ -18,17 +20,31 @@
     <log message=" - simulation: $(var simulation)"/>
     <log message=" - use_sim_time: $(var use_sim_time)"/>
     <log message=" - run_rviz: $(var run_rviz)"/>
+    <log message=" - debug: $(var debug)"/>
 
     <group>
         <group>
             <set_env name="ROS_DOMAIN_ID" value="0"/>
+            <!-- run_simulator.bash writes awsim.log under LOG_DIR. -->
+            <set_env name="LOG_DIR" value="$(var log_dir)"/>
             <executable
                 name="aichallenge_awsim_eval"
                 cwd="$(var log_dir)"
                 output="both"
                 cmd="bash /aichallenge/run_simulator.bash $(var sim_mode)"/>
             <include file="$(find-pkg-share aichallenge_system_launch)/launch/mode/awsim_state_manager.launch.xml">
-                <arg name="debug" value="$(var run_rviz)"/>
+                <arg name="debug" value="$(var debug)"/>
+            </include>
+        </group>
+    </group>
+
+    <!-- Standalone recorder (X root window). With rviz on, its AutowareScreenCapturePanel already serves
+         /debug/service/capture_screen, so the recorder is skipped to avoid two servers. -->
+    <group if="$(var capture)">
+        <group unless="$(var run_rviz)">
+            <set_env name="ROS_DOMAIN_ID" value="$(var domain_id)"/>
+            <include file="$(find-pkg-share aichallenge_screen_recorder)/launch/screen_recorder.launch.xml">
+                <arg name="output_dir" value="$(var log_dir)/capture"/>
             </include>
         </group>
     </group>
@@ -39,6 +55,7 @@
             <arg name="simulation" value="$(var simulation)"/>
             <arg name="use_sim_time" value="$(var use_sim_time)"/>
             <arg name="run_rviz" value="$(var run_rviz)"/>
+            <arg name="debug" value="$(var debug)"/>
             <arg name="capture" value="$(var capture)"/>
             <arg name="rosbag" value="$(var rosbag)"/>
             <arg name="domain_id" value="$(var domain_id)"/>

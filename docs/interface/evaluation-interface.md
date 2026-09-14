@@ -8,13 +8,14 @@
 
 ## 1. 概要（この契約が何を保証するか）
 
-この契約は以下の 5 つの面を固定します。
+この契約は以下の 6 つの面を固定します。
 
 1. **ROS 2 ドメイン規約** — AWSIM が Domain 0、車両 Autoware が Domain 1..N に固定
 2. **admin/awsim トピック** — スタート・リセット・状態遷移を駆動するトピックの名前・型・所有者
 3. **ノード責務分離** — `awsim_state_manager_node` と `autostart_orchestrator_node` の境界
 4. **成果物・ログレイアウト** — `/output` 配下のディレクトリ構造とシンボリックリンク
 5. **result JSON スキーマ** — `result-summary.json`（schema v2）と `dN-result-details.json`（schema v3）のキー
+6. **評価環境の入口（entrypoint）** — 評価パイプラインが起動するスクリプトの名前と、それが自己完結で満たす前提
 
 いずれかを変更すると、評価パイプライン・複数車両ランの分離・スコアリング Lambda のいずれかが機能しなくなります。
 
@@ -42,10 +43,12 @@
 
 10. **`HOST_UID` / `HOST_GID` を Makefile が export し、`output/` 配下の成果物がホストユーザ所有になる。コンテナを直接 `docker compose` で起動する場合も `HOST_UID` / `HOST_GID` を渡すこと。** 守らないと `output/` が root 所有になり、ホストで成果物を参照/削除できなくなる。
 
-11. **`dN-result-details.json` のファイル名接頭辞 `d{vehicle_number}-` と `schema_version: "v3"`、`result-summary.json` のファイル名と `schema_version: "v2"`、`vehicles[].vehicle_number`、`vehicles[].final_position` は変更しない。** 守らないと AWS `result_update` Lambda がファイル検索に失敗するか、スコアリングが壊れる。`result-summary.json` はファイル名が Lambda の S3 イベント発火条件であり固定。
+11. **`dN-result-details.json` のファイル名接頭辞 `d{vehicle_number}-` と `schema_version: "v3"`、`result-summary.json` のファイル名と `schema_version: "v2"`（レースモード。セーフティゲートモードは `"safety-gate-v1"`、§5 参照）、`vehicles[].vehicle_number`、`vehicles[].final_position` は変更しない。** 守らないと AWS `result_update` Lambda がファイル検索に失敗するか、スコアリングが壊れる。`result-summary.json` はファイル名が Lambda の S3 イベント発火条件であり固定。
 
 12. **`dN-result-details.json` の配置は AWSIM の CWD に従う（固定の `d0/` 前提でパスを決め打ちしない）。`result-summary.json` は `autostart_orchestrator` が `output_dir / "result-summary.json"` と `run_dir / "result-summary.json"` の両方を探索する（ソース: `_refresh_latest_artifact_links`）。この探索ロジックを変更する場合は配置パターンと整合させること。** 守らないと `latest/` へのシンボリックリンクが張れず、最新成果物の特定手段が失われる。
 
+
+13. **評価パイプライン（`aichallenge-aws` の `main.bash`）が起動する入口は §6 の 3 本（`run_evaluation.bash` / `run_safety_gate.bash` / `run_parallel.bash`）だけで、いずれも引数なし・自己完結（ROS overlay と `SIM_MODE` を自分で決める）。名前と自己完結性を変更しない。** 守らないと評価イメージ（entrypoint 無し、提出物は `/aichallenge/d1` overlay）で `ros2: command not found` や提出パッケージ未検出で全件 failed になる。
 ---
 
 ## 2. ドメイン規約の約束
@@ -131,7 +134,7 @@ output/
 
 > 注: AWSIM はレース結果（`result-summary.json` / `dN-result-details.json`）を **自身の CWD** に書き出す。配置はフローで異なる:
 > - **dev / 並列（`run_simulator.bash`）**: AWSIM の CWD = run_dir 直下。`awsim.log` も `${LOG_DIR}/awsim.log`（run_dir 直下）。実サンプル `output/20260607-235456/` では `awsim.log`・`d1..d4-result-details.json`・`result-summary.json` が全て run_dir 直下にあり、`d0/` は存在しない。
-> - **eval（`run_evaluation.bash`）**: `cd "${out_dir}"`（= `d<N>/`）してから launch するため AWSIM の CWD = `d<N>/`。
+> - **eval / safety gate（`run_evaluation.bash`、`run_safety_gate.bash`）**: `cd "${out_dir}"`（= `d<N>/`）してから launch するため AWSIM の CWD = `d<N>/`。`evaluation.launch.xml` が `LOG_DIR=log_dir`（= `d<N>/`）を渡すので `awsim.log` も `d<N>/` に入る。
 >
 > `d0/` というディレクトリは生成されない。固定前提でパスを決め打ちせず、`autostart_orchestrator` の探索（約束 12）に従うこと。
 
@@ -181,9 +184,79 @@ result JSON の**生産者は AWSIM（Unity）シミュレータ本体**。`scri
 
 AWS `result_update` Lambda は `vehicles[].vehicle_number` と `vehicles[].final_position` のみを消費してスコア（Elo レーティング）を算出する。
 
+##### セーフティゲートモードの `result-summary.json`（2026-09 追加）
+
+セーフティゲート実行（`SIM_MODE=gate*`、`evaluation_mode: s2r_2_practice_solo`）では、AWSIM は
+レースを走らせないため通常の summary は生成せず、代わりに **gate 版 summary** を CWD に書き出す。
+完了契約（「summary を最後にアップロード → `result_update` 発火」）は全モード共通:
+
+```json
+{
+  "schema_version": "safety-gate-v1",
+  "safety_gate": {
+    "all_passed": true,
+    "gate_arg": "all",
+    "scenario_folder": "SafetyGate",
+    "tests": [{ "test_name": "test1", "passed": true, "fail_reason": "" }]
+  },
+  "vehicles": []
+}
+```
+
+- `safety_gate` キーの有無がモード判別子。**レース用フィールドの偽装は禁止**（`vehicles` は空配列。
+  `final_position` / `laps` のダミー値を入れない）。
+- `schema_version` はレース用 `"v2"` と区別するため `"safety-gate-v1"` 固定。gate 版 summary は
+  `safety_gate` + `vehicles` しか持たないので、v2（session + legacy projection）契約でパースしてはならない
+  （AWS `result_update` は `schema_version` を読まず `vehicles[].final_position` のみ参照するため影響なし）。
+- `vehicles: []` のため `result_update` の順位パースは安全に None を返し、`executions.status=2` と
+  raw JSON の `result` 列保存のみが行われる（レーティングは `evaluation_mode` ガードで不変）。
+- 人間/デバッグ用の `safety-gate-result.json` も従来どおり CWD に併存する（S3 へはアップロードしない）。
+
 ---
 
-## 6. 関連ドキュメント
+## 6. 評価環境の入口（entrypoint）契約
+
+ソース確認先: `aichallenge/run_safety_gate.bash`、`aichallenge/run_parallel.bash`、`aichallenge-aws/makefile/main.bash`、`aichallenge-aws/makefile/Dockerfile`
+
+評価環境（AWS Batch 上の評価イメージ）とローカル開発環境は、同じ `aichallenge/` を使いながら前提が異なる。
+
+| 前提 | ローカル（`docker compose` / `make eval*`） | 評価環境（`aichallenge-aws`） |
+|---|---|---|
+| ROS overlay の source | `docker-entrypoint.sh`（ENTRYPOINT / `.bashrc`）が行う | ENTRYPOINT 無し。`main.bash` は `bash <entrypoint>` を呼ぶだけ |
+| 提出物の配置 | `/aichallenge/workspace/src/aichallenge_submit`（1 つの workspace） | `/aichallenge/d1/workspace`（挑戦者）、`d2` / `d3`（対戦相手 / NPC）を base の上に overlay |
+| AWSIM 起動引数 | `simulator_scripts/<SIM_MODE>.sh` | 同じ（`run_simulator.bash` 経由） |
+| 完了シグナル | 人が `make down` | `/admin/awsim/state` の `terminate`（gate）/ `finishall`（parallel）を `main.bash` が監視し、grace 後にアップロード |
+
+この差を吸収する層が **評価環境の入口スクリプト** である。`run_evaluation.bash` はローカルの `make eval` と評価環境の両方で使う唯一のスクリプトで、そのために ROS overlay を自分で source する。
+
+### 6-1. 入口スクリプト
+
+`aichallenge-aws` の `start_build` Lambda が `evaluation_mode` を入口名とタイムアウトに変換し、Step Functions が Batch コンテナの env（`EVAL_ENTRYPOINT`, `EVAL_TIMEOUT_SEC`）として渡す。`main.bash` は許可リストで名前を検証してから起動する。
+
+| evaluation_mode | EVAL_ENTRYPOINT | SIM_MODE（AWSIM 引数） | EVAL_TIMEOUT_SEC |
+|---|---|---|---|
+| `s2r_1_practice_solo` | `run_evaluation.bash` | `eval`（`eval.sh`） | 800 |
+| `s2r_2_practice_solo` | `run_safety_gate.bash` → `run_evaluation.bash` | `safety-gate`（`safety-gate.sh`） | 400 |
+| `s2r_1_rated_trios` | `run_parallel.bash` → `parallel.launch.xml` | `parallel`（`parallel.sh`） | 800 |
+
+ソース確認先: 各入口スクリプト本体、`aichallenge-aws/cloudformation_templates/lambda_functions/_shared/evaluation_mode.py`（`EVAL_RUNTIME_PROFILES`）、`aichallenge-aws/makefile/main.bash`（`ALLOWED_ENTRYPOINTS`）。
+
+### 6-2. 入口スクリプトが守ること
+
+- **引数なしで起動できる。** 評価環境から渡されるのは環境変数のみ（`EVAL_TIMEOUT_SEC` は `main.bash` の `timeout` に使われ、入口には渡らない）。
+- **ROS 環境を自分で整える。** 単体系は `run_evaluation.bash` が `d1` overlay（あれば。base workspace を chain する）か base workspace を source し、`run_safety_gate.bash` はモード指定だけの薄い wrapper。parallel は `run_parallel.bash` が base を、`parallel.launch.xml` が各車両の `dN` を source する。`LOG_DIR` は launch ファイルが `log_dir` から設定する。
+- **`SIM_MODE` を自分で決める。** 入口 = モードなので、外から渡された `SIM_MODE` は上書きする。AWSIM の引数は `simulator_scripts/<mode>.sh` に置き、入口や launch に直接書かない（`eval.sh` / `safety-gate.sh` / `parallel.sh`）。
+- **rviz は評価環境側が切る（`RUN_RVIZ=false` を `main.bash` が export）。** 録画は standalone の `aichallenge_screen_recorder`（X root window 全体 = 1280x720）で行う。rviz が居ると Autoware 標準の AutowareScreenCapturePanel が同じ `/debug/service/capture_screen` を提供し、rviz ウィンドウ領域（1850x1136、オフセット 70,27）しか録れない。`evaluation.launch.xml` は `run_rviz=false` かつ `capture=true` のときだけ recorder を起動する。debug 可視化 / motion analytics は `debug` 引数で独立に on。
+- **出力レイアウトは §5 に従う。** 単体系は `/output/<ts>/d1/`（`result-summary.json` も同じ場所）、parallel は `/output/<ts>/`（`result-summary.json` は run_dir 直下、車両ログは `d1..d3/`）。
+- **完了は `/admin/awsim/state` で通知する。** gate は AWSIM の自己終了時 `terminate`、レース系は `finishall`。入口が自分で結果をアップロードしたり、`/output` 以外に書いたりしない。
+
+### 6-3. 変更時の手順
+
+入口の名前・数・自己完結性を変えるときは、(1) 本節と約束 13 を更新、(2) `aichallenge-aws` の `start_build`（mode → 入口の表）と `makefile/main.bash` の許可リストを合わせる、(3) base image（`aichallenge-aws/base_image`）を stg から再ビルドして push、(4) `makefile/deploy.sh` で `main.bash` を反映、の順で行う。base image は `aichallenge/` を丸ごと取り込むため、入口スクリプトは base image 再ビルドまで評価環境に届かない。
+
+---
+
+## 7. 関連ドキュメント
 
 - ログ設計（`/output` 詳細・ローテーション方針・rosbag 安全停止）: [`../spec/log-design.md`](../spec/log-design.md)
 - Compose オーバーレイ選択（`COMPOSE_FILE` の GPU/CPU/headless）: [`../spec/compose-overlays.md`](../spec/compose-overlays.md)
