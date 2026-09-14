@@ -8,7 +8,7 @@
 # Add a new vehicle here only. Do not duplicate these mappings in callers.
 
 # shellcheck disable=SC2034  # consumed by the scripts that source this file
-VEHICLE_ID_VALID_LIST="A1, A2, A3, A5, A6, A7, A8"
+VEHICLE_ID_VALID_LIST="A1, A2, A3, A4, A5, A6, A7, A8, test"
 
 # VEHICLE_ID -> Zenoh bridge port on the tournament server.
 zenoh_port_for_vehicle_id() {
@@ -20,7 +20,22 @@ zenoh_port_for_vehicle_id() {
     A1) echo 7452 ;;
     A5) echo 7453 ;;
     A8) echo 7454 ;;
+    # A4 用の 7455 に対応する router は後ほど作成する。
+    A4) echo 7455 ;;
     *) return 1 ;;
+    esac
+}
+
+# VEHICLE_ID -> Zenoh endpoint the vehicle bridge connects to. "test" is not a real kart:
+# it targets a local zenohd (remote/connect_zenoh.bash test-server) instead.
+zenoh_endpoint_for_vehicle_id() {
+    local port
+    case "$1" in
+    test) echo "${ZENOH_LOCAL_ENDPOINT:-tcp/127.0.0.1:7448}" ;;
+    *)
+        port="$(zenoh_port_for_vehicle_id "$1")" || return 1
+        echo "tls/zenoh.dev.aichallenge-board.jsae.or.jp:${port}"
+        ;;
     esac
 }
 

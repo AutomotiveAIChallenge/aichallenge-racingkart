@@ -2,7 +2,8 @@
 SHELL := /bin/bash
 
 .PHONY: autoware-build autoware-vehicle autoware-simulator autoware-request-initialpose autoware-request-control  awsim-request-start awsim-request-reset autoware-driver-zenoh autoware-driver-zenoh-rosbag setup-vehicle \
-	simulator dev dev2 dev3 dev4 driver zenoh download rviz2 down down_all ps autoware-attach autoware-bash eval e2e vehicle-tui
+	workspace-clean \
+	simulator dev dev2 dev3 dev4 driver zenoh rosbag download submission-extract rviz2 down down_all ps autoware-attach autoware-bash eval e2e vehicle-tui vehicle-tui-staff workspace
 
 # Used by docker-compose.yml for build/eval artifact ownership.
 HOST_UID ?= $(shell id -u)
@@ -17,7 +18,6 @@ endif
 
 TIMESTAMP := $(shell date +%Y%m%d-%H%M%S)
 LOG_DIR := /output/$(TIMESTAMP)
-
 # make simulator-<mode>: <mode> は simulator_scripts/*.sh のファイル名
 SIM_MODES := $(notdir $(basename $(wildcard aichallenge/simulator_scripts/*.sh)))
 # dev<N>（車両数、2..4）は run_simulator.bash が展開するエイリアス
@@ -75,6 +75,10 @@ driver:
 zenoh:
 	docker compose up -d zenoh
 
+# all-topic rosbag (docker compose up -d rosbag)
+rosbag:
+	LOG_DIR=$(LOG_DIR) docker compose up -d rosbag
+
 dev: SIM_MODE := dev
 dev: simulator autoware-simulator
 
@@ -123,6 +127,13 @@ autoware-driver-zenoh-rosbag:
 	sleep 15
 	LOG_DIR=$(LOG_DIR) docker compose up -d zenoh
 
+# --staged も戻すのは stage 済みの提出物を残さないため。パスを限定するのは
+# リポジトリ全体のローカル変更を巻き込まないため。
+workspace-clean:
+	@echo "Clean aichallenge/workspace: restore src/aichallenge_submit/, remove build/ install/ log/ and untracked files"
+	git restore --source=HEAD --staged --worktree -- aichallenge/workspace/src/aichallenge_submit
+	git clean -fdx aichallenge/workspace
+
 down:
 	@for p in 1 2 3 4; do docker compose -p $$p down --remove-orphans; done
 	@docker compose down --remove-orphans
@@ -166,7 +177,23 @@ download:
 		fi; \
 	fi
 
+# 事前に置いた vehicle/.submissions/<id>.zip（パスワード付き）で src/aichallenge_submit/ を入れ替える。
+# ID とパスワードは対話で聞く（SUBMISSION_ID で ID を先渡し可）。
+# 展開後に参加者の承認を確認して AWSIM adapter の共通 map を適用する。IMU は runtime で別途確認する。
+submission-extract:
+	vehicle/extract_submission.py $(if $(SUBMISSION_ID),--id $(SUBMISSION_ID))
+
 # 車両 PC 上の操作コンソール。tmux 常駐なので ssh が切れても作業が残り、
 # 再接続して同じターゲットを叩けば -A で同じセッションへアタッチする。
+# 参加者用（autoware と提出物のステップだけ）。
 vehicle-tui:
 	tmux new -A -s aic-vehicle "vehicle/tui.py"
+
+# 運営用。driver / zenoh / rosbag の起動、download、down all も出す。tmux セッションを分けるので
+# 参加者の aic-vehicle セッションが残っていても運営側の画面になる。
+vehicle-tui-staff:
+	tmux new -A -s aic-vehicle-staff "vehicle/tui.py --role staff"
+
+# 遠隔操作用ワークスペース。terminator を 4 分割 (車両 ssh×3 + remote/gui_tools.py) で開く。
+workspace:
+	remote/workspace.bash

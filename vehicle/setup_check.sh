@@ -49,9 +49,8 @@ fi
 # shellcheck source-path=SCRIPTDIR source=vehicle_ports.sh
 source "${SCRIPT_DIR}/vehicle_ports.sh"
 
-# ログの実パスを決める。呼び出し元の cwd に散らさないため、常に vehicle/logs/
-# 配下に置く。ディレクトリが作れない環境では log() の tee が黙って落ちるので、
-# 画面出力だけが残る。
+# ログの実パス。呼び出し元の cwd に散らさないため常に vehicle/logs/ 配下に置く。
+# ディレクトリが作れない環境では log() の tee が黙って落ち、画面出力だけが残る。
 LOG_FILE="${SCRIPT_DIR}/logs/setup_check_$(date +'%Y%m%d_%H%M%S').log"
 mkdir -p "${SCRIPT_DIR}/logs" 2>/dev/null || true
 
@@ -490,16 +489,19 @@ check_network() {
         fi
     fi
 
-    # Zenohサーバー疎通確認。run_zenoh.bash と同じ VEHICLE_ID -> port 対応を使う。
-    local zenoh_host="${ZENOH_HOST:-zenoh.dev.aichallenge-board.jsae.or.jp}"
+    # Zenohサーバー疎通確認。run_zenoh.bash と同じ VEHICLE_ID -> endpoint 対応を使う。
     local vehicle_id_for_zenoh
-    local zenoh_port
+    local zenoh_endpoint zenoh_host zenoh_port
     vehicle_id_for_zenoh="$(detect_vehicle_id)"
     if [ -z "${vehicle_id_for_zenoh}" ]; then
         log "${FAIL} VEHICLE_ID is not set; cannot choose Zenoh endpoint"
         log "   Fix: export VEHICLE_ID=A6 or add VEHICLE_ID=A6 to .env"
         record_result "fail"
-    elif zenoh_port="$(zenoh_port_for_vehicle_id "${vehicle_id_for_zenoh}")"; then
+    elif zenoh_endpoint="$(zenoh_endpoint_for_vehicle_id "${vehicle_id_for_zenoh}")"; then
+        # "tls/host:port" / "tcp/host:port" -> host, port。ZENOH_HOST は host だけの差し替え。
+        zenoh_host="${zenoh_endpoint#*/}"
+        zenoh_port="${zenoh_host##*:}"
+        zenoh_host="${ZENOH_HOST:-${zenoh_host%:*}}"
         if timeout 5 bash -c "echo >/dev/tcp/${zenoh_host}/${zenoh_port}" 2>/dev/null; then
             log "${OK} Zenoh endpoint connectivity (${vehicle_id_for_zenoh}: ${zenoh_host}:${zenoh_port})"
             record_result "pass"
@@ -687,7 +689,7 @@ check_runtime_ros_topics() {
     check_ros_topic_once "driver" "/racing_kart/vcu/status" "VCU status"
     check_ros_topic_once "driver" "/racing_kart/steer/status" "Steer status"
     check_ros_topic_once "driver" "/racing_kart/brake/status" "Brake status"
-    check_ros_topic_once "driver" "/racing_kart/joy" "Joy input"
+    check_ros_topic_once "driver" "/racing_kart/sd/joy" "Joy input"
 
     log "${INFO} Racing kart final command topics"
     check_ros_topic_once "driver" "/racing_kart/vcu/command" "VCU command"
@@ -711,6 +713,15 @@ check_runtime_ros_topics() {
 check_imu_bias() {
     print_section "IMU Gyro Bias Check (stationary)"
 
+    local calibration_vehicle_id
+    calibration_vehicle_id="$(detect_vehicle_id)"
+    local bias_output_arg=""
+    if zenoh_endpoint_for_vehicle_id "${calibration_vehicle_id}" >/dev/null; then
+        bias_output_arg="--bias-output '/vehicle/.calibration/${calibration_vehicle_id}/imu_bias.yaml'"
+    else
+        log "${WARN} VEHICLE_ID is missing or unknown; measuring IMU without vehicle bias storage"
+    fi
+
     if ! is_compose_service_running "autoware"; then
         log "${FAIL} IMU bias check: autoware service is not running"
         record_result "fail"
@@ -718,8 +729,7 @@ check_imu_bias() {
         return 0
     fi
 
-    # 静止確認。バイアス推定は車両が完全に静止していることが前提なので、
-    # y/N で明示確認する。誤って走行中に測ると黙って誤ったバイアスを書き込むので、
+    # 静止確認。走行中に測ると誤ったバイアスを黙って書き込むので y/N で明示確認する。
     # タイムアウトは付けず回答があるまで待つ。
     local answer=""
     read -r -p "$(echo -e "${WARN} Vehicle must be COMPLETELY stationary for IMU bias check. Proceed? [y/N]: ")" answer
@@ -743,20 +753,25 @@ check_imu_bias() {
     fi
 
     # check_imu_bias.py は ./vehicle:/vehicle マウント経由でコンテナから見える。
-    # rc=4 は「静止時ノイズが大きく、バイアス推定値が信用できない」の意味で、
-    # ここ（bash 側）で人間に再計測してよいか毎回確認してから再実行する。
-    # python 側では自動リトライしない。
-    # y と答え続ける限り上限なく再計測する。
+    # rc=4（静止時ノイズ過大）は python 側では自動リトライせず、ここで毎回確認して再実行する。
     local output
     local rc
     local attempt=1
+    local proposal_file
+    if ! proposal_file="$(mktemp "${SCRIPT_DIR}/.imu-bias-XXXXXX.json")"; then
+        log "${FAIL} Could not create temporary IMU proposal"
+        record_result "fail"
+        return 0
+    fi
+    local proposal_path="/vehicle/${proposal_file##*/}"
     output="$(docker compose -f "${REPO_ROOT}/docker-compose.yml" exec -T autoware bash -lc "
         ${setup_cmd}
         python3 /vehicle/check_imu_bias.py \
             --duration '${IMU_BIAS_DURATION_SEC}' \
             --warmup '${IMU_BIAS_WARMUP_SEC}' \
             --velocity-threshold '${IMU_BIAS_VELOCITY_THRESHOLD}' \
-            --std-threshold '${IMU_BIAS_STD_THRESHOLD}'
+            --std-threshold '${IMU_BIAS_STD_THRESHOLD}' \
+            --proposal-output '${proposal_path}'
     " 2>&1)"
     rc=$?
     log "${output}"
@@ -777,23 +792,47 @@ check_imu_bias() {
                 --duration '${IMU_BIAS_DURATION_SEC}' \
                 --warmup '${IMU_BIAS_WARMUP_SEC}' \
                 --velocity-threshold '${IMU_BIAS_VELOCITY_THRESHOLD}' \
-                --std-threshold '${IMU_BIAS_STD_THRESHOLD}'
+                --std-threshold '${IMU_BIAS_STD_THRESHOLD}' \
+                --proposal-output '${proposal_path}'
         " 2>&1)"
         rc=$?
         log "${output}"
     done
 
+    if [ "${rc}" = "0" ]; then
+        local update_answer=""
+        read -r -p "実測値で上書きしますか？ 参加者の承認を確認してください。 [y/N]: " update_answer
+        case "${update_answer}" in
+        y | Y | yes | YES)
+            output="$(docker compose -f "${REPO_ROOT}/docker-compose.yml" exec -T autoware bash -lc "
+                ${setup_cmd}
+                python3 /vehicle/check_imu_bias.py \
+                    --apply-proposal '${proposal_path}' \
+                    ${bias_output_arg}
+            " 2>&1)"
+            rc=$?
+            log "${output}"
+            ;;
+        *) rc=5 ;;
+        esac
+    fi
+    rm -f "${proposal_file}"
+
     case "${rc}" in
     0)
-        log "${OK} IMU gyro bias measured and imu_corrector.param.yaml updated (restart autoware to apply)"
+        log "${OK} Participant-approved IMU bias applied (restart autoware to apply; see above for vehicle storage)"
         record_result "pass"
         ;;
     4)
         log "${WARN} IMU gyro bias check: gave up on noisy measurement (see above; not written)"
         record_result "warn"
         ;;
+    5)
+        log "${WARN} IMU update skipped; participant settings and saved bias retained"
+        record_result "warn"
+        ;;
     *)
-        log "${FAIL} IMU gyro bias check failed (rc=${rc}; measurement not completed, not written)"
+        log "${FAIL} IMU gyro bias check failed (rc=${rc}; see above for measurement/write status)"
         record_result "fail"
         ;;
     esac
@@ -842,9 +881,8 @@ check_execution_readiness() {
 print_summary() {
     log ""
     log "📊 ${TOTAL_CHECKS} checks: ${PASSED_CHECKS} ok, ${WARNING_CHECKS} warn, ${FAILED_CHECKS} fail"
-    # 判定を 1 行だけ添える。スクリプトを直接叩いた人が末尾で結論を得られるように。
-    # 行頭に ${FAIL} / ${WARN} を置かないこと: TUI が行頭のマーカーで失敗行を
-    # 拾うため、判定行まで failures 領域に混ざる。
+    # 判定を 1 行だけ添える。行頭に ${FAIL} / ${WARN} を置かないこと: TUI が行頭のマーカーで
+    # 失敗行を拾うため、判定行まで failures 領域に混ざる。
     if [ "${FAILED_CHECKS}" -gt 0 ]; then
         log "   失敗あり。上の失敗項目を直して再実行してください。"
         exit 1

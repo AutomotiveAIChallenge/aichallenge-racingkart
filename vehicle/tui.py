@@ -12,7 +12,10 @@ Usage:
 """
 from __future__ import annotations
 
+import argparse
 import curses
+import json
+import os
 import queue
 import shutil
 import subprocess
@@ -27,25 +30,43 @@ from tui_core import (
     PENDING,
     REQUIRED_SERVICES,
     RUNNING,
+    ROLE_PARTICIPANT,
+    ROLE_STAFF,
+    ROLES,
     STEP_PREFLIGHT,
-    STEP_TEARDOWN,
-    STEP_UP,
     STEPS,
     Workspace,
     is_runnable,
     step_by_id,
     step_status,
+    steps_for_role,
     has_unmet_requirement,
 )
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
+# colcon ワークスペース。make workspace-clean が消す対象。
+WORKSPACE_REL = Path("aichallenge/workspace")
+# workspace-clean が消す ignored な生成物。どれかが在れば git を呼ぶ前に
+# 「未完了」と判れる。
+WORKSPACE_ARTIFACTS = ("build", "install", "log")
 
-# 40x12 の内訳: header 1 + step 6 行 (縦 1 列) + failures 見出し 1 + failures 1
-# + log 見出し 1 + log 1 で 11 行。1 行余裕を見て 12。これ未満だと failures か
-# log が 0 行になり、失敗を流さずに残すという狙いが成立しない。
-# 40 桁は最長セル "1 NG check preflight" の 20 文字に対する余裕。
-MIN_COLS = 40
-MIN_LINES = 12
+# 最低行数 = header 1 + services 2 + ステップ数 + 見出し 2 + failures 1 + log 1 + 余裕 1。
+# 47 桁は最長の header 行に合わせた共通幅（役割で変えると tmux を張り替える羽目になる）。
+MIN_COLS = 47
+
+
+def has_version_line(role: str) -> bool:
+    """version 行を出す役割か。min_lines と Console の両方がこの 1 つの事実を使う。"""
+    return role == ROLE_STAFF
+
+
+def min_lines(n_steps: int, extra: int = 0) -> int:
+    return 1 + 2 + extra + n_steps + 4 + 1
+
+
+# 運営・参加者を合わせた全ステップぶん（後方互換のため残す）。実際の最低行数は
+# main が steps_for_role(role) の本数から役割ごとに計算する。
+MIN_LINES = min_lines(len(STEPS))
 LOG_TAIL = 2000  # 保持するログ行数の上限。走行枠中に膨らみ続けないため。
 FAILURE_TAIL = 40  # failures 領域に retain する上限行数。
 FALLBACK_LINES = 5  # マーカーの無いステップが失敗したとき末尾から拾う行数。
@@ -57,20 +78,65 @@ OBSERVE_INTERVAL_SEC = 2.0
 _MARK = {DONE: "OK", FAILED: "NG", RUNNING: ">>", PENDING: "- "}
 _MARK_UNMET = "? "
 
-def terminal_too_small(cols: int, lines: int) -> bool:
+def terminal_too_small(cols: int, lines: int, need_lines: int = MIN_LINES) -> bool:
     """Whether the terminal is below the minimum the layout needs."""
-    return cols < MIN_COLS or lines < MIN_LINES
+    return cols < MIN_COLS or lines < need_lines
 
 
-def service_badge(services_running) -> str:
-    """REQUIRED_SERVICES を 1 文字ずつ並べた位置固定のバッジ。
+def service_status_lines(services_running) -> tuple:
+    """REQUIRED_SERVICES を running / stopped の 2 行に分けてサービス名のまま並べる。
 
-    起動中はサービス名の頭文字、停止中は '-'。`driver off  autoware off ...`
-    が 47 文字だったのを 4 文字にする。位置で意味が決まるので凡例が要らない。
-    括弧を付けない: 40 桁の 2 列配置でセルに収める必要がある。
+    画面に 1 箇所しか出さないので略さない（`dazr` のような頭文字は凡例が要る）。
+    順序は REQUIRED_SERVICES に従い、空側は '-'。
     """
-    return "".join(
-        name[0] if name in services_running else "-" for name in REQUIRED_SERVICES
+    running = [n for n in REQUIRED_SERVICES if n in services_running]
+    stopped = [n for n in REQUIRED_SERVICES if n not in services_running]
+    return (
+        f"running: {' '.join(running) or '-'}",
+        f"stopped: {' '.join(stopped) or '-'}",
+    )
+
+
+def vehicle_id(repo_root: Path) -> str:
+    """走らせている車両の VEHICLE_ID。環境変数 -> リポジトリ直下の .env の順に見る。
+
+    setup_check.sh の detect_vehicle_id と同じ優先順だが、hostname からの引き当ては
+    持たない。その対応表は vehicle_ports.sh にあり、ここへ写すと表が二重になる。
+    取れなければ "-"（画面は必ず何か出す。空欄だと見落とす）。
+    """
+    value = os.environ.get("VEHICLE_ID", "").strip()
+    if value:
+        return value
+    try:
+        lines = (repo_root / ".env").read_text().splitlines()
+    except OSError:
+        return "-"
+    for line in lines:
+        line = line.strip()
+        if line.startswith("export "):
+            line = line[len("export "):].strip()
+        if line.startswith("#") or "=" not in line:
+            continue
+        key, raw = line.split("=", 1)
+        if key.strip() == "VEHICLE_ID":
+            # 最後の代入が勝つ。setup_check.sh の read_env_value と同じ。
+            value = raw.strip().strip("\"'").strip()
+    return value or "-"
+
+
+def header_title(role: str, vid: str) -> str:
+    """ヘッダ左側。どの役割でどの車両を動かしているかを 1 行目で見せる。"""
+    return f"[{vid}] vehicle console [{role}]"
+
+
+def version_line(image_date, commit) -> str:
+    """driver イメージの日付とこのリポジトリの commit を 1 行にする。
+
+    観測できなかった側は省かず unknown と出す（理由は docs/spec/vehicle-tui.md）。
+    """
+    return (
+        f"driver image: {image_date or 'unknown'}"
+        f"  aic commit: {commit or 'unknown'}"
     )
 
 
@@ -114,10 +180,15 @@ def should_reobserve(busy: bool, now: float, observed_at: float) -> bool:
     return now - observed_at >= OBSERVE_INTERVAL_SEC
 
 
-def probe_workspace(repo_root: Path, services_running: frozenset) -> Workspace:
+def probe_workspace(
+    repo_root: Path,
+    services_running: frozenset,
+    workspace_pristine: bool = False,
+    stack_containers: int = 0,
+) -> Workspace:
     """Sample the workspace on disk.
 
-    Filesystem only -- the docker query is passed in -- so this stays cheap
+    Filesystem only -- the docker and git queries are passed in -- so this stays cheap
     enough to call on every redraw and testable in a temp dir. A missing
     workspace reads as "nothing present", not an error: the console has to
     render before anything has been downloaded.
@@ -131,12 +202,12 @@ def probe_workspace(repo_root: Path, services_running: frozenset) -> Workspace:
     Note: aichallenge_submit/ ships with 15 git-tracked participant packages,
     so it is never actually empty on a checkout -- whether it *has* entries
     proves nothing about whether a download has run. That is exactly why
-    the submission step is not in tui_core's _MEASURED set: its DONE/PENDING
+    the submission step has no `measure` in tui_core: its DONE/PENDING
     comes from the session (did `make download` exit 0 this run), not from
     this probe. submit_mtime is still sampled here because build_done() uses
     it to judge whether install/ is stale relative to the submission.
     """
-    ws_dir = repo_root / "aichallenge" / "workspace"
+    ws_dir = repo_root / WORKSPACE_REL
     setup_bash = ws_dir / "install" / "setup.bash"
     submit_dir = ws_dir / "src" / "aichallenge_submit"
 
@@ -147,7 +218,109 @@ def probe_workspace(repo_root: Path, services_running: frozenset) -> Workspace:
         install_mtime=setup_bash.stat().st_mtime if install_present else None,
         submit_mtime=submit_dir.stat().st_mtime if submit_has_entries else None,
         services_running=services_running,
+        stack_containers=stack_containers,
+        workspace_pristine=workspace_pristine,
     )
+
+
+def _run(cmd, repo_root: Path, timeout: float = 10):
+    """Run a probe command; None on any failure.
+
+    Probes must never raise: the console has to keep rendering on a machine
+    whose docker daemon is down or whose checkout is not a git repo.
+    """
+    try:
+        out = subprocess.run(
+            cmd, cwd=str(repo_root), capture_output=True, text=True, timeout=timeout
+        )
+    except (OSError, subprocess.SubprocessError):
+        return None
+    return out if out.returncode == 0 else None
+
+
+def driver_image(repo_root: Path):
+    """docker-compose.yml が driver サービスに与えているイメージ。無ければ None。
+
+    タグを tui.py 側に写すと compose を変えたときに黙ってずれるので compose に訊く。
+    """
+    out = _run(["docker", "compose", "config", "--format", "json"], repo_root, timeout=5)
+    if out is None:
+        return None
+    try:
+        return json.loads(out.stdout)["services"]["driver"]["image"] or None
+    except (ValueError, TypeError, KeyError):
+        return None
+
+
+def driver_image_date(repo_root: Path, image=None):
+    """driver イメージの作成日 (YYYY-MM-DD)。無ければ None。
+
+    タグではなくイメージの作成日を見る: latest-experiment は動かないタグなので、
+    タグ名からは手元にいつ pull したものが載っているか判らない。
+    """
+    image = image or driver_image(repo_root)
+    if image is None:
+        return None
+    out = _run(
+        ["docker", "image", "inspect", image, "--format", "{{.Created}}"],
+        repo_root, timeout=5,
+    )
+    if out is None:
+        return None
+    created = out.stdout.strip()
+    return created[:10] or None
+
+
+def repo_commit(repo_root: Path):
+    """このリポジトリの短縮 commit hash。git が失敗したら None。"""
+    out = _run(["git", "rev-parse", "--short", "HEAD"], repo_root, timeout=5)
+    if out is None:
+        return None
+    return out.stdout.strip() or None
+
+
+def workspace_is_pristine(repo_root: Path) -> bool:
+    """Whether aichallenge/workspace/ matches the checkout exactly.
+
+    `git status --porcelain --ignored` on that path lists tracked changes,
+    untracked files and ignored artifacts (build/ install/ log/) alike; an
+    empty listing is the state `make workspace-clean` leaves behind. A git
+    failure reads as "not pristine" so cleanup is never shown as done on
+    evidence the console does not have.
+
+    The artifact directories are checked first: this runs every observe()
+    tick, and `--ignored` would otherwise walk the whole install/ tree
+    (thousands of files after a build) just to say "not clean".
+    """
+    ws_dir = repo_root / WORKSPACE_REL
+    if any((ws_dir / name).exists() for name in WORKSPACE_ARTIFACTS):
+        return False
+    out = _run(
+        ["git", "status", "--porcelain", "--ignored", "--", str(WORKSPACE_REL)],
+        repo_root,
+    )
+    return out is not None and not out.stdout.strip()
+
+
+def stack_containers(repo_root: Path) -> int:
+    """How many running containers compose has started from this repo.
+
+    Counts across every compose project (default and `-p 1..4`) via the
+    working_dir label compose stamps on each container, which is exactly the
+    set `make down` tears down. `docker compose ps` cannot do this: it sees
+    one project per call. A docker failure counts as zero, consistent with
+    running_services().
+    """
+    out = _run(
+        [
+            "docker", "ps", "--quiet",
+            "--filter", f"label=com.docker.compose.project.working_dir={repo_root}",
+        ],
+        repo_root,
+    )
+    if out is None:
+        return 0
+    return len(out.stdout.split())
 
 
 def running_services(repo_root: Path) -> frozenset:
@@ -157,21 +330,11 @@ def running_services(repo_root: Path) -> frozenset:
     still render, and let the operator run preflight, on a machine whose
     daemon is down -- which is exactly when preflight is worth running.
     """
-    try:
-        out = subprocess.run(
-            [
-                "docker", "compose", "ps",
-                "--status", "running",
-                "--format", "{{.Service}}",
-            ],
-            cwd=str(repo_root),
-            capture_output=True,
-            text=True,
-            timeout=10,
-        )
-    except (OSError, subprocess.SubprocessError):
-        return frozenset()
-    if out.returncode != 0:
+    out = _run(
+        ["docker", "compose", "ps", "--status", "running", "--format", "{{.Service}}"],
+        repo_root,
+    )
+    if out is None:
         return frozenset()
     return frozenset(line.strip() for line in out.stdout.splitlines() if line.strip())
 
@@ -184,8 +347,10 @@ class Console:
     (which exist solely as an exit code) are remembered here.
     """
 
-    def __init__(self, screen) -> None:
+    def __init__(self, screen, steps=STEPS, role: str = ROLE_PARTICIPANT) -> None:
         self.screen = screen
+        self.steps = steps
+        self.role = role
         self.session: dict = {}
         self.log: list = []
         # 失敗行は log とは別に retain する。log は tail しか見えないので、
@@ -198,6 +363,11 @@ class Console:
         # 既定値で始める。observe() は docker compose ps を待つので、
         # 最初の 1 フレームを描いたあとに _loop が呼ぶ。
         self.ws = Workspace()
+        # unknown で場所だけ確保しておき、実測は最初の 1 フレームのあとに
+        # observe_version() が入れ替える。docker を待って画面を白いままにしない。
+        self.version = version_line(None, None) if has_version_line(role) else None
+        # 走行枠の途中で .env が変わることはないので 1 度だけ読む。
+        self.vehicle_id = vehicle_id(REPO_ROOT)
 
     @property
     def busy(self) -> bool:
@@ -210,7 +380,19 @@ class Console:
 
     def observe(self) -> Workspace:
         self._observed_at = time.monotonic()
-        return probe_workspace(REPO_ROOT, running_services(REPO_ROOT))
+        return probe_workspace(
+            REPO_ROOT,
+            running_services(REPO_ROOT),
+            workspace_is_pristine(REPO_ROOT),
+            stack_containers(REPO_ROOT),
+        )
+
+    def observe_version(self) -> None:
+        """起動時に 1 度だけ採る。イメージも checkout も走行枠の途中では変わらない。"""
+        if self.version is not None:
+            self.version = version_line(
+                driver_image_date(REPO_ROOT), repo_commit(REPO_ROOT)
+            )
 
     def refresh_if_stale(self) -> None:
         """アイドルが続いても実測を追い続ける。"""
@@ -322,11 +504,18 @@ class Console:
         width = max(1, cols - 1)
 
         hints = "↑↓ enter q"
-        title = "vehicle console"
+        title = header_title(self.role, self.vehicle_id)
         pad = max(1, width - len(title) - len(hints))
         self.screen.addnstr(0, 0, f"{title}{' ' * pad}{hints}", width, curses.A_BOLD)
+        # サービスの状態は画面全体で 1 つの事実なので、ステップ行ではなくここに 1 度だけ出す。
+        for i, text in enumerate(service_status_lines(self.ws.services_running)):
+            self.screen.addnstr(1 + i, 0, text, width)
 
-        row = self._draw_steps(1, lines, width)
+        row = 3
+        if self.version is not None:
+            self.screen.addnstr(row, 0, self.version, width, curses.A_DIM)
+            row += 1
+        row = self._draw_steps(row, lines, width)
 
         # failures は必要な分だけ。残りの 2/3 までに抑えて log を潰さない。
         # log より失敗のほうが読まれるべきなので log に多くは残さない。
@@ -350,7 +539,7 @@ class Console:
     def _draw_steps(self, top: int, lines: int, width: int) -> int:
         """ステップを縦 1 列に並べ、次に使える行番号を返す。"""
         used = 0
-        for idx, step in enumerate(STEPS):
+        for idx, step in enumerate(self.steps):
             y = top + idx
             if y >= lines:
                 break
@@ -367,16 +556,8 @@ class Console:
         ):
             # 前提未達。実行は妨げない（前提は助言）ので印だけ変える。
             mark = _MARK_UNMET
-        return f"{idx + 1} {mark} {step.title}{self._detail(step)}"
-
-    def _detail(self, step) -> str:
-        """セルの右に足す情報。桁を食わないものだけ。
-
-        前提未達は _cell のマークで示すので、ここには出さない。
-        """
-        if step.step_id in (STEP_UP, STEP_TEARDOWN):
-            return " " + service_badge(self.ws.services_running)
-        return ""
+        note = f"  ({step.note})" if step.note else ""
+        return f"{idx + 1} {mark} {step.title}{note}"
 
     def _draw_region(
         self, top: int, label: str, wrapped: list, rows: int, width: int
@@ -414,23 +595,26 @@ class Console:
         if key == curses.KEY_UP:
             self.cursor = max(0, self.cursor - 1)
         elif key == curses.KEY_DOWN:
-            self.cursor = min(len(STEPS) - 1, self.cursor + 1)
+            self.cursor = min(len(self.steps) - 1, self.cursor + 1)
         elif key in (curses.KEY_ENTER, ord("\n"), ord("\r")):
             if not self.busy:
-                step = STEPS[self.cursor]
+                step = self.steps[self.cursor]
                 if is_runnable(step.step_id, self.ws, self.session):
                     self.run_step(step.step_id)
         return True
 
 
-def _loop(screen) -> int:
+def _loop(screen, role: str) -> int:
     curses.curs_set(0)
     screen.nodelay(True)
-    console = Console(screen)
+    console = Console(screen, steps_for_role(role), role)
     console.draw()  # docker を待たずにまず画面を出す
     console.ws = console.observe()
-    # preflight runs on open: a CAN or GNSS fault has to surface before a build.
-    console.run_step(STEP_PREFLIGHT)
+    console.observe_version()
+    if role == ROLE_PARTICIPANT:
+        # preflight runs on open: a CAN or GNSS fault has to surface before a
+        # build. Staff has no preflight row on screen, so it must not run here.
+        console.run_step(STEP_PREFLIGHT)
     while True:
         console.drain()
         console.refresh_if_stale()
@@ -444,16 +628,25 @@ def _loop(screen) -> int:
         curses.napms(120)
 
 
-def main() -> int:
+def main(argv=None) -> int:
+    parser = argparse.ArgumentParser(description="vehicle console")
+    parser.add_argument(
+        "--role", choices=ROLES, default=ROLE_PARTICIPANT,
+        help="participant: autoware と提出物だけ / staff: download・driver/zenoh/rosbag の個別起動・停止・down all だけの独立画面",
+    )
+    args = parser.parse_args(argv)
+    need = min_lines(
+        len(steps_for_role(args.role)), extra=1 if has_version_line(args.role) else 0
+    )
     size = shutil.get_terminal_size(fallback=(0, 0))
-    if terminal_too_small(size.columns, size.lines):
+    if terminal_too_small(size.columns, size.lines, need):
         print(
             f"端末が狭すぎます（{size.columns}x{size.lines}）。"
-            f"最低 {MIN_COLS}x{MIN_LINES} が必要です。",
+            f"最低 {MIN_COLS}x{need} が必要です。",
             flush=True,
         )
         return 2
-    return curses.wrapper(_loop)
+    return curses.wrapper(_loop, args.role)
 
 
 if __name__ == "__main__":

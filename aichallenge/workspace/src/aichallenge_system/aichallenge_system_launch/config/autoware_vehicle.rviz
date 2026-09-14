@@ -115,6 +115,18 @@ Visualization Manager:
         Reliability Policy: Reliable
         Value: /map/vector_map_marker
       Value: true
+    - Class: rviz_default_plugins/MarkerArray
+      Enabled: true
+      Name: V2XVehiclePositions
+      Namespaces:
+        v2x_vehicles: true
+      Topic:
+        Depth: 5
+        Durability Policy: Volatile
+        History Policy: Keep Last
+        Reliability Policy: Reliable
+        Value: /v2x/vehicle_positions/markers
+      Value: true
     - Alpha: 0.9990000128746033
       Axes Length: 0.0010000000474974513
       Axes Radius: 0.30000001192092896
