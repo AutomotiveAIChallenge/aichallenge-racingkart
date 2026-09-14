@@ -20,7 +20,6 @@ zenoh_port_for_vehicle_id() {
     A1) echo 7452 ;;
     A5) echo 7453 ;;
     A8) echo 7454 ;;
-    # A4 用の 7455 に対応する router は後ほど作成する。
     A4) echo 7455 ;;
     *) return 1 ;;
     esac
