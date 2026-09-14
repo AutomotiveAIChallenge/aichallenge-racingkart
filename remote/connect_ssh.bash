@@ -8,8 +8,9 @@ if [ -f "$REPO_ROOT/.env" ]; then
 fi
 
 usage() {
-    echo "使用法: $0 [[ユーザー名@]<A2|A3|A6|A7|test>] [実行するコマンド]"
+    echo "使用法: $0 [[ユーザー名@]<A1-A8|test>] [実行するコマンド]"
     echo "  接続先を省略すると .env の VEHICLE_ID (現在: ${ENV_VEHICLE_ID:-未設定}) に接続する"
+    echo "  車両 ID は小文字に変換して SSH の接続先に使う (例: A3 → a3)"
     echo "  ユーザー名を省略するとローカルのユーザー名 ($USER) で接続する"
     echo "  test: 踏み台を通さず localhost:22 へ接続する (動作確認用)"
 }
@@ -33,36 +34,27 @@ if [[ $SPEC == *@* ]]; then
     USERNAME=${SPEC%@*}
     TARGET_ID=${SPEC#*@}
 fi
-host="zenoh.dev.aichallenge-board.jsae.or.jp"
-PORT=""
+# 引数と .env のどちらから取得した車両 ID も小文字に統一する。
+TARGET_ID=${TARGET_ID,,}
+host="$TARGET_ID"
+PORT_ARGS=()
 
-# 2. 引数に応じて接続先ホストとポート番号を設定
+# 2. 車両名で接続する。接続設定は SSH の設定に従う。
 case "$TARGET_ID" in
-A2)
-    PORT=10025
-    ;;
-A3)
-    PORT=10024
-    ;;
-A6)
-    PORT=10023
-    ;;
-A7)
-    PORT=10022
-    ;;
+a[1-8]) ;;
 test)
     host="localhost"
-    PORT=22
+    PORT_ARGS=(-p 22)
     ;;
 *)
     echo "エラー: 不明な接続先です: $TARGET_ID"
-    echo "利用可能な接続先: A2, A3, A6, A7, test"
+    echo "利用可能な接続先: A1-A8, test (小文字も可)"
     usage
     exit 1
     ;;
 esac
 
-# 3. 選択されたポートとユーザーでautosshを実行
+# 3. 選択されたホストとユーザーでautosshを実行
 # 2番目以降の引数（現在は "$@" に格納されている）があれば、それがリモートコマンドとして実行される
 if [ $# -gt 0 ]; then
     # コマンドが指定されている場合
@@ -72,7 +64,7 @@ else
     echo "Connecting... Target Vehicle: $TARGET_ID, User: $USERNAME"
 fi
 
-autossh -AC -M 0 -p "$PORT" \
+autossh -AC -M 0 "${PORT_ARGS[@]}" \
     -o ServerAliveInterval=60 \
     -o ServerAliveCountMax=3 \
     "${USERNAME}@${host}" \
