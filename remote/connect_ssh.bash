@@ -54,17 +54,19 @@ test)
     ;;
 esac
 
-# 3. 選択されたホストとユーザーでautosshを実行
+# 3. コマンド実行は ssh、対話接続は autossh を使う。
 # 2番目以降の引数（現在は "$@" に格納されている）があれば、それがリモートコマンドとして実行される
 if [ $# -gt 0 ]; then
-    # コマンドが指定されている場合
+    # 終了コードをそのまま返し、接続切断時にコマンドを再実行しない。
+    SSH_COMMAND=(ssh)
     echo "Connecting to $TARGET_ID as $USERNAME to run command: '$*'"
 else
     # コマンドが指定されていない場合（インタラクティブ接続）
+    SSH_COMMAND=(autossh -M 0)
     echo "Connecting... Target Vehicle: $TARGET_ID, User: $USERNAME"
 fi
 
-autossh -AC -M 0 "${PORT_ARGS[@]}" \
+exec "${SSH_COMMAND[@]}" -AC "${PORT_ARGS[@]}" \
     -o ServerAliveInterval=60 \
     -o ServerAliveCountMax=3 \
     "${USERNAME}@${host}" \
