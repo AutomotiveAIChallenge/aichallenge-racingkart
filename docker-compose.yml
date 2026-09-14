@@ -46,13 +46,14 @@ x-autoware-base: &autoware-base
 x-autoware-rosbag-base: &autoware-rosbag-base
   <<: *autoware-base
   stop_grace_period: 60s
+  # Driver-only topics are excluded by record_all_rosbag.bash; use Autoware's
+  # message definitions without mounting the racing_kart_interface workspace.
   volumes:
     - ./output:${OUTPUT_ROOT:-/output}
     - ./aichallenge:/aichallenge
     - ./remote:/remote
     - ./vehicle:/vehicle
     - ./vehicle/cyclonedds.xml:/opt/autoware/cyclonedds.xml
-    - ${RACING_KART_INTERFACE_DIR:-/home/tier4/racing_kart_interface}:${RACING_KART_INTERFACE_DIR:-/home/tier4/racing_kart_interface}:ro
     - /etc/passwd:/etc/passwd:ro
     - /etc/group:/etc/group:ro
     - /tmp/.X11-unix:/tmp/.X11-unix:rw
@@ -128,7 +129,7 @@ services:
 
   rosbag:
     <<: *autoware-rosbag-base
-    command: ["bash", "-lc", 'exec /aichallenge/utils/record_all_rosbag.bash "${ROS_DOMAIN_ID:-1}" "${LOG_DIR:-}" "${RACING_KART_INTERFACE_DIR:-/home/tier4/racing_kart_interface}"']
+    command: ["bash", "-lc", 'exec /aichallenge/utils/record_all_rosbag.bash "${ROS_DOMAIN_ID:-1}" "${LOG_DIR:-}"']
 
   autoware-simulator-evaluation:
     <<: *autoware-base

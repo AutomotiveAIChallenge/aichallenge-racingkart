@@ -3,7 +3,7 @@
 > 仕様ドキュメント（現仕様の正）。最終確認: 2026-06-14。文書運用方針は [docs/README.md](../README.md) を参照。
 
 作成日: 2026-01-27  
-更新日: 2026-06-14
+更新日: 2026-09-14
 
 対象: `docker-compose.yml`（make 経由 / 主要パス）・`aichallenge/run_evaluation.bash`（評価オーケストレータ）
 
@@ -74,6 +74,26 @@ rosbag compose サービスには `stop_grace_period: 10s` を設定してあり
 ### 3.3 `output/latest/` について
 
 `latest/` は `autostart_orchestrator_node.py`（`_refresh_latest_artifact_links`）が評価完了時に更新する実ディレクトリ。`latest/d<N>/` 配下に最新 run の成果物を指す symlink が置かれる。`docker_build.log` / `docker_run.log` については `docker_build.sh` / `docker_run.sh` が `latest/` 直下に symlink を直接作成する。`topic_check.sh` が `output/latest/topic_check.txt` を出力する用途も引き続き有効。
+
+### 3.4 実車 all-topic rosbag の型定義と除外対象
+
+`rosbag` サービスの `record_all_rosbag.bash` は Autoware イメージの型定義を使用する。ホストの `racing_kart_interface` ワークスペースはマウントせず、その `install/setup.bash` も source しない。ドライバーと記録側でメッセージ定義が一致しない状態による記録失敗を避けるため、`-a --include-hidden-topics` に `--exclude '^(/racing_kart/.*|/comm_status)$'` を組み合わせる。
+
+| 除外対象 | 理由 |
+| --- | --- |
+| `/racing_kart/.*` | `racing_kart_msgs` など、ドライバー側のワークスペースに依存する内部トピック。`/racing_kart/comms/status`（`racing_kart_msgs/msg/CommsStatus`）も含む。 |
+| `/comm_status` | V2X の `tier4_v2x_msgs/msg/CommStatusArray`。Autoware 側にも同名パッケージが存在するが、このメッセージの定義と型サポートは存在しない。`/racing_kart/` の外にあるため個別の除外が必要。 |
+
+2026-09-14 に `ssh tier4@a3` で次を確認した。
+
+- `/comm_status` の publisher は `/v2x_communicator`、型は `tier4_v2x_msgs/msg/CommStatusArray`。
+- ドライバーの `/workspace/install/tier4_v2x_msgs` には `CommStatusArray` の定義と C++ 型サポートのシンボルがある。
+- rosbag と Autoware のコンテナは同一イメージを使用していた。その `/autoware/install/tier4_v2x_msgs` にはパッケージと C++ 型サポートライブラリがあるが、`CommStatusArray` の `.msg` / `.idl` と対応シンボルはない。
+- `output/20260819-093911/d1/rosbag.log` には `racing_kart_msgs` の定義欠落と `Failure in topics discovery` が記録されていた。一方、直近の `output/20260914-145624/d1/rosbag.log` は正常終了しており、今回の確認では `/comm_status` によるコンテナ異常終了自体は再現していない。
+
+A3 の rosbag2 は `0.15.15`。この版の [TopicFilter](https://github.com/ros2/rosbag2/blob/0.15.15/rosbag2_transport/src/rosbag2_transport/topic_filter.cpp#L156) はパッケージの型サポートライブラリの存在を確認するだけで、個々のメッセージの対応シンボルまでは確認しない。そのため `/comm_status` は「未知の型として自動でスキップされる」とは限らず、購読作成時に型サポートの読み込みに失敗する。[Recorder](https://github.com/ros2/rosbag2/blob/0.15.15/rosbag2_transport/src/rosbag2_transport/recorder.cpp#L182) の初回購読と後続のトピック探索では例外処理も異なるため、起動順によっては記録開始の失敗、探索エラーの繰り返しにつながり得る。
+
+マウント削除と明示的な除外はセットで扱う。除外以外のトピックと hidden topic は引き続き記録対象とするが、記録側に型定義がない別パッケージのトピックは rosbag2 によってスキップされる。これらを記録対象へ戻す場合は、送信側と一致するメッセージ定義・型サポートを記録側に用意して確認する。
 
 ## 4. 今後の改善候補
 
