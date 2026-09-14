@@ -60,6 +60,7 @@ record_cmd=(
     ros2 bag record
     -a
     --include-hidden-topics
+    --exclude '^(/racing_kart/.*|/comm_status)$'
     -s mcap
     --storage-preset-profile zstd_fast
     --max-bag-duration 60
