@@ -49,6 +49,11 @@ class TestReadEnvVehicleId(unittest.TestCase):
         self.assertEqual(read_env_vehicle_id(_write_env("VEHICLE_ID=A1\nVEHICLE_ID=A2\n")), "A2")
 
 
+class TestVehicleIds(unittest.TestCase):
+    def test_a4_is_available(self):
+        self.assertIn("A4", VALID_VEHICLE_IDS)
+
+
 class TestDefaultVehicleId(unittest.TestCase):
     def test_uses_env_value(self):
         self.assertEqual(default_vehicle_id(_write_env("VEHICLE_ID=A7\n")), "A7")
