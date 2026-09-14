@@ -60,7 +60,6 @@ A8)
         -c zenoh-user.json5
     ;;
 A4)
-    # このポートに対応する router は後ほど作成する。
     echo "Connecting Zenoh. Target Vehicle: '$NAMESPACE' - Port 7455"
     RUST_BACKTRACE=1 zenoh-bridge-ros2dds client \
         -e tls/zenoh.dev.aichallenge-board.jsae.or.jp:7455 \
