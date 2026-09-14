@@ -15,7 +15,12 @@ base_compose="${COMPOSE_FILE-}"
 if [ -z "${base_compose}" ] && [ -f .env ]; then
     base_compose="$(sed -n 's/^COMPOSE_FILE=//p' .env | tail -n 1)"
 fi
-export COMPOSE_FILE="${base_compose:-docker-compose.yml}:aichallenge/practice/compose.practice.yml"
+practice_compose="${base_compose:-docker-compose.yml}:aichallenge/practice/compose.practice.yml"
+# docker-compose.gpu.yml only names the existing services, so give autoware-slot the same GPU settings.
+case ":${base_compose}:" in
+*:docker-compose.gpu.yml:*) practice_compose="${practice_compose}:aichallenge/practice/compose.practice.gpu.yml" ;;
+esac
+export COMPOSE_FILE="${practice_compose}"
 
 die() {
     echo "[practice] ERROR: $*" >&2
@@ -48,6 +53,9 @@ RUN_CTR="/output/${TS}"
 [[ ${NPC} =~ ^[0-3]$ ]] || die "NPC must be 0..3"
 [[ ${ROUND} =~ ^[0-9]+$ ]] || die "ROUND must be a non-negative integer"
 [[ ${GRID} =~ ^(fixed|shuffle|rotate)$ ]] || die "GRID must be fixed, shuffle or rotate"
+if [ "${CLASS}" = e2e ] && [ "${HEADLESS}" = 1 ]; then
+    die "HEADLESS=1 disables the camera and LiDAR that CLASS=e2e needs; use HEADLESS=1 with CLASS=s2r only"
+fi
 
 # ---- 1. tarballs: same layout as ./create_submit_file.bash produces ------------------
 # Hygiene only, not a sandbox: a submission's CMake runs arbitrary code at build time anyway.

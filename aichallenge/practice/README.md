@@ -18,7 +18,7 @@ make practice-4car SUBMISSIONS="submit/a.tar.gz submit/b.tar.gz submit/c.tar.gz 
 | `HANDICAP` | `on` | 順位ハンディキャップ（決勝は on） |
 | `NPC` | `0` | NPC 台数（決勝は 0） |
 | `GRID` | `fixed` | `fixed` = 指定順、`shuffle` = `SEED` で並べ替え、`rotate` = `ROUND` だけずらす（4回回すと全員が全位置を走る） |
-| `VIZ` / `HEADLESS` | `0` | `VIZ=1` で出走位置1の RViz を表示 / `HEADLESS=1` で AWSIM を `-headless`（S2R のみ） |
+| `VIZ` / `HEADLESS` | `0` | `VIZ=1` で出走位置1の RViz を表示 / `HEADLESS=1` で AWSIM を `-headless`（S2R のみ。`CLASS=e2e` と併用するとカメラ・LiDAR が無効になるため起動前にエラー） |
 | `PIN` | `0` | `1` で各車を3コアに固定（出走位置 N は CPU 5+3(N-1) から3コア。17 CPU 以上） |
 | `KEEP` | `0` | `1` でレース後もコンテナを残す（`make down` で停止） |
 
@@ -35,11 +35,14 @@ Results and a summary (`practice-summary.md`) land in `output/<timestamp>/`. Opt
 
 追加のみです。`docker-compose*.yml`・`run_autoware.bash`・既存の make ターゲットと simulator スクリプトは変更していません。
 コンテナ設定は `aichallenge/practice/compose.practice.yml` にあり、`make practice-4car` の実行中だけ `.env` の
-`COMPOSE_FILE`（gpu / sound の指定を含む）の後ろに足されます。
+`COMPOSE_FILE`（gpu / sound の指定を含む）の後ろに足されます。`COMPOSE_FILE` に `docker-compose.gpu.yml` が含まれる
+場合は `compose.practice.gpu.yml` も足され、各車（`autoware-slot`）にも `autoware` と同じ GPU 設定が入ります。
 
 Additive only: `docker-compose*.yml`, `run_autoware.bash`, the existing make targets and simulator scripts are
 unchanged. The container settings live in `aichallenge/practice/compose.practice.yml`, which is appended to your
-`.env` `COMPOSE_FILE` (gpu / sound overlays included) only while `make practice-4car` runs.
+`.env` `COMPOSE_FILE` (gpu / sound overlays included) only while `make practice-4car` runs. When `COMPOSE_FILE`
+includes `docker-compose.gpu.yml`, `compose.practice.gpu.yml` is added too, so every car (`autoware-slot`) gets the
+same GPU settings as `autoware`.
 
 ## Limits
 

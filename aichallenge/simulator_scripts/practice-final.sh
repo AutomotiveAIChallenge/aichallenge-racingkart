@@ -30,7 +30,10 @@ esac
 [[ ${npcs} =~ ^[0-3]$ ]] || fail "PRACTICE_NPCS must be 0..3 (got '${npcs}')"
 [[ ${vehicles} =~ ^[1-4]$ ]] || fail "PRACTICE_VEHICLES must be 1..4 (got '${vehicles}')"
 extra_args=()
-[ "${PRACTICE_HEADLESS:-0}" = 1 ] && extra_args+=(-headless)
+if [ "${PRACTICE_HEADLESS:-0}" = 1 ]; then
+    [ "${class}" = s2r ] || fail "PRACTICE_HEADLESS=1 disables the camera and LiDAR that PRACTICE_CLASS=${class} needs (S2R only)"
+    extra_args+=(-headless)
+fi
 
 # AWSIM は result-summary.json / dN-result-details.json を自身の CWD に書き出すので、run ディレクトリへ移動する。
 cd "${LOG_DIR:-/output}" || fail "cannot cd to LOG_DIR '${LOG_DIR:-/output}'"

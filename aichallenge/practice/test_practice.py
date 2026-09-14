@@ -168,6 +168,14 @@ class PracticeFinalMatchesFinalsTest(unittest.TestCase):
             code, _ = awsim_args(SCRIPTS / "practice-final.sh", env)
             self.assertEqual(code, 1, env)
 
+    def test_headless_is_passed_for_s2r_and_rejected_for_e2e_which_needs_camera_and_lidar(self):
+        code, practice = awsim_args(SCRIPTS / "practice-final.sh", {"PRACTICE_HEADLESS": "1"})
+        self.assertEqual(code, 0)
+        self.assertIn("-headless", practice)
+        code, stderr = awsim_args(SCRIPTS / "practice-final.sh", {"PRACTICE_HEADLESS": "1", "PRACTICE_CLASS": "e2e"})
+        self.assertEqual(code, 1)
+        self.assertIn("S2R only", stderr)
+
 
 class PracticeRaceInputTest(unittest.TestCase):
     """practice_race.bash rejects bad input before touching Docker."""
@@ -201,6 +209,11 @@ class PracticeRaceInputTest(unittest.TestCase):
         for key, value in (("CLASS", "x"), ("HANDICAP", "1"), ("NPC", "9"), ("GRID", "random")):
             proc = self.run_race(SUBMISSIONS="a.tar.gz", **{key: value})
             self.assertEqual(proc.returncode, 1, key)
+
+    def test_rejects_headless_e2e_before_building_anything(self):
+        proc = self.run_race(SUBMISSIONS="a.tar.gz", CLASS="e2e", HEADLESS="1")
+        self.assertEqual(proc.returncode, 1)
+        self.assertIn("use HEADLESS=1 with CLASS=s2r only", proc.stderr)
 
 
 if __name__ == "__main__":
