@@ -60,13 +60,16 @@ fi
 # ---- 1. tarballs: same layout as ./create_submit_file.bash produces ------------------
 # Hygiene only, not a sandbox: a submission's CMake runs arbitrary code at build time anyway.
 validate_tar() {
-    local t="$1" entries
+    local t="$1" all_entries entries
     [ -f "${t}" ] || die "not found: ${t}"
-    entries=$(tar -tzf "${t}") || die "${t} is not a readable tar.gz"
+    all_entries=$(tar -tzf "${t}") || die "${t} is not a readable tar.gz"
+    # tar on macOS adds AppleDouble "._<name>" metadata entries (e.g. ._aichallenge_submit). The eval
+    # image extracts them as harmless extra files, so they do not count against the layout.
+    entries=$(grep -vE '(^|/)\._[^/]+/?$' <<<"${all_entries}" || true)
     if grep -qvE '^aichallenge_submit(/|$)' <<<"${entries}"; then
         die "${t}: every entry must be under aichallenge_submit/ (make it with ./create_submit_file.bash)"
     fi
-    if grep -qE '(^|/)\.\.(/|$)' <<<"${entries}"; then
+    if grep -qE '(^|/)\.\.(/|$)' <<<"${all_entries}"; then
         die "${t}: contains a '..' path"
     fi
 }
@@ -175,12 +178,11 @@ with open(out, "w", encoding="utf-8") as f:
     f.write("\n")
 EOF
 
-# ---- 6. AWSIM on domain 0, then one Autoware per slot on domain = slot -----------------
+# ---- 6. one Autoware per slot on domain = slot, then AWSIM on domain 0 -----------------
+# The stacks start first. AWSIM announces each vehicle's /awsim/state (Grounded) once, and the
+# autostart orchestrator subscribes with volatile QoS, so a stack that is still starting when AWSIM
+# grounds its vehicle never sees that state and never requests control.
 log "run dir: ${RUN_HOST}  class=${CLASS} handicap=${HANDICAP} npc=${NPC} grid=${GRID}${SEED:+ seed=${SEED}}"
-LOG_DIR="${RUN_CTR}" SIM_MODE=practice-final ROS_DOMAIN_ID=0 \
-    PRACTICE_CLASS="${CLASS}" PRACTICE_HANDICAP="${HANDICAP}" PRACTICE_NPCS="${NPC}" \
-    PRACTICE_VEHICLES="${N}" PRACTICE_HEADLESS="${HEADLESS}" \
-    docker compose up -d simulator
 for i in "${!ORDER[@]}"; do
     slot=$((i + 1))
     mode=awsim-no-viz
@@ -192,24 +194,42 @@ for i in "${!ORDER[@]}"; do
         SLOT_TASKSET="${taskset_cmd}" \
         docker compose -p "${slot}" up -d autoware-slot
 done
+deadline=$((SECONDS + START_TIMEOUT))
+for slot in $(seq 1 "${N}"); do
+    until grep -qs 'wait start:' "${RUN_HOST}/d${slot}/autoware.log"; do
+        ((SECONDS < deadline)) ||
+            die "slot ${slot}: autostart_orchestrator did not start within ${START_TIMEOUT}s; see ${RUN_HOST}/d${slot}/autoware.log (stack left running: make down)"
+        sleep 5
+    done
+done
+sleep "${SUBSCRIBE_SETTLE_S:-5}" # let DDS match every orchestrator's /awsim/state subscription
+LOG_DIR="${RUN_CTR}" SIM_MODE=practice-final ROS_DOMAIN_ID=0 \
+    PRACTICE_CLASS="${CLASS}" PRACTICE_HANDICAP="${HANDICAP}" PRACTICE_NPCS="${NPC}" \
+    PRACTICE_VEHICLES="${N}" PRACTICE_HEADLESS="${HEADLESS}" \
+    docker compose up -d simulator
 
 # ---- 7. sync start once every slot has requested autonomous control ---------------------
-deadline=$((SECONDS + START_TIMEOUT))
 for slot in $(seq 1 "${N}"); do
     until grep -qs 'control mode request: success=True' "${RUN_HOST}/d${slot}/autoware.log"; do
         ((SECONDS < deadline)) ||
-            die "slot ${slot} did not request control within ${START_TIMEOUT}s; see ${RUN_HOST}/d${slot}/autoware.log (stack left running: make down)"
+            die "slot ${slot} did not request control within ${START_TIMEOUT}s: its autostart_orchestrator never saw /awsim/state, or AWSIM and Autoware cannot see each other over DDS (on WSL2, see aichallenge/practice/README.md); see ${RUN_HOST}/d${slot}/autoware.log (stack left running: make down)"
         sleep 5
     done
     log "slot ${slot} ready"
 done
-for _ in 1 2 3 4 5 6 7 8 9 10; do
-    make --no-print-directory awsim-request-start >/dev/null 2>&1 || true
-    grep -qs 'Received /admin/awsim/start' "${RUN_HOST}/awsim.log" && break
+# Source ROS explicitly: the autoware-command container only sources the repo workspace, which
+# a checkout used just for practice may never have built.
+start_awsim() {
+    CMD="source /opt/ros/humble/setup.bash && env ROS_DOMAIN_ID=0 timeout 30 ros2 topic pub -1 /admin/awsim/start std_msgs/msg/Bool '{data: true}'" \
+        docker compose run --rm --no-deps -T autoware-command 2>&1
+}
+start_out=""
+for _ in 1 2 3 4 5; do
+    start_out=$(start_awsim) && break
     sleep 3
 done
-grep -qs 'Received /admin/awsim/start' "${RUN_HOST}/awsim.log" ||
-    log "WARN: 'Received /admin/awsim/start' not in awsim.log (wording may differ in this AWSIM build); waiting for results anyway"
+grep -qs 'Received /admin/awsim/start\|state → Start\|state → Running' "${RUN_HOST}/awsim.log" ||
+    log "WARN: AWSIM has not logged the start yet; last start attempt said: $(tail -n 2 <<<"${start_out}" | tr '\n' ' ')"
 
 # ---- 8. wait for AWSIM's result files, summarise, tear down ------------------------------
 log "race started; waiting for ${RUN_HOST}/result-summary.json (timeout ${RACE_TIMEOUT}s)"

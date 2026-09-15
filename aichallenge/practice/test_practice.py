@@ -7,6 +7,7 @@
 import json
 import os
 import re
+import shutil
 import stat
 import subprocess
 import sys
@@ -202,6 +203,41 @@ class PracticeRaceInputTest(unittest.TestCase):
     def test_rejects_a_tarball_that_is_not_an_aichallenge_submit_tree(self):
         with tempfile.TemporaryDirectory() as tmp:
             proc = self.run_race(SUBMISSIONS=str(self.make_tar(tmp, "other/pkg.xml")))
+        self.assertEqual(proc.returncode, 1)
+        self.assertIn("every entry must be under aichallenge_submit/", proc.stderr)
+
+    def make_tar_with(self, tmp, members):
+        path = Path(tmp) / "multi.tar.gz"
+        with tarfile.open(path, "w:gz") as tar:
+            for member in members:
+                src = Path(tmp) / "src" / member
+                src.parent.mkdir(parents=True, exist_ok=True)
+                src.write_text("x")
+                tar.add(src, arcname=member)
+        return path
+
+    def run_isolated_race(self, tmp, **env):
+        """Run a copy of the runner inside an empty repo tree, so it stops at the AWSIM check even on a
+        machine where AWSIM is installed, and never reaches Docker."""
+        runner = Path(tmp) / "repo" / "aichallenge" / "practice" / "practice_race.bash"
+        runner.parent.mkdir(parents=True)
+        shutil.copy(HERE / "practice_race.bash", runner)
+        return subprocess.run(["bash", str(runner)], capture_output=True, text=True,
+                              env={"PATH": os.environ["PATH"], **env})
+
+    def test_accepts_the_appledouble_entries_that_macos_tar_adds(self):
+        members = ("aichallenge_submit/pkg.xml", "._aichallenge_submit", "aichallenge_submit/._pkg.xml")
+        with tempfile.TemporaryDirectory() as tmp:
+            proc = self.run_isolated_race(tmp, SUBMISSIONS=str(self.make_tar_with(tmp, members)))
+        # The layout check passes; the run then stops at the next check (no AWSIM in the isolated tree).
+        self.assertNotIn("every entry must be under aichallenge_submit/", proc.stderr)
+        self.assertIn("AWSIM is not installed", proc.stderr)
+        self.assertEqual(proc.returncode, 1)
+
+    def test_still_rejects_a_stray_entry_next_to_appledouble_entries(self):
+        members = ("aichallenge_submit/pkg.xml", "._aichallenge_submit", "other/pkg.xml")
+        with tempfile.TemporaryDirectory() as tmp:
+            proc = self.run_race(SUBMISSIONS=str(self.make_tar_with(tmp, members)))
         self.assertEqual(proc.returncode, 1)
         self.assertIn("every entry must be under aichallenge_submit/", proc.stderr)
 

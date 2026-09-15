@@ -44,6 +44,17 @@ unchanged. The container settings live in `aichallenge/practice/compose.practice
 includes `docker-compose.gpu.yml`, `compose.practice.gpu.yml` is added too, so every car (`autoware-slot`) gets the
 same GPU settings as `autoware`.
 
+## WSL2
+
+`vehicle/cyclonedds.xml` は CycloneDDS を `lo` に固定しています。WSL2 では `lo` に `10.255.255.254` も付くため DDS が参加者を作れず、
+AWSIM が `WaitStart` のまま、各車が `wait until clock received` のまま止まります。シミュレーション用の PC では
+`<NetworkInterface autodetermine="true" priority="default" multicast="default" />` に変えてください（実車ではこの変更をしないこと）。
+
+`vehicle/cyclonedds.xml` pins CycloneDDS to `lo`. Under WSL2, `lo` also carries `10.255.255.254`, DDS cannot create
+participants, and the run stops with AWSIM at `WaitStart` and every car at `wait until clock received`. On a
+simulation PC, switch it to `<NetworkInterface autodetermine="true" priority="default" multicast="default" />`
+(do not do this on the real kart).
+
 ## Limits
 
 - One PC runs AWSIM and four Autoware stacks; in the SIM final each stack has its own PC (i7-8700, 16 GB).
