@@ -190,7 +190,8 @@ docker compose -f ../docker-compose.yml ps --services --filter status=running
 ```
 
 **期待する結果:**
-- ✅ `Required compose services are running: driver autoware rosbag zenoh`
+- ✅ `Required compose services are running: driver autoware zenoh`
+- ℹ️ `rosbag` は必須サービスに含めない（記録するかどうかは運営が都度決める）
 - ❌ `Required compose services not running: zenoh` → 該当サービスのログを確認
 
 ---
@@ -424,7 +425,7 @@ Time: 2025年  8月 25日 月曜日 23:10:02 JST
 
 ℹ️ 2. Runtime Docker Service Check
 ----------------------------------------
-✅ Required compose services are running: driver autoware rosbag zenoh
+✅ Required compose services are running: driver autoware zenoh
 
 ℹ️ 3. GNSS/RTK Status Check
 ----------------------------------------

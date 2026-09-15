@@ -121,9 +121,10 @@ down → up と辿る（`driver` は 4 → 2、`zenoh` は 5 → 3、`rosbag` �
 監視が切れ、`driver` を落とすと車両が動かなくなる。`rosbag` / `rosbag down` は大会中は押さない。
 `down all` は 1 日の終わりに使う。参加者の `autoware-vehicle down` はこの 3 つを触らない。
 
-`driver` / `zenoh` に加えて運営が `rosbag` も上げるのは、`autoware-vehicle` が rosbag を上げないのに
-`check runtime` の必須サービスに rosbag が入っているためである。運営が rosbag を上げ忘れると
-参加者の 5 が必ず落ちる。
+`rosbag` は任意である。`check runtime` の必須サービスは `driver` / `autoware` / `zenoh` の 3 つで、
+rosbag が止まっていても参加者の 5 は落ちない。記録を残す走行枠では運営が 6（`rosbag`）で始め、
+7（`rosbag down`）で閉じる。上げ忘れに気づく手段は runtime check ではなく、
+サービス行（`stopped: rosbag`）である。
 
 チェックの 2 ステップは `check preflight` / `check runtime` と表示する。
 `setup_check.sh` の `--phase` の値をそのまま名前にしているので、画面の名前から
