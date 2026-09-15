@@ -590,7 +590,8 @@ check_runtime_docker_services() {
         return 0
     fi
 
-    local required_services=(driver autoware rosbag zenoh)
+    # rosbag は記録の有無を運営が都度決めるため必須にしない（未起動でも fail にならない）。
+    local required_services=(driver autoware zenoh)
     local running_services
     local missing_services=()
     if running_services="$(compose_running_services)"; then
