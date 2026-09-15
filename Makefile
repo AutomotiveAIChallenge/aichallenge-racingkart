@@ -3,7 +3,8 @@ SHELL := /bin/bash
 
 .PHONY: autoware-build autoware-vehicle autoware-simulator autoware-request-initialpose autoware-request-control  awsim-request-start awsim-request-reset autoware-driver-zenoh autoware-driver-zenoh-rosbag setup-vehicle \
 	workspace-clean \
-	simulator dev dev2 dev3 dev4 driver zenoh rosbag download submission-extract rviz2 down down_all ps autoware-attach autoware-bash eval e2e vehicle-tui vehicle-tui-staff workspace
+	simulator dev dev2 dev3 dev4 driver zenoh rosbag download submission-extract rviz2 down down_all ps autoware-attach autoware-bash eval e2e vehicle-tui vehicle-tui-staff workspace \
+	practice-4car practice-summary
 
 # Used by docker-compose.yml for build/eval artifact ownership.
 HOST_UID ?= $(shell id -u)
@@ -92,6 +93,17 @@ e2e: SIM_MODE := e2e
 e2e: simulator autoware-simulator
 	@echo "Start e2e simulation (AWSIM + Autoware)"
 	@echo "To stop: make down  (docker compose down --remove-orphans)"
+
+# SIM決勝の練習: 任意の提出物 tar.gz を最大4台、決勝と同じ AWSIM 条件（NPC なし）でレースさせる。
+# 出走位置 N = ROS_DOMAIN_ID N = SUBMISSIONS の N 番目。オプションは aichallenge/practice/README.md
+#   make practice-4car SUBMISSIONS="a.tar.gz b.tar.gz c.tar.gz d.tar.gz" [CLASS=s2r|e2e] [HANDICAP=on|off]
+#        [NPC=0..3] [GRID=fixed|shuffle|rotate] [SEED=n] [ROUND=n] [VIZ=1] [HEADLESS=1] [PIN=1] [KEEP=1]
+practice-4car:
+	@SUBMISSIONS="$(SUBMISSIONS)" TIMESTAMP="$(TIMESTAMP)" ./aichallenge/practice/practice_race.bash
+
+# make practice-summary [RUN=output/<timestamp>]（既定: 最新の練習レース）
+practice-summary:
+	@python3 aichallenge/practice/practice_summary.py $(RUN)
 
 # gate<N>: 任意のテスト番号を受け付ける（例: make gate7）
 gate%:
