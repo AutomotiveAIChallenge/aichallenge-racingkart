@@ -20,6 +20,10 @@ from tkinter.scrolledtext import ScrolledText
 ROOT_DIR = Path(__file__).resolve().parent
 REMOTE_DIR = ROOT_DIR
 
+# RViz は起動シェルの ROS_DOMAIN_ID (未設定なら 0) を使い、Zenoh/Joy と揃える。
+# Makefile が環境変数 ROS_DOMAIN_ID を unexport するため、RViz 起動用の
+# make に MAKEFLAGS 経由でコマンドライン変数として渡す。
+
 # connect_zenoh.bash の case が受理する Vehicle ID。
 # 候補一覧と検証を同じ定義から導いて食い違わないようにする。
 VEHICLE_IDS = ["A1", "A2", "A3", "A4", "A5", "A6", "A7", "A8"]
@@ -449,7 +453,7 @@ COMMANDS: List[CommandSpec] = [
     CommandSpec(
         label="Restart Zenoh and RViz",
         role="restart",
-        command="./restart.bash {vehicle_id}",
+        command='MAKEFLAGS="ROS_DOMAIN_ID=${{ROS_DOMAIN_ID:-0}}" ./restart.bash {vehicle_id}',
         log_key="zenoh",
         requires_vehicle=True,
         stop_before=True,
@@ -457,7 +461,7 @@ COMMANDS: List[CommandSpec] = [
     ),
     CommandSpec(
         label="Start RViz",
-        command="./rviz.bash",
+        command='MAKEFLAGS="ROS_DOMAIN_ID=${{ROS_DOMAIN_ID:-0}}" ./rviz.bash',
         log_key="rviz",
         note="RViz 用コンテナを起動します。",
     ),
@@ -472,7 +476,7 @@ COMMANDS: List[CommandSpec] = [
     CommandSpec(
         label="Restart RViz",
         role="restart",
-        command="./rviz.bash restart",
+        command='MAKEFLAGS="ROS_DOMAIN_ID=${{ROS_DOMAIN_ID:-0}}" ./rviz.bash restart',
         log_key="rviz",
         note="RViz コンテナを再起動します。",
     ),
