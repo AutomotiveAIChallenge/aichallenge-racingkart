@@ -4,6 +4,7 @@
 Builds real directory trees in a temp dir; never touches docker or curses.
 Run with python3 -m unittest (no third-party runner).
 """
+import curses
 import json
 import os
 import subprocess
@@ -36,6 +37,7 @@ from tui_core import (  # noqa: E402
     REQUIRED_SERVICES,
     ROLE_PARTICIPANT,
     STAFF_STEPS,
+    STEP_CALIBRATION,
     STEP_UP,
     STEP_DRIVER,
     STEP_DRIVER_DOWN,
@@ -311,6 +313,48 @@ class TestServiceLinePlacement(unittest.TestCase):
             self.assertNotIn("running:", screen.rows[idx])
             self.assertNotIn("stopped:", screen.rows[idx])
             self.assertNotIn("rosbag", screen.rows[idx])
+
+
+class TestRecommendedPlacement(unittest.TestCase):
+    def draw(self, cols, lines=13):
+        screen = FakeScreen(lines=lines, cols=cols)
+        console = Console(screen, steps=PARTICIPANT_STEPS, role=ROLE_PARTICIPANT)
+        console.cursor = 1
+        console.failures = ["error details"]
+        console.log = ["latest output"]
+        with mock.patch("tui.curses.doupdate"):
+            console.draw()
+        return console, screen
+
+    def test_recommendation_is_at_the_right_edge_of_the_update_row(self):
+        _, screen = self.draw(cols=80)
+        row = screen.rows[4]
+        self.assertIn(step_by_id(STEP_CALIBRATION).title, row)
+        self.assertTrue(row.endswith("(Recommended)"))
+        self.assertEqual(len(row), 79)
+        self.assertIn("3 ?  autoware-vehicle", screen.rows[5])
+        self.assertEqual(sum("(Recommended)" in row for row in screen.rows.values()), 1)
+
+    def test_minimum_terminal_wraps_label_and_keeps_failures_and_log_visible(self):
+        _, screen = self.draw(cols=MIN_COLS)
+        self.assertIn(step_by_id(STEP_CALIBRATION).title, screen.rows[4])
+        self.assertEqual(screen.rows[5].strip(), "(Recommended)")
+        self.assertEqual(len(screen.rows[5]), MIN_COLS - 1)
+        self.assertIn("3 ?  autoware-vehicle", screen.rows[6])
+        self.assertIn("5 OK autoware-vehicle down", screen.rows[8])
+        self.assertEqual(screen.rows[10], "error details")
+        self.assertEqual(screen.rows[12], "latest output")
+
+    def test_wrapped_label_does_not_become_a_separate_keyboard_selection(self):
+        console, _ = self.draw(cols=MIN_COLS)
+        with mock.patch.object(console, "run_step") as run:
+            console.handle_key(ord("\n"))
+            run.assert_called_once_with(STEP_CALIBRATION)
+        console.handle_key(curses.KEY_DOWN)
+        with mock.patch.object(console, "run_step") as run:
+            console.handle_key(ord("\n"))
+            run.assert_called_once_with(STEP_UP)
+
 
 class TestShouldReobserve(unittest.TestCase):
     def test_not_while_a_step_is_running(self):

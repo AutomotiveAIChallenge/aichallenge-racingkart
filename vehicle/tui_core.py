@@ -106,6 +106,8 @@ class Step:
     # 行末に括弧書きで出す一言。押してよい場面が題名から読めないステップにだけ付ける。
     # 端末は 46 桁しかないので短く、幅計算が狂わないよう ASCII で書く。
     note: str = ""
+    # 推奨操作には右端のラベルを付ける。適用元の検証結果とは独立した操作の案内。
+    recommended: bool = False
 
 
 # 参加者の並び。運営は STAFF_STEPS を別画面として持つ（参加者の続きではない）。
@@ -119,6 +121,7 @@ PARTICIPANT_STEPS = (
     Step(
         step_id=STEP_CALIBRATION,
         title="Update the accel/brake maps and IMU bias",
+        recommended=True,
         command=("python3", "apply_calibration.py"),
         cwd="vehicle",
         requires=(STEP_PREFLIGHT,),

@@ -5,6 +5,8 @@
 
 `check preflight` → `Update the accel/brake maps and IMU bias` → `autoware-vehicle` → `check runtime`
 
+TUI ではこの操作の右端に `(Recommended)` を表示します。幅が足りない場合は次行に表示します。
+
 Autoware が停止している状態で実行します。既に起動している場合は
 `autoware-vehicle down` で停止してください。起動中の適用はエラーになります。
 提出物は TUI 外で展開・ビルド済みにしておきます。適用後の再ビルドは不要です。

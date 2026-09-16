@@ -44,7 +44,7 @@ from tui_core import (
 )
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
-# 最低行数 = header 1 + services 2 + ステップ数 + 見出し 2 + failures 1 + log 1 + 余裕 1。
+# 最低行数 = header 1 + services 2 + ステップ数 + 見出し 2 + failures 1 + log 1 + 推奨ラベル折り返し用 1。
 # 47 桁は最長の header 行に合わせた共通幅（役割で変えると tmux を張り替える羽目になる）。
 MIN_COLS = 47
 
@@ -466,15 +466,23 @@ class Console:
 
     def _draw_steps(self, top: int, lines: int, width: int) -> int:
         """ステップを縦 1 列に並べ、次に使える行番号を返す。"""
-        used = 0
+        y = top
         for idx, step in enumerate(self.steps):
-            y = top + idx
-            if y >= lines:
-                break
             attr = curses.A_REVERSE if idx == self.cursor else curses.A_NORMAL
-            self.screen.addnstr(y, 0, self._cell(idx, step), width, attr)
-            used = idx + 1
-        return top + used
+            text = self._cell(idx, step)
+            rows = [text]
+            if step.recommended:
+                label = "(Recommended)"
+                if len(text) + 1 + len(label) <= width:
+                    rows = [text.ljust(width - len(label)) + label]
+                else:
+                    rows.append(label.rjust(width))
+            for text in rows:
+                if y >= lines:
+                    return y
+                self.screen.addnstr(y, 0, text, width, attr)
+                y += 1
+        return y
 
     def _cell(self, idx: int, step) -> str:
         status = step_status(step.step_id, self.ws, self.session)

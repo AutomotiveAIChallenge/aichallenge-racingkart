@@ -207,7 +207,7 @@ GNSS の 8 秒待ち、14 topic ぶんの `docker compose exec` + ROS 環境の 
 running: driver
 stopped: autoware zenoh rosbag
 1 NG check preflight
-2 ?  Update the accel/brake maps and IMU bias
+2 ?  Update the accel/brake maps and IMU bias        (Recommended)
 3 ?  autoware-vehicle
 4 ?  check runtime
 5 OK autoware-vehicle down
@@ -246,6 +246,10 @@ driver image: 2025-09-04  aic commit: bd9c626
   `3 - zenoh` / `4 - driver down` / `5 - zenoh down` / `6 - rosbag` / `7 - rosbag down` /
   `8 - down all` の 8 行だけ。
 - ステップは縦 1 列。印は 2 文字固定（`OK` / `NG` / `>>` 実行中 / `-` 未実行 / `?` 前提未達）。
+- `Update the accel/brake maps and IMU bias` の行は、右端に `(Recommended)` を表示する。
+  操作名と 1 文字以上の間隔を取れない幅では、注記を次行の右端に表示する。
+  この注記は操作の実行を推奨する表示であり、適用元の検証・承認確認は実行後に行う。
+  折り返した注記も同じ操作の行として選択表示し、↑↓ の選択単位はステップのままとする。
 - 押してよい場面が題名から読み取れないステップは、行末に括弧書きで一言添える。
   `driver` / `zenoh` は `always on`（走行枠の間ずっと上げたまま）、`driver down` /
   `zenoh down` は `on faults only`（異常時だけ）、`rosbag` / `rosbag down` は
@@ -267,7 +271,8 @@ driver image: 2025-09-04  aic commit: bd9c626
   起動時の自動実行もしない。
 - 最低端末サイズは参加者 47x13、運営 47x17（桁数は参加者・運営共通）。行数の内訳は
   ヘッダ 1 + サービス行 2 + ステップ数（5 / 8）+ version 行（運営のみ 1）
-  + failures 見出し 1 + failures 1 + log 見出し 1 + log 1、に 1 行の余裕。桁数は画面中で
+  + failures 見出し 1 + failures 1 + log 見出し 1 + log 1、に 1 行の余裕。
+  参加者の余裕行は、狭い端末で推奨ラベルを折り返す場合に使う。桁数は画面中で
   いちばん幅を食う固定行、ヘッダの最長形 `[test] vehicle console [participant]` + 区切り 1
   + キー操作 10 = 47 桁に合わせたもの（version 行は 45 桁）。version 行は運営の画面にしか
   出ないが、役割で最低幅を変えると tmux を役割ごとに張り替える羽目になるので幅は共通にしている。
@@ -366,6 +371,7 @@ Python 3 標準ライブラリのみを使う（`curses` / `subprocess` / `threa
 | 失敗行の判定（インデントあり・警告と成功の除外） |
 | 折り返し（短い行の素通し・長い行の分割・空行の保持） |
 | 最低端末サイズの境界 |
+| 推奨ラベルの右寄せ・狭い端末での折り返し、ログ領域とキー選択の維持 |
 | アイドル中の再観測の判定（実行中は取り直さない・間隔の境界） |
 
 curses の描画、実車での疎通、`make` ターゲットの実行そのものは手動確認とする。
