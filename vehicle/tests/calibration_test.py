@@ -117,7 +117,7 @@ class CalibrationTest(unittest.TestCase):
             self.assertEqual(extract(self.archive, "password", self.output), 0)
         self.assertEqual(prompt.call_count, 2)
         prompts = [call.args[0] for call in prompt.call_args_list]
-        self.assertIn("実車用の共通 accel/brake map", prompts[0])
+        self.assertIn("実車用の accel/brake map", prompts[0])
         self.assertIn("車両 A2", prompts[1])
         for message in prompts:
             self.assertIn("(Recommended)", message)

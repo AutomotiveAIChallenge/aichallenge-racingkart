@@ -119,7 +119,7 @@ def apply_maps(submit: Path, names: list[str]) -> bool:
     except (OSError, ValueError) as exc:
         error = exc
         print(f"⚠️ Common accel/brake maps unavailable: {exc}")
-    if not confirm_application("実車用の共通 accel/brake map", recommended=error is None):
+    if not confirm_application("実車用の accel/brake map", recommended=error is None):
         return False
     if error is not None:
         raise error
