@@ -419,6 +419,8 @@ class Console:
             proc = subprocess.Popen(
                 list(step.command),
                 cwd=str(self._cwd_for(step)),
+                # Keep keys for curses; docker compose exec -T still reads stdin.
+                stdin=subprocess.DEVNULL,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.STDOUT,
                 text=True,

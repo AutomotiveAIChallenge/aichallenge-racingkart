@@ -4,6 +4,7 @@
 Builds real directory trees in a temp dir; never touches docker or curses.
 Run with python3 -m unittest (no third-party runner).
 """
+import json
 import os
 import subprocess
 import sys
@@ -439,6 +440,41 @@ class TestShouldReobserve(unittest.TestCase):
     def test_after_the_interval(self):
         # An external `make down` while idle has to show up on its own.
         self.assertTrue(should_reobserve(False, 10.0, 0.0))
+
+
+class TestStreamInput(unittest.TestCase):
+    def test_background_step_leaves_console_input_unread(self):
+        # Give an isolated console pending input, then run a child that reads
+        # stdin (as docker compose exec does, even with -T).
+        script = """
+import json
+import os
+import sys
+from tui import Console
+from tui_core import Step
+
+console = Console(None)
+step = Step("probe", "probe", (
+    sys.executable, "-c",
+    "import os, sys; print(repr(os.read(0, 1))); sys.exit(7)",
+))
+console._stream(step)
+events = []
+while not console.log_queue.empty():
+    events.append(console.log_queue.get_nowait())
+print(json.dumps({"events": events, "pending_input": os.read(0, 1).decode()}))
+"""
+        result = subprocess.run(
+            [sys.executable, "-c", script],
+            cwd=Path(__file__).resolve().parents[1],
+            input="q", text=True, capture_output=True, check=True, timeout=10,
+        )
+        observed = json.loads(result.stdout)
+        self.assertEqual(observed["pending_input"], "q")
+        self.assertEqual(observed["events"], [
+            ["line", "b''"],
+            ["exit", ["probe", 7]],
+        ])
 
 
 if __name__ == "__main__":
