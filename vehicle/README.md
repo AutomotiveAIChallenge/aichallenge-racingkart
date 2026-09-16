@@ -53,6 +53,8 @@ Zenoh の直接確認はコンテナ稼働までです。接続先への TCP 疎
 
 右上の運営 TUI は `check preflight`（新規起動時に自動実行）→ `driver` → `zenoh` →
 `check driver / zenoh` の順で準備・確認します。既存の停止操作・rosbag 操作・down all はその下に残ります。
+運営 TUI は `~/aichallenge-racingkart` から起動し、共通の driver・zenoh 設定を使います。
+参加者 TUI と監視用シェルは、対象チームの `~/team-xxxx` から起動します。
 左上の参加者 TUI は `Update the accel/brake maps and IMU bias` → `autoware-vehicle`
 → `check autoware` → `autoware-vehicle down` の順です。運営側の確認完了後に参加者側へ進みます。
 チェック結果は各 TUI 内で保持し、起動・停止操作で対象サービスの古いチェック結果を未確認へ戻します。

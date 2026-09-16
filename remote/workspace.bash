@@ -74,12 +74,12 @@ staff)
     hint "[ssh 3/3] 運営 TUI  ${TARGET}" \
         "  ${CONNECT}" \
         "  接続後、車両側で:" \
-        "    cd ~/team-xxxx    # 使用するチームのディレクトリを指定" \
+        "    cd ~/aichallenge-racingkart" \
         "    make vehicle-tui-staff" \
         "  (↑ キーで SSH コマンドが出る)"
     exec_bash_with_history \
         "make vehicle-tui-staff" \
-        "cd ~/team-xxxx" \
+        "cd ~/aichallenge-racingkart" \
         "./remote/connect_ssh.bash"
     ;;
 gui)
