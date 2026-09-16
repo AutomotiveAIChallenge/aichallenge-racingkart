@@ -323,7 +323,17 @@ Python 3 標準ライブラリのみを使う（`curses` / `subprocess` / `threa
 再接続して同じターゲットを叩けば同じセッションへアタッチする。セッションを役割で分けるのは、
 参加者の画面が残った tmux に運営が `-A` で入っても運営のステップが出ないためである。
 
-参加者は `ssh` の後に `make vehicle-tui`、運営は `make vehicle-tui-staff` を実行する。
+接続・起動は次の 3 手順で案内する。`team-xxxx` は使用するチームのディレクトリ名に置き換える。
+
+```bash
+./remote/connect_ssh.bash
+# 接続後、車両側で:
+cd ~/team-xxxx    # 使用するチームのディレクトリを指定
+make vehicle-tui
+```
+
+運営は最後に `make vehicle-tui-staff`、監視用は `make autoware-bash` を実行する。
+`remote/workspace.bash` の各 SSH ペインにも同じ手順を表示する。
 遠隔側 GUI からワンクリックで端末を開く導線は
 `aichallenge-racingkart-remote` 側の追加になるため、本 spec の対象外とする。
 
