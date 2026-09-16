@@ -8,15 +8,19 @@
 ## 自動チェックスクリプト
 
 チェックは **起動前（preflight）** と **起動後（runtime）** の2フェーズに分かれています。
+IMU 校正は独立した `calibrate` フェーズで、提出物の展開後・ビルド前に実行します。
 
 ```bash
 # 起動前チェックのみ（driver/autoware を起動する前に実行）
 ./setup_check.sh --phase preflight
 
+# IMU 校正（driver 起動済み・Autoware 停止中、提出物のビルド前）
+./setup_check.sh --phase calibrate
+
 # 起動後チェックのみ（スタックが起動している状態で実行）
 ./setup_check.sh --phase runtime
 
-# 全チェック（既定。runtime を含むためスタック起動中に実行する）
+# 全チェック（既定。スタック起動中に実行。校正・設定変更は含まない）
 ./setup_check.sh
 
 # ログファイル出力付き実行
@@ -30,7 +34,8 @@
 
 | ターゲット | フェーズ |
 | --- | --- |
-| `make autoware-driver-zenoh-rosbag` | 起動前に `--phase preflight`、起動後に `--phase runtime` |
+| `make autoware-driver-zenoh-rosbag` | 起動前に `--phase preflight`（runtime は別途実行） |
+| `make calibrate-imu` | `--phase calibrate`（展開後・ビルド前、driver 起動済み・Autoware 停止中） |
 | `make setup-vehicle` | `--phase all`（runtime を含むため **スタック起動中** に実行する） |
 
 preflight が fail すると exit code が非0になり、`docker compose up` に進まず中断します。
@@ -228,6 +233,7 @@ docker compose -f ../docker-compose.yml exec -T driver bash -lc \
 | --- | --- |
 | `driver` | `/racing_kart/vcu/status`, `/racing_kart/steer/status`, `/racing_kart/brake/status`, `/racing_kart/sd/joy` |
 | `driver` | `/racing_kart/vcu/command`, `/racing_kart/steer/command`, `/racing_kart/brake/command` |
+| `driver` | `/sensing/imu/imu_raw`（受信確認のみ。バイアス設定は変更しない） |
 | `autoware` | `/vehicle/status/velocity_status`, `/vehicle/status/steering_status`, `/vehicle/status/gear_status`, `/vehicle/status/actuation_status` |
 | `autoware` | `/control/command/control_cmd`, `/control/command/actuation_cmd` |
 
@@ -239,14 +245,16 @@ docker compose -f ../docker-compose.yml exec -T driver bash -lc \
 
 ---
 
-### runtime: 5. IMUジャイロバイアス計測
+### calibrate: 1. IMUジャイロバイアス計測（起動前の独立ステップ）
 
-autoware 起動後に **車両が静止している状態の** ジャイロバイアスを推定し、静止時ノイズが
+Autoware 起動前に **車両が静止している状態の** ジャイロバイアスを推定し、静止時ノイズが
 十分小さければ現在値・実測値・差分（実測値 − 現在値）を表示し、参加者の承認を確認します。
 `[y/N]` に明示的に `y` と答えた場合だけ `imu_corrector.param.yaml` の
-`angular_velocity_offset_*` を実測値で上書きします。拒否・空回答・入力終了では保持します。imu_corrector は
-パラメータを起動時に一度だけ読むため、**書き換えても今動いている autoware には反映されません。
-次回 autoware を再起動したときから新しい値が使われます。**
+`angular_velocity_offset_*` を実測値で上書きします。拒否・空回答・入力終了では保持します。
+**driver 起動済み・Autoware 停止中が前提です。更新後にビルド・起動して反映します。**
+前提未達やサービス状態の取得失敗では更新しません。承認直後にもサービス状態を再確認します。
+計測には driver と同じイメージの `imu-calibration` 一時コンテナを使うため、提出物のビルドは不要です。
+`runtime` / `all` からは実行されません。
 
 承認したバイアスは `vehicle/.calibration/<VEHICLE_ID>/imu_bias.yaml` にも保存します。
 次の提出物へ自動適用はしません。ID は環境変数 → リポジトリ直下の `.env` →
@@ -256,13 +264,11 @@ autoware 起動後に **車両が静止している状態の** ジャイロバ�
 配置・適用手順は [車両別校正値](calibration.md) を参照してください。
 
 ```bash
-# runtime フェーズの一部として実行される
-./setup_check.sh --phase runtime
+# vehicle/ ディレクトリから実行
+./setup_check.sh --phase calibrate
 
-# 単体実行（コンテナ内）
-docker compose exec autoware bash -lc \
-  "source /opt/ros/humble/setup.bash; source /aichallenge/workspace/install/setup.bash; \
-   python3 /vehicle/check_imu_bias.py"
+# リポジトリルートから同じ処理を実行
+make calibrate-imu
 ```
 
 計測前に静止確認の `y/N` プロンプトが出ます（y=計測開始、それ以外=skip）。
@@ -293,21 +299,20 @@ x     +0.000329  0.002042  OK
 y     -0.000762  0.002062  OK
 z     +0.001286  0.002076  OK
 
-Updated /aichallenge/workspace/src/aichallenge_submit/imu_corrector/config/imu_corrector.param.yaml:
-axis    old[rad/s]    new[rad/s]
---------------------------------
-x     +0.000000  +0.000329
-y     +0.000000  -0.000762
-z     -0.000000  +0.001286
+IMUジャイロバイアス [rad/s]: /aichallenge/workspace/src/aichallenge_submit/imu_corrector/config/imu_corrector.param.yaml
+軸             現在値           実測値      差分(実測値−現在値)
+x     +0.000000  +0.000329  +0.000329
+y     +0.000000  -0.000762  -0.000762
+z     +0.000000  +0.001286  +0.001286
 
-✅ imu_corrector.param.yaml updated.
-   This bias will not take effect until autoware is restarted
-   (imu_corrector reads the parameter once at startup).
+実測値で上書きしますか？ 参加者の承認を確認してください。 [y/N]: y
+✅ imu_corrector.param.yaml updated (participant approved).
+Build and start autoware to use the new offsets (restart if already running).
 ```
 
 `imu_corrector` は `output = raw - angular_velocity_offset` で補正するため、
 **測定値を符号そのまま** param.yaml に書きます（+ にずれていれば + を書く）。乖離の大小は
-判定せず常に上書きします。書き換え後は autoware を再起動しないと反映されません。
+自動更新の条件にはせず、参加者の承認後だけ上書きします。その後のビルド・起動で反映します。
 
 **静止時ノイズが大きい場合（書き込まない / 終了コード 4、再計測確認へ）:**
 
@@ -437,6 +442,7 @@ Time: 2025年  8月 25日 月曜日 23:10:02 JST
 ✅ VCU status: /racing_kart/vcu/status
 ✅ Steer status: /racing_kart/steer/status
 ...
+✅ Raw IMU: /sensing/imu/imu_raw
 ℹ️ Autoware downstream control command topics
 ✅ Control command: /control/command/control_cmd
 ✅ Actuation command: /control/command/actuation_cmd
@@ -444,8 +450,8 @@ Time: 2025年  8月 25日 月曜日 23:10:02 JST
 ========================================
 📊 Check Results Summary
 ========================================
-Total checks: 18
-✅ Passed: 18
+Total checks: 19
+✅ Passed: 19
 ⚠️ Warnings: 0
 ❌ Failed: 0
 

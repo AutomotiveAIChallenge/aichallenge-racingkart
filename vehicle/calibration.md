@@ -1,8 +1,15 @@
 # 参加者の承認による map・IMU バイアス更新
 
 提出物の設定は、参加者の承認を確認した場合だけ更新します。
-map は提出物の展開時、IMU バイアスは Autoware 起動後の runtime 静止計測時に確認します。
+map は提出物の展開時、IMU バイアスは展開後・ビルド前の `calibrate IMU` で確認します。
 拒否・空回答・入力終了では参加者の設定を保持します。
+
+運営が `driver` / `zenoh` を起動した状態で、参加者は次の順に進めます。
+
+`check preflight` → `extract`（map 更新）→ `calibrate IMU` → `build` → `autoware-vehicle` → `check runtime`
+
+前の Autoware が起動中なら、提出物を入れ替える前に `autoware-vehicle down` で停止します。
+`check runtime` と `setup_check.sh --phase all` は確認だけを行い、IMU 設定を更新しません。
 
 ## 提出物の展開と map の確認
 
@@ -44,12 +51,15 @@ make submission-extract SUBMISSION_ID=<id>
 展開時に IMU 設定は変更せず、車両別保存元のバイアスも自動適用しません。
 展開には `VEHICLE_ID` や車両別の `imu_bias.yaml` は不要です。
 
-## runtime の IMU 計測と更新確認
+## 起動前の IMU 計測と更新確認
 
 ```bash
-vehicle/setup_check.sh --phase runtime
+make calibrate-imu
+# 同じ処理: vehicle/setup_check.sh --phase calibrate
 ```
 
+`driver` 起動済み・`autoware` 停止中が前提です。前提を満たさない場合やサービス状態を
+取得できない場合は失敗し、設定を変更しません。承認後の書き込み直前にも再確認します。
 車両が完全に静止していることを確認してから IMU の角速度を計測します。
 移動・サンプル不足では計測失敗とし、ノイズ超過では従来どおり再計測するか確認します。
 これらの場合、更新の承認確認は出さず、提出設定と保存元を保持します。
@@ -72,7 +82,7 @@ z    +0.001000   +0.003000   +0.002000
 拒否・空回答・入力終了では「更新見送り」を記録し、提出設定と車両別保存元を保持します。
 独自補正などで対象設定や対応する 3 軸オフセットがない場合は、警告して更新をスキップします。
 
-runtime は測定結果を `vehicle/` 内の一時ファイルに保存し、ホスト側で承認を確認してから
+校正ステップは測定結果を `vehicle/` 内の一時ファイルに保存し、ホスト側で承認を確認してから
 同じ測定結果を適用します。一時ファイルは処理後に削除します。計測後に参加者の設定が
 変更された場合は更新を拒否し、再計測を求めます。
 
@@ -80,7 +90,13 @@ runtime は測定結果を `vehicle/` 内の一時ファイルに保存し、ホ
 内部用の `--proposal-output` は設定を変更せず、`--apply-proposal` は承認後の適用用です。
 `--bias-output <path>` を指定した場合だけ、承認後に車両別保存元にも記録します。
 
-**更新した IMU バイアスの反映には Autoware の再起動が必要です。**
+計測と適用には `imu-calibration` の一時コンテナを使います。driver と同じイメージに
+同梱された ROS 環境を使い、提出物の `install/` や Autoware の起動には依存しません。
+`driver` が配信する `/sensing/imu/imu_raw` と `/vehicle/status/velocity_status` を購読し、
+driver・センサ・Autoware を追加起動しません。ホストの UID/GID で設定を書き込みます。
+
+**更新後にビルドして Autoware を起動すると、最初から新しいバイアスが使われます。**
+更新し直す場合は Autoware を停止してから同じ手順を辿ります。
 
 ## 車両別 IMU バイアスの保存
 

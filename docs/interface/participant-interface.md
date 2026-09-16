@@ -75,9 +75,10 @@ aichallenge_submit.launch.xml
 
 実車の `make submission-extract` は、提出物の accel/brake map を AWSIM adapter の
 共通 map で上書きしてよいか参加者の承認を確認します。拒否した場合は提出物の値を保持します。
-IMU バイアスは展開時には変更せず、runtime の静止計測後に現在値・実測値・差分を示して
+IMU バイアスは展開時には変更せず、ビルド前の `make calibrate-imu` で静止計測し、現在値・実測値・差分を示して
 承認後だけ更新します。独自補正などで対象ファイルがない場合は警告してその項目をスキップします。
-更新した IMU バイアスの反映には Autoware の再起動が必要です。
+校正は driver 起動済み・Autoware 停止中に行い、その後のビルド・起動で反映します。
+起動後の `check runtime` では設定を更新しません。
 詳細は [車両別校正値と提出物の展開](../../vehicle/calibration.md) を参照してください。
 
 ---

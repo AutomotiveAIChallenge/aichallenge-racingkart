@@ -119,6 +119,10 @@ setup-vehicle:
 	@echo "Run vehicle setup check"
 	@cd vehicle && ./setup_check.sh
 
+.PHONY: calibrate-imu
+calibrate-imu:
+	@cd vehicle && ./setup_check.sh --phase calibrate
+
 # driver + autoware + all-topic rosbag + zenoh
 autoware-driver-zenoh-rosbag:
 	@echo "Run vehicle setup preflight check"
@@ -179,7 +183,7 @@ download:
 
 # 事前に置いた vehicle/.submissions/<id>.zip（パスワード付き）で src/aichallenge_submit/ を入れ替える。
 # ID とパスワードは対話で聞く（SUBMISSION_ID で ID を先渡し可）。
-# 展開後に参加者の承認を確認して AWSIM adapter の共通 map を適用する。IMU は runtime で別途確認する。
+# 展開後に参加者の承認を確認して AWSIM adapter の共通 map を適用する。IMU は build 前の calibrate-imu で確認する。
 submission-extract:
 	vehicle/extract_submission.py $(if $(SUBMISSION_ID),--id $(SUBMISSION_ID))
 

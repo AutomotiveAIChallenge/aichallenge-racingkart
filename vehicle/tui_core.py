@@ -20,6 +20,7 @@ FAILED = "failed"
 # --- ステップ ID -----------------------------------------------------------
 STEP_PREFLIGHT = "preflight"
 STEP_SUBMISSION = "submission"
+STEP_CALIBRATE_IMU = "calibrate_imu"
 STEP_BUILD = "build"
 STEP_UP = "up"
 STEP_RUNTIME = "runtime"
@@ -149,10 +150,18 @@ PARTICIPANT_STEPS = (
         # パッケージが入っており常に非空。ディレクトリの有無は入れ替えの証拠にならない。
     ),
     Step(
+        step_id=STEP_CALIBRATE_IMU,
+        title="calibrate IMU",
+        command=("make", "calibrate-imu"),
+        requires=(STEP_SUBMISSION,),
+        # 静止と参加者の承認をホスト端末で確認する。
+        interactive=True,
+    ),
+    Step(
         step_id=STEP_BUILD,
         title="build",
         command=("make", "autoware-build"),
-        requires=(STEP_SUBMISSION,),
+        requires=(STEP_CALIBRATE_IMU,),
         measure=build_done,
     ),
     Step(
@@ -168,10 +177,6 @@ PARTICIPANT_STEPS = (
         command=("./setup_check.sh", "--phase", "runtime"),
         cwd="vehicle",
         requires=(STEP_UP,),
-        # check_imu_bias() が停止確認の y/N プロンプトを出す。端末を明け渡さないと
-        # curses の getch() とプロンプトの read が同じ tty を取り合い、
-        # 操作者に見えないまま応答不能でハングする。
-        interactive=True,
     ),
     Step(
         step_id=STEP_AUTOWARE_DOWN,

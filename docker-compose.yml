@@ -62,7 +62,7 @@ x-autoware-rosbag-base: &autoware-rosbag-base
     - ${XAUTHORITY:-/dev/null}:${XAUTHORITY:-/dev/null}:rw
 
 x-racing_kart_interface-base: &racing_kart_interface-base
-  image: "ghcr.io/tier4/racing_kart_interface:latest-experiment"
+  image: &racing-kart-interface-image "ghcr.io/tier4/racing_kart_interface:latest-experiment"
   privileged: true
   pull_policy: never
   network_mode: host
@@ -109,6 +109,25 @@ x-racing_kart_interface-base: &racing_kart_interface-base
   working_dir: /workspace
 
 services:
+  # One-shot subscriber using the driver's built-in ROS workspace. No submission
+  # build, vehicle entrypoint, hardware devices or running Autoware are needed.
+  imu-calibration:
+    image: *racing-kart-interface-image
+    profiles: ["calibration"]
+    pull_policy: never
+    network_mode: host
+    user: "${HOST_UID:-1000}:${HOST_GID:-1000}"
+    environment:
+      HOME: /tmp
+      ROS_DOMAIN_ID: "${ROS_DOMAIN_ID:-1}"
+      PYTHONDONTWRITEBYTECODE: "1"
+    volumes:
+      - ./vehicle:/vehicle
+      - ./aichallenge/workspace/src/aichallenge_submit:/aichallenge/workspace/src/aichallenge_submit
+      - ./vehicle/cyclonedds.xml:/opt/autoware/cyclonedds.xml:ro
+    entrypoint: ["bash", "/vehicle/run_imu_calibration.bash"]
+    command: ["--help"]
+
   # Autoware service
   autoware:
     <<: *autoware-base
