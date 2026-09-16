@@ -185,13 +185,15 @@ submission-extract:
 	vehicle/extract_submission.py $(if $(SUBMISSION_ID),--id $(SUBMISSION_ID))
 
 # 車両 PC 上の操作コンソール。tmux 常駐なので ssh が切れても作業が残り、
-# 再接続して同じターゲットを叩けば -A で同じセッションへアタッチする。
-# 参加者用（チェック、map・IMU バイアスの適用、autoware の起動・停止）。
+# 同じチームディレクトリから再接続すれば -A で同じセッションへアタッチする。
+# チームを切り替えたときに前チームの TUI を再利用しないよう、セッション名には
+# 起動したリポジトリのディレクトリ名を含める。
 vehicle-tui:
-	tmux new -A -s aic-vehicle "vehicle/tui.py"
+	@session_name="aic-vehicle-$(notdir $(CURDIR))"; \
+	tmux new -A -s "$$session_name" "vehicle/tui.py"
 
 # 運営用。driver / zenoh / rosbag の起動・停止、down all を出す。tmux セッションを分けるので
-# 参加者の aic-vehicle セッションが残っていても運営側の画面になる。
+# 参加者のチーム別セッションが残っていても運営側の画面になる。
 vehicle-tui-staff:
 	tmux new -A -s aic-vehicle-staff "vehicle/tui.py --role staff"
 
