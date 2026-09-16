@@ -37,6 +37,12 @@ class CalibrationTest(unittest.TestCase):
         self.root = Path(self.temp.name)
         self.calibration = self.root / "calibration" / "A2"
         self.calibration.mkdir(parents=True)
+        bias_patch = patch("calibration.DEFAULT_BIAS_DIR", self.calibration.parent)
+        bias_patch.start()
+        self.addCleanup(bias_patch.stop)
+        id_patch = patch("extract_submission.detect_vehicle_id", return_value="A2")
+        self.vehicle_id = id_patch.start()
+        self.addCleanup(id_patch.stop)
         self.maps = self.root / "awsim_adapter" / "data"
         self.maps.mkdir(parents=True)
         for name in ("accel_map.csv", "brake_map.csv"):
@@ -60,8 +66,8 @@ class CalibrationTest(unittest.TestCase):
             script.external_attr = 0o100755 << 16
             archive.writestr(script, "#!/bin/sh\n")
 
-    def run_extract(self, archive=None, password="password", answer="y"):
-        with patch("builtins.input", return_value=answer), \
+    def run_extract(self, archive=None, password="password", answer="y", imu_answer="n"):
+        with patch("builtins.input", side_effect=[answer, imu_answer]), \
                 contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
             return extract(archive or self.archive, password, self.output)
 
@@ -134,17 +140,99 @@ class CalibrationTest(unittest.TestCase):
         self.assertEqual((self.target / MAP_DIR / "accel_map.csv").read_bytes(), MAP.encode())
         self.assertFalse((self.target / MAP_DIR / "brake_map.csv").exists())
 
-    def test_cli_extract_does_not_require_vehicle_id_or_saved_imu_bias(self):
+    def test_cli_can_decline_imu_without_vehicle_id_or_saved_bias(self):
         argv = ["extract_submission.py", "--id", "submission", "--zip-dir", str(self.root),
                 "--output", str(self.output)]
         for env in ("", "A4", "A0"):
+            self.vehicle_id.return_value = env
             with self.subTest(env=env), patch.dict(os.environ, {"VEHICLE_ID": env}), \
                     patch.object(sys, "argv", argv), \
-                    patch("builtins.input", return_value="y"), \
+                    patch("builtins.input", side_effect=["y", "n"]), \
                     patch("extract_submission.getpass.getpass", return_value="password"), \
                     contextlib.redirect_stdout(io.StringIO()):
                 self.assertEqual(main(), 0)
                 self.assertEqual((self.target / IMU_PARAM).read_text(), PARAM)
+
+    def test_approved_maps_and_saved_bias_are_applied_together_before_replacement(self):
+        saved_before = (self.calibration / "imu_bias.yaml").read_bytes()
+        self.assertEqual(self.run_extract(imu_answer="y"), 0)
+        for name in ("accel_map.csv", "brake_map.csv"):
+            self.assertEqual((self.target / MAP_DIR / name).read_text(), MAP)
+        text = (self.target / IMU_PARAM).read_text()
+        self.assertEqual(parse_offsets(text), OFFSETS)
+        self.assertIn("# x comment", text)
+        self.assertIn("angular_velocity_stddev_xx: 0.123 # participant setting", text)
+        self.assertEqual((self.calibration / "imu_bias.yaml").read_bytes(), saved_before)
+        self.assertEqual((self.target / "run.sh").stat().st_mode & 0o777, 0o755)
+
+    def test_imu_approval_is_independent_of_map_approval(self):
+        self.assertEqual(self.run_extract(answer="n", imu_answer="y"), 0)
+        self.assertEqual((self.target / MAP_DIR / "accel_map.csv").read_text(), "participant map")
+        self.assertEqual(parse_offsets((self.target / IMU_PARAM).read_text()), OFFSETS)
+
+    def test_imu_decline_empty_answer_or_eof_keeps_offsets(self):
+        for answer in ("n", "", EOFError()):
+            with self.subTest(answer=answer):
+                self.assertEqual(self.run_extract(imu_answer=answer), 0)
+                self.assertEqual((self.target / IMU_PARAM).read_text(), PARAM)
+
+    def test_missing_invalid_or_nonfinite_saved_bias_preserves_previous_submission(self):
+        source = self.calibration / "imu_bias.yaml"
+        for content in (None, "angular_velocity_offset_x: 1\n", "invalid",
+                        "angular_velocity_offset_x: 1e999\nangular_velocity_offset_y: 0\nangular_velocity_offset_z: 0\n"):
+            with self.subTest(content=content):
+                source.unlink(missing_ok=True)
+                if content is not None:
+                    source.write_text(content)
+                self.assertEqual(self.run_extract(imu_answer="y"), 1)
+                self.assert_existing_untouched()
+
+    def test_missing_or_unsafe_vehicle_id_never_uses_another_profile(self):
+        for vid in ("", "A9", "../A2", "/A2"):
+            with self.subTest(vehicle_id=vid):
+                self.vehicle_id.return_value = vid
+                self.assertEqual(self.run_extract(imu_answer="y"), 1)
+                self.assert_existing_untouched()
+
+    def test_uses_selected_vehicle_profile(self):
+        self.vehicle_id.return_value = "A4"
+        offsets = {"x": -.01, "y": .02, "z": -.03}
+        save_bias(self.calibration.parent / "A4/imu_bias.yaml", offsets)
+        self.assertEqual(self.run_extract(imu_answer="y"), 0)
+        self.assertEqual(parse_offsets((self.target / IMU_PARAM).read_text()), offsets)
+
+    def test_imu_write_failure_after_staging_maps_keeps_previous_submission(self):
+        def write(path, text):
+            if path.name == IMU_PARAM.name:
+                raise OSError("IMU write failed after maps were staged")
+            atomic_write(path, text)
+        with patch("calibration.atomic_write", side_effect=write):
+            self.assertEqual(self.run_extract(imu_answer="y"), 1)
+        self.assert_existing_untouched()
+
+    def test_current_saved_and_difference_are_shown_before_imu_approval(self):
+        output = io.StringIO()
+        def answer(prompt):
+            if "IMU" in prompt:
+                self.assertIn("保存値", output.getvalue())
+                self.assertIn("z  +0.001000  +0.003000  +0.002000", output.getvalue())
+                return "n"
+            return "y"
+        with patch("builtins.input", side_effect=answer), contextlib.redirect_stdout(output):
+            self.assertEqual(extract(self.archive, "password", self.output), 0)
+
+    def test_readonly_imu_settings_preserve_permissions_when_applied(self):
+        with zipfile.ZipFile(self.archive) as archive:
+            entries = [(entry, archive.read(entry)) for entry in archive.infolist()]
+        with zipfile.ZipFile(self.archive, "w") as archive:
+            for entry, data in entries:
+                if entry.filename.endswith(str(IMU_PARAM)):
+                    entry.external_attr = 0o100444 << 16
+                archive.writestr(entry, data)
+        self.assertEqual(self.run_extract(imu_answer="y"), 0)
+        param = self.target / IMU_PARAM
+        self.assertEqual(parse_offsets(param.read_text()), OFFSETS)
+        self.assertEqual(param.stat().st_mode & 0o777, 0o444)
 
     def test_approved_readonly_maps_are_replaced_preserving_mode(self):
         with zipfile.ZipFile(self.archive) as archive:

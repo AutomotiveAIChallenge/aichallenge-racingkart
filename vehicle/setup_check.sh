@@ -30,11 +30,6 @@ CAN_MIN_FRAMES="${CAN_MIN_FRAMES:-100}"
 GNSS_NAVPVT_TIMEOUT_SEC="${GNSS_NAVPVT_TIMEOUT_SEC:-8}"
 ROS_TOPIC_TIMEOUT_SEC="${ROS_TOPIC_TIMEOUT_SEC:-4}"
 ROS_TOPIC_RETRY="${ROS_TOPIC_RETRY:-2}"
-IMU_BIAS_DURATION_SEC="${IMU_BIAS_DURATION_SEC:-5}"
-IMU_BIAS_WARMUP_SEC="${IMU_BIAS_WARMUP_SEC:-2}"
-# 暫定値（imu_corrector.param.yaml の想定ノイズ既定値に合わせている）。実測を踏まえて後で絞り込む。
-IMU_BIAS_STD_THRESHOLD="${IMU_BIAS_STD_THRESHOLD:-0.03}"
-IMU_BIAS_VELOCITY_THRESHOLD="${IMU_BIAS_VELOCITY_THRESHOLD:-0.05}"
 TOTAL_CHECKS=0
 PASSED_CHECKS=0
 FAILED_CHECKS=0
@@ -89,16 +84,6 @@ ENVIRONMENT:
                    seconds to wait for each runtime ROS topic [default: 4]
   ROS_TOPIC_RETRY  attempts per runtime ROS topic before reporting a failure
                    [default: 2]
-  IMU_BIAS_DURATION_SEC
-                   IMU gyro bias sampling seconds [default: 5]
-  IMU_BIAS_WARMUP_SEC
-                   seconds discarded before sampling (IMU warmup) [default: 2]
-  IMU_BIAS_STD_THRESHOLD
-                   warn if stationary gyro stddev exceeds this [rad/s, default: 0.03
-                   (provisional, matches imu_corrector's assumed noise; to be
-                   tightened after real measurements)]
-  IMU_BIAS_VELOCITY_THRESHOLD
-                   treat as moving if |velocity| exceeds this [m/s, default: 0.05]
 
 MODE:
   vehicle         Real vehicle mode (CAN + VCU required) [default]
@@ -342,36 +327,6 @@ check_can_traffic() {
         log "   Check: motor/controller power, VCU state, CAN wiring, termination, and bitrate."
         record_result "fail"
     fi
-}
-
-read_env_value() {
-    local key=$1
-    local env_file="${REPO_ROOT}/.env"
-
-    [ -f "${env_file}" ] || return 0
-    # 先頭の空白と `export ` を落として `KEY=value` に正規化してから読む
-    sed -E 's/^[[:space:]]*(export[[:space:]]+)?//' "${env_file}" |
-        awk -F= -v key="${key}" '
-            $1 == key {
-                value = substr($0, length(key) + 2)
-                gsub(/^["'\'']|["'\'']$/, "", value)
-                print value
-            }
-        ' | tail -1
-}
-
-detect_vehicle_id() {
-    local vehicle_id="${VEHICLE_ID-}"
-
-    if [ -z "${vehicle_id}" ]; then
-        vehicle_id="$(read_env_value VEHICLE_ID)"
-    fi
-
-    if [ -z "${vehicle_id}" ]; then
-        vehicle_id="$(vehicle_id_for_hostname "$(hostname)" || true)"
-    fi
-
-    printf '%s\n' "${vehicle_id}"
 }
 
 # ヘッダー表示
@@ -686,6 +641,9 @@ check_gnss_rtk_status() {
 check_runtime_ros_topics() {
     print_section "Runtime ROS Topic Output Check"
 
+    log "${INFO} Raw IMU topic"
+    check_ros_topic_once "driver" "/sensing/imu/imu_raw" "Raw IMU"
+
     log "${INFO} Racing kart hardware/status topics"
     check_ros_topic_once "driver" "/racing_kart/vcu/status" "VCU status"
     check_ros_topic_once "driver" "/racing_kart/steer/status" "Steer status"
@@ -706,137 +664,6 @@ check_runtime_ros_topics() {
     log "${INFO} Autoware downstream control command topics"
     check_ros_topic_once "autoware" "/control/command/control_cmd" "Control command"
     check_ros_topic_once "autoware" "/control/command/actuation_cmd" "Actuation command"
-
-    log ""
-}
-
-# IMUジャイロバイアス計測 (runtime)
-check_imu_bias() {
-    print_section "IMU Gyro Bias Check (stationary)"
-
-    local calibration_vehicle_id
-    calibration_vehicle_id="$(detect_vehicle_id)"
-    local bias_output_arg=""
-    if zenoh_endpoint_for_vehicle_id "${calibration_vehicle_id}" >/dev/null; then
-        bias_output_arg="--bias-output '/vehicle/.calibration/${calibration_vehicle_id}/imu_bias.yaml'"
-    else
-        log "${WARN} VEHICLE_ID is missing or unknown; measuring IMU without vehicle bias storage"
-    fi
-
-    if ! is_compose_service_running "autoware"; then
-        log "${FAIL} IMU bias check: autoware service is not running"
-        record_result "fail"
-        log ""
-        return 0
-    fi
-
-    # 静止確認。走行中に測ると誤ったバイアスを黙って書き込むので y/N で明示確認する。
-    # タイムアウトは付けず回答があるまで待つ。
-    local answer=""
-    read -r -p "$(echo -e "${WARN} Vehicle must be COMPLETELY stationary for IMU bias check. Proceed? [y/N]: ")" answer
-
-    case "${answer}" in
-    y | Y | yes | YES) ;;
-    *)
-        log "${WARN} IMU bias check skipped (vehicle not confirmed stationary)"
-        record_result "warn"
-        log ""
-        return 0
-        ;;
-    esac
-
-    local setup_cmd
-    if ! setup_cmd="$(ros_setup_command_for_service autoware)"; then
-        log "${FAIL} IMU bias check: unknown compose service 'autoware'"
-        record_result "fail"
-        log ""
-        return 0
-    fi
-
-    # check_imu_bias.py は ./vehicle:/vehicle マウント経由でコンテナから見える。
-    # rc=4（静止時ノイズ過大）は python 側では自動リトライせず、ここで毎回確認して再実行する。
-    local output
-    local rc
-    local attempt=1
-    local proposal_file
-    if ! proposal_file="$(mktemp "${SCRIPT_DIR}/.imu-bias-XXXXXX.json")"; then
-        log "${FAIL} Could not create temporary IMU proposal"
-        record_result "fail"
-        return 0
-    fi
-    local proposal_path="/vehicle/${proposal_file##*/}"
-    output="$(docker compose -f "${REPO_ROOT}/docker-compose.yml" exec -T autoware bash -lc "
-        ${setup_cmd}
-        python3 /vehicle/check_imu_bias.py \
-            --duration '${IMU_BIAS_DURATION_SEC}' \
-            --warmup '${IMU_BIAS_WARMUP_SEC}' \
-            --velocity-threshold '${IMU_BIAS_VELOCITY_THRESHOLD}' \
-            --std-threshold '${IMU_BIAS_STD_THRESHOLD}' \
-            --proposal-output '${proposal_path}'
-    " 2>&1)"
-    rc=$?
-    log "${output}"
-
-    while [ "${rc}" = "4" ]; do
-        local retry_answer=""
-        read -r -p "$(echo -e "${WARN} Do not touch the vehicle. Re-measure? [y/N] (attempt $((attempt + 1))): ")" retry_answer
-
-        case "${retry_answer}" in
-        y | Y | yes | YES) ;;
-        *) break ;;
-        esac
-
-        attempt=$((attempt + 1))
-        output="$(docker compose -f "${REPO_ROOT}/docker-compose.yml" exec -T autoware bash -lc "
-            ${setup_cmd}
-            python3 /vehicle/check_imu_bias.py \
-                --duration '${IMU_BIAS_DURATION_SEC}' \
-                --warmup '${IMU_BIAS_WARMUP_SEC}' \
-                --velocity-threshold '${IMU_BIAS_VELOCITY_THRESHOLD}' \
-                --std-threshold '${IMU_BIAS_STD_THRESHOLD}' \
-                --proposal-output '${proposal_path}'
-        " 2>&1)"
-        rc=$?
-        log "${output}"
-    done
-
-    if [ "${rc}" = "0" ]; then
-        local update_answer=""
-        read -r -p "実測値で上書きしますか？ 参加者の承認を確認してください。 [y/N]: " update_answer
-        case "${update_answer}" in
-        y | Y | yes | YES)
-            output="$(docker compose -f "${REPO_ROOT}/docker-compose.yml" exec -T autoware bash -lc "
-                ${setup_cmd}
-                python3 /vehicle/check_imu_bias.py \
-                    --apply-proposal '${proposal_path}' \
-                    ${bias_output_arg}
-            " 2>&1)"
-            rc=$?
-            log "${output}"
-            ;;
-        *) rc=5 ;;
-        esac
-    fi
-    rm -f "${proposal_file}"
-
-    case "${rc}" in
-    0)
-        log "${OK} Participant-approved IMU bias applied (restart autoware to apply; see above for vehicle storage)"
-        record_result "pass"
-        ;;
-    4)
-        log "${WARN} IMU gyro bias check: gave up on noisy measurement (see above; not written)"
-        record_result "warn"
-        ;;
-    5)
-        log "${WARN} IMU update skipped; participant settings and saved bias retained"
-        record_result "warn"
-        ;;
-    *)
-        log "${FAIL} IMU gyro bias check failed (rc=${rc}; see above for measurement/write status)"
-        record_result "fail"
-        ;;
-    esac
 
     log ""
 }
@@ -917,7 +744,6 @@ main() {
         check_runtime_docker_services
         check_gnss_rtk_status
         check_runtime_ros_topics
-        check_imu_bias
         ;;
     all)
         check_hardware
@@ -927,7 +753,6 @@ main() {
         check_runtime_docker_services
         check_gnss_rtk_status
         check_runtime_ros_topics
-        check_imu_bias
         check_known_issues
         check_execution_readiness
         ;;

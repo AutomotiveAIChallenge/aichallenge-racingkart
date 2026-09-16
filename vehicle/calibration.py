@@ -5,12 +5,14 @@ import csv
 import math
 import os
 import re
+import subprocess
 import tempfile
 from pathlib import Path
 
 AXES = ("x", "y", "z")
 MAP_DIR = Path("aichallenge_submit_launch/data")
 IMU_PARAM = Path("imu_corrector/config/imu_corrector.param.yaml")
+DEFAULT_BIAS_DIR = Path(__file__).resolve().parent / ".calibration"
 DEFAULT_MAP_DIR = (
     Path(__file__).resolve().parent.parent
     / "aichallenge/workspace/src/aichallenge_system/aichallenge_awsim_adapter/data"
@@ -116,9 +118,70 @@ def apply_maps(submit: Path, names: list[str]) -> None:
         atomic_write(submit / MAP_DIR / name, data.decode("utf-8"))
 
 
+def detect_vehicle_id(repo_root: Path) -> str:
+    """Use the same environment/.env/hostname resolution as setup_check.sh."""
+    result = subprocess.run(
+        ["bash", "-c", 'REPO_ROOT=$1; source "$2"; detect_vehicle_id', "bash",
+         str(repo_root), str(Path(__file__).resolve().parent / "vehicle_ports.sh")],
+        check=True, capture_output=True, text=True,
+    )
+    return result.stdout.strip()
+
+
+def read_saved_bias(vehicle_id: str) -> dict[str, float]:
+    """Read this vehicle's stored offsets; never fall back to zero or another kart."""
+    if not re.fullmatch(r"[A-Za-z0-9_-]+", vehicle_id):
+        raise ValueError("set a valid VEHICLE_ID before applying saved IMU bias")
+    return parse_offsets(
+        (DEFAULT_BIAS_DIR / vehicle_id / "imu_bias.yaml").read_text(encoding="utf-8"), flat=True
+    )
+
+
 def confirm_update(prompt: str) -> bool:
     """Only an explicit yes authorizes an update; EOF also retains current settings."""
     try:
         return input(prompt).strip().lower() in ("y", "yes")
     except EOFError:
         return False
+
+
+def apply_saved_imu_bias(submit: Path, vehicle_id: str) -> bool:
+    """Apply a vehicle profile after approval without changing the saved profile."""
+    param = submit / IMU_PARAM
+    if not param.is_file():
+        print(f"⚠️ Submission has no {IMU_PARAM}; skipping IMU update.")
+        return False
+    before = param.read_text(encoding="utf-8")
+    try:
+        current = parse_offsets(before)
+    except ValueError as exc:
+        print(f"⚠️ No supported IMU offsets; skipping IMU update: {exc}")
+        return False
+    # Read before the prompt to show current/saved values and the difference.
+    # Missing profiles do not prevent declining; approval can never apply a fallback.
+    saved = None
+    error = None
+    try:
+        saved = read_saved_bias(vehicle_id)
+    except (OSError, ValueError) as exc:
+        error = exc
+        print(f"⚠️ Saved IMU bias unavailable for {vehicle_id or '(unset)'}: {exc}")
+    if saved is not None:
+        print(f"IMU 角速度バイアス [rad/s] / VEHICLE_ID={vehicle_id}")
+        print("軸    現在値        保存値        差分(保存値−現在値)")
+        for axis in AXES:
+            print(f"{axis}  {current[axis]:+.6f}  {saved[axis]:+.6f}  {saved[axis] - current[axis]:+.6f}")
+    if not confirm_update(
+        f"提出物の IMU 角速度バイアスを車両 {vehicle_id or '(未設定)'} の保存値で上書きしますか？\n"
+        "参加者の承認を確認してください。 [y/N]: "
+    ):
+        print("IMU update declined; participant offsets retained.")
+        return False
+    if error is not None:
+        raise ValueError(f"cannot apply saved IMU bias for {vehicle_id or '(unset)'}: {error}") from error
+    if param.read_text(encoding="utf-8") != before:
+        raise ValueError("IMU settings changed during approval; retry the update")
+    atomic_write(param, replace_offsets(before, saved))
+    print(f"Updated IMU offsets from vehicle/.calibration/{vehicle_id}/imu_bias.yaml")
+
+    return True

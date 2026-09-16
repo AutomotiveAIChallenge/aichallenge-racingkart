@@ -49,3 +49,34 @@ vehicle_id_for_hostname() {
     *) return 1 ;;
     esac
 }
+
+# Environment -> repository .env -> ECU hostname. Callers set REPO_ROOT.
+read_env_value() {
+    local key=$1
+    local env_file="${REPO_ROOT}/.env"
+
+    [ -f "${env_file}" ] || return 0
+    # 先頭の空白と `export ` を落として `KEY=value` に正規化してから読む
+    sed -E 's/^[[:space:]]*(export[[:space:]]+)?//' "${env_file}" |
+        awk -F= -v key="${key}" '
+            $1 == key {
+                value = substr($0, length(key) + 2)
+                gsub(/^["'\'']|["'\'']$/, "", value)
+                print value
+            }
+        ' | tail -1
+}
+
+detect_vehicle_id() {
+    local vehicle_id="${VEHICLE_ID-}"
+
+    if [ -z "${vehicle_id}" ]; then
+        vehicle_id="$(read_env_value VEHICLE_ID)"
+    fi
+
+    if [ -z "${vehicle_id}" ]; then
+        vehicle_id="$(vehicle_id_for_hostname "$(hostname)" || true)"
+    fi
+
+    printf '%s\n' "${vehicle_id}"
+}
