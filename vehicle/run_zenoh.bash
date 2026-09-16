@@ -16,14 +16,26 @@ fi
 
 export ROS_DOMAIN_ID=$id
 
+# PID 1 in the zenoh container: untrapped signals are dropped and the container
+# is SIGKILLed after stop_grace_period, so trap INT/TERM. Children run as jobs
+# (own process group, SIGINT not ignored) so the trap can signal the group, and
+# are waited on so it fires at once, even during the retry sleep.
+run() {
+    set -m
+    "$@" &
+    set +m
+    wait $!
+}
+trap 'kill -INT -- "-$!" 2>/dev/null; wait; exit 0' INT TERM
+
 mkdir -p "${out_dir}"
 exec >"${out_dir}/zenoh.log" 2>&1
 
 cd "${out_dir}" || exit
 
+# The bridge reconnects by itself while running; this only covers exits.
 while true; do
-    zenoh-bridge-ros2dds client -e "${ENDPOINT}" -c /vehicle/zenoh.json5 -n "/${vehicle_id}"
-    status=$?
-    echo "zenoh-bridge-ros2dds exited with status ${status}; retrying in 5s..."
-    sleep 5
+    run zenoh-bridge-ros2dds client -e "${ENDPOINT}" -c /vehicle/zenoh.json5 -n "/${vehicle_id}"
+    echo "zenoh-bridge-ros2dds exited with status $?; retrying in 5s..."
+    run sleep 5
 done

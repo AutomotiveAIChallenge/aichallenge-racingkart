@@ -30,7 +30,7 @@ preflight（起動前）でチェックする項目：
 
 runtime（起動後）でチェックする項目：
 1. **ハードウェア通信確認** - CANのリンク状態とトラフィック／エラーフレーム
-2. **Dockerサービス確認** - `driver` / `autoware` / `rosbag` / `zenoh` の稼働
+2. **Dockerサービス確認** - `driver` / `autoware` / `zenoh` の稼働（`rosbag` は必須にしない）
 3. **GNSS/RTK状態確認** - `/sensing/gnss/navpvt` の RTK fixed / float 判定
 4. **ROS topic出力確認** - 車両status・最終指令・autoware制御指令の出力
 5. **IMUジャイロバイアス計測** - 静止時バイアスを測って `imu_corrector.param.yaml` を更新
