@@ -20,7 +20,6 @@ from tui_core import (  # noqa: E402
     ROLE_PARTICIPANT,
     ROLE_STAFF,
     STAFF_STEPS,
-    STEP_DOWNLOAD,
     STEP_DRIVER,
     STEP_DRIVER_DOWN,
     STEP_ZENOH,
@@ -56,12 +55,11 @@ class TestSteps(unittest.TestCase):
             ],
         )
 
-    def test_staff_sees_exactly_download_per_service_up_down_teardown(self):
+    def test_staff_sees_exactly_per_service_up_down_teardown(self):
         staff = [s.step_id for s in steps_for_role(ROLE_STAFF)]
         self.assertEqual(
             staff,
             [
-                STEP_DOWNLOAD,
                 STEP_DRIVER,
                 STEP_ZENOH,
                 STEP_DRIVER_DOWN,
@@ -80,7 +78,7 @@ class TestSteps(unittest.TestCase):
         self.assertNotIn(STEP_PREFLIGHT, staff)
 
     def test_participant_never_touches_the_infra_or_the_whole_stack(self):
-        # driver / zenoh / rosbag の起動・停止、download、make down は運営の仕事。
+        # driver / zenoh / rosbag の起動・停止、make down は運営の仕事。
         participant = {s.step_id for s in steps_for_role(ROLE_PARTICIPANT)}
         self.assertFalse(
             participant
@@ -91,7 +89,6 @@ class TestSteps(unittest.TestCase):
                 STEP_DRIVER_DOWN,
                 STEP_ZENOH_DOWN,
                 STEP_ROSBAG_DOWN,
-                STEP_DOWNLOAD,
                 STEP_TEARDOWN,
             }
         )
@@ -132,10 +129,6 @@ class TestSteps(unittest.TestCase):
         self.assertEqual(step.command, ("python3", "apply_calibration.py"))
         self.assertEqual(step.cwd, "vehicle")
         self.assertFalse(step_by_id(STEP_RUNTIME).interactive)
-
-    def test_download_step_is_interactive_and_staff_only(self):
-        self.assertTrue(step_by_id(STEP_DOWNLOAD).interactive)
-        self.assertEqual(step_by_id(STEP_DOWNLOAD).command, ("make", "download"))
 
     def test_calibration_follows_preflight_and_precedes_autoware(self):
         self.assertEqual(step_by_id(STEP_CALIBRATION).requires, (STEP_PREFLIGHT,))

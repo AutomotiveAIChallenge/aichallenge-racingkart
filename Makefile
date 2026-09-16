@@ -189,7 +189,7 @@ submission-extract:
 vehicle-tui:
 	tmux new -A -s aic-vehicle "vehicle/tui.py"
 
-# 運営用。driver / zenoh / rosbag の起動、download、down all も出す。tmux セッションを分けるので
+# 運営用。driver / zenoh / rosbag の起動・停止、down all を出す。tmux セッションを分けるので
 # 参加者の aic-vehicle セッションが残っていても運営側の画面になる。
 vehicle-tui-staff:
 	tmux new -A -s aic-vehicle-staff "vehicle/tui.py --role staff"

@@ -31,10 +31,9 @@ STEP_ROSBAG = "rosbag"        # 土台: all-topic rosbag
 STEP_DRIVER_DOWN = "driver_down"
 STEP_ZENOH_DOWN = "zenoh_down"
 STEP_ROSBAG_DOWN = "rosbag_down"
-STEP_DOWNLOAD = "download"    # 提出物を board から取る
 
 # --- 役割 ------------------------------------------------------------------
-# 参加者はチェック、map・IMU バイアスの適用、autoware の起動・停止を行う。driver / zenoh / rosbag、ダウンロード、全体停止は運営。
+# 参加者はチェック、map・IMU バイアスの適用、autoware の起動・停止を行う。driver / zenoh / rosbag、全体停止は運営。
 ROLE_PARTICIPANT = "participant"
 ROLE_STAFF = "staff"
 ROLES = (ROLE_PARTICIPANT, ROLE_STAFF)
@@ -149,17 +148,9 @@ PARTICIPANT_STEPS = (
     ),
 )
 
-# 運営の並び。参加者の画面には出さない: download、土台サービスの個別の上げ下げ、
-# スタック全体の停止は運営の仕事で、参加者の並びとは独立した 8 ステップだけの画面。
+# 運営の並び。参加者の画面には出さない: 土台サービスの個別の上げ下げ、
+# スタック全体の停止は運営の仕事で、参加者の並びとは独立した 7 ステップだけの画面。
 STAFF_STEPS = (
-    Step(
-        step_id=STEP_DOWNLOAD,
-        title="download",
-        command=("make", "download"),
-        # download_submission.sh prompts for username/password and
-        # download_submission.py prompts for the submission to take.
-        interactive=True,
-    ),
     Step(
         step_id=STEP_DRIVER,
         title="driver",

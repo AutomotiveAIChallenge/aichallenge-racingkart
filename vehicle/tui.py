@@ -365,9 +365,8 @@ class Console:
     def _run_interactive(self, step) -> None:
         """Give the real terminal to a step that prompts.
 
-        download_submission.sh reads a hidden password and
-        download_submission.py asks which submission to take; both need a real
-        tty, so curses is torn down and rebuilt around the call.
+        apply_calibration.py asks whether to apply maps and saved IMU biases.
+        It needs a real tty, so curses is torn down and rebuilt around the call.
         """
         curses.endwin()
         print(f"\n$ {' '.join(step.command)}\n", flush=True)
@@ -568,7 +567,7 @@ def main(argv=None) -> int:
     parser = argparse.ArgumentParser(description="vehicle console")
     parser.add_argument(
         "--role", choices=ROLES, default=ROLE_PARTICIPANT,
-        help="participant: チェック・map/IMU バイアス適用・autoware の起動と停止 / staff: download・driver/zenoh/rosbag の個別起動・停止・down all だけの独立画面",
+        help="participant: チェック・map/IMU バイアス適用・autoware の起動と停止 / staff: driver/zenoh/rosbag の個別起動・停止・down all だけの独立画面",
     )
     args = parser.parse_args(argv)
     need = min_lines(

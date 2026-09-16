@@ -159,7 +159,8 @@ class TestVersionLine(unittest.TestCase):
         self.assertIn("aic commit:", line)
 
     def test_staff_row_is_accounted_for_in_the_minimum_height(self):
-        self.assertEqual(min_lines(8, extra=1), min_lines(8) + 1)
+        n_steps = len(STAFF_STEPS)
+        self.assertEqual(min_lines(n_steps, extra=1), min_lines(n_steps) + 1)
 
 
 class TestVersionProbes(unittest.TestCase):
