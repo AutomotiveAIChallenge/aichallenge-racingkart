@@ -28,7 +28,8 @@ from tui_core import (  # noqa: E402
     STEP_ROSBAG_DOWN,
     STEP_PREFLIGHT,
     STEP_CALIBRATION,
-    STEP_RUNTIME,
+    STEP_CHECK_AUTOWARE,
+    STEP_CHECK_DRIVER,
     STEP_TEARDOWN,
     STEP_UP,
     Workspace,
@@ -47,21 +48,22 @@ class TestSteps(unittest.TestCase):
         self.assertEqual(
             [s.step_id for s in PARTICIPANT_STEPS],
             [
-                STEP_PREFLIGHT,
                 STEP_CALIBRATION,
                 STEP_UP,
-                STEP_RUNTIME,
+                STEP_CHECK_AUTOWARE,
                 STEP_AUTOWARE_DOWN,
             ],
         )
 
-    def test_staff_sees_exactly_per_service_up_down_teardown(self):
+    def test_staff_checks_and_service_controls_in_execution_order(self):
         staff = [s.step_id for s in steps_for_role(ROLE_STAFF)]
         self.assertEqual(
             staff,
             [
+                STEP_PREFLIGHT,
                 STEP_DRIVER,
                 STEP_ZENOH,
+                STEP_CHECK_DRIVER,
                 STEP_DRIVER_DOWN,
                 STEP_ZENOH_DOWN,
                 # rosbag は記録の開始・終了なので down all の直前にまとめる
@@ -71,11 +73,12 @@ class TestSteps(unittest.TestCase):
             ],
         )
 
-    def test_staff_has_no_participant_steps_and_no_preflight(self):
+    def test_preflight_belongs_to_staff_only(self):
         staff = {s.step_id for s in steps_for_role(ROLE_STAFF)}
         participant_ids = {s.step_id for s in PARTICIPANT_STEPS}
         self.assertFalse(staff & participant_ids)
-        self.assertNotIn(STEP_PREFLIGHT, staff)
+        self.assertIn(STEP_PREFLIGHT, staff)
+        self.assertNotIn(STEP_PREFLIGHT, participant_ids)
 
     def test_participant_never_touches_the_infra_or_the_whole_stack(self):
         # driver / zenoh / rosbag の起動・停止、make down は運営の仕事。
@@ -128,10 +131,13 @@ class TestSteps(unittest.TestCase):
         self.assertEqual(step.title, "Update the accel/brake maps and IMU bias")
         self.assertEqual(step.command, ("python3", "apply_calibration.py"))
         self.assertEqual(step.cwd, "vehicle")
-        self.assertFalse(step_by_id(STEP_RUNTIME).interactive)
+        self.assertFalse(step_by_id(STEP_CHECK_AUTOWARE).interactive)
 
-    def test_calibration_follows_preflight_and_precedes_autoware(self):
-        self.assertEqual(step_by_id(STEP_CALIBRATION).requires, (STEP_PREFLIGHT,))
+    def test_participant_does_not_require_staff_session_results(self):
+        self.assertEqual(step_by_id(STEP_CALIBRATION).requires, ())
+        participant_ids = {step.step_id for step in PARTICIPANT_STEPS}
+        for step in PARTICIPANT_STEPS:
+            self.assertTrue(set(step.requires) <= participant_ids)
         self.assertEqual(step_by_id(STEP_UP).requires, (STEP_CALIBRATION,))
 
     def test_step_by_id_rejects_unknown(self):
@@ -233,17 +239,17 @@ class TestRunnable(unittest.TestCase):
 
     def test_runtime_runnable_even_when_stack_is_not_up(self):
         session = {STEP_PREFLIGHT: DONE}
-        self.assertTrue(is_runnable(STEP_RUNTIME, Workspace(), session))
+        self.assertTrue(is_runnable(STEP_CHECK_AUTOWARE, Workspace(), session))
 
     def test_runtime_runnable_once_the_stack_is_up(self):
         session = {STEP_PREFLIGHT: DONE}
         ws = Workspace(services_running=ALL_UP)
-        self.assertTrue(is_runnable(STEP_RUNTIME, ws, session))
+        self.assertTrue(is_runnable(STEP_CHECK_AUTOWARE, ws, session))
 
     def test_a_failed_step_stays_runnable(self):
         # That is how retry works.
-        session = {STEP_RUNTIME: FAILED}
-        self.assertTrue(is_runnable(STEP_RUNTIME, Workspace(), session))
+        session = {STEP_CHECK_AUTOWARE: FAILED}
+        self.assertTrue(is_runnable(STEP_CHECK_AUTOWARE, Workspace(), session))
 
     def test_a_running_step_is_not_runnable(self):
         # No launching a second overlapping run of the same step. This is

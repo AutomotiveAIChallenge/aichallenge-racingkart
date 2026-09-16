@@ -3,7 +3,9 @@
 参加者 TUI の `Update the accel/brake maps and IMU bias` で、共通 accel/brake map と
 車両別の保存済み IMU バイアスを、参加者の承認後に適用します。
 
-`check preflight` → `Update the accel/brake maps and IMU bias` → `autoware-vehicle` → `check runtime`
+運営 TUI で preflight と driver / zenoh の確認を済ませてから、参加者 TUI で次を実行します。
+
+`Update the accel/brake maps and IMU bias` → `autoware-vehicle` → `check autoware`
 
 TUI ではこの操作の右端に `(Recommended)` を表示します。幅が足りない場合は次行に表示します。
 
@@ -16,7 +18,7 @@ CLI から同じ確認を行う場合は、リポジトリ直下で次を実行�
 ```bash
 python3 vehicle/apply_calibration.py
 make autoware-vehicle
-vehicle/setup_check.sh --phase runtime
+vehicle/setup_check.sh --phase autoware
 ```
 
 ## 確認と適用先
@@ -73,6 +75,7 @@ Enter・`n`・EOF は保持し、`y` で適用を選ぶと失敗します。
 このコマンドも展開時に共通 map と保存済み IMU バイアスの適用をそれぞれ確認します。
 ビルド済みの提出物には、TUI の `Update the accel/brake maps and IMU bias` を実行してください。
 
-`setup_check.sh` の runtime / all は生 IMU を含むトピック受信を検査し、
+`setup_check.sh --phase driver` は生 IMU を含む車両側トピックを、`--phase autoware` は制御指令を検査します。
+互換用の runtime は両方、all は preflight も含めて実行します。どのフェーズでも、
 IMU バイアスの計測・上書き・承認確認は行いません。
 `check_imu_bias.py` は整備時に明示的に使う単体ツールとして残しています。

@@ -70,7 +70,8 @@ Racing Kart Setup Check Script
 Usage: $0 [OPTIONS]
 
 OPTIONS:
-  --phase PHASE   Check phase: preflight, runtime, or all [default: all]
+  --phase PHASE   Check phase: preflight, driver, autoware, runtime, or all [default: all]
+                  runtime runs driver + autoware checks (compatibility)
   --log           Enable logging to file
   --help          Show this help
 
@@ -91,6 +92,8 @@ MODE:
 Examples:
   $0
   $0 --phase preflight
+  $0 --phase driver
+  $0 --phase autoware
   $0 --phase runtime
   $0 --log
   CAN_SAMPLE_SEC=5 CAN_MIN_FRAMES=200 $0 --log
@@ -103,7 +106,7 @@ while [[ $# -gt 0 ]]; do
     --phase)
         PHASE="${2-}"
         case "${PHASE}" in
-        preflight | runtime | all) ;;
+        preflight | driver | autoware | runtime | all) ;;
         *)
             echo "Invalid phase: ${PHASE}"
             show_help
@@ -526,7 +529,7 @@ check_docker() {
     log ""
 }
 
-# 起動後Dockerサービス確認 (runtime)
+# 指定された起動後Dockerサービスだけを確認する。
 check_runtime_docker_services() {
     print_section "Runtime Docker Service Check"
 
@@ -546,7 +549,7 @@ check_runtime_docker_services() {
     fi
 
     # rosbag は記録の有無を運営が都度決めるため必須にしない（未起動でも fail にならない）。
-    local required_services=(driver autoware zenoh)
+    local required_services=("$@")
     local running_services
     local missing_services=()
     if running_services="$(compose_running_services)"; then
@@ -637,9 +640,9 @@ check_gnss_rtk_status() {
     log ""
 }
 
-# ROS topic出力確認 (runtime)
-check_runtime_ros_topics() {
-    print_section "Runtime ROS Topic Output Check"
+# driver が発行する状態・最終指令と、車両への Joy 入力を確認する。
+check_driver_ros_topics() {
+    print_section "Driver ROS Topic Output Check"
 
     log "${INFO} Raw IMU topic"
     check_ros_topic_once "driver" "/sensing/imu/imu_raw" "Raw IMU"
@@ -655,17 +658,35 @@ check_runtime_ros_topics() {
     check_ros_topic_once "driver" "/racing_kart/steer/command" "Steer command"
     check_ros_topic_once "driver" "/racing_kart/brake/command" "Brake command"
 
-    log "${INFO} Autoware vehicle status topics"
-    check_ros_topic_once "autoware" "/vehicle/status/velocity_status" "Velocity status"
-    check_ros_topic_once "autoware" "/vehicle/status/steering_status" "Steering status"
-    check_ros_topic_once "autoware" "/vehicle/status/gear_status" "Gear status"
-    check_ros_topic_once "autoware" "/vehicle/status/actuation_status" "Actuation status"
+    log "${INFO} Vehicle status topics published by driver"
+    check_ros_topic_once "driver" "/vehicle/status/velocity_status" "Velocity status"
+    check_ros_topic_once "driver" "/vehicle/status/steering_status" "Steering status"
+    check_ros_topic_once "driver" "/vehicle/status/gear_status" "Gear status"
+    check_ros_topic_once "driver" "/vehicle/status/actuation_status" "Actuation status"
+
+    log ""
+}
+
+check_autoware_ros_topics() {
+    print_section "Autoware ROS Topic Output Check"
 
     log "${INFO} Autoware downstream control command topics"
     check_ros_topic_once "autoware" "/control/command/control_cmd" "Control command"
     check_ros_topic_once "autoware" "/control/command/actuation_cmd" "Actuation command"
 
     log ""
+}
+
+check_driver_runtime() {
+    check_runtime_hardware
+    check_runtime_docker_services driver zenoh
+    check_gnss_rtk_status
+    check_driver_ros_topics
+}
+
+check_autoware_runtime() {
+    check_runtime_docker_services autoware
+    check_autoware_ros_topics
 }
 
 # past_log.md既知問題チェック (preflight)
@@ -707,18 +728,26 @@ check_execution_readiness() {
 
 # 結果サマリー表示。失敗は最後に置く: TUI のログ pane は末尾しか見えない。
 print_summary() {
+    local scope
+    case "${PHASE}" in
+    preflight) scope="preflight" ;;
+    driver) scope="driver / zenoh" ;;
+    autoware) scope="Autoware" ;;
+    runtime) scope="driver / zenoh・Autoware" ;;
+    all) scope="全フェーズ" ;;
+    esac
     log ""
     log "📊 ${TOTAL_CHECKS} checks: ${PASSED_CHECKS} ok, ${WARNING_CHECKS} warn, ${FAILED_CHECKS} fail"
     # 判定を 1 行だけ添える。行頭に ${FAIL} / ${WARN} を置かないこと: TUI が行頭のマーカーで
     # 失敗行を拾うため、判定行まで failures 領域に混ざる。
     if [ "${FAILED_CHECKS}" -gt 0 ]; then
-        log "   失敗あり。上の失敗項目を直して再実行してください。"
+        log "   ${scope} チェックに失敗あり。上の失敗項目を直して再実行してください。"
         exit 1
     fi
     if [ "${WARNING_CHECKS}" -gt 0 ]; then
-        log "   警告のみ。内容を確認したうえで進めてください。"
+        log "   ${scope} チェック完了（警告あり）。内容を確認してください。"
     else
-        log "   すべて通過。走行準備 OK。"
+        log "   ${scope} チェック完了。"
     fi
     exit 0
 }
@@ -739,20 +768,22 @@ main() {
         check_known_issues
         check_execution_readiness
         ;;
+    driver)
+        check_driver_runtime
+        ;;
+    autoware)
+        check_autoware_runtime
+        ;;
     runtime)
-        check_runtime_hardware
-        check_runtime_docker_services
-        check_gnss_rtk_status
-        check_runtime_ros_topics
+        check_driver_runtime
+        check_autoware_runtime
         ;;
     all)
         check_hardware
         check_network
         check_docker
-        check_runtime_hardware
-        check_runtime_docker_services
-        check_gnss_rtk_status
-        check_runtime_ros_topics
+        check_driver_runtime
+        check_autoware_runtime
         check_known_issues
         check_execution_readiness
         ;;

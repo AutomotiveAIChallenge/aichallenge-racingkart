@@ -308,10 +308,18 @@ class Console:
 
     def observe(self) -> Workspace:
         self._observed_at = time.monotonic()
-        return Workspace(
+        ws = Workspace(
             services_running=running_services(REPO_ROOT),
             stack_containers=stack_containers(REPO_ROOT),
         )
+        # 別ペインの down all などで停止した場合も、古い成功結果を残さない。
+        # 失敗結果はサービス停止が原因の場合もあるため、再実行まで保持する。
+        for step in self.steps:
+            if self.session.get(step.step_id) == DONE and any(
+                service not in ws.services_running for service in step.checked_services
+            ):
+                self.session.pop(step.step_id)
+        return ws
 
     def observe_version(self) -> None:
         """起動時に 1 度だけ採る。イメージも checkout も走行枠の途中では変わらない。"""
@@ -329,6 +337,8 @@ class Console:
 
     def run_step(self, step_id: str) -> None:
         step = step_by_id(step_id)
+        for check_id in step.invalidates:
+            self.session.pop(check_id, None)
         # 前回の実行の失敗を持ち越さない。表示は常に「今の実行」のもの。
         self.failures.clear()
         self._log_mark = len(self.log)
@@ -546,9 +556,8 @@ def _loop(screen, role: str) -> int:
     console.draw()  # docker を待たずにまず画面を出す
     console.ws = console.observe()
     console.observe_version()
-    if role == ROLE_PARTICIPANT:
-        # preflight runs on open: a CAN or GNSS fault has to surface before
-        # Autoware starts. Staff has no preflight row on screen, so it must not run here.
+    if role == ROLE_STAFF:
+        # 車両側の起動前確認は運営の新規起動時に実行する。
         console.run_step(STEP_PREFLIGHT)
     while True:
         console.drain()
@@ -567,7 +576,7 @@ def main(argv=None) -> int:
     parser = argparse.ArgumentParser(description="vehicle console")
     parser.add_argument(
         "--role", choices=ROLES, default=ROLE_PARTICIPANT,
-        help="participant: チェック・map/IMU バイアス適用・autoware の起動と停止 / staff: driver/zenoh/rosbag の個別起動・停止・down all だけの独立画面",
+        help="participant: map/IMU バイアス適用・autoware の起動・確認・停止 / staff: preflight・driver/zenoh の確認・各サービスの起動と停止",
     )
     args = parser.parse_args(argv)
     need = min_lines(

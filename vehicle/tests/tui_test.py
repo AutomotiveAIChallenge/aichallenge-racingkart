@@ -36,6 +36,14 @@ from tui_core import (  # noqa: E402
     PARTICIPANT_STEPS,
     REQUIRED_SERVICES,
     ROLE_PARTICIPANT,
+    ROLE_STAFF,
+    DONE,
+    FAILED,
+    PENDING,
+    STEP_PREFLIGHT,
+    STEP_CHECK_DRIVER,
+    STEP_CHECK_AUTOWARE,
+    STEP_AUTOWARE_DOWN,
     STAFF_STEPS,
     STEP_CALIBRATION,
     STEP_UP,
@@ -309,7 +317,7 @@ class TestServiceLinePlacement(unittest.TestCase):
 
     def test_steps_start_on_fourth_row_without_service_names(self):
         _, screen = self._console(frozenset(REQUIRED_SERVICES))
-        self.assertIn("check preflight", screen.rows[3])
+        self.assertIn("Update the accel/brake maps and IMU bias", screen.rows[3])
         for idx in range(3, len(PARTICIPANT_STEPS) + 3):
             self.assertNotIn("running:", screen.rows[idx])
             self.assertNotIn("stopped:", screen.rows[idx])
@@ -317,10 +325,12 @@ class TestServiceLinePlacement(unittest.TestCase):
 
 
 class TestRecommendedPlacement(unittest.TestCase):
-    def draw(self, cols, lines=13):
+    def draw(self, cols, lines=None):
+        if lines is None:
+            lines = min_lines(len(PARTICIPANT_STEPS))
         screen = FakeScreen(lines=lines, cols=cols)
         console = Console(screen, steps=PARTICIPANT_STEPS, role=ROLE_PARTICIPANT)
-        console.cursor = 1
+        console.cursor = 0
         console.failures = ["error details"]
         console.log = ["latest output"]
         with mock.patch("tui.curses.doupdate"):
@@ -329,22 +339,22 @@ class TestRecommendedPlacement(unittest.TestCase):
 
     def test_recommendation_is_at_the_right_edge_of_the_update_row(self):
         _, screen = self.draw(cols=80)
-        row = screen.rows[4]
+        row = screen.rows[3]
         self.assertIn(step_by_id(STEP_CALIBRATION).title, row)
         self.assertTrue(row.endswith("(Recommended)"))
         self.assertEqual(len(row), 79)
-        self.assertIn("3 ?  autoware-vehicle", screen.rows[5])
+        self.assertIn("2 ?  autoware-vehicle", screen.rows[4])
         self.assertEqual(sum("(Recommended)" in row for row in screen.rows.values()), 1)
 
     def test_minimum_terminal_wraps_label_and_keeps_failures_and_log_visible(self):
         _, screen = self.draw(cols=MIN_COLS)
-        self.assertIn(step_by_id(STEP_CALIBRATION).title, screen.rows[4])
-        self.assertEqual(screen.rows[5].strip(), "(Recommended)")
-        self.assertEqual(len(screen.rows[5]), MIN_COLS - 1)
-        self.assertIn("3 ?  autoware-vehicle", screen.rows[6])
-        self.assertIn("5 OK autoware-vehicle down", screen.rows[8])
-        self.assertEqual(screen.rows[10], "error details")
-        self.assertEqual(screen.rows[12], "latest output")
+        self.assertIn(step_by_id(STEP_CALIBRATION).title, screen.rows[3])
+        self.assertEqual(screen.rows[4].strip(), "(Recommended)")
+        self.assertEqual(len(screen.rows[4]), MIN_COLS - 1)
+        self.assertIn("2 ?  autoware-vehicle", screen.rows[5])
+        self.assertIn("4 OK autoware-vehicle down", screen.rows[7])
+        self.assertEqual(screen.rows[9], "error details")
+        self.assertEqual(screen.rows[11], "latest output")
 
     def test_wrapped_label_does_not_become_a_separate_keyboard_selection(self):
         console, _ = self.draw(cols=MIN_COLS)
@@ -371,6 +381,86 @@ class TestShouldReobserve(unittest.TestCase):
     def test_after_the_interval(self):
         # An external `make down` while idle has to show up on its own.
         self.assertTrue(should_reobserve(False, 10.0, 0.0))
+
+
+class TestRoleCheckLifecycle(unittest.TestCase):
+    def test_observed_shutdown_forgets_success_until_check_runs_again(self):
+        for role, steps, check, services in (
+            (ROLE_PARTICIPANT, PARTICIPANT_STEPS, STEP_CHECK_AUTOWARE, {"autoware"}),
+            (ROLE_STAFF, STAFF_STEPS, STEP_CHECK_DRIVER, {"driver", "zenoh"}),
+        ):
+            with self.subTest(role=role):
+                console = Console(None, steps, role)
+                console.session[check] = DONE
+                # A different pane stops the services and subsequently starts them again.
+                with mock.patch("tui.running_services", side_effect=[frozenset(), frozenset(services)]), \
+                        mock.patch("tui.stack_containers", return_value=0):
+                    console.observe()
+                    self.assertNotIn(check, console.session)
+                    console.observe()
+                    self.assertNotIn(check, console.session)
+                # A failed check on a stopped service must still show NG.
+                console.session[check] = FAILED
+                with mock.patch("tui.running_services", return_value=frozenset()), \
+                        mock.patch("tui.stack_containers", return_value=0):
+                    console.observe()
+                self.assertEqual(console.session[check], FAILED)
+
+    def test_only_staff_runs_preflight_on_open(self):
+        from tui import _loop
+
+        for role in (ROLE_PARTICIPANT, ROLE_STAFF):
+            with self.subTest(role=role), mock.patch("tui.Console") as factory, \
+                    mock.patch("tui.curses.curs_set"):
+                screen = mock.Mock()
+                screen.getch.return_value = ord("q")
+                factory.return_value.handle_key.return_value = False
+                self.assertEqual(_loop(screen, role), 0)
+                if role == ROLE_STAFF:
+                    factory.return_value.run_step.assert_called_once_with(STEP_PREFLIGHT)
+                else:
+                    factory.return_value.run_step.assert_not_called()
+
+    def test_service_actions_invalidate_only_their_checks_even_if_the_action_fails(self):
+        cases = (
+            (STEP_DRIVER, {STEP_CHECK_DRIVER}),
+            (STEP_ZENOH, {STEP_CHECK_DRIVER}),
+            (STEP_DRIVER_DOWN, {STEP_CHECK_DRIVER}),
+            (STEP_ZENOH_DOWN, {STEP_CHECK_DRIVER}),
+            (STEP_UP, {STEP_CHECK_AUTOWARE}),
+            (STEP_AUTOWARE_DOWN, {STEP_CHECK_AUTOWARE}),
+            (STEP_TEARDOWN, {STEP_CHECK_DRIVER, STEP_CHECK_AUTOWARE}),
+            (STEP_ROSBAG, set()),
+            (STEP_ROSBAG_DOWN, set()),
+        )
+        for action, invalidated in cases:
+            with self.subTest(action=action):
+                console = Console(None)
+                console.session = {STEP_CHECK_DRIVER: DONE, STEP_CHECK_AUTOWARE: DONE,
+                                   STEP_PREFLIGHT: DONE, STEP_CALIBRATION: DONE}
+                with mock.patch("tui.threading.Thread"), mock.patch.object(console, "observe"):
+                    console.run_step(action)
+                    console.log_queue.put(("exit", (action, 1)))
+                    console.drain()
+                for check in (STEP_CHECK_DRIVER, STEP_CHECK_AUTOWARE):
+                    self.assertEqual(console.session.get(check, PENDING),
+                                     PENDING if check in invalidated else DONE)
+                self.assertEqual(console.session[STEP_PREFLIGHT], DONE)
+                self.assertEqual(console.session[STEP_CALIBRATION], DONE)
+                self.assertEqual(console.session[action], FAILED)
+
+    def test_staff_minimum_terminal_shows_nine_steps_failures_and_log(self):
+        screen = FakeScreen(lines=min_lines(len(STAFF_STEPS), extra=1), cols=MIN_COLS)
+        console = Console(screen, STAFF_STEPS, ROLE_STAFF)
+        console.failures = ["driver check failed"]
+        console.log = ["latest output"]
+        with mock.patch("tui.curses.doupdate"):
+            console.draw()
+        self.assertIn("1 -  check preflight", screen.rows[4])
+        self.assertIn("4 ?  check driver / zenoh", screen.rows[7])
+        self.assertIn("9 OK down all", screen.rows[12])
+        self.assertIn("driver check failed", screen.rows.values())
+        self.assertIn("latest output", screen.rows.values())
 
 
 class TestStreamInput(unittest.TestCase):

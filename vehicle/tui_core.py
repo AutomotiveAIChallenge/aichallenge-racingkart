@@ -21,7 +21,8 @@ FAILED = "failed"
 STEP_PREFLIGHT = "preflight"
 STEP_CALIBRATION = "calibration"
 STEP_UP = "up"
-STEP_RUNTIME = "runtime"
+STEP_CHECK_DRIVER = "check_driver"
+STEP_CHECK_AUTOWARE = "check_autoware"
 STEP_AUTOWARE_DOWN = "autoware_down"
 STEP_TEARDOWN = "teardown"
 # 運営だけに出すステップ
@@ -107,23 +108,20 @@ class Step:
     note: str = ""
     # 推奨操作には右端のラベルを付ける。適用元の検証結果とは独立した操作の案内。
     recommended: bool = False
+    # サービスを起動・停止したら、以前のチェック結果を未確認へ戻す。
+    invalidates: Tuple[str, ...] = ()
+    # 観測で対象サービスの停止が分かった場合も、成功結果を未確認へ戻す。
+    checked_services: Tuple[str, ...] = ()
 
 
 # 参加者の並び。運営は STAFF_STEPS を別画面として持つ（参加者の続きではない）。
 PARTICIPANT_STEPS = (
-    Step(
-        step_id=STEP_PREFLIGHT,
-        title="check preflight",
-        command=("./setup_check.sh", "--phase", "preflight"),
-        cwd="vehicle",
-    ),
     Step(
         step_id=STEP_CALIBRATION,
         title="Update the accel/brake maps and IMU bias",
         recommended=True,
         command=("python3", "apply_calibration.py"),
         cwd="vehicle",
-        requires=(STEP_PREFLIGHT,),
         interactive=True,
     ),
     Step(
@@ -132,38 +130,59 @@ PARTICIPANT_STEPS = (
         command=("make", "autoware-vehicle"),
         requires=(STEP_CALIBRATION,),
         measure=_autoware_up,
+        invalidates=(STEP_CHECK_AUTOWARE,),
     ),
     Step(
-        step_id=STEP_RUNTIME,
-        title="check runtime",
-        command=("./setup_check.sh", "--phase", "runtime"),
+        step_id=STEP_CHECK_AUTOWARE,
+        title="check autoware",
+        command=("./setup_check.sh", "--phase", "autoware"),
         cwd="vehicle",
         requires=(STEP_UP,),
+        checked_services=("autoware",),
     ),
     Step(
         step_id=STEP_AUTOWARE_DOWN,
         title="autoware-vehicle down",
         command=("docker", "compose", "down", "autoware"),
         measure=_autoware_down,
+        invalidates=(STEP_CHECK_AUTOWARE,),
     ),
 )
 
 # 運営の並び。参加者の画面には出さない: 土台サービスの個別の上げ下げ、
-# スタック全体の停止は運営の仕事で、参加者の並びとは独立した 7 ステップだけの画面。
+# スタック全体の停止と車両側のチェックは運営の仕事。参加者とは独立した 9 ステップ。
 STAFF_STEPS = (
+    Step(
+        step_id=STEP_PREFLIGHT,
+        title="check preflight",
+        command=("./setup_check.sh", "--phase", "preflight"),
+        cwd="vehicle",
+    ),
     Step(
         step_id=STEP_DRIVER,
         title="driver",
         note="always on",
         command=("make", "driver"),
+        requires=(STEP_PREFLIGHT,),
         measure=_service_up("driver"),
+        invalidates=(STEP_CHECK_DRIVER,),
     ),
     Step(
         step_id=STEP_ZENOH,
         title="zenoh",
         note="always on",
         command=("make", "zenoh"),
+        requires=(STEP_PREFLIGHT,),
         measure=_service_up("zenoh"),
+        invalidates=(STEP_CHECK_DRIVER,),
+    ),
+    Step(
+        step_id=STEP_CHECK_DRIVER,
+        title="check driver / zenoh",
+        command=("./setup_check.sh", "--phase", "driver"),
+        cwd="vehicle",
+        requires=(STEP_DRIVER, STEP_ZENOH),
+        checked_services=("driver", "zenoh"),
     ),
     Step(
         step_id=STEP_DRIVER_DOWN,
@@ -171,6 +190,7 @@ STAFF_STEPS = (
         note="on faults only",
         command=("docker", "compose", "down", "driver"),
         measure=_service_down("driver"),
+        invalidates=(STEP_CHECK_DRIVER,),
     ),
     Step(
         step_id=STEP_ZENOH_DOWN,
@@ -178,6 +198,7 @@ STAFF_STEPS = (
         note="on faults only",
         command=("docker", "compose", "down", "zenoh"),
         measure=_service_down("zenoh"),
+        invalidates=(STEP_CHECK_DRIVER,),
     ),
     Step(
         step_id=STEP_ROSBAG,
@@ -199,6 +220,7 @@ STAFF_STEPS = (
         note="end of the day",
         command=("make", "down"),
         measure=_stack_down,
+        invalidates=(STEP_CHECK_DRIVER, STEP_CHECK_AUTOWARE),
     ),
 )
 

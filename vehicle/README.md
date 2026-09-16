@@ -2,13 +2,19 @@
 
 ## セットアップ確認スクリプト / Setup Check Script
 
-走行前の車両環境確認用スクリプトが利用可能です。チェックは **起動前（preflight）** と **起動後（runtime）** の2フェーズに分かれています。
+走行前の車両環境確認用スクリプトが利用可能です。チェックは **起動前（preflight）**・**driver / zenoh 起動後（driver）**・**Autoware 起動後（autoware）** の3フェーズに分かれています。
 
 ```bash
 # 起動前チェックのみ（driver/autoware を起動する前に実行）
 ./setup_check.sh --phase preflight
 
-# 起動後チェックのみ（スタックが起動している状態で実行）
+# driver / zenoh 起動後（Autoware は停止中でも可）
+./setup_check.sh --phase driver
+
+# Autoware 起動後
+./setup_check.sh --phase autoware
+
+# 互換用: driver と autoware の両チェック
 ./setup_check.sh --phase runtime
 
 # 全チェック（既定。runtime を含むためスタック起動中に実行する）
@@ -28,17 +34,28 @@ preflight（起動前）でチェックする項目：
 4. **既知問題予防チェック** - 過去の実験から抽出した予防項目
 5. **実行準備確認** - リポジトリルート、gitブランチ確認
 
-runtime（起動後）でチェックする項目：
-1. **ハードウェア通信確認** - CANのリンク状態とトラフィック／エラーフレーム
-2. **Dockerサービス確認** - `driver` / `autoware` / `zenoh` の稼働（`rosbag` は必須にしない）
-3. **GNSS/RTK状態確認** - `/sensing/gnss/navpvt` の RTK fixed / float 判定
-4. **ROS topic出力確認** - 生IMU・車両status・最終指令・autoware制御指令の出力
+driver（driver / zenoh 起動後）でチェックする項目：
+
+1. **ハードウェア通信確認** - CAN のリンク状態とトラフィック／エラーフレーム
+2. **Docker サービス確認** - `driver` / `zenoh` の稼働（Autoware・rosbag は必須にしない）
+3. **GNSS / RTK 状態確認** - `/sensing/gnss/navpvt` の RTK fixed / float 判定
+4. **ROS topic 出力確認** - 生 IMU、車両 status、Joy 入力、最終指令、`/vehicle/status/*` を driver 内で確認
+
+Autoware（起動後）でチェックする項目：
+
+1. **Docker サービス確認** - `autoware` の稼働
+2. **制御指令確認** - `/control/command/control_cmd`・`/control/command/actuation_cmd` を Autoware 内で確認
+
+Zenoh の直接確認はコンテナ稼働までです。接続先への TCP 疎通は preflight、Joy 入力確認には送信側の起動も必要です。
 
 `make autoware-driver-zenoh-rosbag` は起動前に preflight を自動実行します。runtime は起動後に別途実行します。
 `make setup-vehicle` は `--phase all` 相当なので、**スタック起動中** に実行してください（停止中に叩くと runtime 系が一斉に fail します）。
 
-参加者 TUI は `check preflight` → `Update the accel/brake maps and IMU bias` → `autoware-vehicle`
-→ `check runtime` → `autoware-vehicle down` の順です。
+右上の運営 TUI は `check preflight`（新規起動時に自動実行）→ `driver` → `zenoh` →
+`check driver / zenoh` の順で準備・確認します。既存の停止操作・rosbag 操作・down all はその下に残ります。
+左上の参加者 TUI は `Update the accel/brake maps and IMU bias` → `autoware-vehicle`
+→ `check autoware` → `autoware-vehicle down` の順です。運営側の確認完了後に参加者側へ進みます。
+チェック結果は各 TUI 内で保持し、起動・停止操作で対象サービスの古いチェック結果を未確認へ戻します。
 `Update the accel/brake maps and IMU bias` は、Autoware 停止中に共通 map と保存済み IMU バイアスを
 それぞれ確認し、承認後にビルド済みの設定へ適用します。Enter / y で推奨値を適用し、n で保持します。
 runtime での計測・設定更新はありません。詳細は [設定の適用手順](calibration.md) を参照してください。
