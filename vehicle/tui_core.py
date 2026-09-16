@@ -118,7 +118,7 @@ PARTICIPANT_STEPS = (
     ),
     Step(
         step_id=STEP_CALIBRATION,
-        title="accel brake map and IMU bias",
+        title="Update the accel/brake maps and IMU bias",
         command=("python3", "apply_calibration.py"),
         cwd="vehicle",
         requires=(STEP_PREFLIGHT,),

@@ -37,9 +37,9 @@ runtime（起動後）でチェックする項目：
 `make autoware-driver-zenoh-rosbag` は起動前に preflight を自動実行します。runtime は起動後に別途実行します。
 `make setup-vehicle` は `--phase all` 相当なので、**スタック起動中** に実行してください（停止中に叩くと runtime 系が一斉に fail します）。
 
-参加者 TUI は `check preflight` → `accel brake map and IMU bias` → `autoware-vehicle`
+参加者 TUI は `check preflight` → `Update the accel/brake maps and IMU bias` → `autoware-vehicle`
 → `check runtime` → `autoware-vehicle down` の順です。
-`accel brake map and IMU bias` は、Autoware 停止中に共通 map と保存済み IMU バイアスを
+`Update the accel/brake maps and IMU bias` は、Autoware 停止中に共通 map と保存済み IMU バイアスを
 それぞれ確認し、承認後にビルド済みの設定へ適用します。Enter / y で推奨値を適用し、n で保持します。
 runtime での計測・設定更新はありません。詳細は [設定の適用手順](calibration.md) を参照してください。
 

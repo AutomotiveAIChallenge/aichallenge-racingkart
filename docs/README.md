@@ -21,7 +21,7 @@
 - `log-design.md` — `/output` 配下へログを集約する設計（compose / `run_evaluation.bash` の出力レイアウト）。
 - `makefile-target-naming.md` — Makefile ターゲットの `<service>-<command>` 命名ガイドライン。
 - `mpc-integration.md` — `multi_purpose_mpc_ros` のインテグレーション設計。
-- `vehicle-tui.md` — 車両 PC 上の走行枠オペレーション（preflight → accel brake map and IMU bias → 起動 → runtime → 停止）を 1 つの TUI に集約する設計。順序の提示と状態の実測を担い、既存の `make` / `setup_check.sh` は再実装しない。
+- `vehicle-tui.md` — 車両 PC 上の走行枠オペレーション（preflight → Update the accel/brake maps and IMU bias → 起動 → runtime → 停止）を 1 つの TUI に集約する設計。順序の提示と状態の実測を担い、既存の `make` / `setup_check.sh` は再実装しない。
 
 ## docs/guide/ 一覧
 

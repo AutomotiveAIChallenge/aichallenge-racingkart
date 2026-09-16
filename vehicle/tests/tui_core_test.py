@@ -128,7 +128,7 @@ class TestSteps(unittest.TestCase):
     def test_calibration_releases_the_terminal_and_runtime_streams_output(self):
         step = step_by_id(STEP_CALIBRATION)
         self.assertTrue(step.interactive)
-        self.assertEqual(step.title, "accel brake map and IMU bias")
+        self.assertEqual(step.title, "Update the accel/brake maps and IMU bias")
         self.assertEqual(step.command, ("python3", "apply_calibration.py"))
         self.assertEqual(step.cwd, "vehicle")
         self.assertFalse(step_by_id(STEP_RUNTIME).interactive)

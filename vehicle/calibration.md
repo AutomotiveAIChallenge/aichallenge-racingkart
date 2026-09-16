@@ -1,9 +1,9 @@
 # 起動前の accel/brake map・保存済み IMU バイアス適用
 
-参加者 TUI の `accel brake map and IMU bias` で、共通 accel/brake map と
+参加者 TUI の `Update the accel/brake maps and IMU bias` で、共通 accel/brake map と
 車両別の保存済み IMU バイアスを、参加者の承認後に適用します。
 
-`check preflight` → `accel brake map and IMU bias` → `autoware-vehicle` → `check runtime`
+`check preflight` → `Update the accel/brake maps and IMU bias` → `autoware-vehicle` → `check runtime`
 
 Autoware が停止している状態で実行します。既に起動している場合は
 `autoware-vehicle down` で停止してください。起動中の適用はエラーになります。
@@ -69,7 +69,7 @@ Enter・`n`・EOF は保持し、`y` で適用を選ぶと失敗します。
 
 `make submission-extract` は TUI 外のコマンドとして残っています。
 このコマンドも展開時に共通 map と保存済み IMU バイアスの適用をそれぞれ確認します。
-ビルド済みの提出物には、TUI の `accel brake map and IMU bias` を実行してください。
+ビルド済みの提出物には、TUI の `Update the accel/brake maps and IMU bias` を実行してください。
 
 `setup_check.sh` の runtime / all は生 IMU を含むトピック受信を検査し、
 IMU バイアスの計測・上書き・承認確認は行いません。

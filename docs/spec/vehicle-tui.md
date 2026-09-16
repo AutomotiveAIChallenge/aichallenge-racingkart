@@ -89,7 +89,7 @@
 | # | 表示名 | 実行するもの | 前提（助言） | 完了の判定 |
 |---|--------|--------------|--------------|------------|
 | 1 | `check preflight` | `./setup_check.sh --phase preflight` | なし | 終了コード 0（セッション記憶） |
-| 2 | `accel brake map and IMU bias` | `python3 vehicle/apply_calibration.py` | 1 | 確認完了・終了コード 0（保持を選んだ場合も含む） |
+| 2 | `Update the accel/brake maps and IMU bias` | `python3 vehicle/apply_calibration.py` | 1 | 確認完了・終了コード 0（保持を選んだ場合も含む） |
 | 3 | `autoware-vehicle` | `make autoware-vehicle` | 2 | `autoware` が compose 上で running（実測。`driver` / `zenoh` / `rosbag` はサービス行で見せるだけ） |
 | 4 | `check runtime` | `./setup_check.sh --phase runtime` | 3 | 終了コード 0（セッション記憶） |
 | 5 | `autoware-vehicle down` | `docker compose down autoware` | なし | `autoware` が running でない（実測） |
@@ -149,7 +149,7 @@ CLI の `make submission-extract` / `make autoware-build` / `make workspace-clea
 
 ### 実測とセッション記憶
 
-`accel brake map and IMU bias` は Autoware 停止中に、共通 accel/brake map と
+`Update the accel/brake maps and IMU bias` は Autoware 停止中に、共通 accel/brake map と
 車両別の保存済み IMU バイアスの適用をそれぞれ確認する。
 正常な適用元には `Y: 推奨設定を適用する (Recommended)` と `[Y/n]` を表示し、
 参加者の承認を確認して Enter / y で適用する。n・EOF は現在値を保持する。
@@ -167,7 +167,7 @@ runtime では計測・上書き・承認確認を行わず、生 IMU を含む�
 実測を優先するため、別のシェルで `make down` された場合も次の観測で反映され、
 TUI 内のキャッシュと実態が食い違うことがない。
 
-`preflight` / `accel brake map and IMU bias` / `check runtime` / `download` はセッションの結果を記憶する。
+`preflight` / `Update the accel/brake maps and IMU bias` / `check runtime` / `download` はセッションの結果を記憶する。
 合否は終了コードにしか現れず、後からファイルシステムを見て再現できないためである。
 
 `autoware` の完了は `autoware` だけで判定する。`autoware-vehicle` が上げるのは
@@ -207,7 +207,7 @@ GNSS の 8 秒待ち、14 topic ぶんの `docker compose exec` + ROS 環境の 
 running: driver
 stopped: autoware zenoh rosbag
 1 NG check preflight
-2 ?  accel brake map and IMU bias
+2 ?  Update the accel/brake maps and IMU bias
 3 ?  autoware-vehicle
 4 ?  check runtime
 5 OK autoware-vehicle down
@@ -283,7 +283,7 @@ TUI は `❌` で始まる行を失敗として retain する。これは `setup
 ### 対話が必要なステップ
 
 運営の `download` はユーザー名・パスワードと提出物の選択を聞く。
-参加者の `accel brake map and IMU bias` は map と保存済み IMU バイアスの適用をそれぞれ聞く。
+参加者の `Update the accel/brake maps and IMU bias` は map と保存済み IMU バイアスの適用をそれぞれ聞く。
 TUI は端末上で動くため、この対話をそのまま通せる。
 
 該当ステップの実行中は curses を一時的に解除し（`curses.endwin()`）、

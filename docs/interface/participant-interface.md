@@ -73,7 +73,7 @@ aichallenge_submit.launch.xml
 
 ### 実車での map・IMU バイアス更新
 
-実車の TUI は、Autoware 起動前の `accel brake map and IMU bias` で
+実車の TUI は、Autoware 起動前の `Update the accel/brake maps and IMU bias` で
 共通 accel/brake map と車両別の保存済み IMU バイアスの適用をそれぞれ確認します。
 IMU は現在値・保存値・差分を表示し、承認後だけ更新します。
 通常は Enter / y で推奨値を適用し、独自補正・調整がある場合は n で現在値を保持できます。

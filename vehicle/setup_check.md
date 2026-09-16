@@ -242,7 +242,7 @@ docker compose -f ../docker-compose.yml exec -T driver bash -lc \
 
 ### map・IMU バイアスの適用は提出物の展開時
 
-Autoware 停止中の TUI `accel brake map and IMU bias` で、共通 accel/brake map と
+Autoware 停止中の TUI `Update the accel/brake maps and IMU bias` で、共通 accel/brake map と
 `vehicle/.calibration/<VEHICLE_ID>/imu_bias.yaml` の保存値を、参加者の承認後だけ適用します。
 ビルド済みの設定を更新し、次の起動から反映します。当日の IMU 計測は行いません。
 `runtime` / `all` は確認だけを行い、設定の上書きや承認入力はありません。
