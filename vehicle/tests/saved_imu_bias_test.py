@@ -11,7 +11,7 @@ from unittest.mock import patch
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from calibration import (  # noqa: E402
-    IMU_PARAM, apply_saved_imu_bias, detect_vehicle_id, parse_offsets, save_bias,
+    IMU_PARAM, apply_saved_imu_bias, confirm_update, detect_vehicle_id, parse_offsets, save_bias,
 )
 from apply_imu_bias import main  # noqa: E402
 
@@ -56,11 +56,47 @@ class SavedBiasTest(unittest.TestCase):
         self.assertEqual(self.param.stat().st_mode & 0o777, 0o444)
         self.assertEqual(self.source.read_bytes(), source)
 
-    def test_decline_empty_or_eof_keeps_participant_offsets(self):
-        for answer in ("n", "", "unexpected", EOFError()):
+    def test_decline_or_eof_keeps_participant_offsets(self):
+        for answer in ("n", "unexpected", EOFError()):
             with self.subTest(answer=answer):
                 self.assertFalse(self.apply(answer))
                 self.assertEqual(self.param.read_text(), PARAM)
+
+    def test_enter_applies_recommended_profile_after_showing_vehicle_and_values(self):
+        output = io.StringIO()
+        def answer(prompt):
+            self.assertIn("車両 A2", prompt)
+            self.assertIn("(Recommended)", prompt)
+            self.assertIn("[Y/n]", prompt)
+            self.assertIn("参加者の承認", prompt)
+            self.assertNotIn("上書き", prompt)
+            self.assertIn("z  +0.001000  +0.003000  +0.002000", output.getvalue())
+            return ""
+        with patch("builtins.input", side_effect=answer), contextlib.redirect_stdout(output):
+            self.assertTrue(apply_saved_imu_bias(self.submit, "A2"))
+        self.assertEqual(parse_offsets(self.param.read_text()), OFFSETS)
+
+    def test_unavailable_profile_is_not_recommended_and_enter_retains_settings(self):
+        for content in (None, "invalid"):
+            with self.subTest(content=content):
+                self.source.unlink(missing_ok=True)
+                if content is not None:
+                    self.source.write_text(content)
+                with patch("builtins.input", return_value="") as prompt, contextlib.redirect_stdout(io.StringIO()):
+                    self.assertFalse(apply_saved_imu_bias(self.submit, "A2"))
+                self.assertIn("[y/N]", prompt.call_args.args[0])
+                self.assertNotIn("Recommended", prompt.call_args.args[0])
+                self.assertEqual(self.param.read_text(), PARAM)
+
+    def test_unset_vehicle_id_is_not_recommended(self):
+        with patch("builtins.input", return_value="") as prompt, contextlib.redirect_stdout(io.StringIO()):
+            self.assertFalse(apply_saved_imu_bias(self.submit, ""))
+        self.assertNotIn("Recommended", prompt.call_args.args[0])
+        self.assertEqual(self.param.read_text(), PARAM)
+
+    def test_other_confirmation_callers_keep_default_no(self):
+        with patch("builtins.input", return_value=""):
+            self.assertFalse(confirm_update("[y/N]: "))
 
     def test_missing_invalid_or_nonfinite_source_never_writes(self):
         for content in (None, "invalid", "angular_velocity_offset_x: 1\n",
@@ -120,7 +156,7 @@ class SavedBiasTest(unittest.TestCase):
 
     def test_cli_reports_applied_skipped_and_failed(self):
         argv = ["apply_imu_bias.py", "--submit-dir", str(self.submit)]
-        for answer, vehicle, code in (("y", "A2", 0), ("n", "A2", 5), ("y", "A9", 3)):
+        for answer, vehicle, code in (("y", "A2", 0), ("", "A2", 0), ("n", "A2", 5), ("y", "A9", 3)):
             with self.subTest(code=code), patch.object(sys, "argv", argv), \
                     patch("apply_imu_bias.detect_vehicle_id", return_value=vehicle), \
                     patch("builtins.input", return_value=answer), \

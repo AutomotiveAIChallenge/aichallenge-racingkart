@@ -30,7 +30,7 @@ import tempfile
 import zipfile
 from pathlib import Path
 
-from calibration import MAP_DIR, apply_maps, apply_saved_imu_bias, confirm_update, detect_vehicle_id
+from calibration import MAP_DIR, apply_maps, apply_saved_imu_bias, detect_vehicle_id
 
 FAIL = "❌"
 SUBMIT_DIR = "aichallenge_submit"
@@ -110,11 +110,7 @@ def extract(zip_path: Path, password: str, output: Path) -> int:
                 else:
                     print(f"⚠️ Submission has no {MAP_DIR / name}; skipping its map update.")
             try:
-                if names and confirm_update(
-                    "提出物の accel/brake map を AWSIM adapter の共通mapで上書きしますか？\n"
-                    "参加者の承認を確認してください。 [y/N]: "
-                ):
-                    apply_maps(extracted, names)
+                if names and apply_maps(extracted, names):
                     print(f"Updated common maps: {', '.join(names)}")
                 elif names:
                     print("Map update declined; participant maps retained.")

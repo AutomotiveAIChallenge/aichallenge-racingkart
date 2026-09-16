@@ -111,11 +111,21 @@ def read_map(path: Path) -> bytes:
     return data
 
 
-def apply_maps(submit: Path, names: list[str]) -> None:
-    """Validate selected adapter maps before replacing files in a disposable submission."""
-    maps = {name: read_map(DEFAULT_MAP_DIR / name) for name in names}
+def apply_maps(submit: Path, names: list[str]) -> bool:
+    """Validate and recommend common maps, then apply the approved bytes."""
+    error = None
+    try:
+        maps = {name: read_map(DEFAULT_MAP_DIR / name) for name in names}
+    except (OSError, ValueError) as exc:
+        error = exc
+        print(f"⚠️ Common accel/brake maps unavailable: {exc}")
+    if not confirm_application("実車用の共通 accel/brake map", recommended=error is None):
+        return False
+    if error is not None:
+        raise error
     for name, data in maps.items():
         atomic_write(submit / MAP_DIR / name, data.decode("utf-8"))
+    return True
 
 
 def detect_vehicle_id(repo_root: Path) -> str:
@@ -137,12 +147,32 @@ def read_saved_bias(vehicle_id: str) -> dict[str, float]:
     )
 
 
-def confirm_update(prompt: str) -> bool:
-    """Only an explicit yes authorizes an update; EOF also retains current settings."""
+def confirm_update(prompt: str, *, default_yes: bool = False) -> bool:
+    """Enter accepts the displayed default; EOF always retains current settings."""
     try:
-        return input(prompt).strip().lower() in ("y", "yes")
+        answer = input(prompt).strip().lower()
     except EOFError:
         return False
+    return default_yes if not answer else answer in ("y", "yes")
+
+
+def confirm_application(settings: str, *, recommended: bool) -> bool:
+    """Recommend applying validated settings, retaining participant approval."""
+    if recommended:
+        prompt = (
+            f"{settings}を適用します。\n"
+            "通常はこちらを選択してください。参加者の承認を確認してください。\n\n"
+            "Y: 推奨設定を適用する (Recommended)\n"
+            "n: 提出物の値を保持する\n"
+            "[Y/n]: "
+        )
+    else:
+        prompt = (
+            f"{settings}の適用元に問題があります。適用を選ぶとエラーになります。\n"
+            "提出物の値を保持する場合は n を選択してください。\n"
+            "適用しますか？ [y/N]: "
+        )
+    return confirm_update(prompt, default_yes=recommended)
 
 
 def apply_saved_imu_bias(submit: Path, vehicle_id: str) -> bool:
@@ -171,9 +201,9 @@ def apply_saved_imu_bias(submit: Path, vehicle_id: str) -> bool:
         print("軸    現在値        保存値        差分(保存値−現在値)")
         for axis in AXES:
             print(f"{axis}  {current[axis]:+.6f}  {saved[axis]:+.6f}  {saved[axis] - current[axis]:+.6f}")
-    if not confirm_update(
-        f"提出物の IMU 角速度バイアスを車両 {vehicle_id or '(未設定)'} の保存値で上書きしますか？\n"
-        "参加者の承認を確認してください。 [y/N]: "
+    if not confirm_application(
+        f"車両 {vehicle_id or '(未設定)'} の保存済み IMU バイアス",
+        recommended=error is None,
     ):
         print("IMU update declined; participant offsets retained.")
         return False

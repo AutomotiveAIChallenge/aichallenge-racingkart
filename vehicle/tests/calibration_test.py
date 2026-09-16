@@ -104,13 +104,53 @@ class CalibrationTest(unittest.TestCase):
             self.assertEqual((self.target / MAP_DIR / name).read_text(), "participant map")
         self.assertEqual((self.target / IMU_PARAM).read_text(), PARAM)
 
-    def test_eof_or_empty_answer_keeps_participant_maps(self):
-        for answer in ("", "no", "unexpected", EOFError()):
+    def test_decline_or_eof_keeps_participant_maps(self):
+        for answer in ("no", "unexpected", EOFError()):
             with self.subTest(answer=answer):
                 input_patch = patch("builtins.input", side_effect=answer) if isinstance(answer, EOFError) else patch("builtins.input", return_value=answer)
                 with input_patch, contextlib.redirect_stdout(io.StringIO()):
                     self.assertEqual(extract(self.archive, "password", self.output), 0)
                 self.assertEqual((self.target / MAP_DIR / "accel_map.csv").read_text(), "participant map")
+
+    def test_enter_applies_maps_and_imu_with_independent_recommendations(self):
+        with patch("builtins.input", return_value="") as prompt, contextlib.redirect_stdout(io.StringIO()):
+            self.assertEqual(extract(self.archive, "password", self.output), 0)
+        self.assertEqual(prompt.call_count, 2)
+        prompts = [call.args[0] for call in prompt.call_args_list]
+        self.assertIn("実車用の共通 accel/brake map", prompts[0])
+        self.assertIn("車両 A2", prompts[1])
+        for message in prompts:
+            self.assertIn("(Recommended)", message)
+            self.assertIn("[Y/n]", message)
+            self.assertNotIn("上書き", message)
+        for name in ("accel_map.csv", "brake_map.csv"):
+            self.assertEqual((self.target / MAP_DIR / name).read_text(), MAP)
+        self.assertEqual(parse_offsets((self.target / IMU_PARAM).read_text()), OFFSETS)
+
+    def test_unavailable_maps_are_not_recommended_and_enter_retains_them(self):
+        source = self.maps / "accel_map.csv"
+        for content in (None, "invalid"):
+            with self.subTest(content=content):
+                source.unlink(missing_ok=True)
+                if content is not None:
+                    source.write_text(content)
+                with patch("builtins.input", side_effect=["", "n"]) as prompt, contextlib.redirect_stdout(io.StringIO()):
+                    self.assertEqual(extract(self.archive, "password", self.output), 0)
+                message = prompt.call_args_list[0].args[0]
+                self.assertIn("[y/N]", message)
+                self.assertNotIn("Recommended", message)
+                self.assertEqual((self.target / MAP_DIR / "accel_map.csv").read_text(), "participant map")
+                self.assertEqual((self.target / MAP_DIR / "brake_map.csv").read_text(), "participant map")
+
+    def test_maps_apply_the_validated_bytes_even_if_source_changes_during_prompt(self):
+        def answer(prompt):
+            if "accel/brake" in prompt:
+                (self.maps / "accel_map.csv").write_text("invalid after validation")
+                return ""
+            return "n"
+        with patch("builtins.input", side_effect=answer), contextlib.redirect_stdout(io.StringIO()):
+            self.assertEqual(extract(self.archive, "password", self.output), 0)
+        self.assertEqual((self.target / MAP_DIR / "accel_map.csv").read_text(), MAP)
 
     def test_invalid_maps_leave_existing_submission(self):
         for text in ("", "default,0,2\n0,1\n0.1,1,2\n",
@@ -170,8 +210,8 @@ class CalibrationTest(unittest.TestCase):
         self.assertEqual((self.target / MAP_DIR / "accel_map.csv").read_text(), "participant map")
         self.assertEqual(parse_offsets((self.target / IMU_PARAM).read_text()), OFFSETS)
 
-    def test_imu_decline_empty_answer_or_eof_keeps_offsets(self):
-        for answer in ("n", "", EOFError()):
+    def test_imu_decline_or_eof_keeps_offsets(self):
+        for answer in ("n", EOFError()):
             with self.subTest(answer=answer):
                 self.assertEqual(self.run_extract(imu_answer=answer), 0)
                 self.assertEqual((self.target / IMU_PARAM).read_text(), PARAM)
