@@ -102,7 +102,7 @@
 | 6 | `zenoh down` | `docker compose down zenoh` | なし | `zenoh` が running でない（実測） |
 | 7 | `rosbag` | `make rosbag` | なし | `rosbag` が running（実測） |
 | 8 | `rosbag down` | `docker compose down rosbag` | なし | `rosbag` が running でない（実測） |
-| 9 | `down all` | `make down` | なし | このリポジトリから compose で起動された running コンテナが 0（全プロジェクト、実測） |
+| 9 | `down all` | `make down_all` | なし | ホスト上の running コンテナが 0（全プロジェクト、実測） |
 
 運営が 1〜4 で車両側の準備・確認を済ませてから、参加者が 1〜3 で Autoware を起動・確認する。
 終了時は参加者の 4 で Autoware を落とす。1 日の終わりに運営が 9（`down all`）で全部を落とす。
@@ -111,7 +111,8 @@ Autoware の入れ替えは参加者の 4 → 1 → 2 → 3。driver は運営�
 
 `driver` / `zenoh` は常時 ON で、落とすのは異常時だけである。`zenoh` を落とすと遠隔からの
 監視が切れ、`driver` を落とすと車両が動かなくなる。`rosbag` / `rosbag down` は大会中は押さない。
-`down all` は 1 日の終わりに使う。参加者の `autoware-vehicle down` はこの 3 つを触らない。
+`down all` は専用の車両 PC 上にある全コンテナを強制削除するため、1 日の終わりに使う。
+参加者の `autoware-vehicle down` は driver / zenoh / rosbag を触らない。
 `rosbag` は両方の起動後チェックの必須サービスに含めない。
 記録を残す走行枠では運営の 7 で始め、8 で閉じる。記録状態はサービス行で確認する。
 
@@ -140,7 +141,7 @@ Zenoh の直接確認はコンテナ稼働までで、TCP 疎通は preflight �
 |----------|------|------------|----------|
 | `autoware-vehicle down` | 参加者 | `autoware` のみ（`docker compose down autoware`） | Autoware だけ落とす。`driver` / `zenoh` / `rosbag` は繋いだまま。入れ替えは続けて `autoware-vehicle` |
 | `driver down` / `zenoh down` / `rosbag down` | 運営 | それぞれ 1 サービスだけ（`docker compose down driver` / `zenoh` / `rosbag`） | 土台のうち入れ替えたいサービスだけ落とすとき |
-| `down all` | 運営 | compose のスタック全部（プロジェクト 1〜4 を含む） | 1 日の終わり |
+| `down all` | 運営 | ホスト上の全 Docker コンテナ（compose project を問わず強制削除） | 1 日の終わり |
 
 ### 提出物の準備と片付け
 
@@ -162,11 +163,11 @@ runtime では計測・上書き・承認確認を行わず、生 IMU を含む�
 詳細は [設定の適用手順](../../vehicle/calibration.md) を参照する。
 
 各サービスの起動・停止と `down all` は Docker の状態から実測する。
-`down all` は `docker compose ps` では判定できない: それは 1 プロジェクトしか見ないが、
-`make down` は default と `-p 1..4` の全部を落とす。compose が各コンテナに付ける
-`com.docker.compose.project.working_dir` ラベルでこのリポジトリ由来の running コンテナを
-数え、0 なら済とする。
-実測を優先するため、別のシェルで `make down` された場合も次の観測で反映され、
+`make down_all` は `sudo docker ps -aq` で得た全コンテナを `sudo docker rm -f` する。
+車両 PC は専用ホストで他用途のコンテナを動かさないため、compose project や起動元の
+リポジトリを問わず全コンテナを停止対象にする。完了判定もホスト全体の `docker ps -q` を数え、
+0 なら済とする。`sudo` がパスワードを要求できるよう、TUI はこのステップに実端末を明け渡す。
+実測を優先するため、別のシェルで `make down_all` された場合も次の観測で反映され、
 TUI 内のキャッシュと実態が食い違うことがない。
 
 `check preflight` / `Update the accel/brake maps and IMU bias` / `check driver / zenoh` / `check autoware` は各 TUI のセッションに結果を記憶する。
@@ -358,7 +359,7 @@ make vehicle-tui-staff
 - **ステップの失敗**：終了コードを表示し、そのステップを失敗状態にする。
   失敗したステップは実行可能なまま残り、Enter で再実行できる。
   `setup_check.sh` の失敗項目は failures 領域にそのまま見せる（TUI 側で解釈しない）。
-- **前提の崩れ**：アイドル中も 2 秒間隔で実測を取り直すため、外部で `make down` された
+- **前提の崩れ**：アイドル中も 2 秒間隔で実測を取り直すため、外部で `make down_all` された
   場合や、コンソールを触っていないあいだにサービスが落ちた場合も自動的に反映される。
   ステップの実行中は取り直さない（`observe()` は `docker compose ps` を待つので
   描画スレッドを塞ぐし、ステップ終了時にはどうせ取り直す）。

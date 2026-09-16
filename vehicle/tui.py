@@ -166,7 +166,7 @@ def should_reobserve(busy: bool, now: float, observed_at: float) -> bool:
     """アイドル中の実測を取り直すべきか。
 
     実行中は取り直さない。observe() は描画スレッドを塞ぐし、ステップ終了時には
-    どうせ取り直すため。アイドル中に取り直さないと、別のシェルで make down された
+    どうせ取り直すため。アイドル中に取り直さないと、別のシェルで make down_all された
     ときにバッジと実測ステップの表示が古いまま残る。
     """
     if busy:
@@ -231,21 +231,13 @@ def repo_commit(repo_root: Path):
 
 
 def stack_containers(repo_root: Path) -> int:
-    """How many running containers compose has started from this repo.
+    """How many containers are running on this dedicated vehicle host.
 
-    Counts across every compose project (default and `-p 1..4`) via the
-    working_dir label compose stamps on each container, which is exactly the
-    set `make down` tears down. `docker compose ps` cannot do this: it sees
-    one project per call. A docker failure counts as zero, consistent with
-    running_services().
+    `make down_all` force-removes every container regardless of compose project,
+    so its completion probe must use the same host-wide scope. A docker failure
+    counts as zero, consistent with running_services().
     """
-    out = _run(
-        [
-            "docker", "ps", "--quiet",
-            "--filter", f"label=com.docker.compose.project.working_dir={repo_root}",
-        ],
-        repo_root,
-    )
+    out = _run(["docker", "ps", "--quiet"], repo_root)
     if out is None:
         return 0
     return len(out.stdout.split())
@@ -376,7 +368,8 @@ class Console:
         """Give the real terminal to a step that prompts.
 
         apply_calibration.py asks whether to apply maps and saved IMU biases.
-        It needs a real tty, so curses is torn down and rebuilt around the call.
+        make down_all may ask for a sudo password. These need a real tty, so
+        curses is torn down and rebuilt around the call.
         """
         curses.endwin()
         print(f"\n$ {' '.join(step.command)}\n", flush=True)

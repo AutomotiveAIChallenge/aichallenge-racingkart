@@ -53,8 +53,8 @@ class Workspace:
     """
 
     services_running: FrozenSet[str] = field(default_factory=frozenset)
-    # このリポジトリから compose で起動された running なコンテナ数（プロジェクト不問）。
-    # services_running は default しか見ないので、make down の「全部止まったか」はこちら。
+    # ホスト上の running コンテナ数。運営 TUI の make down_all は project を問わず
+    # 全コンテナを強制削除するため、その完了判定もホスト全体を見る。
     stack_containers: int = 0
 
 
@@ -73,8 +73,8 @@ def _service_down(name: str) -> Callable[[Workspace], bool]:
 
 
 def _stack_down(ws: Workspace) -> bool:
-    # make down は default と -p 1..4 の全コンテナを落とす。REQUIRED_SERVICES だけ
-    # 見ると simulator や別プロジェクトの autoware が残っていても OK と出てしまう。
+    # make down_all はホスト上の全コンテナを落とす。REQUIRED_SERVICES だけ見ると
+    # team-* など別プロジェクトの autoware が残っていても OK と出てしまう。
     return ws.stack_containers == 0 and not any(
         name in ws.services_running for name in REQUIRED_SERVICES
     )
@@ -218,7 +218,9 @@ STAFF_STEPS = (
         step_id=STEP_TEARDOWN,
         title="down all",
         note="end of the day",
-        command=("make", "down"),
+        command=("make", "down_all"),
+        # make down_all は sudo がパスワードを要求できるよう実端末を使う。
+        interactive=True,
         measure=_stack_down,
         invalidates=(STEP_CHECK_DRIVER, STEP_CHECK_AUTOWARE),
     ),
@@ -247,7 +249,7 @@ def step_status(step_id: str, ws: Workspace, session: Dict[str, str]) -> str:
     """Derive a step's state.
 
     A step in flight reports RUNNING regardless of anything else. Otherwise
-    measured steps come from the environment, so an external `make down` shows
+    measured steps come from the environment, so an external `make down_all` shows
     through instead of this session's stale memory; the remaining steps are
     check runs whose result exists only as an exit code, so they come from the
     session.

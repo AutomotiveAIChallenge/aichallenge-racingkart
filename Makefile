@@ -138,6 +138,7 @@ down:
 	@for p in 1 2 3 4; do docker compose -p $$p down --remove-orphans; done
 	@docker compose down --remove-orphans
 
+# 車両 PC は専用ホストなので、1 日の終わりには project を問わず全コンテナを強制削除する。
 down_all:
 	sudo docker ps -aq | xargs -r sudo docker rm -f
 

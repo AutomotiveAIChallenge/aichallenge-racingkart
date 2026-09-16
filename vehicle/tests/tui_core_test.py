@@ -81,7 +81,7 @@ class TestSteps(unittest.TestCase):
         self.assertNotIn(STEP_PREFLIGHT, participant_ids)
 
     def test_participant_never_touches_the_infra_or_the_whole_stack(self):
-        # driver / zenoh / rosbag の起動・停止、make down は運営の仕事。
+        # driver / zenoh / rosbag の起動・停止、make down_all は運営の仕事。
         participant = {s.step_id for s in steps_for_role(ROLE_PARTICIPANT)}
         self.assertFalse(
             participant
@@ -120,10 +120,13 @@ class TestSteps(unittest.TestCase):
         self.assertEqual(
             step_by_id(STEP_ROSBAG_DOWN).command, ("docker", "compose", "down", "rosbag")
         )
-        self.assertEqual(step_by_id(STEP_TEARDOWN).command, ("make", "down"))
+        self.assertEqual(step_by_id(STEP_TEARDOWN).command, ("make", "down_all"))
 
     def test_preflight_step_is_not_interactive(self):
         self.assertFalse(step_by_id(STEP_PREFLIGHT).interactive)
+
+    def test_teardown_releases_the_terminal_for_sudo(self):
+        self.assertTrue(step_by_id(STEP_TEARDOWN).interactive)
 
     def test_calibration_releases_the_terminal_and_runtime_streams_output(self):
         step = step_by_id(STEP_CALIBRATION)
@@ -192,8 +195,8 @@ class TestStepStatus(unittest.TestCase):
         self.assertEqual(step_status(STEP_TEARDOWN, ws, {}), PENDING)
 
     def test_teardown_pending_while_another_project_still_runs(self):
-        # default プロジェクトの 4 サービスが落ちていても、simulator や -p 2 の
-        # autoware が残っていれば make down はまだ済んでいない。
+        # 運営側 project の 4 サービスが落ちていても、team-* など別 project の
+        # autoware が残っていれば make down_all はまだ済んでいない。
         ws = Workspace(services_running=frozenset(), stack_containers=1)
         self.assertEqual(step_status(STEP_TEARDOWN, ws, {}), PENDING)
 
@@ -207,7 +210,7 @@ class TestStepStatus(unittest.TestCase):
         self.assertEqual(step_status(STEP_AUTOWARE_DOWN, ws, {}), PENDING)
 
     def test_measured_step_ignores_a_stale_session_entry(self):
-        # An external `make down` must show through even though this session
+        # An external `make down_all` must show through even though this session
         # recorded the stack as up.
         ws = Workspace(services_running=frozenset())
         self.assertEqual(step_status(STEP_UP, ws, {STEP_UP: DONE}), PENDING)

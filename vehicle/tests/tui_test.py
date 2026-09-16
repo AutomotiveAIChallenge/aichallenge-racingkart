@@ -26,6 +26,7 @@ from tui import (  # noqa: E402
     is_failure_line,
     min_lines,
     repo_commit,
+    stack_containers,
     version_line,
     service_status_lines,
     should_reobserve,
@@ -196,6 +197,15 @@ class TestVersionProbes(unittest.TestCase):
             self.assertIsNone(
                 driver_image_date(Path(tmp), image="no-such-image:does-not-exist")
             )
+
+
+class TestStackContainers(unittest.TestCase):
+    def test_counts_every_running_container_on_the_host(self):
+        root = Path("/vehicle/repo")
+        result = subprocess.CompletedProcess([], 0, "first\nsecond\n", "")
+        with mock.patch("tui._run", return_value=result) as run:
+            self.assertEqual(stack_containers(root), 2)
+        run.assert_called_once_with(["docker", "ps", "--quiet"], root)
 
 
 class TestServiceStatusLines(unittest.TestCase):
@@ -379,7 +389,7 @@ class TestShouldReobserve(unittest.TestCase):
         self.assertTrue(should_reobserve(False, 2.0, 0.0))
 
     def test_after_the_interval(self):
-        # An external `make down` while idle has to show up on its own.
+        # An external `make down_all` while idle has to show up on its own.
         self.assertTrue(should_reobserve(False, 10.0, 0.0))
 
 
@@ -438,10 +448,17 @@ class TestRoleCheckLifecycle(unittest.TestCase):
                 console = Console(None)
                 console.session = {STEP_CHECK_DRIVER: DONE, STEP_CHECK_AUTOWARE: DONE,
                                    STEP_PREFLIGHT: DONE, STEP_CALIBRATION: DONE}
-                with mock.patch("tui.threading.Thread"), mock.patch.object(console, "observe"):
+                with mock.patch("tui.threading.Thread"), \
+                        mock.patch.object(console, "_run_interactive") as interactive, \
+                        mock.patch.object(console, "observe"):
                     console.run_step(action)
-                    console.log_queue.put(("exit", (action, 1)))
-                    console.drain()
+                    if step_by_id(action).interactive:
+                        interactive.assert_called_once_with(step_by_id(action))
+                        console.session[action] = FAILED
+                    else:
+                        interactive.assert_not_called()
+                        console.log_queue.put(("exit", (action, 1)))
+                        console.drain()
                 for check in (STEP_CHECK_DRIVER, STEP_CHECK_AUTOWARE):
                     self.assertEqual(console.session.get(check, PENDING),
                                      PENDING if check in invalidated else DONE)
