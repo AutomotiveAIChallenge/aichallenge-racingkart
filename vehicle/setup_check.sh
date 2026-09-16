@@ -668,30 +668,6 @@ check_runtime_ros_topics() {
     log ""
 }
 
-# 保存済みの車両別 IMU バイアスを適用 (runtime)
-apply_imu_bias() {
-    print_section "Apply Saved IMU Gyro Bias"
-
-    # 承認プロンプトを端末へ直接表示するため、コマンド置換で出力を捕捉しない。
-    python3 "${SCRIPT_DIR}/apply_imu_bias.py"
-    local rc=$?
-    case "${rc}" in
-    0)
-        log "${OK} Saved IMU bias applied (restart autoware to load the updated parameters)"
-        record_result "pass"
-        ;;
-    5)
-        log "${WARN} IMU update skipped; participant settings and saved bias retained"
-        record_result "warn"
-        ;;
-    *)
-        log "${FAIL} Saved IMU bias update failed (rc=${rc}; see above)"
-        record_result "fail"
-        ;;
-    esac
-    log ""
-}
-
 # past_log.md既知問題チェック (preflight)
 check_known_issues() {
     print_section "Known Issues Prevention Check"
@@ -768,7 +744,6 @@ main() {
         check_runtime_docker_services
         check_gnss_rtk_status
         check_runtime_ros_topics
-        apply_imu_bias
         ;;
     all)
         check_hardware
@@ -778,7 +753,6 @@ main() {
         check_runtime_docker_services
         check_gnss_rtk_status
         check_runtime_ros_topics
-        apply_imu_bias
         check_known_issues
         check_execution_readiness
         ;;

@@ -12,7 +12,8 @@ Extraction happens into a sibling temp directory first, so a wrong password or
 a malformed archive leaves the current aichallenge_submit/ untouched.
 Before replacement, ask for participant approval to copy the common accel/brake
 maps from aichallenge_awsim_adapter/data/. Declining preserves participant maps.
-IMU offsets are retained; runtime proposes applying the saved vehicle bias separately.
+Apply the saved vehicle IMU bias with separate participant approval before build
+and startup. Runtime checks do not measure or update calibration settings.
 
 Failures print a line starting with the FAIL marker so vehicle/tui.py retains
 them in its failures pane.
@@ -23,12 +24,13 @@ import argparse
 import getpass
 import os
 import shutil
+import subprocess
 import sys
 import tempfile
 import zipfile
 from pathlib import Path
 
-from calibration import MAP_DIR, apply_maps, confirm_update
+from calibration import MAP_DIR, apply_maps, apply_saved_imu_bias, confirm_update, detect_vehicle_id
 
 FAIL = "❌"
 SUBMIT_DIR = "aichallenge_submit"
@@ -118,6 +120,10 @@ def extract(zip_path: Path, password: str, output: Path) -> int:
                     print("Map update declined; participant maps retained.")
             except (OSError, ValueError) as exc:
                 return fail(f"cannot apply common maps: {exc}")
+            try:
+                apply_saved_imu_bias(extracted, detect_vehicle_id(REPO_ROOT))
+            except (OSError, ValueError, subprocess.SubprocessError) as exc:
+                return fail(f"cannot update IMU offsets: {exc}")
             if target.exists():
                 shutil.rmtree(target)
             os.replace(extracted, target)

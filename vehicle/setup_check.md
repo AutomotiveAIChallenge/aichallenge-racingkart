@@ -16,7 +16,7 @@
 # 起動後チェックのみ（スタックが起動している状態で実行）
 ./setup_check.sh --phase runtime
 
-# 全チェック（既定。runtime を含むためスタック起動中に実行する）
+# 全チェック（既定。スタック起動中に実行。設定更新・IMU 計測は含まない）
 ./setup_check.sh
 
 # ログファイル出力付き実行
@@ -30,7 +30,7 @@
 
 | ターゲット | フェーズ |
 | --- | --- |
-| `make autoware-driver-zenoh-rosbag` | 起動前に `--phase preflight`、起動後に `--phase runtime` |
+| `make autoware-driver-zenoh-rosbag` | 起動前に `--phase preflight`（runtime は別途実行） |
 | `make setup-vehicle` | `--phase all`（runtime を含むため **スタック起動中** に実行する） |
 
 preflight が fail すると exit code が非0になり、`docker compose up` に進まず中断します。
@@ -226,8 +226,8 @@ docker compose -f ../docker-compose.yml exec -T driver bash -lc \
 
 | コンテナ | トピック |
 | --- | --- |
-| `driver` | `/sensing/imu/imu_raw` |
 | `driver` | `/racing_kart/vcu/status`, `/racing_kart/steer/status`, `/racing_kart/brake/status`, `/racing_kart/sd/joy` |
+| `driver` | `/sensing/imu/imu_raw`（受信確認のみ） |
 | `driver` | `/racing_kart/vcu/command`, `/racing_kart/steer/command`, `/racing_kart/brake/command` |
 | `autoware` | `/vehicle/status/velocity_status`, `/vehicle/status/steering_status`, `/vehicle/status/gear_status`, `/vehicle/status/actuation_status` |
 | `autoware` | `/control/command/control_cmd`, `/control/command/actuation_cmd` |
@@ -240,16 +240,13 @@ docker compose -f ../docker-compose.yml exec -T driver bash -lc \
 
 ---
 
-### runtime: 5. 保存済み IMU バイアス適用
+### map・IMU バイアスの適用は提出物の展開時
 
-runtime での IMU バイアス計測・静止確認・再計測は行いません。
-`vehicle/.calibration/<VEHICLE_ID>/imu_bias.yaml` の保存値と提出物の現在値・差分を表示し、
-参加者の承認後だけ角速度バイアスを上書きします。保存元は変更しません。
-拒否・空回答・入力終了、対象ファイルなしは警告としてスキップします。
-保存元の欠損や不正な値は、承認時に失敗を報告し、提出物の値を保持します。
-
-更新の反映には Autoware の再起動が必要です。
-保存値の準備・適用手順は [calibration.md](calibration.md) を参照してください。
+Autoware 停止中の `make submission-extract` で、共通 accel/brake map と
+`vehicle/.calibration/<VEHICLE_ID>/imu_bias.yaml` の保存値を、参加者の承認後だけ適用します。
+その後にビルド・起動します。当日の IMU 計測は行いません。
+`runtime` / `all` は確認だけを行い、設定の上書きや承認入力はありません。
+詳細は [設定の適用手順](calibration.md) を参照してください。
 
 ---
 
@@ -352,26 +349,20 @@ Time: 2025年  8月 25日 月曜日 23:10:02 JST
 
 ℹ️ 4. Runtime ROS Topic Output Check
 ----------------------------------------
-ℹ️ Raw IMU topic
-✅ Raw IMU: /sensing/imu/imu_raw
 ℹ️ Racing kart hardware/status topics
 ✅ VCU status: /racing_kart/vcu/status
 ✅ Steer status: /racing_kart/steer/status
 ...
+✅ Raw IMU: /sensing/imu/imu_raw
 ℹ️ Autoware downstream control command topics
 ✅ Control command: /control/command/control_cmd
 ✅ Actuation command: /control/command/actuation_cmd
 
-ℹ️ 5. Apply Saved IMU Gyro Bias
-----------------------------------------
-...
-✅ Saved IMU bias applied (restart autoware to load the updated parameters)
-
 ========================================
 📊 Check Results Summary
 ========================================
-Total checks: 20
-✅ Passed: 20
+Total checks: 19
+✅ Passed: 19
 ⚠️ Warnings: 0
 ❌ Failed: 0
 
