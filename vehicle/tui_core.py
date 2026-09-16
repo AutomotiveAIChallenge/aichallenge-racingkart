@@ -19,13 +19,11 @@ FAILED = "failed"
 
 # --- ステップ ID -----------------------------------------------------------
 STEP_PREFLIGHT = "preflight"
-STEP_SUBMISSION = "submission"
-STEP_BUILD = "build"
+STEP_CALIBRATION = "calibration"
 STEP_UP = "up"
 STEP_RUNTIME = "runtime"
 STEP_AUTOWARE_DOWN = "autoware_down"
 STEP_TEARDOWN = "teardown"
-STEP_CLEAN = "clean"
 # 運営だけに出すステップ
 STEP_DRIVER = "driver"        # 土台: racing_kart_interface
 STEP_ZENOH = "zenoh"          # 土台: Zenoh bridge
@@ -36,7 +34,7 @@ STEP_ROSBAG_DOWN = "rosbag_down"
 STEP_DOWNLOAD = "download"    # 提出物を board から取る
 
 # --- 役割 ------------------------------------------------------------------
-# 参加者は autoware と提出物だけを触る。driver / zenoh / rosbag、ダウンロード、全体停止は運営。
+# 参加者はチェック、map・IMU バイアスの適用、autoware の起動・停止を行う。driver / zenoh / rosbag、ダウンロード、全体停止は運営。
 ROLE_PARTICIPANT = "participant"
 ROLE_STAFF = "staff"
 ROLES = (ROLE_PARTICIPANT, ROLE_STAFF)
@@ -54,24 +52,10 @@ class Workspace:
     "unknown but probably fine".
     """
 
-    install_mtime: Optional[float] = None
-    submit_mtime: Optional[float] = None
     services_running: FrozenSet[str] = field(default_factory=frozenset)
     # このリポジトリから compose で起動された running なコンテナ数（プロジェクト不問）。
     # services_running は default しか見ないので、make down の「全部止まったか」はこちら。
     stack_containers: int = 0
-    # aichallenge/workspace/ が checkout 直後の状態か。既定は False: 観測できなかったときに
-    # cleanup を「済」と見せてはいけない。
-    workspace_pristine: bool = False
-
-
-def build_done(ws: Workspace) -> bool:
-    """Whether install/ exists and is no older than the submission."""
-    if ws.install_mtime is None or ws.submit_mtime is None:
-        # Freshness is unprovable without both timestamps; report stale rather
-        # than let an old install/ pass as built.
-        return False
-    return ws.install_mtime >= ws.submit_mtime
 
 
 def _autoware_up(ws: Workspace) -> bool:
@@ -98,12 +82,6 @@ def _stack_down(ws: Workspace) -> bool:
 
 def _autoware_down(ws: Workspace) -> bool:
     return "autoware" not in ws.services_running
-
-
-def _workspace_pristine(ws: Workspace) -> bool:
-    # checkout 直後と同じなら済。提出物で上書きされた aichallenge_submit/ も、
-    # build/ install/ log/ も、どれか残っていれば未実行。
-    return ws.workspace_pristine
 
 
 @dataclass(frozen=True)
@@ -139,27 +117,18 @@ PARTICIPANT_STEPS = (
         cwd="vehicle",
     ),
     Step(
-        step_id=STEP_SUBMISSION,
-        title="extract",
-        command=("make", "submission-extract"),
+        step_id=STEP_CALIBRATION,
+        title="accel brake map and IMU bias",
+        command=("python3", "apply_calibration.py"),
+        cwd="vehicle",
         requires=(STEP_PREFLIGHT,),
-        # extract_submission.py prompts for the team id and the zip password.
         interactive=True,
-        # measure を持たせない: aichallenge_submit/ は checkout 時点で 15 個の tracked な
-        # パッケージが入っており常に非空。ディレクトリの有無は入れ替えの証拠にならない。
-    ),
-    Step(
-        step_id=STEP_BUILD,
-        title="build",
-        command=("make", "autoware-build"),
-        requires=(STEP_SUBMISSION,),
-        measure=build_done,
     ),
     Step(
         step_id=STEP_UP,
         title="autoware-vehicle",
         command=("make", "autoware-vehicle"),
-        requires=(STEP_BUILD,),
+        requires=(STEP_CALIBRATION,),
         measure=_autoware_up,
     ),
     Step(
@@ -174,12 +143,6 @@ PARTICIPANT_STEPS = (
         title="autoware-vehicle down",
         command=("docker", "compose", "down", "autoware"),
         measure=_autoware_down,
-    ),
-    Step(
-        step_id=STEP_CLEAN,
-        title="cleanup",
-        command=("make", "workspace-clean"),
-        measure=_workspace_pristine,
     ),
 )
 
@@ -290,7 +253,7 @@ def is_runnable(step_id: str, ws: Workspace, session: Dict[str, str]) -> bool:
     is standing on the machine and can see for themselves that, say, preflight
     legitimately fails on a dev box with no CAN hardware attached -- the
     console's job is to surface that deviation, not to forbid working around
-    it. Launching `make autoware-build` or the stack with an unmet
+    it. Launching Autoware with an unmet
     prerequisite is a deliberate operator call, not a bug.
 
     The one real hazard is launching a second overlapping run of the same

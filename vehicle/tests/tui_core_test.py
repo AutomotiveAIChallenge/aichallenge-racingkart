@@ -16,8 +16,6 @@ from tui_core import (  # noqa: E402
     PENDING,
     RUNNING,
     STEP_AUTOWARE_DOWN,
-    STEP_BUILD,
-    STEP_CLEAN,
     PARTICIPANT_STEPS,
     ROLE_PARTICIPANT,
     ROLE_STAFF,
@@ -30,12 +28,11 @@ from tui_core import (  # noqa: E402
     STEP_ROSBAG,
     STEP_ROSBAG_DOWN,
     STEP_PREFLIGHT,
+    STEP_CALIBRATION,
     STEP_RUNTIME,
-    STEP_SUBMISSION,
     STEP_TEARDOWN,
     STEP_UP,
     Workspace,
-    build_done,
     is_runnable,
     step_by_id,
     step_status,
@@ -46,28 +43,16 @@ from tui_core import (  # noqa: E402
 ALL_UP = frozenset({"driver", "autoware", "zenoh", "rosbag"})
 
 
-def built_ws(**kwargs):
-    """A workspace with a submission present and a fresh install/."""
-    base = dict(
-        submit_mtime=100.0,
-        install_mtime=200.0,
-    )
-    base.update(kwargs)
-    return Workspace(**base)
-
-
 class TestSteps(unittest.TestCase):
     def test_participant_steps_in_execution_order(self):
         self.assertEqual(
             [s.step_id for s in PARTICIPANT_STEPS],
             [
                 STEP_PREFLIGHT,
-                STEP_SUBMISSION,
-                STEP_BUILD,
+                STEP_CALIBRATION,
                 STEP_UP,
                 STEP_RUNTIME,
                 STEP_AUTOWARE_DOWN,
-                STEP_CLEAN,
             ],
         )
 
@@ -135,56 +120,30 @@ class TestSteps(unittest.TestCase):
         self.assertEqual(
             step_by_id(STEP_ROSBAG_DOWN).command, ("docker", "compose", "down", "rosbag")
         )
-
-    def test_cleanup_step_clears_the_workspace(self):
-        # cleanup は「ディレクトリを消す」担当。スタックの停止は down が持つ。
-        self.assertEqual(step_by_id(STEP_CLEAN).command, ("make", "workspace-clean"))
         self.assertEqual(step_by_id(STEP_TEARDOWN).command, ("make", "down"))
-
-    def test_extract_step_is_interactive(self):
-        # extract_submission.py asks for the team id and a hidden password; the
-        # console has to release the terminal for it.
-        self.assertTrue(step_by_id(STEP_SUBMISSION).interactive)
-
-    def test_extract_step_swaps_the_submission_from_a_zip(self):
-        self.assertEqual(
-            step_by_id(STEP_SUBMISSION).command, ("make", "submission-extract")
-        )
 
     def test_preflight_step_is_not_interactive(self):
         self.assertFalse(step_by_id(STEP_PREFLIGHT).interactive)
 
-    def test_runtime_step_streams_checks_without_calibration_prompts(self):
+    def test_calibration_releases_the_terminal_and_runtime_streams_output(self):
+        step = step_by_id(STEP_CALIBRATION)
+        self.assertTrue(step.interactive)
+        self.assertEqual(step.title, "accel brake map and IMU bias")
+        self.assertEqual(step.command, ("python3", "apply_calibration.py"))
+        self.assertEqual(step.cwd, "vehicle")
         self.assertFalse(step_by_id(STEP_RUNTIME).interactive)
 
     def test_download_step_is_interactive_and_staff_only(self):
         self.assertTrue(step_by_id(STEP_DOWNLOAD).interactive)
         self.assertEqual(step_by_id(STEP_DOWNLOAD).command, ("make", "download"))
 
+    def test_calibration_follows_preflight_and_precedes_autoware(self):
+        self.assertEqual(step_by_id(STEP_CALIBRATION).requires, (STEP_PREFLIGHT,))
+        self.assertEqual(step_by_id(STEP_UP).requires, (STEP_CALIBRATION,))
+
     def test_step_by_id_rejects_unknown(self):
         with self.assertRaises(KeyError):
             step_by_id("no-such-step")
-
-
-class TestBuildDone(unittest.TestCase):
-    def test_install_newer_than_src_is_built(self):
-        self.assertTrue(build_done(built_ws()))
-
-    def test_equal_mtime_counts_as_built(self):
-        self.assertTrue(build_done(built_ws(install_mtime=100.0)))
-
-    def test_install_older_than_src_is_stale(self):
-        self.assertFalse(build_done(built_ws(install_mtime=50.0)))
-
-    def test_no_install_is_not_built(self):
-        self.assertFalse(build_done(Workspace(submit_mtime=100.0)))
-
-    def test_missing_mtime_is_not_built(self):
-        ws = Workspace(install_mtime=1.0)
-        self.assertFalse(build_done(ws))
-
-    def test_empty_workspace_is_not_built(self):
-        self.assertFalse(build_done(Workspace()))
 
 
 class TestStepStatus(unittest.TestCase):
@@ -198,100 +157,64 @@ class TestStepStatus(unittest.TestCase):
             step_status(STEP_PREFLIGHT, ws, {STEP_PREFLIGHT: FAILED}), FAILED
         )
 
-    def test_submission_pending_with_empty_session_even_if_dir_has_content(self):
-        # aichallenge_submit/ ships tracked packages, so it always has
-        # content on a checkout -- that must not read as "downloaded".
-        ws = Workspace(submit_mtime=100.0)
-        self.assertEqual(step_status(STEP_SUBMISSION, ws, {}), PENDING)
-
-    def test_submission_done_when_session_records_done(self):
-        ws = Workspace(submit_mtime=100.0)
-        self.assertEqual(
-            step_status(STEP_SUBMISSION, ws, {STEP_SUBMISSION: DONE}), DONE
-        )
-
-    def test_submission_failed_when_session_records_failed(self):
-        ws = Workspace(submit_mtime=100.0)
-        self.assertEqual(
-            step_status(STEP_SUBMISSION, ws, {STEP_SUBMISSION: FAILED}), FAILED
-        )
-
-    def test_build_measured_from_the_workspace(self):
-        self.assertEqual(step_status(STEP_BUILD, built_ws(), {}), DONE)
-        self.assertEqual(
-            step_status(STEP_BUILD, built_ws(install_mtime=50.0), {}), PENDING
-        )
-
     def test_up_done_when_autoware_runs_even_without_the_infra(self):
         # autoware-vehicle が上げるのは autoware だけ。土台の有無はバッジで見せる。
-        ws = built_ws(services_running=frozenset({"autoware"}))
+        ws = Workspace(services_running=frozenset({"autoware"}))
         self.assertEqual(step_status(STEP_UP, ws, {}), DONE)
 
     def test_up_pending_when_autoware_is_missing(self):
-        ws = built_ws(services_running=frozenset({"driver", "zenoh", "rosbag"}))
+        ws = Workspace(services_running=frozenset({"driver", "zenoh", "rosbag"}))
         self.assertEqual(step_status(STEP_UP, ws, {}), PENDING)
 
     def test_per_service_up_done_only_when_that_service_runs(self):
         # 各サービスの up は自分だけを見る。他が動いていても関係ない。
-        ws = built_ws(services_running=frozenset({"driver"}))
+        ws = Workspace(services_running=frozenset({"driver"}))
         self.assertEqual(step_status(STEP_DRIVER, ws, {}), DONE)
         self.assertEqual(step_status(STEP_ZENOH, ws, {}), PENDING)
         self.assertEqual(step_status(STEP_ROSBAG, ws, {}), PENDING)
 
     def test_per_service_down_pending_while_that_service_runs(self):
-        ws = built_ws(services_running=frozenset({"driver"}))
+        ws = Workspace(services_running=frozenset({"driver"}))
         self.assertEqual(step_status(STEP_DRIVER_DOWN, ws, {}), PENDING)
         self.assertEqual(step_status(STEP_ZENOH_DOWN, ws, {}), DONE)
         self.assertEqual(step_status(STEP_ROSBAG_DOWN, ws, {}), DONE)
 
     def test_per_service_down_done_when_nothing_runs(self):
-        ws = built_ws()
+        ws = Workspace()
         self.assertEqual(step_status(STEP_DRIVER_DOWN, ws, {}), DONE)
         self.assertEqual(step_status(STEP_ZENOH_DOWN, ws, {}), DONE)
         self.assertEqual(step_status(STEP_ROSBAG_DOWN, ws, {}), DONE)
 
     def test_teardown_done_when_nothing_runs(self):
-        self.assertEqual(step_status(STEP_TEARDOWN, built_ws(), {}), DONE)
+        self.assertEqual(step_status(STEP_TEARDOWN, Workspace(), {}), DONE)
 
     def test_teardown_pending_while_services_run(self):
-        ws = built_ws(services_running=ALL_UP)
+        ws = Workspace(services_running=ALL_UP)
         self.assertEqual(step_status(STEP_TEARDOWN, ws, {}), PENDING)
 
     def test_teardown_pending_while_another_project_still_runs(self):
         # default プロジェクトの 4 サービスが落ちていても、simulator や -p 2 の
         # autoware が残っていれば make down はまだ済んでいない。
-        ws = built_ws(services_running=frozenset(), stack_containers=1)
+        ws = Workspace(services_running=frozenset(), stack_containers=1)
         self.assertEqual(step_status(STEP_TEARDOWN, ws, {}), PENDING)
 
     def test_autoware_down_done_when_autoware_is_not_running(self):
         # driver だけ生きていても autoware が落ちていれば済んでいる。
-        ws = built_ws(services_running=frozenset({"driver", "zenoh"}))
+        ws = Workspace(services_running=frozenset({"driver", "zenoh"}))
         self.assertEqual(step_status(STEP_AUTOWARE_DOWN, ws, {}), DONE)
 
     def test_autoware_down_pending_while_autoware_runs(self):
-        ws = built_ws(services_running=frozenset({"autoware"}))
+        ws = Workspace(services_running=frozenset({"autoware"}))
         self.assertEqual(step_status(STEP_AUTOWARE_DOWN, ws, {}), PENDING)
-
-    def test_clean_done_when_workspace_is_pristine(self):
-        self.assertEqual(
-            step_status(STEP_CLEAN, Workspace(workspace_pristine=True), {}), DONE
-        )
-
-    def test_clean_pending_by_default(self):
-        # 観測できなかった場合に「済」と出してはいけない。
-        self.assertEqual(step_status(STEP_CLEAN, Workspace(), {}), PENDING)
-
-    def test_clean_pending_while_workspace_is_dirty(self):
-        self.assertEqual(step_status(STEP_CLEAN, built_ws(), {}), PENDING)
 
     def test_measured_step_ignores_a_stale_session_entry(self):
         # An external `make down` must show through even though this session
         # recorded the stack as up.
-        ws = built_ws(services_running=frozenset())
+        ws = Workspace(services_running=frozenset())
         self.assertEqual(step_status(STEP_UP, ws, {STEP_UP: DONE}), PENDING)
 
     def test_running_wins_over_everything(self):
-        ws = built_ws(services_running=ALL_UP)
+        ws = Workspace(services_running=ALL_UP)
         self.assertEqual(step_status(STEP_UP, ws, {STEP_UP: RUNNING}), RUNNING)
 
 
@@ -304,57 +227,36 @@ class TestRunnable(unittest.TestCase):
     def test_teardown_always_runnable(self):
         self.assertTrue(is_runnable(STEP_TEARDOWN, Workspace(), {}))
 
-    def test_submission_runnable_even_with_preflight_unmet(self):
-        self.assertTrue(is_runnable(STEP_SUBMISSION, Workspace(), {}))
+    def test_up_runnable_even_with_preflight_unmet(self):
+        self.assertTrue(is_runnable(STEP_UP, Workspace(), {}))
 
-    def test_submission_runnable_even_after_preflight_failed(self):
+    def test_up_runnable_even_after_preflight_failed(self):
         session = {STEP_PREFLIGHT: FAILED}
-        self.assertTrue(is_runnable(STEP_SUBMISSION, Workspace(), session))
+        self.assertTrue(is_runnable(STEP_UP, Workspace(), session))
 
-    def test_submission_runnable_after_preflight_passes(self):
+    def test_up_runnable_after_preflight_passes(self):
         session = {STEP_PREFLIGHT: DONE}
-        self.assertTrue(is_runnable(STEP_SUBMISSION, Workspace(), session))
-
-    def test_build_runnable_without_a_submission(self):
-        session = {STEP_PREFLIGHT: DONE}
-        self.assertTrue(is_runnable(STEP_BUILD, Workspace(), session))
-
-    def test_up_runnable_even_when_not_built(self):
-        session = {STEP_PREFLIGHT: DONE, STEP_SUBMISSION: DONE}
-        ws = Workspace(submit_mtime=100.0)
-        self.assertTrue(is_runnable(STEP_UP, ws, session))
-
-    def test_up_runnable_once_built(self):
-        session = {STEP_PREFLIGHT: DONE}
-        self.assertTrue(is_runnable(STEP_UP, built_ws(), session))
-
-    def test_restart_with_empty_session_still_allows_up_once_built(self):
-        # Console restarted: the session is empty, so STEP_SUBMISSION reads PENDING again.
-        # STEP_BUILD and STEP_UP are measured from disk, so they still report built and up.
-        ws = built_ws()
-        self.assertEqual(step_status(STEP_SUBMISSION, ws, {}), PENDING)
-        self.assertEqual(step_status(STEP_BUILD, ws, {}), DONE)
-        self.assertTrue(is_runnable(STEP_UP, ws, {}))
+        self.assertTrue(is_runnable(STEP_UP, Workspace(), session))
 
     def test_runtime_runnable_even_when_stack_is_not_up(self):
         session = {STEP_PREFLIGHT: DONE}
-        self.assertTrue(is_runnable(STEP_RUNTIME, built_ws(), session))
+        self.assertTrue(is_runnable(STEP_RUNTIME, Workspace(), session))
 
     def test_runtime_runnable_once_the_stack_is_up(self):
         session = {STEP_PREFLIGHT: DONE}
-        ws = built_ws(services_running=ALL_UP)
+        ws = Workspace(services_running=ALL_UP)
         self.assertTrue(is_runnable(STEP_RUNTIME, ws, session))
 
     def test_a_failed_step_stays_runnable(self):
         # That is how retry works.
-        session = {STEP_PREFLIGHT: DONE, STEP_SUBMISSION: FAILED}
-        self.assertTrue(is_runnable(STEP_SUBMISSION, Workspace(), session))
+        session = {STEP_RUNTIME: FAILED}
+        self.assertTrue(is_runnable(STEP_RUNTIME, Workspace(), session))
 
     def test_a_running_step_is_not_runnable(self):
         # No launching a second overlapping run of the same step. This is
         # the one case prerequisites cannot override.
-        session = {STEP_PREFLIGHT: DONE, STEP_SUBMISSION: RUNNING}
-        self.assertFalse(is_runnable(STEP_SUBMISSION, Workspace(), session))
+        session = {STEP_PREFLIGHT: DONE, STEP_UP: RUNNING}
+        self.assertFalse(is_runnable(STEP_UP, Workspace(), session))
 
 
 class TestHasUnmetRequirement(unittest.TestCase):
@@ -363,18 +265,16 @@ class TestHasUnmetRequirement(unittest.TestCase):
         self.assertFalse(has_unmet_requirement(STEP_TEARDOWN, Workspace(), {}))
 
     def test_false_when_the_prerequisite_is_done(self):
-        session = {STEP_PREFLIGHT: DONE}
-        self.assertFalse(has_unmet_requirement(STEP_SUBMISSION, Workspace(), session))
+        session = {STEP_CALIBRATION: DONE}
+        self.assertFalse(has_unmet_requirement(STEP_UP, Workspace(), session))
 
     def test_true_when_the_prerequisite_is_pending(self):
-        self.assertTrue(has_unmet_requirement(STEP_SUBMISSION, Workspace(), {}))
+        self.assertTrue(has_unmet_requirement(STEP_UP, Workspace(), {}))
 
     def test_a_failed_prerequisite_counts_as_unmet(self):
-        session = {STEP_PREFLIGHT: FAILED}
-        self.assertTrue(has_unmet_requirement(STEP_SUBMISSION, Workspace(), session))
+        session = {STEP_CALIBRATION: FAILED}
+        self.assertTrue(has_unmet_requirement(STEP_UP, Workspace(), session))
 
-    def test_build_reports_submission_as_unmet_without_a_session_entry(self):
-        self.assertTrue(has_unmet_requirement(STEP_BUILD, Workspace(), {}))
 
 if __name__ == "__main__":
     unittest.main()

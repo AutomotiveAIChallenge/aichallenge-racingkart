@@ -11,7 +11,7 @@
 # 起動後チェックのみ（スタックが起動している状態で実行）
 ./setup_check.sh --phase runtime
 
-# 全チェック（既定。スタック起動中に実行。設定の上書き・IMU 計測はしない）
+# 全チェック（既定。runtime を含むためスタック起動中に実行する）
 ./setup_check.sh
 
 # ログファイル出力付き実行
@@ -37,13 +37,11 @@ runtime（起動後）でチェックする項目：
 `make autoware-driver-zenoh-rosbag` は起動前に preflight を自動実行します。runtime は起動後に別途実行します。
 `make setup-vehicle` は `--phase all` 相当なので、**スタック起動中** に実行してください（停止中に叩くと runtime 系が一斉に fail します）。
 
-accel/brake map と IMU の角速度バイアスは、Autoware 停止中に `make submission-extract`
-で提出物を展開するときに、参加者の承認後に適用します。
-map は AWSIM adapter の共通値、IMU は `vehicle/.calibration/<VEHICLE_ID>/imu_bias.yaml`
-の保存値を使います。その後にビルドして起動するため、最初から更新した設定が使われます。
-通常は `Y: 推奨設定を適用する (Recommended)` を選びます。適用元を検証できた場合は
-Enter で適用します。独自の補正・調整がある場合は参加者と確認して `n` で提出物の値を保持できます。
-runtime ではキャリブレーションも設定更新も行いません。詳細は [設定の適用手順](calibration.md) を参照してください。
+参加者 TUI は `check preflight` → `accel brake map and IMU bias` → `autoware-vehicle`
+→ `check runtime` → `autoware-vehicle down` の順です。
+`accel brake map and IMU bias` は、Autoware 停止中に共通 map と保存済み IMU バイアスを
+それぞれ確認し、承認後にビルド済みの設定へ適用します。Enter / y で推奨値を適用し、n で保持します。
+runtime での計測・設定更新はありません。詳細は [設定の適用手順](calibration.md) を参照してください。
 
 詳細な確認項目と手動コマンドについては [setup_check.md](./setup_check.md) を参照してください。
 
@@ -54,15 +52,18 @@ runtime ではキャリブレーションも設定更新も行いません。詳
 ### 起動（例）
 
 ```bash
-# 運営: 土台を起動
+# ビルド済み提出物の map・IMU バイアスを承認後に適用して起動
+python3 vehicle/apply_calibration.py
+make autoware-vehicle
+
+# Racing Kart ドライバー
 make driver
+
+# Zenoh bridge
 make zenoh
 
-# 参加者: Autoware 停止中に提出物を展開し、保存済みの設定を適用してから起動
-make submission-extract  # map・IMU 保存値の適用をそれぞれ確認（通常は Y）
-make autoware-build
-make autoware-vehicle
-vehicle/setup_check.sh --phase runtime
+# まとめて起動（Autoware + Driver + Zenoh）
+make autoware-driver-zenoh
 ```
 
 ### 可視化 / 記録

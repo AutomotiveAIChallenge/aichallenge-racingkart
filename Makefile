@@ -185,7 +185,7 @@ submission-extract:
 
 # 車両 PC 上の操作コンソール。tmux 常駐なので ssh が切れても作業が残り、
 # 再接続して同じターゲットを叩けば -A で同じセッションへアタッチする。
-# 参加者用（autoware と提出物のステップだけ）。
+# 参加者用（チェック、map・IMU バイアスの適用、autoware の起動・停止）。
 vehicle-tui:
 	tmux new -A -s aic-vehicle "vehicle/tui.py"
 

@@ -44,12 +44,6 @@ from tui_core import (
 )
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
-# colcon ワークスペース。make workspace-clean が消す対象。
-WORKSPACE_REL = Path("aichallenge/workspace")
-# workspace-clean が消す ignored な生成物。どれかが在れば git を呼ぶ前に
-# 「未完了」と判れる。
-WORKSPACE_ARTIFACTS = ("build", "install", "log")
-
 # 最低行数 = header 1 + services 2 + ステップ数 + 見出し 2 + failures 1 + log 1 + 余裕 1。
 # 47 桁は最長の header 行に合わせた共通幅（役割で変えると tmux を張り替える羽目になる）。
 MIN_COLS = 47
@@ -180,49 +174,6 @@ def should_reobserve(busy: bool, now: float, observed_at: float) -> bool:
     return now - observed_at >= OBSERVE_INTERVAL_SEC
 
 
-def probe_workspace(
-    repo_root: Path,
-    services_running: frozenset,
-    workspace_pristine: bool = False,
-    stack_containers: int = 0,
-) -> Workspace:
-    """Sample the workspace on disk.
-
-    Filesystem only -- the docker and git queries are passed in -- so this stays cheap
-    enough to call on every redraw and testable in a temp dir. A missing
-    workspace reads as "nothing present", not an error: the console has to
-    render before anything has been downloaded.
-
-    Known limitation: submit_mtime is submit_dir.stat().st_mtime, i.e. the
-    directory's own mtime. That changes when an entry is added to or removed
-    from aichallenge_submit/, but not when the contents of a file already
-    inside it are edited. Editing a package's source in place therefore does
-    not make build_done() report stale.
-
-    Note: aichallenge_submit/ ships with 15 git-tracked participant packages,
-    so it is never actually empty on a checkout -- whether it *has* entries
-    proves nothing about whether a download has run. That is exactly why
-    the submission step has no `measure` in tui_core: its DONE/PENDING
-    comes from the session (did `make download` exit 0 this run), not from
-    this probe. submit_mtime is still sampled here because build_done() uses
-    it to judge whether install/ is stale relative to the submission.
-    """
-    ws_dir = repo_root / WORKSPACE_REL
-    setup_bash = ws_dir / "install" / "setup.bash"
-    submit_dir = ws_dir / "src" / "aichallenge_submit"
-
-    install_present = setup_bash.is_file()
-    submit_has_entries = submit_dir.is_dir() and any(submit_dir.iterdir())
-
-    return Workspace(
-        install_mtime=setup_bash.stat().st_mtime if install_present else None,
-        submit_mtime=submit_dir.stat().st_mtime if submit_has_entries else None,
-        services_running=services_running,
-        stack_containers=stack_containers,
-        workspace_pristine=workspace_pristine,
-    )
-
-
 def _run(cmd, repo_root: Path, timeout: float = 10):
     """Run a probe command; None on any failure.
 
@@ -277,29 +228,6 @@ def repo_commit(repo_root: Path):
     if out is None:
         return None
     return out.stdout.strip() or None
-
-
-def workspace_is_pristine(repo_root: Path) -> bool:
-    """Whether aichallenge/workspace/ matches the checkout exactly.
-
-    `git status --porcelain --ignored` on that path lists tracked changes,
-    untracked files and ignored artifacts (build/ install/ log/) alike; an
-    empty listing is the state `make workspace-clean` leaves behind. A git
-    failure reads as "not pristine" so cleanup is never shown as done on
-    evidence the console does not have.
-
-    The artifact directories are checked first: this runs every observe()
-    tick, and `--ignored` would otherwise walk the whole install/ tree
-    (thousands of files after a build) just to say "not clean".
-    """
-    ws_dir = repo_root / WORKSPACE_REL
-    if any((ws_dir / name).exists() for name in WORKSPACE_ARTIFACTS):
-        return False
-    out = _run(
-        ["git", "status", "--porcelain", "--ignored", "--", str(WORKSPACE_REL)],
-        repo_root,
-    )
-    return out is not None and not out.stdout.strip()
 
 
 def stack_containers(repo_root: Path) -> int:
@@ -380,11 +308,9 @@ class Console:
 
     def observe(self) -> Workspace:
         self._observed_at = time.monotonic()
-        return probe_workspace(
-            REPO_ROOT,
-            running_services(REPO_ROOT),
-            workspace_is_pristine(REPO_ROOT),
-            stack_containers(REPO_ROOT),
+        return Workspace(
+            services_running=running_services(REPO_ROOT),
+            stack_containers=stack_containers(REPO_ROOT),
         )
 
     def observe_version(self) -> None:
@@ -419,7 +345,7 @@ class Console:
             proc = subprocess.Popen(
                 list(step.command),
                 cwd=str(self._cwd_for(step)),
-                # Keep keys for curses; docker compose exec -T still reads stdin.
+                # Keep curses input out of background Docker checks.
                 stdin=subprocess.DEVNULL,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.STDOUT,
@@ -486,7 +412,7 @@ class Console:
     def _fallback_failures(self) -> list:
         """マーカーを持たないステップが失敗したときに見せる末尾。
 
-        make autoware-build や docker compose は setup_check.sh の ❌ を出さない
+        docker compose は setup_check.sh の ❌ を出さない
         ので、そのままでは一番長く走るステップで failures 領域が空になる。
         終了コードだけが根拠なので、そのステップの出力の末尾を拾う。
         """
@@ -614,8 +540,8 @@ def _loop(screen, role: str) -> int:
     console.ws = console.observe()
     console.observe_version()
     if role == ROLE_PARTICIPANT:
-        # preflight runs on open: a CAN or GNSS fault has to surface before a
-        # build. Staff has no preflight row on screen, so it must not run here.
+        # preflight runs on open: a CAN or GNSS fault has to surface before
+        # Autoware starts. Staff has no preflight row on screen, so it must not run here.
         console.run_step(STEP_PREFLIGHT)
     while True:
         console.drain()
@@ -634,7 +560,7 @@ def main(argv=None) -> int:
     parser = argparse.ArgumentParser(description="vehicle console")
     parser.add_argument(
         "--role", choices=ROLES, default=ROLE_PARTICIPANT,
-        help="participant: autoware と提出物だけ / staff: download・driver/zenoh/rosbag の個別起動・停止・down all だけの独立画面",
+        help="participant: チェック・map/IMU バイアス適用・autoware の起動と停止 / staff: download・driver/zenoh/rosbag の個別起動・停止・down all だけの独立画面",
     )
     args = parser.parse_args(argv)
     need = min_lines(

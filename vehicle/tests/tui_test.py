@@ -26,11 +26,9 @@ from tui import (  # noqa: E402
     min_lines,
     repo_commit,
     version_line,
-    probe_workspace,
     service_status_lines,
     should_reobserve,
     terminal_too_small,
-    workspace_is_pristine,
     wrap_line,
 )
 from tui_core import (  # noqa: E402
@@ -38,7 +36,7 @@ from tui_core import (  # noqa: E402
     REQUIRED_SERVICES,
     ROLE_PARTICIPANT,
     STAFF_STEPS,
-    STEP_BUILD,
+    STEP_UP,
     STEP_DRIVER,
     STEP_DRIVER_DOWN,
     STEP_ROSBAG,
@@ -48,120 +46,8 @@ from tui_core import (  # noqa: E402
     STEP_ZENOH_DOWN,
     STEPS,
     Workspace,
-    build_done,
     step_by_id,
 )
-
-
-class TestProbeWorkspace(unittest.TestCase):
-    def setUp(self):
-        self._tmp = tempfile.TemporaryDirectory()
-        self.root = Path(self._tmp.name)
-        self.ws = self.root / "aichallenge" / "workspace"
-        self.ws.mkdir(parents=True)
-        self.addCleanup(self._tmp.cleanup)
-
-    def make_install(self):
-        install = self.ws / "install"
-        install.mkdir()
-        (install / "setup.bash").write_text("# built\n")
-
-    def make_submission(self):
-        submit = self.ws / "src" / "aichallenge_submit"
-        submit.mkdir(parents=True)
-        (submit / "some_package").mkdir()
-
-    def test_empty_workspace(self):
-        ws = probe_workspace(self.root, frozenset())
-        self.assertIsNone(ws.install_mtime)
-        self.assertIsNone(ws.submit_mtime)
-
-    def test_detects_built_install(self):
-        self.make_install()
-        ws = probe_workspace(self.root, frozenset())
-        self.assertIsNotNone(ws.install_mtime)
-
-    def test_install_dir_without_setup_bash_is_not_built(self):
-        (self.ws / "install").mkdir()
-        ws = probe_workspace(self.root, frozenset())
-        self.assertIsNone(ws.install_mtime)
-
-    def test_populated_submit_dir_has_an_mtime(self):
-        # submit_dir_populated is gone: aichallenge_submit/ ships tracked packages, so its
-        # presence proves nothing. submit_mtime stays -- build_done() needs it for staleness.
-        self.make_submission()
-        ws = probe_workspace(self.root, frozenset())
-        self.assertIsNotNone(ws.submit_mtime)
-
-    def test_empty_submit_dir_has_no_mtime(self):
-        (self.ws / "src" / "aichallenge_submit").mkdir(parents=True)
-        ws = probe_workspace(self.root, frozenset())
-        self.assertIsNone(ws.submit_mtime)
-
-    def test_built_workspace_reads_as_built(self):
-        self.make_submission()
-        self.make_install()  # created after src/, so it is newer
-        self.assertTrue(build_done(probe_workspace(self.root, frozenset())))
-
-    def test_passes_services_through(self):
-        ws = probe_workspace(self.root, frozenset({"driver"}))
-        self.assertEqual(ws.services_running, frozenset({"driver"}))
-
-    def test_missing_workspace_dir_does_not_raise(self):
-        empty = self.root / "nowhere"
-        empty.mkdir()
-        ws = probe_workspace(empty, frozenset())
-        self.assertIsNone(ws.install_mtime)
-        self.assertIsNone(ws.submit_mtime)
-
-
-class TestWorkspaceIsPristine(unittest.TestCase):
-    def setUp(self):
-        self._tmp = tempfile.TemporaryDirectory()
-        self.addCleanup(self._tmp.cleanup)
-        self.root = Path(self._tmp.name)
-        self.ws = self.root / "aichallenge" / "workspace"
-        (self.ws / "src").mkdir(parents=True)
-        (self.ws / "src" / "tracked.txt").write_text("x")
-        (self.ws / ".gitignore").write_text("/build\n/install\n/log\n")
-        self._git("init", "-q")
-        self._git("add", ".")
-        self._git("commit", "-q", "-m", "init")
-
-    def _git(self, *args):
-        subprocess.run(
-            ["git", "-c", "user.email=t@t", "-c", "user.name=t", *args],
-            cwd=str(self.root), check=True, capture_output=True,
-        )
-
-    def test_fresh_checkout_is_pristine(self):
-        self.assertTrue(workspace_is_pristine(self.root))
-
-    def test_ignored_build_artifacts_make_it_dirty(self):
-        # cleanup は build/ install/ log/ も消す対象なので、ignored でも「済」ではない。
-        # 空ディレクトリでも false: git を呼ぶ前にディレクトリの有無で判っている。
-        for name in ("build", "install", "log"):
-            with self.subTest(name=name):
-                (self.ws / name).mkdir()
-                self.assertFalse(workspace_is_pristine(self.root))
-                (self.ws / name).rmdir()
-
-    def test_untracked_file_makes_it_dirty(self):
-        (self.ws / "src" / "new.txt").write_text("")
-        self.assertFalse(workspace_is_pristine(self.root))
-
-    def test_modified_tracked_file_makes_it_dirty(self):
-        (self.ws / "src" / "tracked.txt").write_text("changed")
-        self.assertFalse(workspace_is_pristine(self.root))
-
-    def test_changes_outside_the_workspace_do_not_count(self):
-        # cleanup の責務は workspace 配下だけ。他のローカル変更は見ない。
-        (self.root / "notes.txt").write_text("")
-        self.assertTrue(workspace_is_pristine(self.root))
-
-    def test_not_a_repo_is_not_pristine(self):
-        with tempfile.TemporaryDirectory() as other:
-            self.assertFalse(workspace_is_pristine(Path(other)))
 
 
 class TestTerminalSize(unittest.TestCase):
@@ -197,7 +83,7 @@ class TestStepNote(unittest.TestCase):
                 self.assertTrue(step_by_id(step_id).note)
 
     def test_a_step_without_a_note_renders_the_title_alone(self):
-        step = step_by_id(STEP_BUILD)
+        step = step_by_id(STEP_UP)
         self.assertEqual(self._row(step), f"1 OK {step.title}")
 
     def test_every_row_fits_min_cols(self):

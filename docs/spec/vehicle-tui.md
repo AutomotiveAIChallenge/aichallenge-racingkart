@@ -53,7 +53,7 @@
 
 | 領域 | 担当 |
 |------|------|
-| 車両 PC 上の準備・起動・片付け | **本 spec（この repo）** |
+| 車両 PC 上のチェック・サービス起動・停止 | **本 spec（この repo）** |
 | joy 中継・車両選択・緊急停止・遠隔 RViz | `aichallenge-racingkart-remote` |
 | joy 優先度解決・緊急停止のラッチ | `racing_kart_interface` |
 | 全車両の状態監視 | Grafana（`aic-telemetry`） |
@@ -64,18 +64,18 @@
    subprocess で呼ぶだけとする。チェック項目やビルド手順を TUI 側に複製しない。
 2. **順序は提示するが強制しない。** ステップは実行順に並べ、前提が未達なら印で示すが、
    実行は妨げない。CAN ハードウェアの無い開発機では preflight が正当に落ちるし、
-   それでも build して Autoware を上げたい場面がある。進めるかどうかの判断は
+   それでも Autoware を上げたい場面がある。進めるかどうかの判断は
    オペレータの領分であり、ツールが禁じるべきではない。
    例外は**実行中の同一ステップ**のみで、これは二重起動に実害があるため禁じる。
 3. **状態は保存せず検出する。** 実測できるステップの完了はファイルに書かず毎回測る
-   （`install/` の存在、`docker compose ps`）。実測できないステップ（チェックの合否は
+   （`docker compose ps`）。実測できないステップ（チェックの合否は
    終了コードにしか現れない）はプロセス内でそのセッションの結果を覚える。
-   いずれの場合も状態ファイルは作らない。
+   いずれの場合も状態ファイルは作らない。ビルド成果物や提出物の変更状態は監視しない。
 4. **失敗は流さない。** 失敗行は log とは別の領域に retain し、log が流れても残す。
 5. **tmux の中で動かす。** ssh 切断で作業が消えないこと、貼り直せることを前提とする。
 6. **純ロジックを分離する。** ステップの前提判定と状態遷移を curses から切り離し、
    端末もプロセスもなしにテストできるようにする。
-7. **役割でステップを出し分ける。** 参加者は autoware と提出物だけを触る。
+7. **役割でステップを出し分ける。** 参加者はチェック、map・IMU バイアスの適用、autoware の起動・停止を行う。
    driver / zenoh / rosbag の起動・停止、提出物のダウンロード、スタック全体の停止は運営の仕事で、
    参加者の画面には出さない（`--role participant|staff`、既定は participant）。
    運営の画面は参加者の並びとは独立の 8 ステップだけの画面で、preflight を含め
@@ -89,12 +89,10 @@
 | # | 表示名 | 実行するもの | 前提（助言） | 完了の判定 |
 |---|--------|--------------|--------------|------------|
 | 1 | `check preflight` | `./setup_check.sh --phase preflight` | なし | 終了コード 0（セッション記憶） |
-| 2 | `extract` | `make submission-extract`（`vehicle/.submissions/<id>.zip` を ID とパスワードで展開し `src/aichallenge_submit/` を入れ替える） | 1 | 終了コード 0（セッション記憶） |
-| 3 | `build` | `make autoware-build` | 2 | `workspace/install/setup.bash` が存在し `src/` より新しい（実測） |
-| 4 | `autoware-vehicle` | `make autoware-vehicle` | 3 | `autoware` が compose 上で running（実測。`driver` / `zenoh` / `rosbag` はサービス行で見せるだけ） |
-| 5 | `check runtime` | `./setup_check.sh --phase runtime` | 4 | 終了コード 0（セッション記憶） |
-| 6 | `autoware-vehicle down` | `docker compose down autoware` | なし | `autoware` が running でない（実測） |
-| 7 | `cleanup` | `make workspace-clean` | なし | `aichallenge/workspace/` が checkout と一致（`git status --porcelain --ignored` が空、実測） |
+| 2 | `accel brake map and IMU bias` | `python3 vehicle/apply_calibration.py` | 1 | 確認完了・終了コード 0（保持を選んだ場合も含む） |
+| 3 | `autoware-vehicle` | `make autoware-vehicle` | 2 | `autoware` が compose 上で running（実測。`driver` / `zenoh` / `rosbag` はサービス行で見せるだけ） |
+| 4 | `check runtime` | `./setup_check.sh --phase runtime` | 3 | 終了コード 0（セッション記憶） |
+| 5 | `autoware-vehicle down` | `docker compose down autoware` | なし | `autoware` が running でない（実測） |
 
 運営（`make vehicle-tui-staff`、`--role staff`）は参加者の並びとは独立の、次の 8 行だけの画面。
 
@@ -110,11 +108,11 @@
 | 8 | `down all` | `make down` | なし | このリポジトリから compose で起動された running コンテナが 0（全プロジェクト、実測） |
 
 走行枠の流れは、運営が 2・3（`driver` / `zenoh`）で土台を上げ、6（`rosbag`）で記録を始め、
-参加者が 1〜5 で autoware を上げて走り、参加者の 6 で autoware を落とし、運営が 7（`rosbag down`）で
-記録を閉じて 8（`down all`）で全部を落とし、参加者の 7（`cleanup`）で片付ける、である。
+参加者が 1〜4 で autoware を上げて走り、参加者の 5 で autoware を落とし、運営が 7（`rosbag down`）で
+記録を閉じる。1 日の終わりに運営が 8（`down all`）で全部を落とす。
 rosbag の 2 行を `down all` の直前に置くのは、記録の開始と終了が走行枠の前後に来る操作で、
 土台の上げ下げとは使う場面が違うからである。
-Autoware を入れ替えるときは参加者の 6 → 4 と辿る。土台のうち 1 サービスだけを入れ替えたいときは、運営がそのサービスの
+Autoware を入れ替えるときは参加者の 5 → 3 と辿る。土台のうち 1 サービスだけを入れ替えたいときは、運営がそのサービスの
 down → up と辿る（`driver` は 4 → 2、`zenoh` は 5 → 3、`rosbag` は 7 → 6）。
 
 `driver` / `zenoh` は常時 ON で、落とすのは異常時だけである。`zenoh` を落とすと遠隔からの
@@ -122,17 +120,17 @@ down → up と辿る（`driver` は 4 → 2、`zenoh` は 5 → 3、`rosbag` �
 `down all` は 1 日の終わりに使う。参加者の `autoware-vehicle down` はこの 3 つを触らない。
 
 `rosbag` は任意である。`check runtime` の必須サービスは `driver` / `autoware` / `zenoh` の 3 つで、
-rosbag が止まっていても参加者の 5 は落ちない。記録を残す走行枠では運営が 6（`rosbag`）で始め、
+rosbag が止まっていても参加者の 4 は落ちない。記録を残す走行枠では運営が 6（`rosbag`）で始め、
 7（`rosbag down`）で閉じる。上げ忘れに気づく手段は runtime check ではなく、
 サービス行（`stopped: rosbag`）である。
 
 チェックの 2 ステップは `check preflight` / `check runtime` と表示する。
 `setup_check.sh` の `--phase` の値をそのまま名前にしているので、画面の名前から
-実行されるコマンドが辿れる。内部のステップ ID は `preflight` / `submission` /
-`build` / `up` / `runtime` / `autoware_down` / `clean` と運営用の `driver` / `zenoh` / `rosbag` /
+実行されるコマンドが辿れる。内部のステップ ID は `preflight` /
+`calibration` / `up` / `runtime` / `autoware_down` と運営用の `driver` / `zenoh` / `rosbag` /
 `driver_down` / `zenoh_down` / `rosbag_down` / `download` / `teardown` で、表示名とは別である。
 
-### 停止の 2 段と cleanup の責務
+### サービスの停止範囲
 
 停止まわりを 1 つのステップに畳まない。落とす範囲と担当が違うためである。
 
@@ -140,56 +138,28 @@ rosbag が止まっていても参加者の 5 は落ちない。記録を残す�
 |----------|------|------------|----------|
 | `autoware-vehicle down` | 参加者 | `autoware` のみ（`docker compose down autoware`） | Autoware だけ落とす。`driver` / `zenoh` / `rosbag` は繋いだまま。入れ替えは続けて `autoware-vehicle` |
 | `driver down` / `zenoh down` / `rosbag down` | 運営 | それぞれ 1 サービスだけ（`docker compose down driver` / `zenoh` / `rosbag`） | 土台のうち入れ替えたいサービスだけ落とすとき |
-| `down all` | 運営 | compose のスタック全部（プロジェクト 1〜4 を含む） | 走行枠の終わり |
+| `down all` | 運営 | compose のスタック全部（プロジェクト 1〜4 を含む） | 1 日の終わり |
 
-`cleanup` はコンテナを触らない。`aichallenge/workspace/` を checkout 直後の状態へ戻すだけである:
-提出物で上書きされた `src/aichallenge_submit/` を `git restore --source=HEAD --staged --worktree`
-で HEAD に戻し（`git checkout -- <path>` は index から戻すので stage 済みの提出物が残る）、
-`git clean -fdx aichallenge/workspace` で `build/` `install/` `log/`（ignored）と
-untracked ファイルを消す。これで `git status` に提出物の差分が残らず、
-次の `extract` をまっさらな状態から始められる。
+### 提出物の準備と片付け
 
-git 操作は **このディレクトリに限定する**。`git stash` + `git stash drop` のように
-リポジトリ全体へ効かせると、車両 PC 上の `vehicle/zenoh.json5` や Makefile への
-ローカル変更まで巻き込む。しかも stash は目的に合っていない: `-u` を付けないと
-untracked な提出物ファイルは残り、付けても ignored な `build/` `install/` は残る。
-
-この分担は、提出物を置く側の責務が
-**「`aichallenge_submit/` を入れ替えるところまで」**と決まったことから来ている。
-`extract_submission.py` は zip に車両別校正値を適用して既存の `aichallenge_submit/` を入れ替える。
-それ以外の後片付け（前回のビルド成果物を消す、提出物を消して checkout 状態へ戻す）は
-展開側ではなく `cleanup` が持つ。展開側に後片付けを足すと、
-「展開したら build も消えた」という副作用を持つことになる。
-
-### 提出物 zip の置き場と形式
-
-運営は走行枠の前に全チームの提出物を `vehicle/.submissions/<id>.zip` として車両 PC に置く。
-`aichallenge/workspace/` の外に置くのは、`cleanup` の `git clean -fdx aichallenge/workspace`
-で消えないようにするためである（`vehicle/.submissions/` は `.gitignore` 済み）。
-
-zip は **トップレベルが `aichallenge_submit/` だけ**で、**従来の PKZIP 暗号**
-（`cd <提出物の親> && zip -er <id>.zip aichallenge_submit`）で作る。
-`extract_submission.py` は Python 標準の `zipfile` で復号するため AES 暗号（7-Zip の既定など）は
-開けず、その場合は `❌ unsupported zip encryption` として失敗する。
-
-展開は `src/` 直下の一時ディレクトリへ行い、成功してから既存の `aichallenge_submit/` を消して
-`os.replace` で入れ替える。パスワード違い・レイアウト違い・破損 zip のいずれでも、
-既存の `aichallenge_submit/` は触られない。
+提出物の展開・ビルド・ワークスペースの片付けは TUI の対象外とする。
+`extract` / `build` / `cleanup` は参加者・運営どちらの画面にも表示しない。
+CLI の `make submission-extract` / `make autoware-build` / `make workspace-clean` は引き続き利用できる。
+提出物の展開と設定の適用手順は [車両別校正値](../../vehicle/calibration.md) を参照する。
 
 ### 実測とセッション記憶
 
-Autoware 停止中に展開し、accel/brake map と車両別の保存済み IMU バイアスの適用について、
-それぞれ参加者の承認を確認する。IMU は現在値・保存値・差分を表示する。
-通常は実車用の推奨設定を適用する。適用元を検証できた場合は `Y` に `(Recommended)` を付け、
-`[Y/n]` の Enter で適用する。独自の補正・調整がある場合は参加者と確認して `n` を選ぶ。
-拒否・入力終了では参加者の設定を保持する。保存元の欠損・不正時は推奨扱いにせず `[y/N]` とする。
-承認後の適用失敗では、既存の提出物を残す。
-設定の更新はビルド・起動前に完了する。runtime では計測・設定変更・承認確認を行わず、
-生 IMU を含むトピック受信などの検査結果を通常のログ欄に表示する。
-詳細は [車両別校正値](../../vehicle/calibration.md) を参照する。
+`accel brake map and IMU bias` は Autoware 停止中に、共通 accel/brake map と
+車両別の保存済み IMU バイアスの適用をそれぞれ確認する。
+正常な適用元には `Y: 推奨設定を適用する (Recommended)` と `[Y/n]` を表示し、
+参加者の承認を確認して Enter / y で適用する。n・EOF は現在値を保持する。
+IMU は現在値・保存値・差分を表示する。適用先はビルド済みの package share で、
+コピー・symlink install のどちらも次の起動から反映する。再ビルドは不要。
+Autoware が起動中、またはビルド済みワークスペースがない場合はエラーにする。
+runtime では計測・上書き・承認確認を行わず、生 IMU を含むトピック受信を検査する。
+詳細は [設定の適用手順](../../vehicle/calibration.md) を参照する。
 
-`build` / `autoware` / `autoware down` / `down all` / `cleanup` は環境から実測する
-（`cleanup` は `git status --porcelain --ignored -- aichallenge/workspace` が空か）。
+各サービスの起動・停止と `down all` は Docker の状態から実測する。
 `down all` は `docker compose ps` では判定できない: それは 1 プロジェクトしか見ないが、
 `make down` は default と `-p 1..4` の全部を落とす。compose が各コンテナに付ける
 `com.docker.compose.project.working_dir` ラベルでこのリポジトリ由来の running コンテナを
@@ -197,18 +167,13 @@ Autoware 停止中に展開し、accel/brake map と車両別の保存済み IMU
 実測を優先するため、別のシェルで `make down` された場合も次の観測で反映され、
 TUI 内のキャッシュと実態が食い違うことがない。
 
-`preflight` / `extract` / `check runtime` / `download` は実測できない。
+`preflight` / `accel brake map and IMU bias` / `check runtime` / `download` はセッションの結果を記憶する。
 合否は終了コードにしか現れず、後からファイルシステムを見て再現できないためである。
 
 `autoware` の完了は `autoware` だけで判定する。`autoware-vehicle` が上げるのは
 autoware だけで、`driver` / `zenoh` / `rosbag` は運営がそれぞれのステップで個別に上げた結果である。
 4 サービス全部で判定すると、参加者が正しく起動できても運営側の都合で「未完了」に見える。
 土台の欠けはサービス行（`stopped: driver zenoh rosbag` など）で分かる。
-
-`extract` は特に注意が要る。`aichallenge/workspace/src/aichallenge_submit/` には
-**git 追跡された参加者パッケージが 15 個ある**ため、このディレクトリはチェックアウト時点で
-既に空でない。したがって「提出物が存在するか」をディレクトリの中身で判定してはならない。
-判定すると常に完了と出て、ステップの存在意義が失われる。
 
 ### TUI が呼ぶ起動ターゲットはチェックを内包しない
 
@@ -239,15 +204,13 @@ GNSS の 8 秒待ち、14 topic ぶんの `docker compose exec` + ROS 環境の 
 
 ```
 [A2] vehicle console [participant]           ↑↓ enter q
-running: driver autoware
-stopped: zenoh rosbag
+running: driver
+stopped: autoware zenoh rosbag
 1 NG check preflight
-2 ?  extract
-3 OK build
-4 -  autoware-vehicle
-5 ?  check runtime
-6 -  autoware-vehicle down
-7 -  cleanup
+2 ?  accel brake map and IMU bias
+3 ?  autoware-vehicle
+4 ?  check runtime
+5 OK autoware-vehicle down
 -- failures (8) ------------------------------------------
 ❌ CAN interface can0 not found
 ❌ VCU directory missing: /dev/vcu
@@ -302,8 +265,8 @@ driver image: 2025-09-04  aic commit: bd9c626
 - 長い行は折り返す。切り詰めると長いパスやコンパイラ出力の末尾が読めなくなる。
 - 参加者のステップ 1（`check preflight`）は起動時に自動実行する。運営の画面には preflight が無く、
   起動時の自動実行もしない。
-- 最低端末サイズは参加者 47x15、運営 47x17（桁数は参加者・運営共通）。行数の内訳は
-  ヘッダ 1 + サービス行 2 + ステップ数（7 / 8）+ version 行（運営のみ 1）
+- 最低端末サイズは参加者 47x13、運営 47x17（桁数は参加者・運営共通）。行数の内訳は
+  ヘッダ 1 + サービス行 2 + ステップ数（5 / 8）+ version 行（運営のみ 1）
   + failures 見出し 1 + failures 1 + log 見出し 1 + log 1、に 1 行の余裕。桁数は画面中で
   いちばん幅を食う固定行、ヘッダの最長形 `[test] vehicle console [participant]` + 区切り 1
   + キー操作 10 = 47 桁に合わせたもの（version 行は 45 桁）。version 行は運営の画面にしか
@@ -319,8 +282,8 @@ TUI は `❌` で始まる行を失敗として retain する。これは `setup
 
 ### 対話が必要なステップ
 
-`extract_submission.py` は `input()` でチーム ID を、`getpass` で zip のパスワードを聞く
-（ID は `SUBMISSION_ID=<id> make submission-extract` で先渡しできる）。
+運営の `download` はユーザー名・パスワードと提出物の選択を聞く。
+参加者の `accel brake map and IMU bias` は map と保存済み IMU バイアスの適用をそれぞれ聞く。
 TUI は端末上で動くため、この対話をそのまま通せる。
 
 該当ステップの実行中は curses を一時的に解除し（`curses.endwin()`）、
@@ -378,7 +341,7 @@ Python 3 標準ライブラリのみを使う（`curses` / `subprocess` / `threa
   まさにその状況こそ preflight を走らせたい場面である。
 - **ssh 切断**：tmux セッションが残る。再接続して `make vehicle-tui` を実行すると
   `-A` により同じセッションへアタッチする。実行中のステップは継続している。
-- **端末が狭い**：役割ごとの最低サイズ（参加者 47x15、運営 47x17）を下回る場合は起動時に警告して終了する。
+- **端末が狭い**：役割ごとの最低サイズ（参加者 47x13、運営 47x17）を下回る場合は起動時に警告して終了する。
 
 ## テスト方針
 
@@ -391,20 +354,14 @@ Python 3 標準ライブラリのみを使う（`curses` / `subprocess` / `threa
 | 運営が参加者の並びとは独立に `download` / `driver` / `zenoh` / `rosbag` / `driver down` / `zenoh down` / `rosbag down` / `down all` の 8 ステップだけを持つこと |
 | 参加者のステップに運営用（土台の起動・停止・download・down all）が混ざらないこと。運営に参加者用ステップと preflight が混ざらないこと。未知の役割は拒否 |
 | `autoware` / `autoware down` が autoware コンテナだけを対象にし、土台は `driver` / `zenoh` / `rosbag` とその down ステップが 1 サービスずつ上げ下げすること |
-| `cleanup` がワークスペースの削除で、`down` がスタックの停止であること |
 | `autoware down` の完了判定が `autoware` だけを見ること |
-| `cleanup` の完了判定（`workspace_pristine` のときだけ完了、既定は未完了） |
-| `workspace_is_pristine` が tracked 差分・untracked・ignored 生成物のどれでも false になり、workspace 外の変更は見ないこと |
 | `MIN_LINES` がステップ数 + failures 1 行 + log 1 行を下回らないこと |
-| `extract` ステップが対話扱いで `make submission-extract` を呼ぶこと |
 | `autoware` の完了が autoware だけで決まり、`driver` / `zenoh` / `rosbag` の各 up ステップがそのサービスだけの running で、各 down ステップがそのサービスだけの停止で決まること |
 | `download` が対話扱いで運営だけに出ること |
-| `install/` と `src/` の新旧による build の完了判定（同時刻を含む境界） |
 | 実測ステップが古いセッション記録より実測を優先すること |
 | 実行中のステップだけが実行不可であること |
 | 前提未達でもステップが実行可能であること |
 | 未達の前提を列挙できること |
-| 観測関数が一時ディレクトリの実体を正しく読むこと |
 | サービス行（running / stopped の 2 行）が `REQUIRED_SERVICES` の順で名前をそのまま出し、ヘッダにもステップ行にも出ないこと |
 | 失敗行の判定（インデントあり・警告と成功の除外） |
 | 折り返し（短い行の素通し・長い行の分割・空行の保持） |
@@ -412,12 +369,6 @@ Python 3 標準ライブラリのみを使う（`curses` / `subprocess` / `threa
 | アイドル中の再観測の判定（実行中は取り直さない・間隔の境界） |
 
 curses の描画、実車での疎通、`make` ターゲットの実行そのものは手動確認とする。
-
-## TODO
-
-- **zip の配布手順。** `vehicle/.submissions/<id>.zip` を車両 PC へ置く手段（scp か、
-  `make download` で取った tar.gz から運営が zip を作り直すか）と、パスワードの受け渡しは未決。
-  `make download`（`download_submission.sh`）は運営用にそのまま残している。
 
 ## スコープ外
 
