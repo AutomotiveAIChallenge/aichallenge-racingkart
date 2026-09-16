@@ -55,7 +55,9 @@ Zenoh の直接確認はコンテナ稼働までです。接続先への TCP 疎
 `check driver / zenoh` の順で準備・確認します。既存の停止操作・rosbag 操作・down all はその下に残ります。
 運営 TUI は `~/aichallenge-racingkart` から起動し、共通の driver・zenoh 設定を使います。
 `down all` は専用の車両 PC 上で `make down_all` を実行し、compose project を問わず
-ホスト上の全コンテナを強制削除します。1 日の終わりにだけ使用します。
+ホスト上の全コンテナを強制削除します。`make down` では固定 project と実行元 project しか
+停止できず、運営用リポジトリから各チームの compose project を網羅できないためです。
+1 日の終わりにだけ使用します。
 参加者 TUI と監視用シェルは、対象チームの `~/team-xxxx` から起動します。参加者 TUI の
 tmux セッション名にはディレクトリ名を含めるため、別チームのセッションには接続しません。
 左上の参加者 TUI は `Update the accel/brake maps and IMU bias` → `autoware-vehicle`

@@ -112,6 +112,9 @@ Autoware の入れ替えは参加者の 4 → 1 → 2 → 3。driver は運営�
 `driver` / `zenoh` は常時 ON で、落とすのは異常時だけである。`zenoh` を落とすと遠隔からの
 監視が切れ、`driver` を落とすと車両が動かなくなる。`rosbag` / `rosbag down` は大会中は押さない。
 `down all` は専用の車両 PC 上にある全コンテナを強制削除するため、1 日の終わりに使う。
+`make down` の対象は固定 project 1〜4 と実行ディレクトリの project に限られ、運営用の
+`~/aichallenge-racingkart` から各 `~/team-xxxx` の compose project を網羅できないため、
+ここでは `make down_all` を使う。
 参加者の `autoware-vehicle down` は driver / zenoh / rosbag を触らない。
 `rosbag` は両方の起動後チェックの必須サービスに含めない。
 記録を残す走行枠では運営の 7 で始め、8 で閉じる。記録状態はサービス行で確認する。
