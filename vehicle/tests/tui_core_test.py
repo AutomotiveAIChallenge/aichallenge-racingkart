@@ -17,7 +17,6 @@ from tui_core import (  # noqa: E402
     RUNNING,
     STEP_AUTOWARE_DOWN,
     STEP_BUILD,
-    STEP_CALIBRATE_IMU,
     STEP_CLEAN,
     PARTICIPANT_STEPS,
     ROLE_PARTICIPANT,
@@ -64,7 +63,6 @@ class TestSteps(unittest.TestCase):
             [
                 STEP_PREFLIGHT,
                 STEP_SUBMISSION,
-                STEP_CALIBRATE_IMU,
                 STEP_BUILD,
                 STEP_UP,
                 STEP_RUNTIME,
@@ -156,15 +154,11 @@ class TestSteps(unittest.TestCase):
     def test_preflight_step_is_not_interactive(self):
         self.assertFalse(step_by_id(STEP_PREFLIGHT).interactive)
 
-    def test_calibration_releases_terminal_for_approval_before_build(self):
-        step = step_by_id(STEP_CALIBRATE_IMU)
-        self.assertTrue(step.interactive)
-        self.assertEqual(step.command, ("make", "calibrate-imu"))
-        self.assertEqual(step.requires, (STEP_SUBMISSION,))
-        self.assertEqual(step_by_id(STEP_BUILD).requires, (STEP_CALIBRATE_IMU,))
-
-    def test_runtime_streams_checks_without_an_interactive_prompt(self):
-        self.assertFalse(step_by_id(STEP_RUNTIME).interactive)
+    def test_runtime_step_is_interactive(self):
+        # check_imu_bias() が停止確認の y/N プロンプトを出す。console が端末を
+        # 明け渡さないと、curses の getch() とプロンプトの read が同じ tty を
+        # 取り合い応答不能でハングする。
+        self.assertTrue(step_by_id(STEP_RUNTIME).interactive)
 
     def test_download_step_is_interactive_and_staff_only(self):
         self.assertTrue(step_by_id(STEP_DOWNLOAD).interactive)

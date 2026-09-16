@@ -1,15 +1,8 @@
 # 参加者の承認による map・IMU バイアス更新
 
 提出物の設定は、参加者の承認を確認した場合だけ更新します。
-map は提出物の展開時、IMU バイアスは展開後・ビルド前の `calibrate IMU` で確認します。
+map は提出物の展開時、IMU バイアスは Autoware 起動後の runtime で保存値の適用を確認します。
 拒否・空回答・入力終了では参加者の設定を保持します。
-
-運営が `driver` / `zenoh` を起動した状態で、参加者は次の順に進めます。
-
-`check preflight` → `extract`（map 更新）→ `calibrate IMU` → `build` → `autoware-vehicle` → `check runtime`
-
-前の Autoware が起動中なら、提出物を入れ替える前に `autoware-vehicle down` で停止します。
-`check runtime` と `setup_check.sh --phase all` は確認だけを行い、IMU 設定を更新しません。
 
 ## 提出物の展開と map の確認
 
@@ -51,67 +44,46 @@ make submission-extract SUBMISSION_ID=<id>
 展開時に IMU 設定は変更せず、車両別保存元のバイアスも自動適用しません。
 展開には `VEHICLE_ID` や車両別の `imu_bias.yaml` は不要です。
 
-## 起動前の IMU 計測と更新確認
+## runtime の保存済み IMU バイアス適用
 
 ```bash
-make calibrate-imu
-# 同じ処理: vehicle/setup_check.sh --phase calibrate
+vehicle/setup_check.sh --phase runtime
 ```
 
-`driver` 起動済み・`autoware` 停止中が前提です。前提を満たさない場合やサービス状態を
-取得できない場合は失敗し、設定を変更しません。承認後の書き込み直前にも再確認します。
-車両が完全に静止していることを確認してから IMU の角速度を計測します。
-移動・サンプル不足では計測失敗とし、ノイズ超過では従来どおり再計測するか確認します。
-これらの場合、更新の承認確認は出さず、提出設定と保存元を保持します。
-
-正常な計測後、提出コードの現在値・静止時の実測値・差分（実測値 − 現在値）を表示します。
-乖離の閾値による自動更新はありません。
+当日のバイアス計測は行いません。`vehicle/.calibration/<VEHICLE_ID>/imu_bias.yaml` を読み、
+提出コードの現在値・保存値・差分（保存値 − 現在値）を表示して参加者の承認を確認します。
+ID は環境変数 → リポジトリ直下の `.env` → 既存のホスト名対応の順で取得します。
 
 ```text
-IMUジャイロバイアス [rad/s]
-軸    現在値      実測値      差分(実測値−現在値)
-x    +0.000000   +0.001000   +0.001000
-y    +0.000000   -0.002000   -0.002000
-z    +0.001000   +0.003000   +0.002000
-
-実測値で上書きしますか？ 参加者の承認を確認してください。 [y/N]:
+IMU 角速度バイアス [rad/s] / VEHICLE_ID=A2
+軸    現在値        保存値        差分(保存値−現在値)
+x  +0.000000  +0.001000  +0.001000
+y  +0.000000  -0.002000  -0.002000
+z  +0.001000  +0.003000  +0.002000
+提出物の IMU 角速度バイアスを車両 A2 の保存値で上書きしますか？
+参加者の承認を確認してください。 [y/N]:
 ```
 
 承認した場合だけ `imu_corrector/config/imu_corrector.param.yaml` の
-`angular_velocity_offset_x/y/z` を実測値で置換し、ノイズ設定やコメントを保持します。
-拒否・空回答・入力終了では「更新見送り」を記録し、提出設定と車両別保存元を保持します。
-独自補正などで対象設定や対応する 3 軸オフセットがない場合は、警告して更新をスキップします。
+`angular_velocity_offset_x/y/z` を保存値で置換し、ノイズ設定・コメント・ファイル権限を保持します。
+保存元の `imu_bias.yaml` は変更しません。拒否・空回答・入力終了は警告として更新を見送ります。
+対象ファイルや対応する 3 軸オフセットがない独自構成も警告してスキップします。
 
-校正ステップは測定結果を `vehicle/` 内の一時ファイルに保存し、ホスト側で承認を確認してから
-同じ測定結果を適用します。一時ファイルは処理後に削除します。計測後に参加者の設定が
-変更された場合は更新を拒否し、再計測を求めます。
+ID 未設定、保存ファイルなし、不正な保存値の場合は警告を表示します。
+そのまま更新を拒否して提出物の値を保持できますが、承認した場合は失敗として報告します。
+別車両やゼロへのフォールバックは行いません。承認待ちの間に提出設定が変更された場合も更新を拒否します。
 
-単体の `check_imu_bias.py` も、差分表示後に承認を確認します。
-内部用の `--proposal-output` は設定を変更せず、`--apply-proposal` は承認後の適用用です。
-`--bias-output <path>` を指定した場合だけ、承認後に車両別保存元にも記録します。
+この処理はホストの Python 標準ライブラリだけで実行します。
+単独実行は `python3 vehicle/apply_imu_bias.py`（成功 `0`、更新見送り `5`、失敗 `3`）です。
+raw IMU の受信は runtime の `/sensing/imu/imu_raw` topic チェックで別途確認します。
 
-計測と適用には `imu-calibration` の一時コンテナを使います。driver と同じイメージに
-同梱された ROS 環境を使い、提出物の `install/` や Autoware の起動には依存しません。
-`driver` が配信する `/sensing/imu/imu_raw` と `/vehicle/status/velocity_status` を購読し、
-driver・センサ・Autoware を追加起動しません。ホストの UID/GID で設定を書き込みます。
+**この段階では更新タイミングは runtime のままです。反映には Autoware の再起動が必要です。**
 
-**更新後にビルドして Autoware を起動すると、最初から新しいバイアスが使われます。**
-更新し直す場合は Autoware を停止してから同じ手順を辿ります。
+## 車両別 IMU バイアスの保存元
 
-## 車両別 IMU バイアスの保存
-
-承認後の保存先は `vehicle/.calibration/<VEHICLE_ID>/imu_bias.yaml` です。
-ID は環境変数 → リポジトリ直下の `.env` → 既存のホスト名対応の順で取得します。
-未設定・未知の ID では警告して車両別保存だけ省略し、計測と承認確認は実行します。
-
-保存元は Git 管理対象で、`make workspace-clean` の削除範囲外です。
-A2・A3・A4・A6・A7・test の同梱値は初期値の 0 であり、実測値ではありません。
-承認後に更新すると、その車両の `imu_bias.yaml` にローカル差分が残ります。
-保存元は記録用で、次の提出物に自動適用する値ではありません。
-
-各ファイルは一時ファイルから rename して保存します。保存元への書き込みが失敗した場合は
-提出設定を元に戻して失敗を報告します。復元にも失敗した場合はそのエラーも明示します。
-プロセス中断を含む 2 ファイルの完全なトランザクションではありません。
+保存元は Git 管理対象の `vehicle/.calibration/<VEHICLE_ID>/imu_bias.yaml` で、
+`make workspace-clean` の削除範囲外です。実測値の記録は [PR #346](https://github.com/AutomotiveAIChallenge/aichallenge-racingkart/pull/346) です。
+同 PR の反映前の初期値 0 を実測値として使わず、運用前に保存元の実測値が配備されていることを確認してください。
 
 `imu_bias.yaml` は有限値の 3 キーだけを持つフラットな YAML です。
 
@@ -120,3 +92,8 @@ angular_velocity_offset_x: 0.001
 angular_velocity_offset_y: -0.002
 angular_velocity_offset_z: 0.003
 ```
+
+整備時に再計測するための `check_imu_bias.py` は単体ツールとして残します。
+通常の runtime からは呼びません。実行時は操作者が完全な静止を確認し、ROS 環境を用意してください。
+`--proposal-output` は測定結果の保存、`--apply-proposal` は承認済み結果の適用に使えます。
+`--bias-output <path>` を指定した場合だけ、承認後に保存元にも記録します。

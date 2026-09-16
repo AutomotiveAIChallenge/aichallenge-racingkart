@@ -8,19 +8,15 @@
 ## 自動チェックスクリプト
 
 チェックは **起動前（preflight）** と **起動後（runtime）** の2フェーズに分かれています。
-IMU 校正は独立した `calibrate` フェーズで、提出物の展開後・ビルド前に実行します。
 
 ```bash
 # 起動前チェックのみ（driver/autoware を起動する前に実行）
 ./setup_check.sh --phase preflight
 
-# IMU 校正（driver 起動済み・Autoware 停止中、提出物のビルド前）
-./setup_check.sh --phase calibrate
-
 # 起動後チェックのみ（スタックが起動している状態で実行）
 ./setup_check.sh --phase runtime
 
-# 全チェック（既定。スタック起動中に実行。校正・設定変更は含まない）
+# 全チェック（既定。runtime を含むためスタック起動中に実行する）
 ./setup_check.sh
 
 # ログファイル出力付き実行
@@ -34,8 +30,7 @@ IMU 校正は独立した `calibrate` フェーズで、提出物の展開後・
 
 | ターゲット | フェーズ |
 | --- | --- |
-| `make autoware-driver-zenoh-rosbag` | 起動前に `--phase preflight`（runtime は別途実行） |
-| `make calibrate-imu` | `--phase calibrate`（展開後・ビルド前、driver 起動済み・Autoware 停止中） |
+| `make autoware-driver-zenoh-rosbag` | 起動前に `--phase preflight`、起動後に `--phase runtime` |
 | `make setup-vehicle` | `--phase all`（runtime を含むため **スタック起動中** に実行する） |
 
 preflight が fail すると exit code が非0になり、`docker compose up` に進まず中断します。
@@ -231,9 +226,9 @@ docker compose -f ../docker-compose.yml exec -T driver bash -lc \
 
 | コンテナ | トピック |
 | --- | --- |
+| `driver` | `/sensing/imu/imu_raw` |
 | `driver` | `/racing_kart/vcu/status`, `/racing_kart/steer/status`, `/racing_kart/brake/status`, `/racing_kart/sd/joy` |
 | `driver` | `/racing_kart/vcu/command`, `/racing_kart/steer/command`, `/racing_kart/brake/command` |
-| `driver` | `/sensing/imu/imu_raw`（受信確認のみ。バイアス設定は変更しない） |
 | `autoware` | `/vehicle/status/velocity_status`, `/vehicle/status/steering_status`, `/vehicle/status/gear_status`, `/vehicle/status/actuation_status` |
 | `autoware` | `/control/command/control_cmd`, `/control/command/actuation_cmd` |
 
@@ -245,97 +240,16 @@ docker compose -f ../docker-compose.yml exec -T driver bash -lc \
 
 ---
 
-### calibrate: 1. IMUジャイロバイアス計測（起動前の独立ステップ）
+### runtime: 5. 保存済み IMU バイアス適用
 
-Autoware 起動前に **車両が静止している状態の** ジャイロバイアスを推定し、静止時ノイズが
-十分小さければ現在値・実測値・差分（実測値 − 現在値）を表示し、参加者の承認を確認します。
-`[y/N]` に明示的に `y` と答えた場合だけ `imu_corrector.param.yaml` の
-`angular_velocity_offset_*` を実測値で上書きします。拒否・空回答・入力終了では保持します。
-**driver 起動済み・Autoware 停止中が前提です。更新後にビルド・起動して反映します。**
-前提未達やサービス状態の取得失敗では更新しません。承認直後にもサービス状態を再確認します。
-計測には driver と同じイメージの `imu-calibration` 一時コンテナを使うため、提出物のビルドは不要です。
-`runtime` / `all` からは実行されません。
+runtime での IMU バイアス計測・静止確認・再計測は行いません。
+`vehicle/.calibration/<VEHICLE_ID>/imu_bias.yaml` の保存値と提出物の現在値・差分を表示し、
+参加者の承認後だけ角速度バイアスを上書きします。保存元は変更しません。
+拒否・空回答・入力終了、対象ファイルなしは警告としてスキップします。
+保存元の欠損や不正な値は、承認時に失敗を報告し、提出物の値を保持します。
 
-承認したバイアスは `vehicle/.calibration/<VEHICLE_ID>/imu_bias.yaml` にも保存します。
-次の提出物へ自動適用はしません。ID は環境変数 → リポジトリ直下の `.env` →
-既存のホスト名対応の順で取得します。未設定・未知の ID では警告して車両別保存だけ省略します。
-ノイズ超過・計測不能・更新見送りでは保存元を変更しません。
-対象設定や対応する 3 軸オフセットがない独自補正の提出物は、警告して IMU 更新をスキップします。
-配置・適用手順は [車両別校正値](calibration.md) を参照してください。
-
-```bash
-# vehicle/ ディレクトリから実行
-./setup_check.sh --phase calibrate
-
-# リポジトリルートから同じ処理を実行
-make calibrate-imu
-```
-
-計測前に静止確認の `y/N` プロンプトが出ます（y=計測開始、それ以外=skip）。
-誤って走行中に測ると誤ったバイアスを黙って書き込んでしまうため、タイムアウトは設けて
-いません。回答するまで待ち続けます。
-
-計測中の静止時ノイズ（std）が `IMU_BIAS_STD_THRESHOLD` を超えた場合は、
-バイアス推定値が信用できないため param.yaml への書き込みはせず、
-「車両に触れないでください」と表示し、「再計測してよいか」を **毎回 `y/N` で確認**します
-（自動では再計測しません）。`y` と答え続ける限り **上限なく** 再計測し、`y` 以外を答えると
-その時点の warn として先へ進みます。
-
-**閾値（環境変数で調整可能）:**
-
-| 環境変数 | 既定値 | 意味 |
-| --- | --- | --- |
-| `IMU_BIAS_DURATION_SEC` | 5 | サンプリング秒数（warmup を除く） |
-| `IMU_BIAS_WARMUP_SEC` | 2 | 開始直後に捨てる秒数 |
-| `IMU_BIAS_STD_THRESHOLD` | 0.03 rad/s | 静止時ジャイロ std の警告閾値（暫定値。`imu_corrector.param.yaml` の想定ノイズ既定値に合わせている。実測を踏まえて後で絞り込む） |
-| `IMU_BIAS_VELOCITY_THRESHOLD` | 0.05 m/s | これを超えたら「動いた」と判定して測定中止（ノイズとは別扱いでリトライなし） |
-
-**静止時ノイズが小さい場合（書き込み成功 / 終了コード 0）:**
-
-```text
-axis    bias[rad/s]         std  status
----------------------------------------
-x     +0.000329  0.002042  OK
-y     -0.000762  0.002062  OK
-z     +0.001286  0.002076  OK
-
-IMUジャイロバイアス [rad/s]: /aichallenge/workspace/src/aichallenge_submit/imu_corrector/config/imu_corrector.param.yaml
-軸             現在値           実測値      差分(実測値−現在値)
-x     +0.000000  +0.000329  +0.000329
-y     +0.000000  -0.000762  -0.000762
-z     +0.000000  +0.001286  +0.001286
-
-実測値で上書きしますか？ 参加者の承認を確認してください。 [y/N]: y
-✅ imu_corrector.param.yaml updated (participant approved).
-Build and start autoware to use the new offsets (restart if already running).
-```
-
-`imu_corrector` は `output = raw - angular_velocity_offset` で補正するため、
-**測定値を符号そのまま** param.yaml に書きます（+ にずれていれば + を書く）。乖離の大小は
-自動更新の条件にはせず、参加者の承認後だけ上書きします。その後のビルド・起動で反映します。
-
-**静止時ノイズが大きい場合（書き込まない / 終了コード 4、再計測確認へ）:**
-
-```text
-axis    bias[rad/s]         std  status
----------------------------------------
-x     +0.000356  0.020723  WARN(noisy)
-y     -0.001511  0.020593  WARN(noisy)
-z     +0.002232  0.021002  WARN(noisy)
-
-⚠️  Stationary gyro noise exceeds 0.03 rad/s — do not touch the vehicle.
-    The bias estimate above is unreliable while noisy. The vehicle may not
-    have been completely stationary (engine/fan vibration, someone
-    touching it), or the IMU itself is noisy.
-```
-
-この rc=4 を受けて setup_check.sh 側が「Do not touch the vehicle. Re-measure? [y/N]」と
-毎回確認し、`y` の間は再計測を続けます。`y` 以外を答えると warn として先へ進みます
-（この場合 param.yaml は書き換えません）。
-
-その他の終了コード:
-
-- `3`: 測定不能（サンプリング中に車両が動いた／`/sensing/imu/imu_raw` が来ない／param.yaml を読めなかった。ノイズとは別扱いでリトライなし。param.yaml は書き換えません）
+更新の反映には Autoware の再起動が必要です。
+保存値の準備・適用手順は [calibration.md](calibration.md) を参照してください。
 
 ---
 
@@ -438,20 +352,26 @@ Time: 2025年  8月 25日 月曜日 23:10:02 JST
 
 ℹ️ 4. Runtime ROS Topic Output Check
 ----------------------------------------
+ℹ️ Raw IMU topic
+✅ Raw IMU: /sensing/imu/imu_raw
 ℹ️ Racing kart hardware/status topics
 ✅ VCU status: /racing_kart/vcu/status
 ✅ Steer status: /racing_kart/steer/status
 ...
-✅ Raw IMU: /sensing/imu/imu_raw
 ℹ️ Autoware downstream control command topics
 ✅ Control command: /control/command/control_cmd
 ✅ Actuation command: /control/command/actuation_cmd
 
+ℹ️ 5. Apply Saved IMU Gyro Bias
+----------------------------------------
+...
+✅ Saved IMU bias applied (restart autoware to load the updated parameters)
+
 ========================================
 📊 Check Results Summary
 ========================================
-Total checks: 19
-✅ Passed: 19
+Total checks: 20
+✅ Passed: 20
 ⚠️ Warnings: 0
 ❌ Failed: 0
 

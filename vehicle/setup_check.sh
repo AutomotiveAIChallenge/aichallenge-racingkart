@@ -30,11 +30,6 @@ CAN_MIN_FRAMES="${CAN_MIN_FRAMES:-100}"
 GNSS_NAVPVT_TIMEOUT_SEC="${GNSS_NAVPVT_TIMEOUT_SEC:-8}"
 ROS_TOPIC_TIMEOUT_SEC="${ROS_TOPIC_TIMEOUT_SEC:-4}"
 ROS_TOPIC_RETRY="${ROS_TOPIC_RETRY:-2}"
-IMU_BIAS_DURATION_SEC="${IMU_BIAS_DURATION_SEC:-5}"
-IMU_BIAS_WARMUP_SEC="${IMU_BIAS_WARMUP_SEC:-2}"
-# 暫定値（imu_corrector.param.yaml の想定ノイズ既定値に合わせている）。実測を踏まえて後で絞り込む。
-IMU_BIAS_STD_THRESHOLD="${IMU_BIAS_STD_THRESHOLD:-0.03}"
-IMU_BIAS_VELOCITY_THRESHOLD="${IMU_BIAS_VELOCITY_THRESHOLD:-0.05}"
 TOTAL_CHECKS=0
 PASSED_CHECKS=0
 FAILED_CHECKS=0
@@ -75,9 +70,7 @@ Racing Kart Setup Check Script
 Usage: $0 [OPTIONS]
 
 OPTIONS:
-  --phase PHASE   preflight, calibrate (IMU), runtime, or all [default: all]
-                  calibrate requires driver running and autoware stopped.
-                  all runs preflight + runtime checks, without calibration.
+  --phase PHASE   Check phase: preflight, runtime, or all [default: all]
   --log           Enable logging to file
   --help          Show this help
 
@@ -91,16 +84,6 @@ ENVIRONMENT:
                    seconds to wait for each runtime ROS topic [default: 4]
   ROS_TOPIC_RETRY  attempts per runtime ROS topic before reporting a failure
                    [default: 2]
-  IMU_BIAS_DURATION_SEC
-                   IMU gyro bias sampling seconds [default: 5]
-  IMU_BIAS_WARMUP_SEC
-                   seconds discarded before sampling (IMU warmup) [default: 2]
-  IMU_BIAS_STD_THRESHOLD
-                   warn if stationary gyro stddev exceeds this [rad/s, default: 0.03
-                   (provisional, matches imu_corrector's assumed noise; to be
-                   tightened after real measurements)]
-  IMU_BIAS_VELOCITY_THRESHOLD
-                   treat as moving if |velocity| exceeds this [m/s, default: 0.05]
 
 MODE:
   vehicle         Real vehicle mode (CAN + VCU required) [default]
@@ -108,7 +91,6 @@ MODE:
 Examples:
   $0
   $0 --phase preflight
-  $0 --phase calibrate
   $0 --phase runtime
   $0 --log
   CAN_SAMPLE_SEC=5 CAN_MIN_FRAMES=200 $0 --log
@@ -121,7 +103,7 @@ while [[ $# -gt 0 ]]; do
     --phase)
         PHASE="${2-}"
         case "${PHASE}" in
-        preflight | calibrate | runtime | all) ;;
+        preflight | runtime | all) ;;
         *)
             echo "Invalid phase: ${PHASE}"
             show_help
@@ -345,36 +327,6 @@ check_can_traffic() {
         log "   Check: motor/controller power, VCU state, CAN wiring, termination, and bitrate."
         record_result "fail"
     fi
-}
-
-read_env_value() {
-    local key=$1
-    local env_file="${REPO_ROOT}/.env"
-
-    [ -f "${env_file}" ] || return 0
-    # 先頭の空白と `export ` を落として `KEY=value` に正規化してから読む
-    sed -E 's/^[[:space:]]*(export[[:space:]]+)?//' "${env_file}" |
-        awk -F= -v key="${key}" '
-            $1 == key {
-                value = substr($0, length(key) + 2)
-                gsub(/^["'\'']|["'\'']$/, "", value)
-                print value
-            }
-        ' | tail -1
-}
-
-detect_vehicle_id() {
-    local vehicle_id="${VEHICLE_ID-}"
-
-    if [ -z "${vehicle_id}" ]; then
-        vehicle_id="$(read_env_value VEHICLE_ID)"
-    fi
-
-    if [ -z "${vehicle_id}" ]; then
-        vehicle_id="$(vehicle_id_for_hostname "$(hostname)" || true)"
-    fi
-
-    printf '%s\n' "${vehicle_id}"
 }
 
 # ヘッダー表示
@@ -689,12 +641,14 @@ check_gnss_rtk_status() {
 check_runtime_ros_topics() {
     print_section "Runtime ROS Topic Output Check"
 
+    log "${INFO} Raw IMU topic"
+    check_ros_topic_once "driver" "/sensing/imu/imu_raw" "Raw IMU"
+
     log "${INFO} Racing kart hardware/status topics"
     check_ros_topic_once "driver" "/racing_kart/vcu/status" "VCU status"
     check_ros_topic_once "driver" "/racing_kart/steer/status" "Steer status"
     check_ros_topic_once "driver" "/racing_kart/brake/status" "Brake status"
     check_ros_topic_once "driver" "/racing_kart/sd/joy" "Joy input"
-    check_ros_topic_once "driver" "/sensing/imu/imu_raw" "Raw IMU"
 
     log "${INFO} Racing kart final command topics"
     check_ros_topic_once "driver" "/racing_kart/vcu/command" "VCU command"
@@ -714,141 +668,27 @@ check_runtime_ros_topics() {
     log ""
 }
 
-# 校正中に Autoware の設定を変更しない。Compose の観測失敗も停止として扱わない。
-check_imu_calibration_services() {
-    local running_services
-    if ! running_services="$(compose_running_services)"; then
-        log "${FAIL} Cannot inspect docker compose services for IMU calibration"
-        return 1
-    fi
-    if grep -Fxq "autoware" <<<"${running_services}"; then
-        log "${FAIL} Stop autoware before IMU calibration (autoware-vehicle down)"
-        return 1
-    fi
-    if ! grep -Fxq "driver" <<<"${running_services}"; then
-        log "${FAIL} IMU calibration requires driver; start it from the staff console or make driver"
-        return 1
-    fi
-}
+# 保存済みの車両別 IMU バイアスを適用 (runtime)
+apply_imu_bias() {
+    print_section "Apply Saved IMU Gyro Bias"
 
-# IMUジャイロバイアス計測 (calibrate: extract 後、build / Autoware 起動前)
-check_imu_bias() {
-    print_section "IMU Gyro Bias Check (stationary)"
-
-    local calibration_vehicle_id
-    calibration_vehicle_id="$(detect_vehicle_id)"
-    local bias_output_args=()
-    if zenoh_endpoint_for_vehicle_id "${calibration_vehicle_id}" >/dev/null; then
-        bias_output_args=(--bias-output "/vehicle/.calibration/${calibration_vehicle_id}/imu_bias.yaml")
-    else
-        log "${WARN} VEHICLE_ID is missing or unknown; measuring IMU without vehicle bias storage"
-    fi
-
-    if ! check_imu_calibration_services; then
-        record_result "fail"
-        log ""
-        return 0
-    fi
-
-    # 静止確認。走行中に測ると誤ったバイアスを黙って書き込むので y/N で明示確認する。
-    # タイムアウトは付けず回答があるまで待つ。
-    local answer=""
-    read -r -p "$(echo -e "${WARN} Vehicle must be COMPLETELY stationary for IMU bias check. Proceed? [y/N]: ")" answer
-
-    case "${answer}" in
-    y | Y | yes | YES) ;;
-    *)
-        log "${WARN} IMU bias check skipped (vehicle not confirmed stationary)"
-        record_result "warn"
-        log ""
-        return 0
-        ;;
-    esac
-
-    # check_imu_bias.py は ./vehicle:/vehicle マウント経由でコンテナから見える。
-    # rc=4（静止時ノイズ過大）は python 側では自動リトライせず、ここで毎回確認して再実行する。
-    local output
-    local rc
-    local attempt=1
-    local proposal_file
-    if ! proposal_file="$(mktemp "${SCRIPT_DIR}/.imu-bias-XXXXXX.json")"; then
-        log "${FAIL} Could not create temporary IMU proposal"
-        record_result "fail"
-        return 0
-    fi
-    local proposal_path="/vehicle/${proposal_file##*/}"
-    # mktemp と同じホストユーザーで実行し、ホストの承認入力をコンテナに渡さない。
-    # driver イメージ内蔵のメッセージ型だけを使う（提出物の install/ は source しない）。
-    local calibration_command=(docker compose -f "${REPO_ROOT}/docker-compose.yml"
-        run --rm --no-deps -T --interactive=false --user "$(id -u):$(id -g)" imu-calibration)
-    output="$("${calibration_command[@]}" \
-        --duration "${IMU_BIAS_DURATION_SEC}" \
-        --warmup "${IMU_BIAS_WARMUP_SEC}" \
-        --velocity-threshold "${IMU_BIAS_VELOCITY_THRESHOLD}" \
-        --std-threshold "${IMU_BIAS_STD_THRESHOLD}" \
-        --proposal-output "${proposal_path}" 2>&1)"
-    rc=$?
-    log "${output}"
-
-    while [ "${rc}" = "4" ]; do
-        local retry_answer=""
-        read -r -p "$(echo -e "${WARN} Do not touch the vehicle. Re-measure? [y/N] (attempt $((attempt + 1))): ")" retry_answer
-
-        case "${retry_answer}" in
-        y | Y | yes | YES) ;;
-        *) break ;;
-        esac
-
-        attempt=$((attempt + 1))
-        output="$("${calibration_command[@]}" \
-            --duration "${IMU_BIAS_DURATION_SEC}" \
-            --warmup "${IMU_BIAS_WARMUP_SEC}" \
-            --velocity-threshold "${IMU_BIAS_VELOCITY_THRESHOLD}" \
-            --std-threshold "${IMU_BIAS_STD_THRESHOLD}" \
-            --proposal-output "${proposal_path}" 2>&1)"
-        rc=$?
-        log "${output}"
-    done
-
-    if [ "${rc}" = "0" ]; then
-        local update_answer=""
-        read -r -p "実測値で上書きしますか？ 参加者の承認を確認してください。 [y/N]: " update_answer
-        case "${update_answer}" in
-        y | Y | yes | YES)
-            # 操作者が承認を考えている間に別の端末で起動された場合も、更新を拒否する。
-            if check_imu_calibration_services; then
-                output="$("${calibration_command[@]}" \
-                    --apply-proposal "${proposal_path}" "${bias_output_args[@]}" 2>&1)"
-                rc=$?
-                log "${output}"
-            else
-                rc=3
-            fi
-            ;;
-        *) rc=5 ;;
-        esac
-    fi
-    rm -f "${proposal_file}"
-
+    # 承認プロンプトを端末へ直接表示するため、コマンド置換で出力を捕捉しない。
+    python3 "${SCRIPT_DIR}/apply_imu_bias.py"
+    local rc=$?
     case "${rc}" in
     0)
-        log "${OK} Participant-approved IMU bias saved; build and start autoware to use it"
+        log "${OK} Saved IMU bias applied (restart autoware to load the updated parameters)"
         record_result "pass"
-        ;;
-    4)
-        log "${WARN} IMU gyro bias check: gave up on noisy measurement (see above; not written)"
-        record_result "warn"
         ;;
     5)
         log "${WARN} IMU update skipped; participant settings and saved bias retained"
         record_result "warn"
         ;;
     *)
-        log "${FAIL} IMU gyro bias check failed (rc=${rc}; see above for measurement/write status)"
+        log "${FAIL} Saved IMU bias update failed (rc=${rc}; see above)"
         record_result "fail"
         ;;
     esac
-
     log ""
 }
 
@@ -901,8 +741,6 @@ print_summary() {
     fi
     if [ "${WARNING_CHECKS}" -gt 0 ]; then
         log "   警告のみ。内容を確認したうえで進めてください。"
-    elif [ "${PHASE}" = "calibrate" ]; then
-        log "   IMU calibration complete. Build and start autoware, then run the runtime checks."
     else
         log "   すべて通過。走行準備 OK。"
     fi
@@ -925,14 +763,12 @@ main() {
         check_known_issues
         check_execution_readiness
         ;;
-    calibrate)
-        check_imu_bias
-        ;;
     runtime)
         check_runtime_hardware
         check_runtime_docker_services
         check_gnss_rtk_status
         check_runtime_ros_topics
+        apply_imu_bias
         ;;
     all)
         check_hardware
@@ -942,6 +778,7 @@ main() {
         check_runtime_docker_services
         check_gnss_rtk_status
         check_runtime_ros_topics
+        apply_imu_bias
         check_known_issues
         check_execution_readiness
         ;;

@@ -1,14 +1,14 @@
 #!/usr/bin/env python3
 """IMU ジャイロバイアス計測・書き込みツール.
 
-Autoware 起動前（setup_check.sh --phase calibrate のタイミング）に、車両が
+整備時に明示的に実行する計測ツール。通常の runtime では保存済みの値を適用し、
+setup_check.sh の runtime からは呼ばない。車両が
 完全に静止している状態で /sensing/imu/imu_raw の角速度を数秒サンプリングし、
 静止時バイアス（3 軸平均）を測る。静止時ノイズ（std）が十分小さければ、
 imu_corrector.param.yaml に書かれている現在の angular_velocity_offset_* を
 現在値・実測値・差分を表示し、参加者の承認を確認した場合だけ上書きする。
-校正ステップでは測定結果を --proposal-output に一時保存し、ホスト側で承認後に
---apply-proposal で適用する。--bias-output の車両別保存元も承認後だけ更新する。
-保存元の値は次の提出物へ自動適用しない。
+測定結果だけを保存する場合は --proposal-output を使う。--apply-proposal は承認した
+測定結果の適用用。--bias-output の車両別保存元も承認後だけ更新する。
 
 符号について（imu_corrector のソースから）:
     imu_corrector は  output = raw - angular_velocity_offset  で補正する。
@@ -20,16 +20,13 @@ imu_corrector.param.yaml に書かれている現在の angular_velocity_offset_
 
 反映タイミングについて:
     imu_corrector はパラメータを起動時に一度だけ読む（動的リロードなし）。
-    通常は Autoware を停止した状態で更新し、その後の build / 起動で反映する。
-    このツールを直接使って起動中に更新した場合は、再起動が必要になる。
+    このスクリプトが param.yaml を書き換えても、今動いている autoware には
+    反映されない。次回 autoware を再起動したときから新しい値が使われる。
 
 静止確認について:
     このスクリプトは1回サンプリングするだけで、再サンプリングの判断はしない。
-    静止確認の y/N、および静止時ノイズ（std）超過時に「車両に触れないでください」
-    と表示して再計測するかどうかの確認は、いずれも setup_check.sh 側の
-    check_imu_bias() が担当する（このスクリプトが呼ばれた時点で人間は
-    「静止している」と既に答えている）。std 超過はそれ専用の終了コード
-    （exit 4）で返し、呼び出し側が確認の上で再実行できるようにしている。
+    操作者が事前に完全な静止を確認する。車速の受信がない場合はその確認に依存する。
+    std 超過は専用の終了コード（exit 4）で返すので、静止を確認してから再実行する。
 
 終了コード:
     0 : 承認後の更新成功、または --proposal-output による測定結果の保存成功
@@ -98,7 +95,7 @@ def apply_proposal(proposal: dict, bias_output: Path | None) -> int:
     print("✅ imu_corrector.param.yaml updated (participant approved).")
     if bias_output is not None:
         print(f"Saved vehicle IMU bias: {bias_output}")
-    print("Build and start autoware to use the new offsets (restart if already running).")
+    print("Restart autoware to apply the new offsets.")
     return EXIT_OK
 
 

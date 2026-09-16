@@ -90,12 +90,11 @@
 |---|--------|--------------|--------------|------------|
 | 1 | `check preflight` | `./setup_check.sh --phase preflight` | なし | 終了コード 0（セッション記憶） |
 | 2 | `extract` | `make submission-extract`（`vehicle/.submissions/<id>.zip` を ID とパスワードで展開し `src/aichallenge_submit/` を入れ替える） | 1 | 終了コード 0（セッション記憶） |
-| 3 | `calibrate IMU` | `make calibrate-imu` | 2 | 終了コード 0（セッション記憶。更新見送りの警告も含む） |
-| 4 | `build` | `make autoware-build` | 3 | `workspace/install/setup.bash` が存在し `src/` より新しい（実測） |
-| 5 | `autoware-vehicle` | `make autoware-vehicle` | 4 | `autoware` が compose 上で running（実測。`driver` / `zenoh` / `rosbag` はサービス行で見せるだけ） |
-| 6 | `check runtime` | `./setup_check.sh --phase runtime` | 5 | 終了コード 0（セッション記憶） |
-| 7 | `autoware-vehicle down` | `docker compose down autoware` | なし | `autoware` が running でない（実測） |
-| 8 | `cleanup` | `make workspace-clean` | なし | `aichallenge/workspace/` が checkout と一致（`git status --porcelain --ignored` が空、実測） |
+| 3 | `build` | `make autoware-build` | 2 | `workspace/install/setup.bash` が存在し `src/` より新しい（実測） |
+| 4 | `autoware-vehicle` | `make autoware-vehicle` | 3 | `autoware` が compose 上で running（実測。`driver` / `zenoh` / `rosbag` はサービス行で見せるだけ） |
+| 5 | `check runtime` | `./setup_check.sh --phase runtime` | 4 | 終了コード 0（セッション記憶） |
+| 6 | `autoware-vehicle down` | `docker compose down autoware` | なし | `autoware` が running でない（実測） |
+| 7 | `cleanup` | `make workspace-clean` | なし | `aichallenge/workspace/` が checkout と一致（`git status --porcelain --ignored` が空、実測） |
 
 運営（`make vehicle-tui-staff`、`--role staff`）は参加者の並びとは独立の、次の 8 行だけの画面。
 
@@ -111,11 +110,11 @@
 | 8 | `down all` | `make down` | なし | このリポジトリから compose で起動された running コンテナが 0（全プロジェクト、実測） |
 
 走行枠の流れは、運営が 2・3（`driver` / `zenoh`）で土台を上げ、6（`rosbag`）で記録を始め、
-参加者が 1〜6 で校正・ビルド・起動・確認して走り、参加者の 7 で autoware を落とし、運営が 7（`rosbag down`）で
-記録を閉じて 8（`down all`）で全部を落とし、参加者の 8（`cleanup`）で片付ける、である。
+参加者が 1〜5 で autoware を上げて走り、参加者の 6 で autoware を落とし、運営が 7（`rosbag down`）で
+記録を閉じて 8（`down all`）で全部を落とし、参加者の 7（`cleanup`）で片付ける、である。
 rosbag の 2 行を `down all` の直前に置くのは、記録の開始と終了が走行枠の前後に来る操作で、
 土台の上げ下げとは使う場面が違うからである。
-Autoware を入れ替えるときは参加者の 7 → 5 と辿る。土台のうち 1 サービスだけを入れ替えたいときは、運営がそのサービスの
+Autoware を入れ替えるときは参加者の 6 → 4 と辿る。土台のうち 1 サービスだけを入れ替えたいときは、運営がそのサービスの
 down → up と辿る（`driver` は 4 → 2、`zenoh` は 5 → 3、`rosbag` は 7 → 6）。
 
 `driver` / `zenoh` は常時 ON で、落とすのは異常時だけである。`zenoh` を落とすと遠隔からの
@@ -123,14 +122,14 @@ down → up と辿る（`driver` は 4 → 2、`zenoh` は 5 → 3、`rosbag` �
 `down all` は 1 日の終わりに使う。参加者の `autoware-vehicle down` はこの 3 つを触らない。
 
 `rosbag` は任意である。`check runtime` の必須サービスは `driver` / `autoware` / `zenoh` の 3 つで、
-rosbag が止まっていても参加者の 6 は落ちない。記録を残す走行枠では運営が 6（`rosbag`）で始め、
+rosbag が止まっていても参加者の 5 は落ちない。記録を残す走行枠では運営が 6（`rosbag`）で始め、
 7（`rosbag down`）で閉じる。上げ忘れに気づく手段は runtime check ではなく、
 サービス行（`stopped: rosbag`）である。
 
 チェックの 2 ステップは `check preflight` / `check runtime` と表示する。
 `setup_check.sh` の `--phase` の値をそのまま名前にしているので、画面の名前から
 実行されるコマンドが辿れる。内部のステップ ID は `preflight` / `submission` /
-`calibrate_imu` / `build` / `up` / `runtime` / `autoware_down` / `clean` と運営用の `driver` / `zenoh` / `rosbag` /
+`build` / `up` / `runtime` / `autoware_down` / `clean` と運営用の `driver` / `zenoh` / `rosbag` /
 `driver_down` / `zenoh_down` / `rosbag_down` / `download` / `teardown` で、表示名とは別である。
 
 ### 停止の 2 段と cleanup の責務
@@ -180,12 +179,9 @@ zip は **トップレベルが `aichallenge_submit/` だけ**で、**従来の 
 ### 実測とセッション記憶
 
 展開時は accel/brake map の上書きについて参加者の承認を確認する。
-IMU バイアスは展開時に保持し、ビルド前の `calibrate IMU` で静止計測する。
-現在値・実測値・差分を表示し、参加者の承認後だけ更新する。拒否・入力終了では設定を保持する。
-校正は driver 起動済み・Autoware 停止中が前提で、スクリプトが計測前と適用直前に確認する。
-一時コンテナは driver と同じイメージの ROS 環境を使い、提出物のビルドには依存しない。
-静止・更新承認の入力があるため TUI は端末を明け渡す。runtime は設定を変更せず、
-トピックの受信などの確認結果を通常のログ欄に表示する。
+IMU バイアスは展開時に保持し、runtime で車両別の現在値・保存値・差分を表示して
+承認後だけ更新する。拒否・入力終了では設定を保持する。
+runtime では当日の IMU バイアス計測を行わず、保存元を変更しません。
 詳細は [車両別校正値](../../vehicle/calibration.md) を参照する。
 
 `build` / `autoware` / `autoware down` / `down all` / `cleanup` は環境から実測する
@@ -197,7 +193,7 @@ IMU バイアスは展開時に保持し、ビルド前の `calibrate IMU` で�
 実測を優先するため、別のシェルで `make down` された場合も次の観測で反映され、
 TUI 内のキャッシュと実態が食い違うことがない。
 
-`preflight` / `extract` / `calibrate IMU` / `check runtime` / `download` は実測できない。
+`preflight` / `extract` / `check runtime` / `download` は実測できない。
 合否は終了コードにしか現れず、後からファイルシステムを見て再現できないためである。
 
 `autoware` の完了は `autoware` だけで判定する。`autoware-vehicle` が上げるのは
@@ -243,12 +239,11 @@ running: driver autoware
 stopped: zenoh rosbag
 1 NG check preflight
 2 ?  extract
-3 ?  calibrate IMU
-4 OK build
-5 -  autoware-vehicle
-6 ?  check runtime
-7 -  autoware-vehicle down
-8 -  cleanup
+3 OK build
+4 -  autoware-vehicle
+5 ?  check runtime
+6 -  autoware-vehicle down
+7 -  cleanup
 -- failures (8) ------------------------------------------
 ❌ CAN interface can0 not found
 ❌ VCU directory missing: /dev/vcu
@@ -303,8 +298,8 @@ driver image: 2025-09-04  aic commit: bd9c626
 - 長い行は折り返す。切り詰めると長いパスやコンパイラ出力の末尾が読めなくなる。
 - 参加者のステップ 1（`check preflight`）は起動時に自動実行する。運営の画面には preflight が無く、
   起動時の自動実行もしない。
-- 最低端末サイズは参加者 47x16、運営 47x17（桁数は参加者・運営共通）。行数の内訳は
-  ヘッダ 1 + サービス行 2 + ステップ数（8 / 8）+ version 行（運営のみ 1）
+- 最低端末サイズは参加者 47x15、運営 47x17（桁数は参加者・運営共通）。行数の内訳は
+  ヘッダ 1 + サービス行 2 + ステップ数（7 / 8）+ version 行（運営のみ 1）
   + failures 見出し 1 + failures 1 + log 見出し 1 + log 1、に 1 行の余裕。桁数は画面中で
   いちばん幅を食う固定行、ヘッダの最長形 `[test] vehicle console [participant]` + 区切り 1
   + キー操作 10 = 47 桁に合わせたもの（version 行は 45 桁）。version 行は運営の画面にしか
@@ -379,7 +374,7 @@ Python 3 標準ライブラリのみを使う（`curses` / `subprocess` / `threa
   まさにその状況こそ preflight を走らせたい場面である。
 - **ssh 切断**：tmux セッションが残る。再接続して `make vehicle-tui` を実行すると
   `-A` により同じセッションへアタッチする。実行中のステップは継続している。
-- **端末が狭い**：役割ごとの最低サイズ（参加者 47x16、運営 47x17）を下回る場合は起動時に警告して終了する。
+- **端末が狭い**：役割ごとの最低サイズ（参加者 47x15、運営 47x17）を下回る場合は起動時に警告して終了する。
 
 ## テスト方針
 

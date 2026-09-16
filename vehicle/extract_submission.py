@@ -12,7 +12,7 @@ Extraction happens into a sibling temp directory first, so a wrong password or
 a malformed archive leaves the current aichallenge_submit/ untouched.
 Before replacement, ask for participant approval to copy the common accel/brake
 maps from aichallenge_awsim_adapter/data/. Declining preserves participant maps.
-IMU offsets are retained; calibrate-imu proposes their update before build/start.
+IMU offsets are retained; runtime proposes applying the saved vehicle bias separately.
 
 Failures print a line starting with the FAIL marker so vehicle/tui.py retains
 them in its failures pane.
