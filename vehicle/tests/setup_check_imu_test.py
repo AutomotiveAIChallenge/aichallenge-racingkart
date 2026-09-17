@@ -17,7 +17,7 @@ CAN_SAMPLE_SEC=1
 CAN_MIN_FRAMES=1
 GNSS_NAVPVT_TIMEOUT_SEC=1
 ROS_TOPIC_TIMEOUT_SEC=1
-ROS_TOPIC_RETRY=1
+ROS_TOPIC_RETRY=${ROS_TOPIC_RETRY:-1}
 REPO_ROOT=/fake-repo
 TOTAL_CHECKS=0
 PASSED_CHECKS=0
@@ -69,6 +69,16 @@ docker() {
         case "${9}" in
         *'/sensing/gnss/navpvt'*) echo "$GNSS_FLAGS" ;;
         *"'$FAILED_TOPIC'"*) return 1 ;;
+        *'--field actuation'*)
+            local attempt=0
+            if [ -f "$ACTUATION_DIR/attempt" ]; then
+                read -r attempt <"$ACTUATION_DIR/attempt"
+            fi
+            attempt=$((attempt + 1))
+            echo "$attempt" >"$ACTUATION_DIR/attempt"
+            cat "$ACTUATION_DIR/$attempt" 2>/dev/null
+            return $?
+            ;;
         esac
         return 0
     fi
@@ -81,7 +91,8 @@ main
 class PhaseRoutingTest(unittest.TestCase):
     def run_phase(self, phase, services, *, flags="131", failed_topic="/not-a-topic",
                   host_containers=None, expected_containers=None,
-                  host_ps_fail=False, compose_ps_fail=False):
+                  host_ps_fail=False, compose_ps_fail=False,
+                  actuation_outputs=("accel_cmd: 0.2\nbrake_cmd: 0.0\nsteer_cmd: 0.0\n---",)):
         containers = [(f"{index:064x}", service) for index, service in enumerate(services.split(), 1)]
         if expected_containers is None:
             expected_containers = "\n".join(
@@ -96,10 +107,14 @@ class PhaseRoutingTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             trace = Path(tmp) / "trace"
             trace.touch()
+            for attempt, output in enumerate(actuation_outputs, 1):
+                if output is not None:
+                    (Path(tmp) / str(attempt)).write_text(output)
             env = dict(os.environ, PHASE=phase, SERVICES=services, GNSS_FLAGS=flags,
                        FAILED_TOPIC=failed_topic, TRACE_FILE=str(trace),
                        HOST_CONTAINERS=host_containers, EXPECTED_CONTAINERS=expected_containers,
-                       HOST_PS_FAIL=str(int(host_ps_fail)), COMPOSE_PS_FAIL=str(int(compose_ps_fail)))
+                       HOST_PS_FAIL=str(int(host_ps_fail)), COMPOSE_PS_FAIL=str(int(compose_ps_fail)),
+                       ACTUATION_DIR=tmp, ROS_TOPIC_RETRY=str(len(actuation_outputs)))
             result = subprocess.run(["bash", "-c", DEFINITIONS + FAKES], env=env,
                                     text=True, capture_output=True, timeout=10)
             return result, trace.read_text()
@@ -135,6 +150,80 @@ class PhaseRoutingTest(unittest.TestCase):
         self.assertIn("docker ps --no-trunc", trace)
         self.assertIn("--status running --no-trunc --format {{.ID}} {{.Service}} autoware driver zenoh", trace)
         self.assertIn("0 warn, 0 fail", result.stdout)
+
+    def test_accelerator_check_is_last_and_shows_both_command_values(self):
+        result, trace = self.run_phase("autoware", "autoware driver zenoh")
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertIn("OK Autoware accelerator command: accel_cmd=0.2, brake_cmd=0.0", result.stdout)
+        self.assertIn("6 checks: 6 ok, 0 warn, 0 fail", result.stdout)
+        self.assertGreater(result.stdout.index("OK Autoware accelerator command:"),
+                           result.stdout.index("OK Actuation command:"))
+        self.assertIn("--once --field actuation", trace)
+        self.assertNotIn("ros2 topic pub", trace)
+
+    def test_zero_negative_accelerator_and_nonzero_brake_fail_with_values(self):
+        for accel, brake in (("0.0", "0.0"), ("-0.1", "0.0"), ("0.2", "0.1"),
+                             ("0.2", "-0.1"), ("0.0", "1.0")):
+            with self.subTest(accel=accel, brake=brake):
+                result, _ = self.run_phase(
+                    "autoware", "autoware driver zenoh",
+                    actuation_outputs=(f"accel_cmd: {accel}\nbrake_cmd: {brake}",),
+                )
+                self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
+                self.assertIn(f"FAIL Autoware accelerator command: accel_cmd={accel}, brake_cmd={brake}",
+                              result.stdout)
+                self.assertIn("6 checks: 5 ok, 0 warn, 1 fail", result.stdout)
+
+    def test_scientific_notation_is_compared_numerically(self):
+        result, _ = self.run_phase(
+            "autoware", "autoware driver zenoh",
+            actuation_outputs=("accel_cmd: 1.0e-05\nbrake_cmd: -0.0",),
+        )
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertIn("accel_cmd=1.0e-05, brake_cmd=-0.0", result.stdout)
+
+    def test_missing_invalid_and_nonfinite_values_fail(self):
+        for output in ("", "accel_cmd: 0.2", "brake_cmd: 0.0",
+                       "accel_cmd: 0.2\nbrake_cmd: invalid",
+                       "accel_cmd: .nan\nbrake_cmd: 0.0",
+                       "accel_cmd: .inf\nbrake_cmd: 0.0",
+                       "accel_cmd: 0.2\nbrake_cmd: .nan",
+                       "accel_cmd: 0.2\nbrake_cmd: 0.0\naccel_cmd: 0.3"):
+            with self.subTest(output=output):
+                result, _ = self.run_phase("autoware", "autoware driver zenoh",
+                                           actuation_outputs=(output,))
+                self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
+                self.assertIn("FAIL Autoware accelerator command: invalid or missing accel_cmd/brake_cmd",
+                              result.stdout)
+
+    def test_accelerator_receive_timeout_fails_even_if_topic_presence_passed(self):
+        result, trace = self.run_phase("autoware", "autoware driver zenoh",
+                                       actuation_outputs=(None, None))
+        self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
+        self.assertIn("OK Actuation command:", result.stdout)
+        self.assertIn("FAIL Autoware accelerator command: no message on /control/command/actuation_cmd",
+                      result.stdout)
+        self.assertEqual(trace.count("--field actuation"), 2)
+
+    def test_accelerator_retries_until_a_valid_command_arrives(self):
+        for first in (None, "accel_cmd: 0.0\nbrake_cmd: 0.0", "accel_cmd: 0.2"):
+            with self.subTest(first=first):
+                result, trace = self.run_phase(
+                    "autoware", "autoware driver zenoh",
+                    actuation_outputs=(first, "accel_cmd: 0.3\nbrake_cmd: 0.0"),
+                )
+                self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+                self.assertIn("OK Autoware accelerator command: accel_cmd=0.3, brake_cmd=0.0", result.stdout)
+                self.assertIn("6 checks: 6 ok, 0 warn, 0 fail", result.stdout)
+                self.assertEqual(trace.count("--field actuation"), 2)
+
+    def test_accelerator_stops_after_the_first_passing_command(self):
+        result, trace = self.run_phase(
+            "autoware", "autoware driver zenoh",
+            actuation_outputs=("accel_cmd: 0.2\nbrake_cmd: 0.0", None),
+        )
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertEqual(trace.count("--field actuation"), 1)
 
     def test_autoware_requires_driver_and_zenoh_as_well(self):
         for services, missing in (("autoware zenoh", "driver"), ("autoware driver", "zenoh")):
@@ -201,6 +290,9 @@ class PhaseRoutingTest(unittest.TestCase):
                 result, _ = self.run_phase(phase, services)
                 self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
                 self.assertIn("Required compose services not running: " + missing, result.stdout)
+                if phase == "autoware":
+                    self.assertIn("FAIL Autoware accelerator command: autoware service is not running",
+                                  result.stdout)
 
     def test_missing_topic_fails_without_stopping_remaining_checks(self):
         for phase, topic in (("driver", "/sensing/imu/imu_raw"),
@@ -211,6 +303,8 @@ class PhaseRoutingTest(unittest.TestCase):
                 self.assertIn("no message on " + topic, result.stdout)
                 last_topic = "/vehicle/status/actuation_status" if phase == "driver" else "/control/command/actuation_cmd"
                 self.assertIn(last_topic, trace)
+                if phase == "autoware":
+                    self.assertIn("OK Autoware accelerator command:", result.stdout)
 
     def test_runtime_and_all_preserve_both_checks(self):
         for phase in ("runtime", "all"):
@@ -223,6 +317,17 @@ class PhaseRoutingTest(unittest.TestCase):
                 self.assertEqual("preflight:" in trace, phase == "all")
                 self.assertEqual(trace.count("/sensing/imu/imu_raw"), 1)
                 self.assertEqual(trace.count("/control/command/control_cmd"), 1)
+                self.assertEqual(trace.count("--field actuation"), 1)
+
+    def test_runtime_and_all_fail_when_the_accelerator_is_zero(self):
+        for phase in ("runtime", "all"):
+            with self.subTest(phase=phase):
+                result, _ = self.run_phase(
+                    phase, "driver zenoh autoware",
+                    actuation_outputs=("accel_cmd: 0.0\nbrake_cmd: 0.0",),
+                )
+                self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
+                self.assertIn("FAIL Autoware accelerator command: accel_cmd=0.0, brake_cmd=0.0", result.stdout)
 
     def test_preflight_does_not_require_running_services(self):
         result, trace = self.run_phase("preflight", "")

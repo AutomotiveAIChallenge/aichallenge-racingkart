@@ -731,8 +731,58 @@ check_autoware_ros_topics() {
     log "${INFO} Autoware downstream control command topics"
     check_ros_topic_once "autoware" "/control/command/control_cmd" "Control command"
     check_ros_topic_once "autoware" "/control/command/actuation_cmd" "Actuation command"
+    check_autoware_acceleration
 
     log ""
+}
+
+# 受信できるだけでなく、同じメッセージでアクセルが正・ブレーキがゼロかを確認する。
+check_autoware_acceleration() {
+    local topic="/control/command/actuation_cmd"
+    local label="Autoware accelerator command"
+    log "${INFO} ${label}: checking accel_cmd > 0 and brake_cmd = 0"
+
+    if ! is_compose_service_running "autoware"; then
+        log "${FAIL} ${label}: autoware service is not running"
+        record_result "fail"
+        return 0
+    fi
+
+    local setup_cmd output detail
+    setup_cmd="$(ros_setup_command_for_service "autoware")"
+    local attempt=1
+    detail="no message on ${topic}"
+    while [ "${attempt}" -le "${ROS_TOPIC_RETRY}" ]; do
+        if output="$(docker compose -f "${REPO_ROOT}/docker-compose.yml" exec -T autoware bash -lc "
+            ${setup_cmd}
+            timeout '${ROS_TOPIC_TIMEOUT_SEC}' ros2 topic echo '${topic}' --once --field actuation
+        " 2>/dev/null)"; then
+            # ROS の YAML 出力から数値だけを読む。欠落・NaN・不正な値をゼロ扱いしない。
+            if detail="$(awk '
+                /^[[:space:]]*accel_cmd:/ { accel = $2; accel_count++ }
+                /^[[:space:]]*brake_cmd:/ { brake = $2; brake_count++ }
+                END {
+                    number = "^[+-]?([0-9]+([.][0-9]*)?|[.][0-9]+)([eE][+-]?[0-9]+)?$"
+                    if (accel_count != 1 || brake_count != 1 || accel !~ number || brake !~ number) {
+                        print "invalid or missing accel_cmd/brake_cmd"
+                        exit 1
+                    }
+                    printf "accel_cmd=%s, brake_cmd=%s\n", accel, brake
+                    exit !(accel + 0 > 0 && brake + 0 == 0)
+                }
+            ' <<<"${output}")"; then
+                log "${OK} ${label}: ${detail}"
+                record_result "pass"
+                return 0
+            fi
+        else
+            detail="no message on ${topic} within ${ROS_TOPIC_TIMEOUT_SEC}s"
+        fi
+        attempt=$((attempt + 1))
+    done
+
+    log "${FAIL} ${label}: ${detail} (expected accel_cmd > 0 and brake_cmd = 0; ${ROS_TOPIC_RETRY} attempts)"
+    record_result "fail"
 }
 
 check_driver_runtime() {

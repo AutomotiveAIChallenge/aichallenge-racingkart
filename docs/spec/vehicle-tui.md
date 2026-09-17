@@ -125,10 +125,13 @@ Autoware の入れ替えは参加者の 4 → 1 → 2 → 3。driver は運営�
 |----------|------|
 | `preflight` | デバイス・ネットワーク・Zenoh 接続先への TCP 疎通・Docker 環境・既知問題・実行準備 |
 | `driver` | CAN 通信、driver / zenoh 稼働、GNSS / RTK、生 IMU、車両 status、Joy、最終指令、`/vehicle/status/*` |
-| `autoware` | ホスト全体のコンテナ（autoware / driver / zenoh の不足は失敗、追加・重複は警告）、`/control/command/control_cmd`・`/control/command/actuation_cmd` |
+| `autoware` | ホスト全体のコンテナ（autoware / driver / zenoh の不足は失敗、追加・重複は警告）、`/control/command/control_cmd`・`/control/command/actuation_cmd` の受信、最後にアクセル指令値の確認（`accel_cmd > 0` かつ `brake_cmd = 0`） |
 
 `/vehicle/status/*` は driver が発行するため driver 内で受信を検査し、Autoware 起動を要求しない。
 参加者側は CAN・GNSS・driver のトピック検査を重複して実行しない。
+アクセル指令確認は `/control/command/actuation_cmd` の同じメッセージ内の値で判定し、
+アクセル・ブレーキの指令値を表示する。ゼロアクセル・ブレーキ出力中・値の欠落や不正・未受信は失敗になる。
+通常のトピック確認と同じ待機秒数・試行回数を使う。確認対象は Autoware の指令値で、実ペダルや車両の加速ではない。
 コンテナ確認では現在の Compose project の autoware / driver / zenoh が必要で、
 監視用・rosbag・別 project・Compose 管理外のコンテナや重複起動は名前を表示して警告する。
 警告だけなら成功扱いとし、コンテナの停止・削除は行わない。停止済みコンテナは対象外。
@@ -405,6 +408,7 @@ make vehicle-tui-staff
 | 推奨ラベルの右寄せ・狭い端末での折り返し、ログ領域とキー選択の維持 |
 | 自動 preflight が運営にだけ走ること、サービス操作・停止観測で関連チェックの古い成功が消えること |
 | driver フェーズは Autoware なしで通り、autoware フェーズは車両側の検査を呼ばないこと |
+| Autoware のトピック確認の最後にアクセル正・ブレーキゼロを検査し、ゼロ・ブレーキ出力・不正値・未受信を失敗にすること |
 | runtime / all の互換動作、失敗・警告の終了コード、フェーズ別の完了表示 |
 | アイドル中の再観測の判定（実行中は取り直さない・間隔の境界） |
 

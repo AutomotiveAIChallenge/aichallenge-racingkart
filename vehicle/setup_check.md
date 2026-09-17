@@ -260,6 +260,12 @@ docker compose -f ../docker-compose.yml exec -T driver bash -lc \
 - `/control/command/control_cmd`
 - `/control/command/actuation_cmd`
 
+最後に `/control/command/actuation_cmd` の `actuation` を受信し、同じメッセージの
+`accel_cmd > 0` かつ `brake_cmd = 0` を確認します。アクセル・ブレーキの指令値を表示し、
+アクセルがゼロ以下、ブレーキがゼロ以外、値の欠落・不正、未受信の場合は失敗にします。
+`ROS_TOPIC_TIMEOUT_SEC`（デフォルト4秒）・`ROS_TOPIC_RETRY`（デフォルト2回）を使って再試行します。
+確認対象は Autoware のアクセル指令で、実ペダルの踏み込みや車両の加速を測るものではありません。
+
 CAN・GNSS・IMU・車両 status の検査は呼び出しません。
 制御指令の生成には車両側の入力が必要なため、運営側の確認を済ませてから実行します。
 
@@ -268,6 +274,8 @@ CAN・GNSS・IMU・車両 status の検査は呼び出しません。
 - ⚠️ `Multiple running containers for autoware: ...`
 - ❌ `Required compose services not running: driver`
 - ❌ `Control command: no message on /control/command/control_cmd within 4s x 2` → Autoware の起動状況とログを確認
+- ✅ `Autoware accelerator command: accel_cmd=0.2, brake_cmd=0.0`
+- ❌ `Autoware accelerator command: accel_cmd=0.0, brake_cmd=0.0 (expected accel_cmd > 0 and brake_cmd = 0; 2 attempts)`
 
 Zenoh はコンテナ稼働を driver / autoware フェーズ、接続先への TCP 疎通を preflight で確認します。
 Zenoh セッションの接続成立を直接検査する項目はありません。Joy 受信には送信側の起動も必要です。
@@ -360,13 +368,17 @@ $ ./setup_check.sh --phase driver
    driver / zenoh チェック完了。
 
 $ ./setup_check.sh --phase autoware
-ℹ️ 1. Runtime Docker Service Check
-✅ Required compose services are running: autoware
+ℹ️ 1. Vehicle Host Container Check
+✅ autoware: aichallenge-autoware-1
+✅ driver: aichallenge-driver-1
+✅ zenoh: aichallenge-zenoh-1
 ℹ️ 2. Autoware ROS Topic Output Check
 ℹ️ Autoware downstream control command topics
 ✅ Control command: /control/command/control_cmd
 ✅ Actuation command: /control/command/actuation_cmd
-📊 3 checks: 3 ok, 0 warn, 0 fail
+ℹ️ Autoware accelerator command: checking accel_cmd > 0 and brake_cmd = 0
+✅ Autoware accelerator command: accel_cmd=0.2, brake_cmd=0.0
+📊 6 checks: 6 ok, 0 warn, 0 fail
    Autoware チェック完了。
 ```
 
