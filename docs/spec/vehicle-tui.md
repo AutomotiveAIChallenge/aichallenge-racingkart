@@ -125,10 +125,13 @@ Autoware の入れ替えは参加者の 4 → 1 → 2 → 3。driver は運営�
 |----------|------|
 | `preflight` | デバイス・ネットワーク・Zenoh 接続先への TCP 疎通・Docker 環境・既知問題・実行準備 |
 | `driver` | CAN 通信、driver / zenoh 稼働、GNSS / RTK、生 IMU、車両 status、Joy、最終指令、`/vehicle/status/*` |
-| `autoware` | Autoware 稼働、`/control/command/control_cmd`・`/control/command/actuation_cmd` |
+| `autoware` | ホスト全体のコンテナ（autoware / driver / zenoh の不足は失敗、追加・重複は警告）、`/control/command/control_cmd`・`/control/command/actuation_cmd` |
 
 `/vehicle/status/*` は driver が発行するため driver 内で受信を検査し、Autoware 起動を要求しない。
-参加者側は CAN・GNSS・driver / zenoh の検査を重複して実行しない。
+参加者側は CAN・GNSS・driver のトピック検査を重複して実行しない。
+コンテナ確認では現在の Compose project の autoware / driver / zenoh が必要で、
+監視用・rosbag・別 project・Compose 管理外のコンテナや重複起動は名前を表示して警告する。
+警告だけなら成功扱いとし、コンテナの停止・削除は行わない。停止済みコンテナは対象外。
 Zenoh の直接確認はコンテナ稼働までで、TCP 疎通は preflight にある。Joy 受信には送信側の起動も必要である。
 互換用の `--phase runtime` は driver と autoware の両方を実行し、`--phase all` は preflight の各項目も実行する。
 
@@ -179,6 +182,7 @@ TUI 内のキャッシュと実態が食い違うことがない。
 操作が失敗しても古い OK は復元しない。driver / zenoh 操作は `check_driver`、
 Autoware 操作は `check_autoware`、down all は両方が対象。rosbag 操作はこれらを消さない。
 別ペインで停止された場合も、観測で対象サービスの停止を検出したら成功結果を未確認へ戻す。
+参加者の `check autoware` も driver / zenoh の停止時には未確認へ戻す。
 失敗結果は再実行まで保持する。観測間に停止・再起動が完了した場合の自動検出は行わない。
 
 `autoware` の完了は `autoware` だけで判定する。`autoware-vehicle` が上げるのは

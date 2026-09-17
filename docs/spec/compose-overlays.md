@@ -70,11 +70,13 @@ COMPOSE_FILE=docker-compose.yml
 
 `./setup.bash env` を実行すると `/dev/nvidia0` の有無で GPU/CPU を自動判定し、`.env` を生成する。
 
-`Makefile` は `COMPOSE_PROJECT_NAME=aichallenge` をエクスポートする。既定の project 名はディレクトリ名なので、
-`~/aichallenge-racingkart` と `~/team-xxxx` から同じ `driver` / `autoware` を上げると別コンテナとして
-二重起動する。project を揃えると別 checkout からの `make ...` は稼働中のコンテナを置き換える
-（`make dev2..4` の `-p N` は CLI 指定なので優先される）。`make` を通さず `docker compose` を直接叩く
-ときは `.env` に同じ行を置くか `COMPOSE_PROJECT_NAME=aichallenge` を付ける。
+`docker-compose.yml` のトップレベルに `name: aichallenge` を指定し、起動・停止・確認の
+既定 project 名を統一する。`~/aichallenge-racingkart` と `~/team-xxxx` の別 checkout からも、
+`make` 経由と直接の `docker compose` 呼び出しで同じコンテナを参照する。
+RViz の停止や単体の設定適用 CLI にも同じ設定が使われ、追加の環境変数指定は不要。
+別 checkout から同じサービスを起動すると稼働中のコンテナを置き換える。
+明示的な `COMPOSE_PROJECT_NAME`（環境変数 / `.env`）や `-p N` はこの既定値を上書きできる。
+`make dev2..4` の `-p N` も従来どおり優先される。
 
 ---
 

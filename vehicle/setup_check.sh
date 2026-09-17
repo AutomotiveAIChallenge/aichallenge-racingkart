@@ -40,9 +40,6 @@ REPO_ROOT="$(git -C "${SCRIPT_DIR}" rev-parse --show-toplevel 2>/dev/null || tru
 if [ -z "${REPO_ROOT}" ]; then
     REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 fi
-# docker compose ps/exec は make を通らないので Makefile と同じ project 名に揃える。
-export COMPOSE_PROJECT_NAME="${COMPOSE_PROJECT_NAME:-aichallenge}"
-
 # shellcheck source-path=SCRIPTDIR source=vehicle_ports.sh
 source "${SCRIPT_DIR}/vehicle_ports.sh"
 
@@ -578,6 +575,65 @@ check_runtime_docker_services() {
     log ""
 }
 
+# 起動後はホスト全体を確認する。必須サービスの不足は失敗、追加・重複は警告。
+check_vehicle_containers() {
+    print_section "Vehicle Host Container Check"
+
+    local expected_containers running_containers
+    if ! expected_containers="$(docker compose -f "${REPO_ROOT}/docker-compose.yml" ps \
+        --status running --no-trunc --format '{{.ID}} {{.Service}}' autoware driver zenoh 2>/dev/null)"; then
+        log "${FAIL} Cannot inspect expected vehicle containers"
+        record_result "fail"
+        log ""
+        return 0
+    fi
+    if ! running_containers="$(docker ps --no-trunc --format '{{.ID}} {{.Names}}' 2>/dev/null)"; then
+        log "${FAIL} Cannot inspect running containers on the vehicle host"
+        record_result "fail"
+        log ""
+        return 0
+    fi
+
+    local -A expected_services=()
+    local -A counts=([autoware]=0 [driver]=0 [zenoh]=0)
+    local -A names=()
+    local container_id service container_name
+    while read -r container_id service; do
+        [ -n "${container_id}" ] || continue
+        case "${service}" in
+        autoware | driver | zenoh) expected_services[${container_id}]="${service}" ;;
+        esac
+    done <<<"${expected_containers}"
+
+    # ID で照合するので、別 project の同名サービスや compose run の一時コンテナも
+    # 通常の3サービスと区別できる。停止済みコンテナは docker ps の対象外。
+    while read -r container_id container_name; do
+        [ -n "${container_id}" ] || continue
+        service="${expected_services[${container_id}]-}"
+        if [ -z "${service}" ]; then
+            log "${WARN} Additional running container: ${container_name} (${container_id:0:12})"
+            record_result "warn"
+        else
+            counts[${service}]=$((counts[${service}] + 1))
+            names[${service}]="${names[${service}]:+${names[${service}]} }${container_name}"
+        fi
+    done <<<"${running_containers}"
+
+    for service in autoware driver zenoh; do
+        if [ "${counts[${service}]}" -eq 0 ]; then
+            log "${FAIL} Required compose services not running: ${service}"
+            record_result "fail"
+        elif [ "${counts[${service}]}" -gt 1 ]; then
+            log "${WARN} Multiple running containers for ${service}: ${names[${service}]}"
+            record_result "warn"
+        else
+            log "${OK} ${service}: ${names[${service}]}"
+            record_result "pass"
+        fi
+    done
+    log ""
+}
+
 # GNSS/RTK状態確認 (runtime)
 check_gnss_rtk_status() {
     print_section "GNSS/RTK Status Check"
@@ -687,7 +743,7 @@ check_driver_runtime() {
 }
 
 check_autoware_runtime() {
-    check_runtime_docker_services autoware
+    check_vehicle_containers
     check_autoware_ros_topics
 }
 

@@ -572,9 +572,6 @@ def main(argv=None) -> int:
         help="participant: map/IMU バイアス適用・autoware の起動・確認・停止 / staff: preflight・driver/zenoh の確認・各サービスの起動と停止",
     )
     args = parser.parse_args(argv)
-    # ステップの docker compose down/ps は make を通らないので、Makefile と同じ project 名を
-    # ここで揃える。無いと ~/team-xxxx の TUI は運営が上げた autoware を見られず、二重起動する。
-    os.environ.setdefault("COMPOSE_PROJECT_NAME", "aichallenge")
     need = min_lines(
         len(steps_for_role(args.role)), extra=1 if has_version_line(args.role) else 0
     )

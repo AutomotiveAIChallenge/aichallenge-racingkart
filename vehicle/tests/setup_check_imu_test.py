@@ -49,8 +49,22 @@ candump() {
 timeout() { shift; "$@"; }
 docker() {
     printf 'docker %s\n' "$*" >>"$TRACE_FILE"
-    if [ "$1" = ps ]; then return 0; fi
-    if [ "$4" = ps ]; then printf '%s\n' $SERVICES; return 0; fi
+    if [ "$1" = ps ]; then
+        if [ "${2-}" = --no-trunc ]; then
+            [ "$HOST_PS_FAIL" = 0 ] || return 1
+            printf '%s\n' "$HOST_CONTAINERS"
+        fi
+        return 0
+    fi
+    if [ "$4" = ps ]; then
+        if [[ "$*" == *'{{.ID}} {{.Service}}'* ]]; then
+            [ "$COMPOSE_PS_FAIL" = 0 ] || return 1
+            printf '%s\n' "$EXPECTED_CONTAINERS"
+        else
+            printf '%s\n' $SERVICES
+        fi
+        return 0
+    fi
     if [ "$4" = exec ]; then
         case "${9}" in
         *'/sensing/gnss/navpvt'*) echo "$GNSS_FLAGS" ;;
@@ -65,12 +79,27 @@ main
 
 
 class PhaseRoutingTest(unittest.TestCase):
-    def run_phase(self, phase, services, *, flags="131", failed_topic="/not-a-topic"):
+    def run_phase(self, phase, services, *, flags="131", failed_topic="/not-a-topic",
+                  host_containers=None, expected_containers=None,
+                  host_ps_fail=False, compose_ps_fail=False):
+        containers = [(f"{index:064x}", service) for index, service in enumerate(services.split(), 1)]
+        if expected_containers is None:
+            expected_containers = "\n".join(
+                f"{identifier} {service}" for identifier, service in containers
+                if service in ("autoware", "driver", "zenoh")
+            )
+        if host_containers is None:
+            host_containers = "\n".join(
+                f"{identifier} aichallenge-{service}-{index}"
+                for index, (identifier, service) in enumerate(containers, 1)
+            )
         with tempfile.TemporaryDirectory() as tmp:
             trace = Path(tmp) / "trace"
             trace.touch()
             env = dict(os.environ, PHASE=phase, SERVICES=services, GNSS_FLAGS=flags,
-                       FAILED_TOPIC=failed_topic, TRACE_FILE=str(trace))
+                       FAILED_TOPIC=failed_topic, TRACE_FILE=str(trace),
+                       HOST_CONTAINERS=host_containers, EXPECTED_CONTAINERS=expected_containers,
+                       HOST_PS_FAIL=str(int(host_ps_fail)), COMPOSE_PS_FAIL=str(int(compose_ps_fail)))
             result = subprocess.run(["bash", "-c", DEFINITIONS + FAKES], env=env,
                                     text=True, capture_output=True, timeout=10)
             return result, trace.read_text()
@@ -85,6 +114,7 @@ class PhaseRoutingTest(unittest.TestCase):
         self.assertNotIn("exec -T autoware", trace)
         self.assertNotIn("/control/command/", trace)
         self.assertNotIn("preflight:", trace)
+        self.assertNotIn("docker ps --no-trunc", trace)
         for name in ("velocity_status", "steering_status", "gear_status", "actuation_status"):
             self.assertIn("/vehicle/status/" + name, trace)
         for name in ("vcu", "steer", "brake"):
@@ -93,8 +123,8 @@ class PhaseRoutingTest(unittest.TestCase):
         self.assertIn("/racing_kart/sd/joy", trace)
         self.assertIn("driver / zenoh チェック完了", result.stdout)
 
-    def test_autoware_only_checks_its_service_and_control_topics(self):
-        result, trace = self.run_phase("autoware", "autoware")
+    def test_autoware_checks_host_containers_and_its_control_topics(self):
+        result, trace = self.run_phase("autoware", "autoware driver zenoh")
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         self.assertIn("exec -T autoware", trace)
         self.assertIn("/control/command/control_cmd", trace)
@@ -102,6 +132,66 @@ class PhaseRoutingTest(unittest.TestCase):
         for unrelated in ("exec -T driver", "candump", "/sensing/", "/vehicle/status/", "preflight:"):
             self.assertNotIn(unrelated, trace)
         self.assertIn("Autoware チェック完了", result.stdout)
+        self.assertIn("docker ps --no-trunc", trace)
+        self.assertIn("--status running --no-trunc --format {{.ID}} {{.Service}} autoware driver zenoh", trace)
+        self.assertIn("0 warn, 0 fail", result.stdout)
+
+    def test_autoware_requires_driver_and_zenoh_as_well(self):
+        for services, missing in (("autoware zenoh", "driver"), ("autoware driver", "zenoh")):
+            with self.subTest(missing=missing):
+                result, _ = self.run_phase("autoware", services)
+                self.assertEqual(result.returncode, 1, result.stdout)
+                self.assertIn("Required compose services not running: " + missing, result.stdout)
+
+    def test_additional_containers_warn_without_failing_or_skipping_topics(self):
+        for extra in ("rosbag", "autoware-command", "simulator"):
+            with self.subTest(extra=extra):
+                result, trace = self.run_phase("autoware", "autoware driver zenoh " + extra)
+                self.assertEqual(result.returncode, 0, result.stdout)
+                self.assertIn("WARN Additional running container: aichallenge-" + extra, result.stdout)
+                self.assertIn("1 warn, 0 fail", result.stdout)
+                self.assertIn("Autoware チェック完了（警告あり）", result.stdout)
+                self.assertIn("/control/command/actuation_cmd", trace)
+
+    def test_foreign_project_and_unmanaged_containers_warn(self):
+        expected = "a autoware\nb driver\nc zenoh"
+        for extra in ("old-team-autoware-1", "standalone-container"):
+            with self.subTest(extra=extra):
+                result, _ = self.run_phase(
+                    "autoware", "autoware driver zenoh", expected_containers=expected,
+                    host_containers=f"a current-autoware\nb current-driver\nc current-zenoh\nx {extra}",
+                )
+                self.assertEqual(result.returncode, 0, result.stdout)
+                self.assertIn("WARN Additional running container: " + extra, result.stdout)
+
+    def test_duplicate_required_service_warns(self):
+        result, _ = self.run_phase("autoware", "autoware driver zenoh autoware")
+        self.assertEqual(result.returncode, 0, result.stdout)
+        self.assertIn("WARN Multiple running containers for autoware:", result.stdout)
+        self.assertIn("1 warn, 0 fail", result.stdout)
+
+    def test_foreign_autoware_does_not_satisfy_missing_current_service(self):
+        result, _ = self.run_phase(
+            "autoware", "driver zenoh", expected_containers="b driver\nc zenoh",
+            host_containers="x old-team-autoware-1\nb current-driver\nc current-zenoh",
+        )
+        self.assertEqual(result.returncode, 1, result.stdout)
+        self.assertIn("WARN Additional running container: old-team-autoware-1", result.stdout)
+        self.assertIn("Required compose services not running: autoware", result.stdout)
+
+    def test_missing_host_container_is_not_satisfied_by_stale_compose_snapshot(self):
+        result, _ = self.run_phase(
+            "autoware", "autoware driver zenoh", expected_containers="a autoware\nb driver\nc zenoh",
+            host_containers="a current-autoware\nb current-driver",
+        )
+        self.assertEqual(result.returncode, 1, result.stdout)
+        self.assertIn("Required compose services not running: zenoh", result.stdout)
+
+    def test_empty_host_and_failed_inventory_queries_fail(self):
+        for options in ({"host_containers": ""}, {"host_ps_fail": True}, {"compose_ps_fail": True}):
+            with self.subTest(options=options):
+                result, _ = self.run_phase("autoware", "autoware driver zenoh", **options)
+                self.assertEqual(result.returncode, 1, result.stdout)
 
     def test_missing_service_fails_its_phase(self):
         for phase, services, missing in (("driver", "driver", "zenoh"),

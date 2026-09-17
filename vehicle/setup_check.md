@@ -249,18 +249,27 @@ docker compose -f ../docker-compose.yml exec -T driver bash -lc \
 
 ### autoware: 起動後のサービス・制御指令確認
 
-`autoware` コンテナの稼働と、同コンテナ内で次のトピックの受信を確認します。
+ホスト全体の稼働コンテナを確認します。現在の Compose project の `autoware`・`driver`・`zenoh`
+が各1つ起動していれば正常です。必須サービスの不足は失敗にします。
+追加コンテナや同じサービスの重複起動は、コンテナ名を表示して警告にします。
+監視用の `make autoware-bash`、rosbag、別 project、Compose 管理外のコンテナも警告対象です。
+警告だけなら終了コードは0で、コンテナを停止・削除することはありません。停止済みコンテナは対象外です。
+
+続けて `autoware` コンテナ内で次のトピックの受信を確認します。
 
 - `/control/command/control_cmd`
 - `/control/command/actuation_cmd`
 
-CAN・GNSS・IMU・車両 status・driver / zenoh のコンテナ検査は呼び出しません。
+CAN・GNSS・IMU・車両 status の検査は呼び出しません。
 制御指令の生成には車両側の入力が必要なため、運営側の確認を済ませてから実行します。
 
-- ✅ `Required compose services are running: autoware`
+- ✅ `autoware: aichallenge-autoware-1`
+- ⚠️ `Additional running container: team-old-autoware-1 (...)`
+- ⚠️ `Multiple running containers for autoware: ...`
+- ❌ `Required compose services not running: driver`
 - ❌ `Control command: no message on /control/command/control_cmd within 4s x 2` → Autoware の起動状況とログを確認
 
-Zenoh はコンテナ稼働を driver フェーズ、接続先への TCP 疎通を preflight で確認します。
+Zenoh はコンテナ稼働を driver / autoware フェーズ、接続先への TCP 疎通を preflight で確認します。
 Zenoh セッションの接続成立を直接検査する項目はありません。Joy 受信には送信側の起動も必要です。
 
 ### map・IMU バイアスの適用は Autoware 起動前

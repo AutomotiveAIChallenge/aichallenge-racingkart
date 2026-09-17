@@ -9,10 +9,8 @@ SHELL := /bin/bash
 HOST_UID ?= $(shell id -u)
 HOST_GID ?= $(shell id -g)
 export HOST_UID HOST_GID
-# compose の project 名を固定する。既定はディレクトリ名なので、~/aichallenge-racingkart と
-# ~/team-xxxx から同じ driver / autoware を上げると別コンテナとして二重起動する。
-# dev2..4 の `docker compose -p N` は CLI 指定なのでこちらより優先される。
-export COMPOSE_PROJECT_NAME ?= aichallenge
+# Project 名の既定値は docker-compose.yml の name で統一する。
+# make 経由の起動も直接 docker compose を呼ぶ停止・確認も同じ project を使う。
 # Stop host shell's ROS_DOMAIN_ID from overriding .env via compose interpolation,
 # but still honor an explicit `make foo ROS_DOMAIN_ID=N` command-line override.
 unexport ROS_DOMAIN_ID

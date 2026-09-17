@@ -396,7 +396,7 @@ class TestShouldReobserve(unittest.TestCase):
 class TestRoleCheckLifecycle(unittest.TestCase):
     def test_observed_shutdown_forgets_success_until_check_runs_again(self):
         for role, steps, check, services in (
-            (ROLE_PARTICIPANT, PARTICIPANT_STEPS, STEP_CHECK_AUTOWARE, {"autoware"}),
+            (ROLE_PARTICIPANT, PARTICIPANT_STEPS, STEP_CHECK_AUTOWARE, {"autoware", "driver", "zenoh"}),
             (ROLE_STAFF, STAFF_STEPS, STEP_CHECK_DRIVER, {"driver", "zenoh"}),
         ):
             with self.subTest(role=role):
@@ -415,6 +415,25 @@ class TestRoleCheckLifecycle(unittest.TestCase):
                         mock.patch("tui.stack_containers", return_value=0):
                     console.observe()
                 self.assertEqual(console.session[check], FAILED)
+
+    def test_autoware_check_is_invalidated_when_any_required_service_stops(self):
+        required = {"autoware", "driver", "zenoh"}
+        for stopped in required:
+            with self.subTest(stopped=stopped):
+                console = Console(None, PARTICIPANT_STEPS, ROLE_PARTICIPANT)
+                console.session[STEP_CHECK_AUTOWARE] = DONE
+                with mock.patch("tui.running_services", return_value=frozenset(required - {stopped})), \
+                        mock.patch("tui.stack_containers", return_value=2):
+                    console.observe()
+                self.assertNotIn(STEP_CHECK_AUTOWARE, console.session)
+
+    def test_additional_service_does_not_invalidate_successful_autoware_check(self):
+        console = Console(None, PARTICIPANT_STEPS, ROLE_PARTICIPANT)
+        console.session[STEP_CHECK_AUTOWARE] = DONE
+        with mock.patch("tui.running_services", return_value=frozenset({"autoware", "driver", "zenoh", "rosbag"})), \
+                mock.patch("tui.stack_containers", return_value=4):
+            console.observe()
+        self.assertEqual(console.session[STEP_CHECK_AUTOWARE], DONE)
 
     def test_only_staff_runs_preflight_on_open(self):
         from tui import _loop

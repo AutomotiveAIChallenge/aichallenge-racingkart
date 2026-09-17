@@ -138,7 +138,7 @@ PARTICIPANT_STEPS = (
         command=("./setup_check.sh", "--phase", "autoware"),
         cwd="vehicle",
         requires=(STEP_UP,),
-        checked_services=("autoware",),
+        checked_services=("autoware", "driver", "zenoh"),
     ),
     Step(
         step_id=STEP_AUTOWARE_DOWN,
