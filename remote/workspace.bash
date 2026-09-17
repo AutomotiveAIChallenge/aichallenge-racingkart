@@ -14,6 +14,7 @@ if [ -n "$VEHICLE_ID" ]; then
 else
     TARGET="接続先: 未設定 (.env に VEHICLE_ID がない。connect_ssh.bash に引数で渡す)"
 fi
+# 車両側の .bashrc がリポジトリへ移動するため、接続後は make を直接実行する。
 CONNECT="遠隔ssh操作：./remote/connect_ssh.bash"
 
 hint() {
@@ -51,26 +52,34 @@ case "${1-}" in
 tui)
     hint "[ssh 1/3] 車両 TUI  ${TARGET}" \
         "  ${CONNECT}" \
-        "  接続後、車両側で: cd aichallenge-racingkart && make vehicle-tui" \
-        "  (↑ キーで両方のコマンドが出る)"
+        "  接続後、車両側で:" \
+        "    cd ~/team-xxxx    # 使用するチームのディレクトリを指定" \
+        "    make vehicle-tui" \
+        "  (↑ キーで SSH コマンドが出る)"
     exec_bash_with_history \
-        "cd aichallenge-racingkart && make vehicle-tui" \
+        "make vehicle-tui" \
+        "cd ~/team-xxxx" \
         "./remote/connect_ssh.bash"
     ;;
 monitor)
     hint "[ssh 2/3] 監視用  ${TARGET}" \
         "  ${CONNECT}" \
-        "  接続後、車両側で: cd aichallenge-racingkart && make autoware-bash" \
+        "  接続後、車両側で:" \
+        "    cd ~/team-xxxx    # 使用するチームのディレクトリを指定" \
+        "    make autoware-bash" \
         "  (autoware コンテナ内の bash が開く。ros2 topic echo / ros2 node list などで状態を見る)"
     exec bash
     ;;
 staff)
     hint "[ssh 3/3] 運営 TUI  ${TARGET}" \
         "  ${CONNECT}" \
-        "  接続後、車両側で: cd aichallenge-racingkart && make vehicle-tui-staff" \
-        "  (↑ キーで両方のコマンドが出る)"
+        "  接続後、車両側で:" \
+        "    cd ~/aichallenge-racingkart" \
+        "    make vehicle-tui-staff" \
+        "  (↑ キーで SSH コマンドが出る)"
     exec_bash_with_history \
-        "cd aichallenge-racingkart && make vehicle-tui-staff" \
+        "make vehicle-tui-staff" \
+        "cd ~/aichallenge-racingkart" \
         "./remote/connect_ssh.bash"
     ;;
 gui)

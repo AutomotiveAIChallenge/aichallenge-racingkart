@@ -30,11 +30,6 @@ CAN_MIN_FRAMES="${CAN_MIN_FRAMES:-100}"
 GNSS_NAVPVT_TIMEOUT_SEC="${GNSS_NAVPVT_TIMEOUT_SEC:-8}"
 ROS_TOPIC_TIMEOUT_SEC="${ROS_TOPIC_TIMEOUT_SEC:-4}"
 ROS_TOPIC_RETRY="${ROS_TOPIC_RETRY:-2}"
-IMU_BIAS_DURATION_SEC="${IMU_BIAS_DURATION_SEC:-5}"
-IMU_BIAS_WARMUP_SEC="${IMU_BIAS_WARMUP_SEC:-2}"
-# 暫定値（imu_corrector.param.yaml の想定ノイズ既定値に合わせている）。実測を踏まえて後で絞り込む。
-IMU_BIAS_STD_THRESHOLD="${IMU_BIAS_STD_THRESHOLD:-0.03}"
-IMU_BIAS_VELOCITY_THRESHOLD="${IMU_BIAS_VELOCITY_THRESHOLD:-0.05}"
 TOTAL_CHECKS=0
 PASSED_CHECKS=0
 FAILED_CHECKS=0
@@ -45,7 +40,6 @@ REPO_ROOT="$(git -C "${SCRIPT_DIR}" rev-parse --show-toplevel 2>/dev/null || tru
 if [ -z "${REPO_ROOT}" ]; then
     REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 fi
-
 # shellcheck source-path=SCRIPTDIR source=vehicle_ports.sh
 source "${SCRIPT_DIR}/vehicle_ports.sh"
 
@@ -75,7 +69,8 @@ Racing Kart Setup Check Script
 Usage: $0 [OPTIONS]
 
 OPTIONS:
-  --phase PHASE   Check phase: preflight, runtime, or all [default: all]
+  --phase PHASE   Check phase: preflight, driver, autoware, runtime, or all [default: all]
+                  runtime runs driver + autoware checks (compatibility)
   --log           Enable logging to file
   --help          Show this help
 
@@ -89,16 +84,6 @@ ENVIRONMENT:
                    seconds to wait for each runtime ROS topic [default: 4]
   ROS_TOPIC_RETRY  attempts per runtime ROS topic before reporting a failure
                    [default: 2]
-  IMU_BIAS_DURATION_SEC
-                   IMU gyro bias sampling seconds [default: 5]
-  IMU_BIAS_WARMUP_SEC
-                   seconds discarded before sampling (IMU warmup) [default: 2]
-  IMU_BIAS_STD_THRESHOLD
-                   warn if stationary gyro stddev exceeds this [rad/s, default: 0.03
-                   (provisional, matches imu_corrector's assumed noise; to be
-                   tightened after real measurements)]
-  IMU_BIAS_VELOCITY_THRESHOLD
-                   treat as moving if |velocity| exceeds this [m/s, default: 0.05]
 
 MODE:
   vehicle         Real vehicle mode (CAN + VCU required) [default]
@@ -106,6 +91,8 @@ MODE:
 Examples:
   $0
   $0 --phase preflight
+  $0 --phase driver
+  $0 --phase autoware
   $0 --phase runtime
   $0 --log
   CAN_SAMPLE_SEC=5 CAN_MIN_FRAMES=200 $0 --log
@@ -118,7 +105,7 @@ while [[ $# -gt 0 ]]; do
     --phase)
         PHASE="${2-}"
         case "${PHASE}" in
-        preflight | runtime | all) ;;
+        preflight | driver | autoware | runtime | all) ;;
         *)
             echo "Invalid phase: ${PHASE}"
             show_help
@@ -344,36 +331,6 @@ check_can_traffic() {
     fi
 }
 
-read_env_value() {
-    local key=$1
-    local env_file="${REPO_ROOT}/.env"
-
-    [ -f "${env_file}" ] || return 0
-    # 先頭の空白と `export ` を落として `KEY=value` に正規化してから読む
-    sed -E 's/^[[:space:]]*(export[[:space:]]+)?//' "${env_file}" |
-        awk -F= -v key="${key}" '
-            $1 == key {
-                value = substr($0, length(key) + 2)
-                gsub(/^["'\'']|["'\'']$/, "", value)
-                print value
-            }
-        ' | tail -1
-}
-
-detect_vehicle_id() {
-    local vehicle_id="${VEHICLE_ID-}"
-
-    if [ -z "${vehicle_id}" ]; then
-        vehicle_id="$(read_env_value VEHICLE_ID)"
-    fi
-
-    if [ -z "${vehicle_id}" ]; then
-        vehicle_id="$(vehicle_id_for_hostname "$(hostname)" || true)"
-    fi
-
-    printf '%s\n' "${vehicle_id}"
-}
-
 # ヘッダー表示
 print_header() {
     log ""
@@ -571,7 +528,7 @@ check_docker() {
     log ""
 }
 
-# 起動後Dockerサービス確認 (runtime)
+# 指定された起動後Dockerサービスだけを確認する。
 check_runtime_docker_services() {
     print_section "Runtime Docker Service Check"
 
@@ -591,7 +548,7 @@ check_runtime_docker_services() {
     fi
 
     # rosbag は記録の有無を運営が都度決めるため必須にしない（未起動でも fail にならない）。
-    local required_services=(driver autoware zenoh)
+    local required_services=("$@")
     local running_services
     local missing_services=()
     if running_services="$(compose_running_services)"; then
@@ -615,6 +572,65 @@ check_runtime_docker_services() {
         record_result "fail"
     fi
 
+    log ""
+}
+
+# 起動後はホスト全体を確認する。必須サービスの不足は失敗、追加・重複は警告。
+check_vehicle_containers() {
+    print_section "Vehicle Host Container Check"
+
+    local expected_containers running_containers
+    if ! expected_containers="$(docker compose -f "${REPO_ROOT}/docker-compose.yml" ps \
+        --status running --no-trunc --format '{{.ID}} {{.Service}}' autoware driver zenoh 2>/dev/null)"; then
+        log "${FAIL} Cannot inspect expected vehicle containers"
+        record_result "fail"
+        log ""
+        return 0
+    fi
+    if ! running_containers="$(docker ps --no-trunc --format '{{.ID}} {{.Names}}' 2>/dev/null)"; then
+        log "${FAIL} Cannot inspect running containers on the vehicle host"
+        record_result "fail"
+        log ""
+        return 0
+    fi
+
+    local -A expected_services=()
+    local -A counts=([autoware]=0 [driver]=0 [zenoh]=0)
+    local -A names=()
+    local container_id service container_name
+    while read -r container_id service; do
+        [ -n "${container_id}" ] || continue
+        case "${service}" in
+        autoware | driver | zenoh) expected_services[${container_id}]="${service}" ;;
+        esac
+    done <<<"${expected_containers}"
+
+    # ID で照合するので、別 project の同名サービスや compose run の一時コンテナも
+    # 通常の3サービスと区別できる。停止済みコンテナは docker ps の対象外。
+    while read -r container_id container_name; do
+        [ -n "${container_id}" ] || continue
+        service="${expected_services[${container_id}]-}"
+        if [ -z "${service}" ]; then
+            log "${WARN} Additional running container: ${container_name} (${container_id:0:12})"
+            record_result "warn"
+        else
+            counts[${service}]=$((counts[${service}] + 1))
+            names[${service}]="${names[${service}]:+${names[${service}]} }${container_name}"
+        fi
+    done <<<"${running_containers}"
+
+    for service in autoware driver zenoh; do
+        if [ "${counts[${service}]}" -eq 0 ]; then
+            log "${FAIL} Required compose services not running: ${service}"
+            record_result "fail"
+        elif [ "${counts[${service}]}" -gt 1 ]; then
+            log "${WARN} Multiple running containers for ${service}: ${names[${service}]}"
+            record_result "warn"
+        else
+            log "${OK} ${service}: ${names[${service}]}"
+            record_result "pass"
+        fi
+    done
     log ""
 }
 
@@ -682,9 +698,12 @@ check_gnss_rtk_status() {
     log ""
 }
 
-# ROS topic出力確認 (runtime)
-check_runtime_ros_topics() {
-    print_section "Runtime ROS Topic Output Check"
+# driver が発行する状態・最終指令と、車両への Joy 入力を確認する。
+check_driver_ros_topics() {
+    print_section "Driver ROS Topic Output Check"
+
+    log "${INFO} Raw IMU topic"
+    check_ros_topic_once "driver" "/sensing/imu/imu_raw" "Raw IMU"
 
     log "${INFO} Racing kart hardware/status topics"
     check_ros_topic_once "driver" "/racing_kart/vcu/status" "VCU status"
@@ -697,11 +716,17 @@ check_runtime_ros_topics() {
     check_ros_topic_once "driver" "/racing_kart/steer/command" "Steer command"
     check_ros_topic_once "driver" "/racing_kart/brake/command" "Brake command"
 
-    log "${INFO} Autoware vehicle status topics"
-    check_ros_topic_once "autoware" "/vehicle/status/velocity_status" "Velocity status"
-    check_ros_topic_once "autoware" "/vehicle/status/steering_status" "Steering status"
-    check_ros_topic_once "autoware" "/vehicle/status/gear_status" "Gear status"
-    check_ros_topic_once "autoware" "/vehicle/status/actuation_status" "Actuation status"
+    log "${INFO} Vehicle status topics published by driver"
+    check_ros_topic_once "driver" "/vehicle/status/velocity_status" "Velocity status"
+    check_ros_topic_once "driver" "/vehicle/status/steering_status" "Steering status"
+    check_ros_topic_once "driver" "/vehicle/status/gear_status" "Gear status"
+    check_ros_topic_once "driver" "/vehicle/status/actuation_status" "Actuation status"
+
+    log ""
+}
+
+check_autoware_ros_topics() {
+    print_section "Autoware ROS Topic Output Check"
 
     log "${INFO} Autoware downstream control command topics"
     check_ros_topic_once "autoware" "/control/command/control_cmd" "Control command"
@@ -710,135 +735,16 @@ check_runtime_ros_topics() {
     log ""
 }
 
-# IMUジャイロバイアス計測 (runtime)
-check_imu_bias() {
-    print_section "IMU Gyro Bias Check (stationary)"
+check_driver_runtime() {
+    check_runtime_hardware
+    check_runtime_docker_services driver zenoh
+    check_gnss_rtk_status
+    check_driver_ros_topics
+}
 
-    local calibration_vehicle_id
-    calibration_vehicle_id="$(detect_vehicle_id)"
-    local bias_output_arg=""
-    if zenoh_endpoint_for_vehicle_id "${calibration_vehicle_id}" >/dev/null; then
-        bias_output_arg="--bias-output '/vehicle/.calibration/${calibration_vehicle_id}/imu_bias.yaml'"
-    else
-        log "${WARN} VEHICLE_ID is missing or unknown; measuring IMU without vehicle bias storage"
-    fi
-
-    if ! is_compose_service_running "autoware"; then
-        log "${FAIL} IMU bias check: autoware service is not running"
-        record_result "fail"
-        log ""
-        return 0
-    fi
-
-    # 静止確認。走行中に測ると誤ったバイアスを黙って書き込むので y/N で明示確認する。
-    # タイムアウトは付けず回答があるまで待つ。
-    local answer=""
-    read -r -p "$(echo -e "${WARN} Vehicle must be COMPLETELY stationary for IMU bias check. Proceed? [y/N]: ")" answer
-
-    case "${answer}" in
-    y | Y | yes | YES) ;;
-    *)
-        log "${WARN} IMU bias check skipped (vehicle not confirmed stationary)"
-        record_result "warn"
-        log ""
-        return 0
-        ;;
-    esac
-
-    local setup_cmd
-    if ! setup_cmd="$(ros_setup_command_for_service autoware)"; then
-        log "${FAIL} IMU bias check: unknown compose service 'autoware'"
-        record_result "fail"
-        log ""
-        return 0
-    fi
-
-    # check_imu_bias.py は ./vehicle:/vehicle マウント経由でコンテナから見える。
-    # rc=4（静止時ノイズ過大）は python 側では自動リトライせず、ここで毎回確認して再実行する。
-    local output
-    local rc
-    local attempt=1
-    local proposal_file
-    if ! proposal_file="$(mktemp "${SCRIPT_DIR}/.imu-bias-XXXXXX.json")"; then
-        log "${FAIL} Could not create temporary IMU proposal"
-        record_result "fail"
-        return 0
-    fi
-    local proposal_path="/vehicle/${proposal_file##*/}"
-    output="$(docker compose -f "${REPO_ROOT}/docker-compose.yml" exec -T autoware bash -lc "
-        ${setup_cmd}
-        python3 /vehicle/check_imu_bias.py \
-            --duration '${IMU_BIAS_DURATION_SEC}' \
-            --warmup '${IMU_BIAS_WARMUP_SEC}' \
-            --velocity-threshold '${IMU_BIAS_VELOCITY_THRESHOLD}' \
-            --std-threshold '${IMU_BIAS_STD_THRESHOLD}' \
-            --proposal-output '${proposal_path}'
-    " 2>&1)"
-    rc=$?
-    log "${output}"
-
-    while [ "${rc}" = "4" ]; do
-        local retry_answer=""
-        read -r -p "$(echo -e "${WARN} Do not touch the vehicle. Re-measure? [y/N] (attempt $((attempt + 1))): ")" retry_answer
-
-        case "${retry_answer}" in
-        y | Y | yes | YES) ;;
-        *) break ;;
-        esac
-
-        attempt=$((attempt + 1))
-        output="$(docker compose -f "${REPO_ROOT}/docker-compose.yml" exec -T autoware bash -lc "
-            ${setup_cmd}
-            python3 /vehicle/check_imu_bias.py \
-                --duration '${IMU_BIAS_DURATION_SEC}' \
-                --warmup '${IMU_BIAS_WARMUP_SEC}' \
-                --velocity-threshold '${IMU_BIAS_VELOCITY_THRESHOLD}' \
-                --std-threshold '${IMU_BIAS_STD_THRESHOLD}' \
-                --proposal-output '${proposal_path}'
-        " 2>&1)"
-        rc=$?
-        log "${output}"
-    done
-
-    if [ "${rc}" = "0" ]; then
-        local update_answer=""
-        read -r -p "実測値で上書きしますか？ 参加者の承認を確認してください。 [y/N]: " update_answer
-        case "${update_answer}" in
-        y | Y | yes | YES)
-            output="$(docker compose -f "${REPO_ROOT}/docker-compose.yml" exec -T autoware bash -lc "
-                ${setup_cmd}
-                python3 /vehicle/check_imu_bias.py \
-                    --apply-proposal '${proposal_path}' \
-                    ${bias_output_arg}
-            " 2>&1)"
-            rc=$?
-            log "${output}"
-            ;;
-        *) rc=5 ;;
-        esac
-    fi
-    rm -f "${proposal_file}"
-
-    case "${rc}" in
-    0)
-        log "${OK} Participant-approved IMU bias applied (restart autoware to apply; see above for vehicle storage)"
-        record_result "pass"
-        ;;
-    4)
-        log "${WARN} IMU gyro bias check: gave up on noisy measurement (see above; not written)"
-        record_result "warn"
-        ;;
-    5)
-        log "${WARN} IMU update skipped; participant settings and saved bias retained"
-        record_result "warn"
-        ;;
-    *)
-        log "${FAIL} IMU gyro bias check failed (rc=${rc}; see above for measurement/write status)"
-        record_result "fail"
-        ;;
-    esac
-
-    log ""
+check_autoware_runtime() {
+    check_vehicle_containers
+    check_autoware_ros_topics
 }
 
 # past_log.md既知問題チェック (preflight)
@@ -880,18 +786,26 @@ check_execution_readiness() {
 
 # 結果サマリー表示。失敗は最後に置く: TUI のログ pane は末尾しか見えない。
 print_summary() {
+    local scope
+    case "${PHASE}" in
+    preflight) scope="preflight" ;;
+    driver) scope="driver / zenoh" ;;
+    autoware) scope="Autoware" ;;
+    runtime) scope="driver / zenoh・Autoware" ;;
+    all) scope="全フェーズ" ;;
+    esac
     log ""
     log "📊 ${TOTAL_CHECKS} checks: ${PASSED_CHECKS} ok, ${WARNING_CHECKS} warn, ${FAILED_CHECKS} fail"
     # 判定を 1 行だけ添える。行頭に ${FAIL} / ${WARN} を置かないこと: TUI が行頭のマーカーで
     # 失敗行を拾うため、判定行まで failures 領域に混ざる。
     if [ "${FAILED_CHECKS}" -gt 0 ]; then
-        log "   失敗あり。上の失敗項目を直して再実行してください。"
+        log "   ${scope} チェックに失敗あり。上の失敗項目を直して再実行してください。"
         exit 1
     fi
     if [ "${WARNING_CHECKS}" -gt 0 ]; then
-        log "   警告のみ。内容を確認したうえで進めてください。"
+        log "   ${scope} チェック完了（警告あり）。内容を確認してください。"
     else
-        log "   すべて通過。走行準備 OK。"
+        log "   ${scope} チェック完了。"
     fi
     exit 0
 }
@@ -912,22 +826,22 @@ main() {
         check_known_issues
         check_execution_readiness
         ;;
+    driver)
+        check_driver_runtime
+        ;;
+    autoware)
+        check_autoware_runtime
+        ;;
     runtime)
-        check_runtime_hardware
-        check_runtime_docker_services
-        check_gnss_rtk_status
-        check_runtime_ros_topics
-        check_imu_bias
+        check_driver_runtime
+        check_autoware_runtime
         ;;
     all)
         check_hardware
         check_network
         check_docker
-        check_runtime_hardware
-        check_runtime_docker_services
-        check_gnss_rtk_status
-        check_runtime_ros_topics
-        check_imu_bias
+        check_driver_runtime
+        check_autoware_runtime
         check_known_issues
         check_execution_readiness
         ;;
