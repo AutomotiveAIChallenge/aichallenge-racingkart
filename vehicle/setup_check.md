@@ -7,16 +7,22 @@
 
 ## 自動チェックスクリプト
 
-チェックは **起動前（preflight）** と **起動後（runtime）** の2フェーズに分かれています。
+チェックは **起動前（preflight）**・**driver / zenoh 起動後（driver）**・**Autoware 起動後（autoware）** の3フェーズに分かれています。右上の運営 TUI が preflight と driver、左上の参加者 TUI が autoware を担当します。
 
 ```bash
 # 起動前チェックのみ（driver/autoware を起動する前に実行）
 ./setup_check.sh --phase preflight
 
-# 起動後チェックのみ（スタックが起動している状態で実行）
+# driver / zenoh 起動後（Autoware 停止中でも実行可能）
+./setup_check.sh --phase driver
+
+# Autoware 起動後
+./setup_check.sh --phase autoware
+
+# 互換用: driver と autoware の両方を確認
 ./setup_check.sh --phase runtime
 
-# 全チェック（既定。runtime を含むためスタック起動中に実行する）
+# 全チェック（既定。スタック起動中に実行。設定更新・IMU 計測は含まない）
 ./setup_check.sh
 
 # ログファイル出力付き実行
@@ -30,10 +36,11 @@
 
 | ターゲット | フェーズ |
 | --- | --- |
-| `make autoware-driver-zenoh-rosbag` | 起動前に `--phase preflight`、起動後に `--phase runtime` |
+| `make autoware-driver-zenoh-rosbag` | 起動前に `--phase preflight`（runtime は別途実行） |
 | `make setup-vehicle` | `--phase all`（runtime を含むため **スタック起動中** に実行する） |
 
-preflight が fail すると exit code が非0になり、`docker compose up` に進まず中断します。
+`make autoware-driver-zenoh-rosbag` は preflight が fail すると起動を中断します。
+TUI では前提未達を `?` で表示し、Enter による操作は妨げません。運営 TUI の新規起動時に preflight を自動実行します。
 
 ## チェック項目
 
@@ -160,7 +167,7 @@ git branch --show-current
 
 ---
 
-### runtime: 1. 起動後ハードウェア通信確認
+### driver: 1. 起動後ハードウェア通信確認
 
 CANが実際に通信しているかを見ます。エラーフレームが出ていれば配線・終端・ビットレート・モータ電源を疑います。
 
@@ -182,7 +189,7 @@ candump -ta -e can0
 
 ---
 
-### runtime: 2. 起動後Dockerサービス確認
+### driver: 2. 起動後Dockerサービス確認
 
 ```bash
 # 手動確認コマンド
@@ -190,13 +197,13 @@ docker compose -f ../docker-compose.yml ps --services --filter status=running
 ```
 
 **期待する結果:**
-- ✅ `Required compose services are running: driver autoware zenoh`
+- ✅ `Required compose services are running: driver zenoh`
 - ℹ️ `rosbag` は必須サービスに含めない（記録するかどうかは運営が都度決める）
 - ❌ `Required compose services not running: zenoh` → 該当サービスのログを確認
 
 ---
 
-### runtime: 3. GNSS/RTK状態確認
+### driver: 3. GNSS/RTK状態確認
 
 `driver` コンテナ内で `/sensing/gnss/navpvt` の `flags` を読み、RTKの状態を判定します。
 `ros-humble-ublox-msgs` が入っていないと型解決に失敗するため `packages.txt` に含めています。
@@ -217,9 +224,10 @@ docker compose -f ../docker-compose.yml exec -T driver bash -lc \
 
 ---
 
-### runtime: 4. ROS topic出力確認
+### driver: 4. ROS topic出力確認
 
-`driver` / `autoware` の各コンテナで主要トピックにメッセージが出ているかを確認します。
+`driver` コンテナで主要トピックにメッセージが出ているかを確認します。
+`/vehicle/status/*` の発行元も driver なので、Autoware が停止中でも確認できます。
 `docker compose up` 直後はまだ出ていないことがあるため、1トピックあたり `ROS_TOPIC_RETRY` 回まで再試行します。
 
 **確認するトピック:**
@@ -227,110 +235,50 @@ docker compose -f ../docker-compose.yml exec -T driver bash -lc \
 | コンテナ | トピック |
 | --- | --- |
 | `driver` | `/racing_kart/vcu/status`, `/racing_kart/steer/status`, `/racing_kart/brake/status`, `/racing_kart/sd/joy` |
+| `driver` | `/sensing/imu/imu_raw`（受信確認のみ） |
 | `driver` | `/racing_kart/vcu/command`, `/racing_kart/steer/command`, `/racing_kart/brake/command` |
-| `autoware` | `/vehicle/status/velocity_status`, `/vehicle/status/steering_status`, `/vehicle/status/gear_status`, `/vehicle/status/actuation_status` |
-| `autoware` | `/control/command/control_cmd`, `/control/command/actuation_cmd` |
+| `driver` | `/vehicle/status/velocity_status`, `/vehicle/status/steering_status`, `/vehicle/status/gear_status`, `/vehicle/status/actuation_status` |
 
 **期待する結果:**
 - ✅ `VCU status: /racing_kart/vcu/status`
-- ❌ `Control command: no message on /control/command/control_cmd within 4s x 2` → autowareの起動状況とログを確認
+- ❌ `Raw IMU: no message on /sensing/imu/imu_raw within 4s x 2` → driver のログ・IMU の接続を確認
 
 `ROS_TOPIC_TIMEOUT_SEC`（1回あたりの待ち秒数）と `ROS_TOPIC_RETRY`（試行回数）で調整できます。
 
 ---
 
-### runtime: 5. IMUジャイロバイアス計測
+### autoware: 起動後のサービス・制御指令確認
 
-autoware 起動後に **車両が静止している状態の** ジャイロバイアスを推定し、静止時ノイズが
-十分小さければ現在値・実測値・差分（実測値 − 現在値）を表示し、参加者の承認を確認します。
-`[y/N]` に明示的に `y` と答えた場合だけ `imu_corrector.param.yaml` の
-`angular_velocity_offset_*` を実測値で上書きします。拒否・空回答・入力終了では保持します。imu_corrector は
-パラメータを起動時に一度だけ読むため、**書き換えても今動いている autoware には反映されません。
-次回 autoware を再起動したときから新しい値が使われます。**
+ホスト全体の稼働コンテナを確認します。現在の Compose project の `autoware`・`driver`・`zenoh`
+が各1つ起動していれば正常です。必須サービスの不足は失敗にします。
+追加コンテナや同じサービスの重複起動は、コンテナ名を表示して警告にします。
+監視用の `make autoware-bash`、rosbag、別 project、Compose 管理外のコンテナも警告対象です。
+警告だけなら終了コードは0で、コンテナを停止・削除することはありません。停止済みコンテナは対象外です。
 
-承認したバイアスは `vehicle/.calibration/<VEHICLE_ID>/imu_bias.yaml` にも保存します。
-次の提出物へ自動適用はしません。ID は環境変数 → リポジトリ直下の `.env` →
-既存のホスト名対応の順で取得します。未設定・未知の ID では警告して車両別保存だけ省略します。
-ノイズ超過・計測不能・更新見送りでは保存元を変更しません。
-対象設定や対応する 3 軸オフセットがない独自補正の提出物は、警告して IMU 更新をスキップします。
-配置・適用手順は [車両別校正値](calibration.md) を参照してください。
+続けて `autoware` コンテナ内で次のトピックの受信を確認します。
 
-```bash
-# runtime フェーズの一部として実行される
-./setup_check.sh --phase runtime
+- `/control/command/control_cmd`
+- `/control/command/actuation_cmd`
 
-# 単体実行（コンテナ内）
-docker compose exec autoware bash -lc \
-  "source /opt/ros/humble/setup.bash; source /aichallenge/workspace/install/setup.bash; \
-   python3 /vehicle/check_imu_bias.py"
-```
+CAN・GNSS・IMU・車両 status の検査は呼び出しません。
+制御指令の生成には車両側の入力が必要なため、運営側の確認を済ませてから実行します。
 
-計測前に静止確認の `y/N` プロンプトが出ます（y=計測開始、それ以外=skip）。
-誤って走行中に測ると誤ったバイアスを黙って書き込んでしまうため、タイムアウトは設けて
-いません。回答するまで待ち続けます。
+- ✅ `autoware: aichallenge-autoware-1`
+- ⚠️ `Additional running container: team-old-autoware-1 (...)`
+- ⚠️ `Multiple running containers for autoware: ...`
+- ❌ `Required compose services not running: driver`
+- ❌ `Control command: no message on /control/command/control_cmd within 4s x 2` → Autoware の起動状況とログを確認
 
-計測中の静止時ノイズ（std）が `IMU_BIAS_STD_THRESHOLD` を超えた場合は、
-バイアス推定値が信用できないため param.yaml への書き込みはせず、
-「車両に触れないでください」と表示し、「再計測してよいか」を **毎回 `y/N` で確認**します
-（自動では再計測しません）。`y` と答え続ける限り **上限なく** 再計測し、`y` 以外を答えると
-その時点の warn として先へ進みます。
+Zenoh はコンテナ稼働を driver / autoware フェーズ、接続先への TCP 疎通を preflight で確認します。
+Zenoh セッションの接続成立を直接検査する項目はありません。Joy 受信には送信側の起動も必要です。
 
-**閾値（環境変数で調整可能）:**
+### map・IMU バイアスの適用は Autoware 起動前
 
-| 環境変数 | 既定値 | 意味 |
-| --- | --- | --- |
-| `IMU_BIAS_DURATION_SEC` | 5 | サンプリング秒数（warmup を除く） |
-| `IMU_BIAS_WARMUP_SEC` | 2 | 開始直後に捨てる秒数 |
-| `IMU_BIAS_STD_THRESHOLD` | 0.03 rad/s | 静止時ジャイロ std の警告閾値（暫定値。`imu_corrector.param.yaml` の想定ノイズ既定値に合わせている。実測を踏まえて後で絞り込む） |
-| `IMU_BIAS_VELOCITY_THRESHOLD` | 0.05 m/s | これを超えたら「動いた」と判定して測定中止（ノイズとは別扱いでリトライなし） |
-
-**静止時ノイズが小さい場合（書き込み成功 / 終了コード 0）:**
-
-```text
-axis    bias[rad/s]         std  status
----------------------------------------
-x     +0.000329  0.002042  OK
-y     -0.000762  0.002062  OK
-z     +0.001286  0.002076  OK
-
-Updated /aichallenge/workspace/src/aichallenge_submit/imu_corrector/config/imu_corrector.param.yaml:
-axis    old[rad/s]    new[rad/s]
---------------------------------
-x     +0.000000  +0.000329
-y     +0.000000  -0.000762
-z     -0.000000  +0.001286
-
-✅ imu_corrector.param.yaml updated.
-   This bias will not take effect until autoware is restarted
-   (imu_corrector reads the parameter once at startup).
-```
-
-`imu_corrector` は `output = raw - angular_velocity_offset` で補正するため、
-**測定値を符号そのまま** param.yaml に書きます（+ にずれていれば + を書く）。乖離の大小は
-判定せず常に上書きします。書き換え後は autoware を再起動しないと反映されません。
-
-**静止時ノイズが大きい場合（書き込まない / 終了コード 4、再計測確認へ）:**
-
-```text
-axis    bias[rad/s]         std  status
----------------------------------------
-x     +0.000356  0.020723  WARN(noisy)
-y     -0.001511  0.020593  WARN(noisy)
-z     +0.002232  0.021002  WARN(noisy)
-
-⚠️  Stationary gyro noise exceeds 0.03 rad/s — do not touch the vehicle.
-    The bias estimate above is unreliable while noisy. The vehicle may not
-    have been completely stationary (engine/fan vibration, someone
-    touching it), or the IMU itself is noisy.
-```
-
-この rc=4 を受けて setup_check.sh 側が「Do not touch the vehicle. Re-measure? [y/N]」と
-毎回確認し、`y` の間は再計測を続けます。`y` 以外を答えると warn として先へ進みます
-（この場合 param.yaml は書き換えません）。
-
-その他の終了コード:
-
-- `3`: 測定不能（サンプリング中に車両が動いた／`/sensing/imu/imu_raw` が来ない／param.yaml を読めなかった。ノイズとは別扱いでリトライなし。param.yaml は書き換えません）
+Autoware 停止中の TUI `Update the accel/brake maps and IMU bias` で、共通 accel/brake map と
+`vehicle/.calibration/<VEHICLE_ID>/imu_bias.yaml` の保存値を、参加者の承認後だけ適用します。
+ビルド済みの設定を更新し、次の起動から反映します。当日の IMU 計測は行いません。
+どのチェックフェーズにも設定の上書き・IMU バイアス計測・承認入力はありません。
+詳細は [設定の適用手順](calibration.md) を参照してください。
 
 ---
 
@@ -386,71 +334,44 @@ Time: 2025年  8月 25日 月曜日 22:54:19 JST
 ✅ docker-compose.yml exists at repo root: /path/to/aichallenge-racingkart/docker-compose.yml
 ℹ️ Current git branch: experiment
 
-========================================
-📊 Check Results Summary
-========================================
-Total checks: 15
-✅ Passed: 10
-⚠️ Warnings: 2
-❌ Failed: 3
-
-❌ Critical issues found! Fix failures before running vehicle mode.
-
-Recommended actions:
-1. Address all failed checks above
-2. Re-run this script
+📊 15 checks: 10 ok, 2 warn, 3 fail
+   preflight チェックに失敗あり。上の失敗項目を直して再実行してください。
 ```
 
-### runtime
+### driver / autoware
 
-`--phase runtime` では番号が改めて 1 から振られます。
+各フェーズでセクション番号は 1 から振られます。以下は出力の抜粋です。
 
-```bash
-$ ./setup_check.sh --phase runtime
-
-========================================
-Racing Kart Setup Check
-Mode: vehicle
-Phase: runtime
-Time: 2025年  8月 25日 月曜日 23:10:02 JST
-========================================
-
+```text
+$ ./setup_check.sh --phase driver
 ℹ️ 1. Runtime Hardware Communication Check
-----------------------------------------
 ✅ CAN interface can0 is UP
-ℹ️ CAN traffic sample (can0, 3s)
 ✅ CAN interface can0 state is ERROR-ACTIVE
-ℹ️ CAN berr-counter tx 0 rx 0
 ✅ CAN traffic observed: 4821 frames, 14 IDs, no error frames
-
 ℹ️ 2. Runtime Docker Service Check
-----------------------------------------
-✅ Required compose services are running: driver autoware zenoh
-
+✅ Required compose services are running: driver zenoh
 ℹ️ 3. GNSS/RTK Status Check
-----------------------------------------
 ✅ GNSS RTK fixed: NavPVT flags=131
+ℹ️ 4. Driver ROS Topic Output Check
+✅ Raw IMU: /sensing/imu/imu_raw
+…
+✅ Actuation status: /vehicle/status/actuation_status
+📊 17 checks: 17 ok, 0 warn, 0 fail
+   driver / zenoh チェック完了。
 
-ℹ️ 4. Runtime ROS Topic Output Check
-----------------------------------------
-ℹ️ Racing kart hardware/status topics
-✅ VCU status: /racing_kart/vcu/status
-✅ Steer status: /racing_kart/steer/status
-...
+$ ./setup_check.sh --phase autoware
+ℹ️ 1. Runtime Docker Service Check
+✅ Required compose services are running: autoware
+ℹ️ 2. Autoware ROS Topic Output Check
 ℹ️ Autoware downstream control command topics
 ✅ Control command: /control/command/control_cmd
 ✅ Actuation command: /control/command/actuation_cmd
-
-========================================
-📊 Check Results Summary
-========================================
-Total checks: 18
-✅ Passed: 18
-⚠️ Warnings: 0
-❌ Failed: 0
-
-✅ All checks passed! System ready for vehicle mode.
+📊 3 checks: 3 ok, 0 warn, 0 fail
+   Autoware チェック完了。
 ```
+
+`--phase runtime` は driver → autoware、`--phase all` は preflight の各項目と両方の起動後チェックを実行します。
+終了コードは失敗ありなら 1、成功または警告のみなら 0 です。完了文は対象フェーズを示します。
 
 ## 手動確認が必要な項目
 

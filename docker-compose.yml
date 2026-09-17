@@ -1,3 +1,7 @@
+# All checkouts and direct Compose commands share the vehicle stack by default.
+# COMPOSE_PROJECT_NAME / --project-name can still override this for development.
+name: aichallenge
+
 x-autoware-base: &autoware-base
   image: "aichallenge-2025-dev"
   privileged: true

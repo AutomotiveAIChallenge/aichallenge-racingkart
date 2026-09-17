@@ -2,13 +2,19 @@
 
 ## セットアップ確認スクリプト / Setup Check Script
 
-走行前の車両環境確認用スクリプトが利用可能です。チェックは **起動前（preflight）** と **起動後（runtime）** の2フェーズに分かれています。
+走行前の車両環境確認用スクリプトが利用可能です。チェックは **起動前（preflight）**・**driver / zenoh 起動後（driver）**・**Autoware 起動後（autoware）** の3フェーズに分かれています。
 
 ```bash
 # 起動前チェックのみ（driver/autoware を起動する前に実行）
 ./setup_check.sh --phase preflight
 
-# 起動後チェックのみ（スタックが起動している状態で実行）
+# driver / zenoh 起動後（Autoware は停止中でも可）
+./setup_check.sh --phase driver
+
+# Autoware 起動後
+./setup_check.sh --phase autoware
+
+# 互換用: driver と autoware の両チェック
 ./setup_check.sh --phase runtime
 
 # 全チェック（既定。runtime を含むためスタック起動中に実行する）
@@ -28,23 +34,38 @@ preflight（起動前）でチェックする項目：
 4. **既知問題予防チェック** - 過去の実験から抽出した予防項目
 5. **実行準備確認** - リポジトリルート、gitブランチ確認
 
-runtime（起動後）でチェックする項目：
-1. **ハードウェア通信確認** - CANのリンク状態とトラフィック／エラーフレーム
-2. **Dockerサービス確認** - `driver` / `autoware` / `zenoh` の稼働（`rosbag` は必須にしない）
-3. **GNSS/RTK状態確認** - `/sensing/gnss/navpvt` の RTK fixed / float 判定
-4. **ROS topic出力確認** - 車両status・最終指令・autoware制御指令の出力
-5. **IMUジャイロバイアス計測** - 静止時バイアスを測って `imu_corrector.param.yaml` を更新
+driver（driver / zenoh 起動後）でチェックする項目：
 
-`make autoware-driver-zenoh-rosbag` は起動前に preflight、起動後に runtime を自動実行します。
+1. **ハードウェア通信確認** - CAN のリンク状態とトラフィック／エラーフレーム
+2. **Docker サービス確認** - `driver` / `zenoh` の稼働（Autoware・rosbag は必須にしない）
+3. **GNSS / RTK 状態確認** - `/sensing/gnss/navpvt` の RTK fixed / float 判定
+4. **ROS topic 出力確認** - 生 IMU、車両 status、Joy 入力、最終指令、`/vehicle/status/*` を driver 内で確認
+
+Autoware（起動後）でチェックする項目：
+
+1. **Docker コンテナ確認** - ホスト全体を確認し、現在の project の `autoware` / `driver` / `zenoh` が必要。追加コンテナ（監視用・rosbag・別 project など）と重複起動は名前を表示して警告し、不足は失敗にする
+2. **制御指令確認** - `/control/command/control_cmd`・`/control/command/actuation_cmd` を Autoware 内で確認
+
+Zenoh の直接確認はコンテナ稼働までです。接続先への TCP 疎通は preflight、Joy 入力確認には送信側の起動も必要です。
+
+`make autoware-driver-zenoh-rosbag` は起動前に preflight を自動実行します。runtime は起動後に別途実行します。
 `make setup-vehicle` は `--phase all` 相当なので、**スタック起動中** に実行してください（停止中に叩くと runtime 系が一斉に fail します）。
 
-IMU ジャイロバイアス計測は、静止状態のバイアスを測って `imu_corrector.param.yaml` の
-`angular_velocity_offset_*` を測定値で上書きします（次回 autoware 再起動時から反映。
-今動いているプロセスには効きません）。計測前に静止確認の `y/N` プロンプトが出ます。
-誤って走行中に測ると誤ったバイアスを書き込むため、タイムアウトは設けておらず、回答するまで
-待ちます（`y` 以外は skip(warn) として先へ進みます）。計測中の静止時ノイズが大きいときは
-書き込まず、「車両に触れないでください」→再計測してよいか `y/N` の確認が入ります
-（`y` の間は上限なく再計測）。
+右上の運営 TUI は `check preflight`（新規起動時に自動実行）→ `driver` → `zenoh` →
+`check driver / zenoh` の順で準備・確認します。既存の停止操作・rosbag 操作・down all はその下に残ります。
+運営 TUI は `~/aichallenge-racingkart` から起動し、共通の driver・zenoh 設定を使います。
+`down all` は専用の車両 PC 上で `make down_all` を実行し、compose project を問わず
+ホスト上の全コンテナを強制削除します。`make down` では固定 project と実行元 project しか
+停止できず、運営用リポジトリから各チームの compose project を網羅できないためです。
+1 日の終わりにだけ使用します。
+参加者 TUI と監視用シェルは、対象チームの `~/team-xxxx` から起動します。参加者 TUI の
+tmux セッション名にはディレクトリ名を含めるため、別チームのセッションには接続しません。
+左上の参加者 TUI は `Update the accel/brake maps and IMU bias` → `autoware-vehicle`
+→ `check autoware` → `autoware-vehicle down` の順です。運営側の確認完了後に参加者側へ進みます。
+チェック結果は各 TUI 内で保持し、起動・停止操作で対象サービスの古いチェック結果を未確認へ戻します。
+`Update the accel/brake maps and IMU bias` は、Autoware 停止中に共通 map と保存済み IMU バイアスを
+それぞれ確認し、承認後にビルド済みの設定へ適用します。Enter / y で推奨値を適用し、n で保持します。
+runtime での計測・設定更新はありません。詳細は [設定の適用手順](calibration.md) を参照してください。
 
 詳細な確認項目と手動コマンドについては [setup_check.md](./setup_check.md) を参照してください。
 
@@ -55,7 +76,8 @@ IMU ジャイロバイアス計測は、静止状態のバイアスを測って 
 ### 起動（例）
 
 ```bash
-# Autoware（vehicle mode）
+# ビルド済み提出物の map・IMU バイアスを承認後に適用して起動
+python3 vehicle/apply_calibration.py
 make autoware-vehicle
 
 # Racing Kart ドライバー
@@ -84,6 +106,7 @@ docker compose run --rm --no-deps autoware-command
 ```bash
 make ps
 make down
+make down_all  # 専用ホスト上の全コンテナを強制削除
 
 # 個別に止めたい場合（rosbag は起動したターミナルで Ctrl+C）
 ```
