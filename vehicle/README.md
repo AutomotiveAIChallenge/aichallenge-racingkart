@@ -45,6 +45,7 @@ Autoware（起動後）でチェックする項目：
 
 1. **Docker コンテナ確認** - ホスト全体を確認し、現在の project の `autoware` / `driver` / `zenoh` が必要。追加コンテナ（監視用・rosbag・別 project など）と重複起動は名前を表示して警告し、不足は失敗にする
 2. **制御指令確認** - `/control/command/control_cmd`・`/control/command/actuation_cmd` を Autoware 内で確認
+3. **アクセル指令確認** - 最後に `actuation_cmd` の `accel_cmd > 0` かつ `brake_cmd = 0` を確認し、実測した指令値を表示
 
 Zenoh の直接確認はコンテナ稼働までです。接続先への TCP 疎通は preflight、Joy 入力確認には送信側の起動も必要です。
 
