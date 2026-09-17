@@ -70,6 +70,12 @@ COMPOSE_FILE=docker-compose.yml
 
 `./setup.bash env` を実行すると `/dev/nvidia0` の有無で GPU/CPU を自動判定し、`.env` を生成する。
 
+`Makefile` は `COMPOSE_PROJECT_NAME=aichallenge` をエクスポートする。既定の project 名はディレクトリ名なので、
+`~/aichallenge-racingkart` と `~/team-xxxx` から同じ `driver` / `autoware` を上げると別コンテナとして
+二重起動する。project を揃えると別 checkout からの `make ...` は稼働中のコンテナを置き換える
+（`make dev2..4` の `-p N` は CLI 指定なので優先される）。`make` を通さず `docker compose` を直接叩く
+ときは `.env` に同じ行を置くか `COMPOSE_PROJECT_NAME=aichallenge` を付ける。
+
 ---
 
 ## ホスト UID/GID

@@ -40,6 +40,8 @@ REPO_ROOT="$(git -C "${SCRIPT_DIR}" rev-parse --show-toplevel 2>/dev/null || tru
 if [ -z "${REPO_ROOT}" ]; then
     REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 fi
+# docker compose ps/exec は make を通らないので Makefile と同じ project 名に揃える。
+export COMPOSE_PROJECT_NAME="${COMPOSE_PROJECT_NAME:-aichallenge}"
 
 # shellcheck source-path=SCRIPTDIR source=vehicle_ports.sh
 source "${SCRIPT_DIR}/vehicle_ports.sh"
