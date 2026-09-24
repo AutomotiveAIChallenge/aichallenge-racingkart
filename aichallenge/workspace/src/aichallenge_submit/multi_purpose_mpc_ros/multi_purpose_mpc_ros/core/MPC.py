@@ -7,6 +7,26 @@ import matplotlib.pyplot as plt
 # Colors
 PREDICTION = '#BA4A00'
 
+# OSQP statuses whose primal iterate may be used as a plan. For an infeasible
+# problem osqp 0.6 returns x = [None, ...] but osqp >= 1.0 returns a finite,
+# meaningless iterate, so the status (not the values) must decide.
+# infeasible 時の x は osqp のバージョンで None/有限値と異なるため status で判定する。
+# Only a fully converged solve is trusted. "solved inaccurate" and
+# "maximum iterations reached" do not guarantee feasibility/convergence and
+# an unconverged primal iterate (e.g. a straight-segment partial iterate with
+# a zero steering entry) must not be published as a control command.
+USABLE_OSQP_STATUSES = ('solved',)
+
+
+def _is_usable_solution(result) -> bool:
+    if result.info.status not in USABLE_OSQP_STATUSES:
+        return False
+    try:
+        x = np.asarray(result.x, dtype=float)
+    except (TypeError, ValueError):
+        return False
+    return bool(np.all(np.isfinite(x)))
+
 ##################
 # MPC Controller #
 ##################
@@ -250,20 +270,25 @@ class MPC:
         try:
             dec = self.optimizer.solve()
             control_signals = np.array(dec.x[-N*nu:])
-            use_control_signals = control_signals[1::2]
 
-            if not np.all(use_control_signals):
+            # NOTE: each retry below calls _init_problem() again, which
+            # advances self.model.wp_id (see wp_id_offset). Keeping the
+            # horizon anchored to the pre-retry waypoint across these
+            # retries is handled separately in PR #324; not duplicated here.
+            if not _is_usable_solution(dec):
                 for i in range(1, 6):
                     relaxed_safety_margin = self.model.safety_margin * ((5-i) / 5.0)
                     self._init_problem(N, relaxed_safety_margin)
                     dec = self.optimizer.solve()
                     control_signals = np.array(dec.x[-N*nu:])
-                    use_control_signals = control_signals[1::2]
 
-                    if self.infeasibility_counter == 0 and np.all(use_control_signals):
+                    if self.infeasibility_counter == 0 and _is_usable_solution(dec):
                         if self.last_solved_wp_id != self.model.wp_id:
                             print(f"Relaxed safety margin by {relaxed_safety_margin} ({5-i}/5) to solve the problem")
                         break
+
+            if not _is_usable_solution(dec):
+                raise ValueError(f"OSQP returned no usable solution ({dec.info.status})")
 
             # ステア角の計算と保存
             control_signals[1::2] = np.arctan(control_signals[1::2] * self.model.length)
@@ -292,7 +317,7 @@ class MPC:
             self.infeasibility_counter = 0
             self.last_solved_wp_id = self.model.wp_id
 
-        except TypeError or ValueError:
+        except (TypeError, ValueError):
             id = nu * (self.infeasibility_counter + 1)
             if id + 2 < len(self.current_control):
                 u = np.array(self.current_control[id:id+2])
