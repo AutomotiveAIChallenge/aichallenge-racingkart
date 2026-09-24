@@ -150,8 +150,11 @@ class MPC:
                 N, self.model.length, self.model.width, safety_margin)
         else:
             ref_wp_id = (self.model.wp_id + 1) % len(self.model.reference_path.path_constraints[0])
-            ub = self.model.reference_path.path_constraints[0][ref_wp_id]
-            lb = self.model.reference_path.path_constraints[1][ref_wp_id]
+            # Copy: the relaxation below edits ub/lb in place, and a numpy row is a
+            # view into the stored table, so every relaxed retry permanently widened
+            # the corridor for this waypoint. 行はビューなのでコピーしてから編集する。
+            ub = self.model.reference_path.path_constraints[0][ref_wp_id].copy()
+            lb = self.model.reference_path.path_constraints[1][ref_wp_id].copy()
             self.model.reference_path.border_cells.current_wp_id = ref_wp_id
 
             # Update safety margin if provided as argument and different from current value
