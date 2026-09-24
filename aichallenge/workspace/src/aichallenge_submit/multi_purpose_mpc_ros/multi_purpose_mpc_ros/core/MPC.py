@@ -237,6 +237,9 @@ class MPC:
         nu = self.nu
 
         self.model.get_current_waypoint()
+        # _init_problem() advances wp_id by wp_id_offset (control delay); remember
+        # the car's own waypoint so every relaxation retry starts from it.
+        wp_id_base = self.model.wp_id
 
         N = min(self.N, self.model.reference_path.n_waypoints - self.model.wp_id) \
             if not self.model.reference_path.circular else self.N
@@ -255,6 +258,7 @@ class MPC:
             if not np.all(use_control_signals):
                 for i in range(1, 6):
                     relaxed_safety_margin = self.model.safety_margin * ((5-i) / 5.0)
+                    self.model.wp_id = wp_id_base
                     self._init_problem(N, relaxed_safety_margin)
                     dec = self.optimizer.solve()
                     control_signals = np.array(dec.x[-N*nu:])
