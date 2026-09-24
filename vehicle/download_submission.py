@@ -294,9 +294,10 @@ class SubmissionLister:
             if data.get('comment'):
                 logger.info(f"Comment: {data['comment']}")
 
-            # Create download directory inside vehicle folder
-            script_dir = os.path.dirname(os.path.abspath(__file__))
-            download_dir = os.path.join(script_dir, 'download')
+            # Save into the caller-provided download directory (e.g. a per-invocation
+            # temp directory), so concurrent invocations and leftover archives from a
+            # prior interrupted run cannot be mixed up.
+            download_dir = os.path.abspath(output_dir)
             os.makedirs(download_dir, exist_ok=True)
 
             # Download the file using the pre-signed URL to download folder
@@ -383,9 +384,10 @@ class SubmissionLister:
             if data.get('comment'):
                 logger.info(f"Comment: {data['comment']}")
 
-            # Create download directory inside vehicle folder
-            script_dir = os.path.dirname(os.path.abspath(__file__))
-            download_dir = os.path.join(script_dir, 'download')
+            # Save into the caller-provided download directory (e.g. a per-invocation
+            # temp directory), so concurrent invocations and leftover archives from a
+            # prior interrupted run cannot be mixed up.
+            download_dir = os.path.abspath(output_dir)
             os.makedirs(download_dir, exist_ok=True)
 
             # Download the file using the pre-signed URL to download folder
