@@ -19,13 +19,12 @@ FAILED = "failed"
 
 # --- ステップ ID -----------------------------------------------------------
 STEP_PREFLIGHT = "preflight"
-STEP_SUBMISSION = "submission"
-STEP_BUILD = "build"
+STEP_CALIBRATION = "calibration"
 STEP_UP = "up"
-STEP_RUNTIME = "runtime"
+STEP_CHECK_DRIVER = "check_driver"
+STEP_CHECK_AUTOWARE = "check_autoware"
 STEP_AUTOWARE_DOWN = "autoware_down"
 STEP_TEARDOWN = "teardown"
-STEP_CLEAN = "clean"
 # 運営だけに出すステップ
 STEP_DRIVER = "driver"        # 土台: racing_kart_interface
 STEP_ZENOH = "zenoh"          # 土台: Zenoh bridge
@@ -33,10 +32,9 @@ STEP_ROSBAG = "rosbag"        # 土台: all-topic rosbag
 STEP_DRIVER_DOWN = "driver_down"
 STEP_ZENOH_DOWN = "zenoh_down"
 STEP_ROSBAG_DOWN = "rosbag_down"
-STEP_DOWNLOAD = "download"    # 提出物を board から取る
 
 # --- 役割 ------------------------------------------------------------------
-# 参加者は autoware と提出物だけを触る。driver / zenoh / rosbag、ダウンロード、全体停止は運営。
+# 参加者はチェック、map・IMU バイアスの適用、autoware の起動・停止を行う。driver / zenoh / rosbag、全体停止は運営。
 ROLE_PARTICIPANT = "participant"
 ROLE_STAFF = "staff"
 ROLES = (ROLE_PARTICIPANT, ROLE_STAFF)
@@ -54,24 +52,10 @@ class Workspace:
     "unknown but probably fine".
     """
 
-    install_mtime: Optional[float] = None
-    submit_mtime: Optional[float] = None
     services_running: FrozenSet[str] = field(default_factory=frozenset)
-    # このリポジトリから compose で起動された running なコンテナ数（プロジェクト不問）。
-    # services_running は default しか見ないので、make down の「全部止まったか」はこちら。
+    # ホスト上の running コンテナ数。運営 TUI の make down_all は project を問わず
+    # 全コンテナを強制削除するため、その完了判定もホスト全体を見る。
     stack_containers: int = 0
-    # aichallenge/workspace/ が checkout 直後の状態か。既定は False: 観測できなかったときに
-    # cleanup を「済」と見せてはいけない。
-    workspace_pristine: bool = False
-
-
-def build_done(ws: Workspace) -> bool:
-    """Whether install/ exists and is no older than the submission."""
-    if ws.install_mtime is None or ws.submit_mtime is None:
-        # Freshness is unprovable without both timestamps; report stale rather
-        # than let an old install/ pass as built.
-        return False
-    return ws.install_mtime >= ws.submit_mtime
 
 
 def _autoware_up(ws: Workspace) -> bool:
@@ -89,8 +73,8 @@ def _service_down(name: str) -> Callable[[Workspace], bool]:
 
 
 def _stack_down(ws: Workspace) -> bool:
-    # make down は default と -p 1..4 の全コンテナを落とす。REQUIRED_SERVICES だけ
-    # 見ると simulator や別プロジェクトの autoware が残っていても OK と出てしまう。
+    # make down_all はホスト上の全コンテナを落とす。REQUIRED_SERVICES だけ見ると
+    # team-* など別プロジェクトの autoware が残っていても OK と出てしまう。
     return ws.stack_containers == 0 and not any(
         name in ws.services_running for name in REQUIRED_SERVICES
     )
@@ -98,12 +82,6 @@ def _stack_down(ws: Workspace) -> bool:
 
 def _autoware_down(ws: Workspace) -> bool:
     return "autoware" not in ws.services_running
-
-
-def _workspace_pristine(ws: Workspace) -> bool:
-    # checkout 直後と同じなら済。提出物で上書きされた aichallenge_submit/ も、
-    # build/ install/ log/ も、どれか残っていれば未実行。
-    return ws.workspace_pristine
 
 
 @dataclass(frozen=True)
@@ -128,10 +106,52 @@ class Step:
     # 行末に括弧書きで出す一言。押してよい場面が題名から読めないステップにだけ付ける。
     # 端末は 46 桁しかないので短く、幅計算が狂わないよう ASCII で書く。
     note: str = ""
+    # 推奨操作には右端のラベルを付ける。適用元の検証結果とは独立した操作の案内。
+    recommended: bool = False
+    # サービスを起動・停止したら、以前のチェック結果を未確認へ戻す。
+    invalidates: Tuple[str, ...] = ()
+    # 観測で対象サービスの停止が分かった場合も、成功結果を未確認へ戻す。
+    checked_services: Tuple[str, ...] = ()
 
 
 # 参加者の並び。運営は STAFF_STEPS を別画面として持つ（参加者の続きではない）。
 PARTICIPANT_STEPS = (
+    Step(
+        step_id=STEP_CALIBRATION,
+        title="Update the accel/brake maps and IMU bias",
+        recommended=True,
+        command=("python3", "apply_calibration.py"),
+        cwd="vehicle",
+        interactive=True,
+    ),
+    Step(
+        step_id=STEP_UP,
+        title="autoware-vehicle",
+        command=("make", "autoware-vehicle"),
+        requires=(STEP_CALIBRATION,),
+        measure=_autoware_up,
+        invalidates=(STEP_CHECK_AUTOWARE,),
+    ),
+    Step(
+        step_id=STEP_CHECK_AUTOWARE,
+        title="check autoware",
+        command=("./setup_check.sh", "--phase", "autoware"),
+        cwd="vehicle",
+        requires=(STEP_UP,),
+        checked_services=("autoware", "driver", "zenoh"),
+    ),
+    Step(
+        step_id=STEP_AUTOWARE_DOWN,
+        title="autoware-vehicle down",
+        command=("docker", "compose", "down", "autoware"),
+        measure=_autoware_down,
+        invalidates=(STEP_CHECK_AUTOWARE,),
+    ),
+)
+
+# 運営の並び。参加者の画面には出さない: 土台サービスの個別の上げ下げ、
+# スタック全体の停止と車両側のチェックは運営の仕事。参加者とは独立した 9 ステップ。
+STAFF_STEPS = (
     Step(
         step_id=STEP_PREFLIGHT,
         title="check preflight",
@@ -139,78 +159,30 @@ PARTICIPANT_STEPS = (
         cwd="vehicle",
     ),
     Step(
-        step_id=STEP_SUBMISSION,
-        title="extract",
-        command=("make", "submission-extract"),
-        requires=(STEP_PREFLIGHT,),
-        # extract_submission.py prompts for the team id and the zip password.
-        interactive=True,
-        # measure を持たせない: aichallenge_submit/ は checkout 時点で 15 個の tracked な
-        # パッケージが入っており常に非空。ディレクトリの有無は入れ替えの証拠にならない。
-    ),
-    Step(
-        step_id=STEP_BUILD,
-        title="build",
-        command=("make", "autoware-build"),
-        requires=(STEP_SUBMISSION,),
-        measure=build_done,
-    ),
-    Step(
-        step_id=STEP_UP,
-        title="autoware-vehicle",
-        command=("make", "autoware-vehicle"),
-        requires=(STEP_BUILD,),
-        measure=_autoware_up,
-    ),
-    Step(
-        step_id=STEP_RUNTIME,
-        title="check runtime",
-        command=("./setup_check.sh", "--phase", "runtime"),
-        cwd="vehicle",
-        requires=(STEP_UP,),
-        # check_imu_bias() が停止確認の y/N プロンプトを出す。端末を明け渡さないと
-        # curses の getch() とプロンプトの read が同じ tty を取り合い、
-        # 操作者に見えないまま応答不能でハングする。
-        interactive=True,
-    ),
-    Step(
-        step_id=STEP_AUTOWARE_DOWN,
-        title="autoware-vehicle down",
-        command=("docker", "compose", "down", "autoware"),
-        measure=_autoware_down,
-    ),
-    Step(
-        step_id=STEP_CLEAN,
-        title="cleanup",
-        command=("make", "workspace-clean"),
-        measure=_workspace_pristine,
-    ),
-)
-
-# 運営の並び。参加者の画面には出さない: download、土台サービスの個別の上げ下げ、
-# スタック全体の停止は運営の仕事で、参加者の並びとは独立した 8 ステップだけの画面。
-STAFF_STEPS = (
-    Step(
-        step_id=STEP_DOWNLOAD,
-        title="download",
-        command=("make", "download"),
-        # download_submission.sh prompts for username/password and
-        # download_submission.py prompts for the submission to take.
-        interactive=True,
-    ),
-    Step(
         step_id=STEP_DRIVER,
         title="driver",
         note="always on",
         command=("make", "driver"),
+        requires=(STEP_PREFLIGHT,),
         measure=_service_up("driver"),
+        invalidates=(STEP_CHECK_DRIVER,),
     ),
     Step(
         step_id=STEP_ZENOH,
         title="zenoh",
         note="always on",
         command=("make", "zenoh"),
+        requires=(STEP_PREFLIGHT,),
         measure=_service_up("zenoh"),
+        invalidates=(STEP_CHECK_DRIVER,),
+    ),
+    Step(
+        step_id=STEP_CHECK_DRIVER,
+        title="check driver / zenoh",
+        command=("./setup_check.sh", "--phase", "driver"),
+        cwd="vehicle",
+        requires=(STEP_DRIVER, STEP_ZENOH),
+        checked_services=("driver", "zenoh"),
     ),
     Step(
         step_id=STEP_DRIVER_DOWN,
@@ -218,6 +190,7 @@ STAFF_STEPS = (
         note="on faults only",
         command=("docker", "compose", "down", "driver"),
         measure=_service_down("driver"),
+        invalidates=(STEP_CHECK_DRIVER,),
     ),
     Step(
         step_id=STEP_ZENOH_DOWN,
@@ -225,6 +198,7 @@ STAFF_STEPS = (
         note="on faults only",
         command=("docker", "compose", "down", "zenoh"),
         measure=_service_down("zenoh"),
+        invalidates=(STEP_CHECK_DRIVER,),
     ),
     Step(
         step_id=STEP_ROSBAG,
@@ -244,8 +218,11 @@ STAFF_STEPS = (
         step_id=STEP_TEARDOWN,
         title="down all",
         note="end of the day",
-        command=("make", "down"),
+        command=("make", "down_all"),
+        # make down_all は sudo がパスワードを要求できるよう実端末を使う。
+        interactive=True,
         measure=_stack_down,
+        invalidates=(STEP_CHECK_DRIVER, STEP_CHECK_AUTOWARE),
     ),
 )
 
@@ -272,7 +249,7 @@ def step_status(step_id: str, ws: Workspace, session: Dict[str, str]) -> str:
     """Derive a step's state.
 
     A step in flight reports RUNNING regardless of anything else. Otherwise
-    measured steps come from the environment, so an external `make down` shows
+    measured steps come from the environment, so an external `make down_all` shows
     through instead of this session's stale memory; the remaining steps are
     check runs whose result exists only as an exit code, so they come from the
     session.
@@ -294,7 +271,7 @@ def is_runnable(step_id: str, ws: Workspace, session: Dict[str, str]) -> bool:
     is standing on the machine and can see for themselves that, say, preflight
     legitimately fails on a dev box with no CAN hardware attached -- the
     console's job is to surface that deviation, not to forbid working around
-    it. Launching `make autoware-build` or the stack with an unmet
+    it. Launching Autoware with an unmet
     prerequisite is a deliberate operator call, not a bug.
 
     The one real hazard is launching a second overlapping run of the same

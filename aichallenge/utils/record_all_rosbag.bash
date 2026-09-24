@@ -4,7 +4,6 @@ set -euo pipefail
 
 id="${1:-${ROS_DOMAIN_ID:-1}}"
 log_dir="${2:-${LOG_DIR-}}"
-racing_kart_interface_dir="${3:-${RACING_KART_INTERFACE_DIR:-/home/tier4/racing_kart_interface}}"
 out_dir="${log_dir:+${log_dir}/d${id}}"
 out_dir="${out_dir:-/output/$(date +%Y%m%d-%H%M%S)/d${id}}"
 bag_name="rosbag2_all"
@@ -54,12 +53,17 @@ mkdir -p "${ROS_LOG_DIR}"
 
 source_setup "/opt/ros/humble/setup.bash"
 source_setup "/aichallenge/workspace/install/setup.bash"
-source_setup "${racing_kart_interface_dir}/install/setup.bash"
 
+# Keep driver-only types out of the Autoware recorder. /comm_status uses
+# tier4_v2x_msgs/msg/CommStatusArray, which is absent from Autoware's copy of
+# tier4_v2x_msgs. rosbag2's package-level check still accepts it, then loading
+# its type support fails. Removing the driver mount alone is not sufficient.
+# See docs/spec/log-design.md for the verified definitions and recording policy.
 record_cmd=(
     ros2 bag record
     -a
     --include-hidden-topics
+    --exclude '^(/racing_kart/.*|/comm_status)$'
     -s mcap
     --storage-preset-profile zstd_fast
     --max-bag-duration 60

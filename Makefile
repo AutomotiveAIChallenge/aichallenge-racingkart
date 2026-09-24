@@ -9,6 +9,8 @@ SHELL := /bin/bash
 HOST_UID ?= $(shell id -u)
 HOST_GID ?= $(shell id -g)
 export HOST_UID HOST_GID
+# Project 名の既定値は docker-compose.yml の name で統一する。
+# make 経由の起動も直接 docker compose を呼ぶ停止・確認も同じ project を使う。
 # Stop host shell's ROS_DOMAIN_ID from overriding .env via compose interpolation,
 # but still honor an explicit `make foo ROS_DOMAIN_ID=N` command-line override.
 unexport ROS_DOMAIN_ID
@@ -138,6 +140,7 @@ down:
 	@for p in 1 2 3 4; do docker compose -p $$p down --remove-orphans; done
 	@docker compose down --remove-orphans
 
+# 車両 PC は専用ホストなので、1 日の終わりには project を問わず全コンテナを強制削除する。
 down_all:
 	sudo docker ps -aq | xargs -r sudo docker rm -f
 
@@ -179,18 +182,20 @@ download:
 
 # 事前に置いた vehicle/.submissions/<id>.zip（パスワード付き）で src/aichallenge_submit/ を入れ替える。
 # ID とパスワードは対話で聞く（SUBMISSION_ID で ID を先渡し可）。
-# 展開後に参加者の承認を確認して AWSIM adapter の共通 map を適用する。IMU は runtime で別途確認する。
+# 展開時に参加者の承認を確認して共通 accel/brake map と車両別の保存済み IMU バイアスを適用する。
 submission-extract:
 	vehicle/extract_submission.py $(if $(SUBMISSION_ID),--id $(SUBMISSION_ID))
 
 # 車両 PC 上の操作コンソール。tmux 常駐なので ssh が切れても作業が残り、
-# 再接続して同じターゲットを叩けば -A で同じセッションへアタッチする。
-# 参加者用（autoware と提出物のステップだけ）。
+# 同じチームディレクトリから再接続すれば -A で同じセッションへアタッチする。
+# チームを切り替えたときに前チームの TUI を再利用しないよう、セッション名には
+# 起動したリポジトリのディレクトリ名を含める。
 vehicle-tui:
-	tmux new -A -s aic-vehicle "vehicle/tui.py"
+	@session_name="aic-vehicle-$(notdir $(CURDIR))"; \
+	tmux new -A -s "$$session_name" "vehicle/tui.py"
 
-# 運営用。driver / zenoh / rosbag の起動、download、down all も出す。tmux セッションを分けるので
-# 参加者の aic-vehicle セッションが残っていても運営側の画面になる。
+# 運営用。driver / zenoh / rosbag の起動・停止、down all を出す。tmux セッションを分けるので
+# 参加者のチーム別セッションが残っていても運営側の画面になる。
 vehicle-tui-staff:
 	tmux new -A -s aic-vehicle-staff "vehicle/tui.py --role staff"
 
