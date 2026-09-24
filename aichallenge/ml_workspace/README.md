@@ -21,7 +21,7 @@ ml_workspace/
 │  ├─ train.py
 │  ├─ config/
 │  │  └─ train.yaml
-│  ├─ datasets/             # extract_data_from_bag.py の出力先（実行時に生成；コミットされない）
+│  ├─ dataset/              # extract_data_from_bag.py の出力先（実行時に生成；コミットされない）
 │  │  ├─ train/...
 │  │  └─ val/...
 │  ├─ lib/
