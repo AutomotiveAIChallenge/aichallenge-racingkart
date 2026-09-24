@@ -15,7 +15,12 @@ fi
 while [ $# -gt 0 ]; do
     case "$1" in
     --submit | --submit-tar)
-        SUBMIT_TAR="${2-}"
+        if [ $# -lt 2 ]; then
+            echo "[ERROR] $1 requires a path (e.g. $1 submit/aichallenge_submit.tar.gz)" >&2
+            echo "Usage: ./docker_build.sh <dev|eval> [--submit <path/to/aichallenge_submit.tar.gz>]" >&2
+            exit 2
+        fi
+        SUBMIT_TAR="$2"
         shift 2
         ;;
     --)
