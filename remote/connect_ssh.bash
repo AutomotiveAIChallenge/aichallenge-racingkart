@@ -8,11 +8,15 @@ if [ -f "$REPO_ROOT/.env" ]; then
 fi
 
 usage() {
-    echo "使用法: $0 [[ユーザー名@]<A1-A8|test>] [実行するコマンド]"
+    echo "使用法 / Usage: $0 [[ユーザー名/user@]<A1-A8|test>] [実行するコマンド/command]"
     echo "  接続先を省略すると .env の VEHICLE_ID (現在: ${ENV_VEHICLE_ID:-未設定}) に接続する"
+    echo "  If the target is omitted, connect to VEHICLE_ID in .env (current: ${ENV_VEHICLE_ID:-not set})"
     echo "  車両 ID は小文字に変換して SSH の接続先に使う (例: A3 → a3)"
+    echo "  The vehicle ID is lowercased and used as the SSH host (e.g. A3 → a3)"
     echo "  ユーザー名を省略するとローカルのユーザー名 ($USER) で接続する"
+    echo "  If the user name is omitted, connect as the local user ($USER)"
     echo "  test: 踏み台を通さず localhost:22 へ接続する (動作確認用)"
+    echo "  test: connect to localhost:22 without the jump host (for testing)"
 }
 
 # 1. 接続先を決める
@@ -22,7 +26,7 @@ if [ $# -ge 1 ]; then
 elif [ -n "$ENV_VEHICLE_ID" ]; then
     SPEC=$ENV_VEHICLE_ID
 else
-    echo "エラー: 接続先を指定してください (.env に VEHICLE_ID もありません)。"
+    echo "エラー: 接続先を指定してください (.env に VEHICLE_ID もありません)。 / Error: specify the target (no VEHICLE_ID in .env either)."
     usage
     exit 1
 fi
@@ -47,8 +51,8 @@ test)
     PORT_ARGS=(-p 22)
     ;;
 *)
-    echo "エラー: 不明な接続先です: $TARGET_ID"
-    echo "利用可能な接続先: A1-A8, test (小文字も可)"
+    echo "エラー: 不明な接続先です / Error: unknown target: $TARGET_ID"
+    echo "利用可能な接続先 / Available targets: A1-A8, test (小文字も可 / lowercase also accepted)"
     usage
     exit 1
     ;;
