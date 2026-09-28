@@ -34,13 +34,31 @@ def main(cfg: DictConfig):
     train_dataset = MultiSeqConcatDataset(cfg.data.train_dir)
     val_dataset = MultiSeqConcatDataset(cfg.data.val_dir)
 
+    if len(train_dataset) == 0:
+        raise RuntimeError(
+            f"Training dataset is empty (train_dir={cfg.data.train_dir}). "
+            "Cannot train without data."
+        )
+    if len(val_dataset) == 0:
+        print("[WARN] Validation dataset is empty. Validation loss will be reported as inf.")
+
+    effective_batch_size = cfg.train.batch_size
+    drop_last = True
+    if len(train_dataset) < cfg.train.batch_size:
+        effective_batch_size = len(train_dataset)
+        drop_last = False
+        print(
+            f"[WARN] train_dataset size ({len(train_dataset)}) < batch_size ({cfg.train.batch_size}). "
+            f"Using batch_size={effective_batch_size} with drop_last=False."
+        )
+
     train_loader = DataLoader(
         train_dataset,
-        batch_size=cfg.train.batch_size,
+        batch_size=effective_batch_size,
         shuffle=True,
         num_workers=cfg.train.num_workers,
         pin_memory=True,
-        drop_last=True
+        drop_last=drop_last
     )
 
     val_loader = DataLoader(
@@ -136,6 +154,7 @@ def main(cfg: DictConfig):
 def validate(model, loader, device, criterion):
     model.eval()
     total_loss = 0.0
+    n_batches = 0
     with torch.no_grad():
         for scans, targets in tqdm(loader, desc="[Val]", leave=False):
             scans = scans.unsqueeze(1).to(device)
@@ -145,7 +164,10 @@ def validate(model, loader, device, criterion):
             outputs = model(scans)
             loss = criterion(outputs, targets)
             total_loss += loss.item()
-    return total_loss / len(loader)
+            n_batches += 1
+    if n_batches == 0:
+        return float("inf")
+    return total_loss / n_batches
 
 
 if __name__ == "__main__":
