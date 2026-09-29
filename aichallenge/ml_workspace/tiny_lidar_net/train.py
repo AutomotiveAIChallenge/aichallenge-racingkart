@@ -10,6 +10,7 @@ from datetime import datetime
 
 from lib.model import TinyLidarNet, TinyLidarNetSmall
 from lib.data import MultiSeqConcatDataset
+from lib.common_params import load_common_params
 from lib.loss import WeightedSmoothL1Loss
 
 
@@ -30,9 +31,25 @@ def main(cfg: DictConfig):
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f"Using device: {device}")
 
+    # === Common parameters (shared with the inference node) ===
+    # 古い train.yaml（common_param_path が無い）では従来の既定値を使う
+    common = load_common_params(cfg.get("common_param_path"), base_dir=Path(__file__).resolve().parent)
+    input_dim = cfg.model.get("input_dim", common["input_dim"])
+    if input_dim != common["input_dim"]:
+        raise ValueError(
+            f"model.input_dim ({input_dim}) differs from input_dim in the common parameter file "
+            f"({common['input_dim']}). Set it only in the common parameter file."
+        )
+    print(f"Common parameters: {common}")
+
     # === Dataset ===
-    train_dataset = MultiSeqConcatDataset(cfg.data.train_dir)
-    val_dataset = MultiSeqConcatDataset(cfg.data.val_dir)
+    dataset_kwargs = dict(
+        max_range=common["max_range"],
+        accel_scale=common["accel_scale"],
+        brake_scale=common["brake_scale"],
+    )
+    train_dataset = MultiSeqConcatDataset(cfg.data.train_dir, **dataset_kwargs)
+    val_dataset = MultiSeqConcatDataset(cfg.data.val_dir, **dataset_kwargs)
 
     train_loader = DataLoader(
         train_dataset,
@@ -55,12 +72,12 @@ def main(cfg: DictConfig):
     # === Model ===
     if cfg.model.name == "TinyLidarNetSmall":
         model = TinyLidarNetSmall(
-            input_dim=cfg.model.input_dim,
+            input_dim=input_dim,
             output_dim=cfg.model.output_dim
         ).to(device)
     else:
         model = TinyLidarNet(
-            input_dim=cfg.model.input_dim,
+            input_dim=input_dim,
             output_dim=cfg.model.output_dim
         ).to(device)
 

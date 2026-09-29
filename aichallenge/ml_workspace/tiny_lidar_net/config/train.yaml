@@ -3,11 +3,14 @@ data:
   train_dir: "/aichallenge/ml_workspace/tiny_lidar_net/dataset/train"
   val_dir: "/aichallenge/ml_workspace/tiny_lidar_net/dataset/val"
 
+# 学習と推論で共通のパラメータ（model.input_dim, max_range, accel_scale, brake_scale）のファイル。
+# 推論ノードと同じファイルを読むので、値はこのファイルだけで変える。相対パスはこのディレクトリの親（train.py の場所）から
+common_param_path: "../../workspace/src/aichallenge_submit/tiny_lidar_net_controller/config/tiny_lidar_net_common.param.yaml"
+
 model:
   # "TinyLidarNet" または "TinyLidarNetSmall"
   name: "TinyLidarNet"
-  # LiDARのスキャン点数
-  input_dim: 750
+  # LiDARのスキャン点数（input_dim）は common_param_path のファイルで設定する
   # 出力次元（[accel, steer]）
   output_dim: 2
 

@@ -13,29 +13,49 @@ class ScanControlSequenceDataset(Dataset):
     A PyTorch Dataset for a single sequence of LiDAR scans and control commands.
 
     Loads synchronized .npy files (scans, steers, accelerations) from a specific
-    directory. The LiDAR scans are normalized by the specified maximum range.
+    directory. The LiDAR scans are normalized by the specified maximum range, and
+    the acceleration targets are divided by accel_scale (positive values) or
+    brake_scale (negative values) so that they fit the (-1, 1) output range.
 
     Attributes:
         seq_dir (Path): Path to the sequence directory.
         max_range (float): Maximum range for LiDAR normalization.
+        accel_scale (float): Divisor for positive acceleration targets.
+        brake_scale (float): Divisor for negative acceleration targets.
         scans (np.ndarray): Normalized scan data array (N, num_points).
         steers (np.ndarray): Steering angle array (N,).
         accels (np.ndarray): Acceleration array (N,).
     """
 
-    def __init__(self, seq_dir: Union[str, Path], max_range: float = 30.0):
+    def __init__(
+        self,
+        seq_dir: Union[str, Path],
+        max_range: float = 30.0,
+        accel_scale: float = 1.0,
+        brake_scale: float = 1.0,
+    ):
         """
         Initializes the dataset from a sequence directory.
 
         Args:
             seq_dir: Path to the directory containing .npy files.
             max_range: Maximum range value to normalize LiDAR data (0.0 to 1.0).
+            accel_scale: Positive acceleration targets are divided by this value.
+            brake_scale: Negative acceleration targets are divided by this value.
+                Both 1.0 keeps the raw values. Use the same values as the
+                inference node (tiny_lidar_net_common.param.yaml).
 
         Raises:
             ValueError: If data lengths do not match or files are missing.
         """
         self.seq_dir = Path(seq_dir)
         self.max_range = max_range
+        if accel_scale <= 0.0 or brake_scale <= 0.0:
+            raise ValueError(
+                f"accel_scale and brake_scale must be positive, got {accel_scale} and {brake_scale}"
+            )
+        self.accel_scale = accel_scale
+        self.brake_scale = brake_scale
 
         try:
             # Load raw data
@@ -74,7 +94,8 @@ class ScanControlSequenceDataset(Dataset):
         # Ensure data is float32 for PyTorch compatibility
         scan = self.scans[idx].astype(np.float32)
         
-        accel = np.float32(self.accels[idx])
+        raw_accel = self.accels[idx]
+        accel = np.float32(raw_accel / (self.accel_scale if raw_accel > 0 else self.brake_scale))
         steer = np.float32(self.steers[idx])
         
         # Target vector construction: [Acceleration, Steering]
@@ -95,6 +116,8 @@ class MultiSeqConcatDataset(ConcatDataset):
         self, 
         dataset_root: Union[str, Path], 
         max_range: float = 30.0, 
+        accel_scale: float = 1.0,
+        brake_scale: float = 1.0,
         include: Optional[List[str]] = None, 
         exclude: Optional[List[str]] = None
     ):
@@ -104,6 +127,8 @@ class MultiSeqConcatDataset(ConcatDataset):
         Args:
             dataset_root: Root directory containing sequence folders.
             max_range: Maximum range for LiDAR normalization.
+            accel_scale: Divisor for positive acceleration targets (1.0 = raw values).
+            brake_scale: Divisor for negative acceleration targets (1.0 = raw values).
             include: List of substrings; if provided, only directories containing
                      at least one of these substrings will be loaded.
             exclude: List of substrings; directories containing any of these
@@ -139,7 +164,9 @@ class MultiSeqConcatDataset(ConcatDataset):
             required_files = ["scans.npy", "steers.npy", "accelerations.npy"]
             if all((seq_dir / f).exists() for f in required_files):
                 try:
-                    ds = ScanControlSequenceDataset(seq_dir, max_range=max_range)
+                    ds = ScanControlSequenceDataset(
+                        seq_dir, max_range=max_range, accel_scale=accel_scale, brake_scale=brake_scale
+                    )
                     datasets.append(ds)
                 except Exception as e:
                     logger.warning(f"Failed to load sequence {seq_dir}: {e}")
