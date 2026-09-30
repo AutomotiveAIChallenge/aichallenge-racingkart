@@ -4,8 +4,8 @@ data:
   val_dir: "/aichallenge/ml_workspace/tiny_lidar_net/dataset/val"
 
 # 学習と推論で共通のパラメータ（model.input_dim, max_range, accel_scale, brake_scale）のファイル。
-# 推論ノードと同じファイルを読むので、値はこのファイルだけで変える。相対パスはこのディレクトリの親（train.py の場所）から
-common_param_path: "../../workspace/src/aichallenge_submit/tiny_lidar_net_controller/config/tiny_lidar_net_common.param.yaml"
+# 推論ノードと同じファイルを読むので、値はこのファイルだけで変える。Docker コンテナ内の固定パス
+common_param_path: "/aichallenge/workspace/src/aichallenge_submit/tiny_lidar_net_controller/config/tiny_lidar_net_common.param.yaml"
 
 model:
   # "TinyLidarNet" または "TinyLidarNetSmall"
