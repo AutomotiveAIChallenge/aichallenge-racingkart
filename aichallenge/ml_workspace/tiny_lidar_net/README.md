@@ -44,13 +44,13 @@ python3 train.py \
 
 ### 学習と推論で共通のパラメータ
 
-`model.input_dim`、`max_range`、`accel_scale`、`brake_scale` は、推論ノードと同じファイル [tiny_lidar_net_common.param.yaml](../../workspace/src/aichallenge_submit/tiny_lidar_net_controller/config/tiny_lidar_net_common.param.yaml) から読みます（`config/train.yaml` の `common_param_path`）。値はこのファイルだけで変えてください。
+`model.input_dim`、`max_range`、`accel_scale`、`decel_scale` は、推論ノードと同じファイル [tiny_lidar_net_common.param.yaml](../../workspace/src/aichallenge_submit/tiny_lidar_net_controller/config/tiny_lidar_net_common.param.yaml) から読みます（`config/train.yaml` の `common_param_path`）。値はこのファイルだけで変えてください。
 
-モデルの出力層は `tanh` なので、出力は (-1, 1) に収まります。アクセルも学習する場合（推論側の `control_mode: "ai"`）は、`accel_scale` / `brake_scale` で加速度の範囲を広げられます。
+モデルの出力層は `tanh` なので、出力は (-1, 1) に収まります。加速度も学習する場合（推論側の `control_mode: "ai"`）は、`accel_scale` / `decel_scale` で目標加速度の正側と負側の範囲を広げられます。負の目標加速度は必ずしもブレーキ操作を意味しません。
 
-- 学習: 教師の加速度を、正の値は `accel_scale`、負の値は `brake_scale` で割る
-- 推論: [-1, 1] にクリップした出力に、正なら `accel_scale`、負なら `brake_scale` を掛ける
-- 例: `accel_scale: 1.37`、`brake_scale: 3.0` なら、+1.37 〜 -3.0 m/s² まで出せます。教師の加速度がこの範囲を超えると、割った後も ±1 を超えるので、データの最大値以上の値にしてください
+- 学習: 教師の加速度を、正の値は `accel_scale`、負の値は `decel_scale` で割る
+- 推論: [-1, 1] にクリップした出力に、正なら `accel_scale`、負なら `decel_scale` を掛ける
+- 例: `accel_scale: 1.37`、`decel_scale: 3.0` なら、+1.37 〜 -3.0 m/s² まで出せます。教師の加速度がこの範囲を超えると、割った後も ±1 を超えるので、データの最大値以上の値にしてください
 - 既定値の 1.0 は従来どおり（±1.0 m/s²）です
 
 ## 重みの形式変換

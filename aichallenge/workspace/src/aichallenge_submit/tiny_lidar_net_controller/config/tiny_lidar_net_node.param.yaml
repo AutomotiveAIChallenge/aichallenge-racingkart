@@ -1,5 +1,5 @@
 # 推論ノード固有のパラメータ。学習と共通のパラメータ（model.input_dim, max_range,
-# accel_scale, brake_scale）は tiny_lidar_net_common.param.yaml にある。
+# accel_scale, decel_scale）は tiny_lidar_net_common.param.yaml にある。
 /**:
   ros__parameters:
     log_interval_sec: 5.0        # 推論統計ログを出す間隔（秒）

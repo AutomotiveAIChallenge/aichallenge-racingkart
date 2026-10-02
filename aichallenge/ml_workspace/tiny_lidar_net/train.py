@@ -7,12 +7,32 @@ import hydra
 from omegaconf import DictConfig, OmegaConf
 from torch.utils.tensorboard import SummaryWriter
 from datetime import datetime
+import yaml
 
 from lib.model import TinyLidarNet, TinyLidarNetSmall
 from lib.data import MultiSeqConcatDataset
-from lib.common_params import load_common_params
 from lib.loss import WeightedSmoothL1Loss
 
+
+def load_common_params(path):
+    """Load training parameters from the ROS parameter file used by inference."""
+    params = {"input_dim": 750, "max_range": 30.0, "accel_scale": 1.0, "decel_scale": 1.0}
+    if path is None:  # Older train.yaml files did not specify a common file.
+        return params
+
+    param_path = Path(path).expanduser()
+    if not param_path.is_absolute():
+        param_path = Path(__file__).resolve().parent / param_path
+    with param_path.open() as f:
+        ros_params = (yaml.safe_load(f) or {}).get("/**", {}).get("ros__parameters", {})
+    if "input_dim" in ros_params.get("model", {}):
+        params["input_dim"] = int(ros_params["model"]["input_dim"])
+    for key in ("max_range", "accel_scale", "decel_scale"):
+        if key in ros_params:
+            params[key] = float(ros_params[key])
+    if params["accel_scale"] <= 0.0 or params["decel_scale"] <= 0.0:
+        raise ValueError("accel_scale and decel_scale must be positive")
+    return params
 
 
 def clean_numerical_tensor(x: torch.Tensor) -> torch.Tensor:
@@ -33,7 +53,7 @@ def main(cfg: DictConfig):
 
     # === Common parameters (shared with the inference node) ===
     # 古い train.yaml（common_param_path が無い）では従来の既定値を使う
-    common = load_common_params(cfg.get("common_param_path"), base_dir=Path(__file__).resolve().parent)
+    common = load_common_params(cfg.get("common_param_path"))
     input_dim = cfg.model.get("input_dim", common["input_dim"])
     if input_dim != common["input_dim"]:
         raise ValueError(
@@ -46,7 +66,7 @@ def main(cfg: DictConfig):
     dataset_kwargs = dict(
         max_range=common["max_range"],
         accel_scale=common["accel_scale"],
-        brake_scale=common["brake_scale"],
+        decel_scale=common["decel_scale"],
     )
     train_dataset = MultiSeqConcatDataset(cfg.data.train_dir, **dataset_kwargs)
     val_dataset = MultiSeqConcatDataset(cfg.data.val_dir, **dataset_kwargs)

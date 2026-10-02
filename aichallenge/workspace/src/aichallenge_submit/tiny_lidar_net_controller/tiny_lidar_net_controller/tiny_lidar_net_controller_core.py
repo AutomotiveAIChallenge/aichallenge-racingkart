@@ -20,7 +20,7 @@ class TinyLidarNetCore:
         control_mode (str): Control strategy ('ai' or 'fixed').
         max_range (float): Maximum LiDAR range used for normalization and clipping.
         accel_scale (float): Multiplier for positive acceleration outputs in 'ai' mode.
-        brake_scale (float): Multiplier for negative acceleration outputs in 'ai' mode.
+        decel_scale (float): Multiplier for negative acceleration outputs in 'ai' mode.
         model (object): The instantiated neural network model.
         logger (logging.Logger): Logger instance.
     """
@@ -35,7 +35,7 @@ class TinyLidarNetCore:
         control_mode: str = 'ai',
         max_range: float = 30.0,
         accel_scale: float = 1.0,
-        brake_scale: float = 1.0
+        decel_scale: float = 1.0
     ):
         """Initializes the TinyLidarNetCore with specified parameters.
 
@@ -59,7 +59,7 @@ class TinyLidarNetCore:
                 by this value. Defaults to 30.0.
             accel_scale (float, optional): In 'ai' mode, a positive acceleration
                 output (clipped to [-1, 1]) is multiplied by this value. Defaults to 1.0.
-            brake_scale (float, optional): In 'ai' mode, a negative acceleration
+            decel_scale (float, optional): In 'ai' mode, a negative acceleration
                 output is multiplied by this value. Defaults to 1.0.
                 Both must match the values used for training
                 (tiny_lidar_net_common.param.yaml).
@@ -70,12 +70,12 @@ class TinyLidarNetCore:
         self.acceleration = acceleration
         self.control_mode = control_mode.lower()
         self.max_range = max_range
-        if accel_scale <= 0.0 or brake_scale <= 0.0:
+        if accel_scale <= 0.0 or decel_scale <= 0.0:
             raise ValueError(
-                f"accel_scale and brake_scale must be positive, got {accel_scale} and {brake_scale}"
+                f"accel_scale and decel_scale must be positive, got {accel_scale} and {decel_scale}"
             )
         self.accel_scale = accel_scale
-        self.brake_scale = brake_scale
+        self.decel_scale = decel_scale
         self.logger = logging.getLogger(__name__)
 
         if self.architecture == 'small':
@@ -101,7 +101,7 @@ class TinyLidarNetCore:
             Tuple[float, float]: A tuple containing (acceleration, steering_angle).
                 Values are clipped between -1.0 and 1.0. In 'ai' mode the clipped
                 acceleration is then multiplied by accel_scale (positive) or
-                brake_scale (negative).
+                decel_scale (negative).
         """
         # 1. Preprocess (Clean -> Resize -> Normalize)
         processed_ranges = self._preprocess_ranges(ranges)
@@ -115,7 +115,7 @@ class TinyLidarNetCore:
         # 3. Post-process
         if self.control_mode == "ai":
             accel = float(np.clip(outputs[0], -1.0, 1.0))
-            accel *= self.accel_scale if accel > 0.0 else self.brake_scale
+            accel *= self.accel_scale if accel > 0.0 else self.decel_scale
         else:
             accel = self.acceleration
 

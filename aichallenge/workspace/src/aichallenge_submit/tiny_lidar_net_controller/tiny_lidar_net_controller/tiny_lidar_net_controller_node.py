@@ -30,7 +30,7 @@ class TinyLidarNetNode(Node):
         self.declare_parameter('max_range', 30.0)
         self.declare_parameter('acceleration', 0.1)
         self.declare_parameter('accel_scale', 1.0)
-        self.declare_parameter('brake_scale', 1.0)
+        self.declare_parameter('decel_scale', 1.0)
         self.declare_parameter('control_mode', 'ai')
         self.declare_parameter('debug', False)
 
@@ -42,7 +42,7 @@ class TinyLidarNetNode(Node):
         max_range = self.get_parameter('max_range').value
         acceleration = self.get_parameter('acceleration').value
         accel_scale = self.get_parameter('accel_scale').value
-        brake_scale = self.get_parameter('brake_scale').value
+        decel_scale = self.get_parameter('decel_scale').value
         control_mode = self.get_parameter('control_mode').value
         
         self.debug = self.get_parameter('debug').value
@@ -58,11 +58,11 @@ class TinyLidarNetNode(Node):
                 control_mode=control_mode,
                 max_range=max_range,
                 accel_scale=accel_scale,
-                brake_scale=brake_scale
+                decel_scale=decel_scale
             )
             self.get_logger().info(
                 f"Core initialized. Arch: {architecture}, MaxRange: {max_range}, "
-                f"AccelScale: {accel_scale}, BrakeScale: {brake_scale}"
+                f"AccelScale: {accel_scale}, DecelScale: {decel_scale}"
             )
         except Exception as e:
             self.get_logger().error(f"Failed to initialize core logic: {e}")
