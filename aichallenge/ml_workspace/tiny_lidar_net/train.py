@@ -7,11 +7,32 @@ import hydra
 from omegaconf import DictConfig, OmegaConf
 from torch.utils.tensorboard import SummaryWriter
 from datetime import datetime
+import yaml
 
 from lib.model import TinyLidarNet, TinyLidarNetSmall
 from lib.data import MultiSeqConcatDataset
 from lib.loss import WeightedSmoothL1Loss
 
+
+def load_common_params(path):
+    """Load training parameters from the ROS parameter file used by inference."""
+    params = {"input_dim": 750, "max_range": 30.0, "accel_scale": 1.0, "decel_scale": 1.0}
+    if path is None:  # Older train.yaml files did not specify a common file.
+        return params
+
+    param_path = Path(path).expanduser()
+    if not param_path.is_absolute():
+        param_path = Path(__file__).resolve().parent / param_path
+    with param_path.open() as f:
+        ros_params = (yaml.safe_load(f) or {}).get("/**", {}).get("ros__parameters", {})
+    if "input_dim" in ros_params.get("model", {}):
+        params["input_dim"] = int(ros_params["model"]["input_dim"])
+    for key in ("max_range", "accel_scale", "decel_scale"):
+        if key in ros_params:
+            params[key] = float(ros_params[key])
+    if params["accel_scale"] <= 0.0 or params["decel_scale"] <= 0.0:
+        raise ValueError("accel_scale and decel_scale must be positive")
+    return params
 
 
 def clean_numerical_tensor(x: torch.Tensor) -> torch.Tensor:
@@ -30,9 +51,25 @@ def main(cfg: DictConfig):
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f"Using device: {device}")
 
+    # === Common parameters (shared with the inference node) ===
+    # 古い train.yaml（common_param_path が無い）では従来の既定値を使う
+    common = load_common_params(cfg.get("common_param_path"))
+    input_dim = cfg.model.get("input_dim", common["input_dim"])
+    if input_dim != common["input_dim"]:
+        raise ValueError(
+            f"model.input_dim ({input_dim}) differs from input_dim in the common parameter file "
+            f"({common['input_dim']}). Set it only in the common parameter file."
+        )
+    print(f"Common parameters: {common}")
+
     # === Dataset ===
-    train_dataset = MultiSeqConcatDataset(cfg.data.train_dir)
-    val_dataset = MultiSeqConcatDataset(cfg.data.val_dir)
+    dataset_kwargs = dict(
+        max_range=common["max_range"],
+        accel_scale=common["accel_scale"],
+        decel_scale=common["decel_scale"],
+    )
+    train_dataset = MultiSeqConcatDataset(cfg.data.train_dir, **dataset_kwargs)
+    val_dataset = MultiSeqConcatDataset(cfg.data.val_dir, **dataset_kwargs)
 
     train_loader = DataLoader(
         train_dataset,
@@ -55,12 +92,12 @@ def main(cfg: DictConfig):
     # === Model ===
     if cfg.model.name == "TinyLidarNetSmall":
         model = TinyLidarNetSmall(
-            input_dim=cfg.model.input_dim,
+            input_dim=input_dim,
             output_dim=cfg.model.output_dim
         ).to(device)
     else:
         model = TinyLidarNet(
-            input_dim=cfg.model.input_dim,
+            input_dim=input_dim,
             output_dim=cfg.model.output_dim
         ).to(device)
 

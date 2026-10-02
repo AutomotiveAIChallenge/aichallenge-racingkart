@@ -42,6 +42,17 @@ python3 train.py \
 
 ステアのみを学習した重みで走らせる場合は、[tiny_lidar_net_controller の設定](../../workspace/src/aichallenge_submit/tiny_lidar_net_controller/config/tiny_lidar_net_node.param.yaml) の `control_mode` を `"fixed"`（既定値）のままにしてください。
 
+### 学習と推論で共通のパラメータ
+
+`model.input_dim`、`max_range`、`accel_scale`、`decel_scale` は、推論ノードと同じファイル [tiny_lidar_net_common.param.yaml](../../workspace/src/aichallenge_submit/tiny_lidar_net_controller/config/tiny_lidar_net_common.param.yaml) から読みます（`config/train.yaml` の `common_param_path`）。値はこのファイルだけで変えてください。
+
+モデルの出力層は `tanh` なので、出力は (-1, 1) に収まります。加速度も学習する場合（推論側の `control_mode: "ai"`）は、`accel_scale` / `decel_scale` で目標加速度の正側と負側の範囲を広げられます。負の目標加速度は必ずしもブレーキ操作を意味しません。
+
+- 学習: 教師の加速度を、正の値は `accel_scale`、負の値は `decel_scale` で割る
+- 推論: [-1, 1] にクリップした出力に、正なら `accel_scale`、負なら `decel_scale` を掛ける
+- 例: `accel_scale: 1.37`、`decel_scale: 3.0` なら、+1.37 〜 -3.0 m/s² まで出せます。教師の加速度がこの範囲を超えると、割った後も ±1 を超えるので、データの最大値以上の値にしてください
+- 既定値の 1.0 は従来どおり（±1.0 m/s²）です
+
 ## 重みの形式変換
 採点環境において実行できるように、pytorchではなくnumpyを用います。そのため、`.pth`から`.npy/.npz`に重みを変換します。
 学習した重みは `config/train.yaml` の `train.save_dir`（既定は `checkpoints/`）に `best_model.pth` として保存されます。
