@@ -80,7 +80,7 @@ if args.obs:
             f.write(f"{x},{y}\n")
 else:
     if len(wp_x) < 2:
-        print("少なくとも2つのポイントを選択してください。")
+        print("少なくとも2つのポイントを選択してください。 / Select at least two points.")
     else:
         waypoint_file_path = path.join(base_path, base_name + '_waypoints.csv')
         with open(waypoint_file_path, 'w') as f:
