@@ -1,0 +1,22 @@
+# make practice-4car 専用の compose overlay。practice_race.bash が COMPOSE_FILE の末尾に足すときだけ読まれ、
+# 既存の docker-compose*.yml と他の make ターゲットの挙動は変わらない。
+# Overlay used only by make practice-4car (practice_race.bash appends it to COMPOSE_FILE).
+# The existing docker-compose*.yml files and every other make target are unchanged.
+services:
+  simulator:
+    environment:
+      - PRACTICE_CLASS=${PRACTICE_CLASS:-}
+      - PRACTICE_HANDICAP=${PRACTICE_HANDICAP:-}
+      - PRACTICE_NPCS=${PRACTICE_NPCS:-}
+      - PRACTICE_VEHICLES=${PRACTICE_VEHICLES:-}
+      - PRACTICE_HEADLESS=${PRACTICE_HEADLESS:-}
+
+  # `autoware` と同じ設定で、/aichallenge/workspace だけを出走位置ごとの workspace に差し替える。
+  # Same as `autoware`, with /aichallenge/workspace replaced by one slot's workspace.
+  autoware-slot:
+    extends:
+      file: docker-compose.yml
+      service: autoware
+    volumes:
+      - ${SLOT_WORKSPACE:-./aichallenge/workspace}:/aichallenge/workspace
+    command: ["bash", "-lc", "exec ${SLOT_TASKSET:-} /aichallenge/run_autoware.bash ${RUN_MODE:-awsim-no-viz} ${ROS_DOMAIN_ID:-1} ${LOG_DIR:-}"]

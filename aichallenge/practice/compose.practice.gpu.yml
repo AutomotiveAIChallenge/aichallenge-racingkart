@@ -1,0 +1,16 @@
+# make practice-4car 専用。.env の COMPOSE_FILE に docker-compose.gpu.yml が含まれるときだけ practice_race.bash が足す。
+# docker-compose.gpu.yml が autoware に与えるのと同じ GPU 設定を autoware-slot にも与える。
+# Added by practice_race.bash only when the .env COMPOSE_FILE includes docker-compose.gpu.yml:
+# gives autoware-slot the same GPU settings that docker-compose.gpu.yml gives autoware.
+services:
+  autoware-slot:
+    environment:
+      - NVIDIA_VISIBLE_DEVICES=all
+      - NVIDIA_DRIVER_CAPABILITIES=all
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: ["gpu"]
