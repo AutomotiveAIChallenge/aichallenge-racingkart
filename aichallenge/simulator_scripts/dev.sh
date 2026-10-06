@@ -22,8 +22,8 @@ exec $AWSIM_DIRECTORY/AWSIM.x86_64 \
     --wall-recovery off \
     --overtaking-lane off \
     --ranking off \
-    --camera off \
-    --lidar off
+    --camera gpu \
+    --lidar gpu
 
 # Cameraを使う場合 : --camera cpu or gpu
 # LiDARを使う場合 : --lidar cpu or gpu
