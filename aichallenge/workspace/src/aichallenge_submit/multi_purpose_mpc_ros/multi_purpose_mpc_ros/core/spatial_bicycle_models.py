@@ -264,7 +264,7 @@ class SpatialBicycleModel(ABC):
         """
 
         # Compute cumulative path length
-        length_cum = np.cumsum(self.reference_path.segment_lengths)
+        length_cum = self.reference_path.length_cum
         # Get first index with distance larger than distance traveled by car
         # so far
         greater_than_threshold = length_cum > self.s
@@ -298,8 +298,8 @@ class SpatialBicycleModel(ABC):
         :return: Index of the closest waypoint
         """
         # Compute distances from the point to all waypoints
-        distances = np.sqrt((np.array([wp.x for wp in self.reference_path.waypoints]) - x)**2 +
-                            (np.array([wp.y for wp in self.reference_path.waypoints]) - y)**2)
+        xy = self.reference_path.waypoints_xy
+        distances = np.sqrt((xy[:, 0] - x)**2 + (xy[:, 1] - y)**2)
 
         # Get the index of the closest waypoint
         closest_wp_id = np.argmin(distances)
@@ -314,7 +314,7 @@ class SpatialBicycleModel(ABC):
         :return: Distance s along the reference path
         """
         # Compute cumulative path length
-        length_cum = np.cumsum(self.reference_path.segment_lengths)
+        length_cum = self.reference_path.length_cum
 
         # Distance s at the closest waypoint
         s_at_closest_wp = length_cum[wp_id]
@@ -486,5 +486,33 @@ class BicycleModel(SpatialBicycleModel):
 
         A = np.stack((a_1, a_2, a_3), axis=0)
         B = np.stack((b_1, b_2, b_3), axis=0)
+
+        return f, A, B
+
+    def linearize_batch(self, v_ref, kappa_ref, delta_s):
+        """
+        Vectorized, element-wise-identical batch version of `linearize`.
+        :param v_ref: (n,) velocity references around which to linearize
+        :param kappa_ref: (n,) waypoint curvatures
+        :param delta_s: (n,) distance between consecutive waypoints
+        :return: f (n,3), A (n,3,3), B (n,3,2)
+        """
+        n = len(delta_s)
+        A = np.zeros((n, 3, 3))
+        B = np.zeros((n, 3, 2))
+        f = np.zeros((n, 3))
+
+        A[:, 0, 0] = 1.0
+        A[:, 0, 1] = delta_s
+        A[:, 1, 0] = -kappa_ref**2 * delta_s
+        A[:, 1, 1] = 1.0
+        A[:, 2, 2] = 1.0
+        B[:, 1, 1] = delta_s
+
+        nz = v_ref != 0
+        with np.errstate(divide="ignore", invalid="ignore"):
+            A[nz, 2, 0] = -kappa_ref[nz] / v_ref[nz] * delta_s[nz]
+            B[nz, 2, 0] = -1.0 / v_ref[nz]**2 * delta_s[nz]
+            f[nz, 2] = 1.0 / v_ref[nz] * delta_s[nz]
 
         return f, A, B
