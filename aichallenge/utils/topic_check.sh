@@ -296,15 +296,16 @@ main() {
     # actuation_cmd の内容チェック
     echo ""
     echo "[INFO] actuation_cmd 内容チェック（accel_cmd > 0 かつ brake_cmd = 0.0）"
-    actuation_result=$(check_actuation_cmd) || true
-    actuation_rc=$?
+    # `|| true` would reset $? to 0, so capture the status in the fallback branch instead.
+    actuation_rc=0
+    actuation_result=$(check_actuation_cmd) || actuation_rc=$?
     printf '%-50s %s\n' "/control/command/actuation_cmd" "$actuation_result"
 
     # awsim トピックチェック
     echo ""
     echo "[INFO] AWSIM トピックチェック（実車環境確認）"
-    awsim_result=$(check_awsim_topics) || true
-    awsim_rc=$?
+    awsim_rc=0
+    awsim_result=$(check_awsim_topics) || awsim_rc=$?
     printf '%-50s %s\n' "AWSIM topics absence" "$awsim_result"
     echo ""
     echo "===== SUMMARY ====="
