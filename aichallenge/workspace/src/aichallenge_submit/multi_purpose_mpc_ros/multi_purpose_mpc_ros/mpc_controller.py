@@ -263,9 +263,12 @@ class MPCController(Node):
 
             for param in parameters:
                 if param.name == "v_max" and param.type_ == Parameter.Type.DOUBLE:
-                    mpc_cfg.v_max = param.value
-                    self._mpc.update_v_max(kmh_to_m_per_sec(param.value))
-                    v_ref: List[float] = [kmh_to_m_per_sec(param.value)] * len(self._reference_path.waypoints)
+                    # The parameter is km/h (as in config.yaml) but MPCConfig.v_max is m/s
+                    # everywhere else, e.g. the per-tick ref_vel cap in _control().
+                    # パラメータは km/h、MPCConfig.v_max は m/s で保持する。
+                    mpc_cfg.v_max = kmh_to_m_per_sec(param.value)
+                    self._mpc.update_v_max(mpc_cfg.v_max)
+                    v_ref: List[float] = [mpc_cfg.v_max] * len(self._reference_path.waypoints)
                     self._reference_path.set_v_ref(v_ref)
 
                     self.get_logger().warn(f"v_max was updated to '{param.value}' [km/h]")
