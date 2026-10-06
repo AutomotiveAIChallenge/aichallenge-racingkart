@@ -19,16 +19,31 @@ class V2XVehicleTracker:
     """Tracks the latest two samples per ``vehicle_id`` and exposes
     constant-velocity predictions over a caller-provided time grid."""
 
-    def __init__(self, v_max_safety: float, position_jump_threshold: float, warn_callback=None):
+    def __init__(self, v_max_safety: float, position_jump_threshold: float, warn_callback=None,
+                 hold_time_s: float = 0.0):
         self._v_max_safety = float(v_max_safety)
         self._jump_thresh = float(position_jump_threshold)
         self._warn = warn_callback if warn_callback is not None else (lambda _msg: None)
         self._samples: Dict[str, Deque[Tuple[float, float, float]]] = {}
         self._velocities: Dict[str, Tuple[float, float]] = {}
         self._active: List[str] = []
+        # Dropout hold: keep a vehicle missing from the latest message for
+        # hold_time_s after its last sample (fail-closed). 0.0 = off, i.e. the
+        # active set is exactly the latest message (historical behaviour).
+        # 最新メッセージに無い車両を hold_time_s の間だけ保持する（0.0 で従来挙動）。
+        self._hold_time_s = max(0.0, float(hold_time_s))
+        self._last_seen: Dict[str, float] = {}
+        self._newest_t: float = 0.0
 
     def update(self, msg) -> None:
         active: List[str] = []
+        # Advance the tracker clock from the array header even when
+        # ``vehicles`` is empty, so held vehicles can still expire. Per-vehicle
+        # stamps (used for velocity) are tracked separately below.
+        # vehicles が空でも配列ヘッダーの時刻で時計を進め、保持中の車両を失効させる。
+        header_t = _stamp_to_seconds(msg.header.stamp)
+        if header_t > self._newest_t:
+            self._newest_t = header_t
         for v in msg.vehicles:
             vid = v.vehicle_id
             t = _stamp_to_seconds(v.header.stamp)
@@ -68,6 +83,9 @@ class V2XVehicleTracker:
                 else:
                     self._velocities[vid] = (0.0, 0.0)
             active.append(vid)
+            self._last_seen[vid] = t
+            if t > self._newest_t:
+                self._newest_t = t
         self._active = active
 
     def velocity(self, vehicle_id: str) -> Tuple[float, float]:
@@ -79,15 +97,31 @@ class V2XVehicleTracker:
         buf = self._samples.get(vehicle_id)
         if not buf:
             return []
-        _t_last, x_last, y_last = buf[-1]
+        t_last, x_last, y_last = buf[-1]
         vx, vy = self._velocities.get(vehicle_id, (0.0, 0.0))
-        return [(x_last + vx * t, y_last + vy * t) for t in t_samples]
+        # A held vehicle is extrapolated from the age of its last sample, so it
+        # is predicted where it is now, not where it was last seen.
+        age = max(0.0, self._newest_t - t_last) if self._hold_time_s > 0.0 else 0.0
+        return [(x_last + vx * (age + t), y_last + vy * (age + t)) for t in t_samples]
 
     def active_vehicle_ids(self) -> List[str]:
-        return list(self._active)
+        if self._hold_time_s <= 0.0:
+            return list(self._active)
+        out = list(self._active)
+        seen = set(out)
+        for vid, t_seen in self._last_seen.items():
+            if vid not in seen and self._newest_t - t_seen <= self._hold_time_s:
+                out.append(vid)
+        return out
+
+    def held_vehicle_ids(self) -> List[str]:
+        """Vehicles kept only by the hold (absent from the latest message)."""
+        seen = set(self._active)
+        return [vid for vid in self.active_vehicle_ids() if vid not in seen]
 
     def predict_all(self, t_samples) -> Dict[str, List[Tuple[float, float]]]:
-        return {vid: self.predict_positions(vid, t_samples) for vid in self._active}
+        return {vid: self.predict_positions(vid, t_samples)
+                for vid in self.active_vehicle_ids()}
 
 
 def predictions_to_obstacles(predictions, vehicle_radius: float, obstacle_cls=None):
