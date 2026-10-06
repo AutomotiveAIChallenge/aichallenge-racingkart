@@ -12,6 +12,11 @@
     initial_pose_service_timeout_sec: 60.0
     control_mode_request_topic: /awsim/control_mode_request_topic
     capture_service: /debug/service/capture_screen
+    # capture_service (wait_for_service + call) の合計上限秒。0以下で無限待ち。
+    # If /debug/service/capture_screen never appears (RViz crashed, or
+    # run_rviz:=false) or never responds, skip after this many seconds so
+    # rosbag/motion analytics/latest link updates are not blocked forever.
+    capture_service_timeout_sec: 10.0
     # capture停止(別スレッド)のjoin上限秒。0以下で無限待ち。
     capture_stop_timeout_sec: 60.0
     rosbag_topics:
