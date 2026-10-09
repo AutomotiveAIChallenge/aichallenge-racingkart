@@ -165,9 +165,7 @@ def validate(model, loader, device, criterion):
             loss = criterion(outputs, targets)
             total_loss += loss.item()
             n_batches += 1
-    if n_batches == 0:
-        return float("inf")
-    return total_loss / n_batches
+    return total_loss / n_batches if n_batches > 0 else float("inf")
 
 
 if __name__ == "__main__":
