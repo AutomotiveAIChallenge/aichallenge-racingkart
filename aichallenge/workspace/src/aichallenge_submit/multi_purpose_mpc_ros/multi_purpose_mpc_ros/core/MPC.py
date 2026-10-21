@@ -57,28 +57,185 @@ class MPC:
         self.current_control = np.zeros((self.nu*self.N))
         self.optimizer = osqp.OSQP()
 
+        # 追加: サイクル不変な QP 構造のキャッシュ (key = N)
+        # - _cost_cache: (P, q_Q_tile, q_R_tile). update_Q/update_R/update_QN で無効化。
+        # - _rate_matrix_cache: ステアリングレート制約込みの不等式行列 (eye + rate) の csc。
+        # - _eq_pattern_cache: Aeq の COO (rows, cols) パターン (値は毎サイクル差し替え)。
+        # - _bounds_template_cache: kron で作る境界テンプレート。update_v_max で無効化
+        #   (umax配列がin-placeで書き換えられるため)。
+        self._cost_cache = {}
+        self._rate_matrix_cache = {}
+        self._eq_pattern_cache = {}
+        self._bounds_template_cache = {}
+
+        # 追加: OSQP ワークスペース永続化キャッシュ。setup() 済みの A_full / P の
+        # スパースパターン (N, indptr, indices) を保持し、次サイクルで両方の
+        # パターンが一致すれば optimizer.update() で使い回す (Task 5)。P の値は
+        # update() 呼び出しのたびに Px=P.data として毎サイクル送信するため、
+        # update_Q/update_R/update_QN はキャッシュを無効化しない (パターンが
+        # 変わらない限り update() 経路が維持される)。パラメータコールバックは
+        # MultiThreadedExecutor 上で _control() (メインスレッド) と非同期に
+        # 実行されるため、値のみを都度送信する方式は「clear してから再構築」
+        # 方式より競合状態に強い (他スレッドの clear が別スレッドの再構築で
+        # 上書きされて古い P が固定されてしまうことがない)。
+        # update_v_max/update_ay_max/update_wp_id_offset は l/u/q の値のみに
+        # 影響し P の値にも A_full のスパースパターンにも影響しないため、
+        # ここでは無効化しない。
+        self._osqp_cache = None
+
         if not self.use_obstacle_avoidance:
             self.model.reference_path.update_simple_path_constraints(
                 N,
                 self.model.safety_margin)
 
     def update_v_max(self, v_max: float):
+        if self.input_constraints['umax'][0] == v_max:
+            # 値が変化しない呼び出し (mpc_controller.py の _control() から毎サイクル
+            # 呼ばれる) では何もする必要がない。テンプレートの失効判定は
+            # _get_bounds_template() 側 (fetch 側) で行うため、ここでキャッシュを
+            # 触る必要はない。
+            return
         self.input_constraints['umax'][0] = v_max
+        # 注意: v_max は l/u/q の値のみに影響し、P の値にも A_full のスパース
+        # パターンにも影響しないため _osqp_cache は無効化しない (update() 経路を
+        # 維持する)。この関数は mpc_controller.py の _control() から毎サイクル
+        # 呼ばれるため、無効化すると osqp の再 setup が毎サイクル発生してしまう。
 
     def update_ay_max(self, ay_max: float):
         self.ay_max = ay_max
+        # v_max と同様、ay_max も umax_dyn (u ベクトルの値) にのみ影響し P の値にも
+        # A_full のスパースパターンにも影響しないため _osqp_cache は無効化しない。
 
     def update_wp_id_offset(self, wp_id_offset: int):
         self.wp_id_offset = wp_id_offset
 
     def update_Q(self, Q: np.ndarray):
         self.Q = Q
+        self._cost_cache.clear()
+        # P の新しい値は _setup_or_update() が毎サイクル Px=P.data として
+        # optimizer.update() に送信するため、ここで _osqp_cache を無効化する
+        # 必要はない (無効化すると P の値のみ変わるだけなのに毎回 re-setup
+        # してしまい、Task 5 の効果が消える)。
 
     def update_R(self, R: np.ndarray):
         self.R = R
+        self._cost_cache.clear()
 
     def update_QN(self, QN: np.ndarray):
         self.QN = QN
+        self._cost_cache.clear()
+
+    def _get_eq_pattern(self, N):
+        """COO (rows, cols) pattern of Aeq for horizon length N (cached).
+
+        Layout matches the original dense construction exactly:
+        Ax = kron(eye(N+1), -eye(nx)) + block_diag_offdiag(A_lin blocks),
+        Bu = block_diag_offdiag(B_lin blocks), Aeq = hstack([Ax, Bu]).
+        """
+        if N not in self._eq_pattern_cache:
+            nx, nu = self.nx, self.nu
+            nx_N = nx * (N + 1)
+            n_idx = np.arange(N)
+
+            # -I diagonal (nx_N entries)
+            rows_diag = np.arange(nx_N)
+            cols_diag = np.arange(nx_N)
+
+            # A_lin blocks: row (n+1)*nx + r, col n*nx + c, all nx*nx entries
+            rr, cc = np.meshgrid(np.arange(nx), np.arange(nx), indexing='ij')
+            rows_A = ((n_idx + 1) * nx)[:, None, None] + rr[None, :, :]
+            cols_A = (n_idx * nx)[:, None, None] + cc[None, :, :]
+
+            # B_lin blocks: row (n+1)*nx + r, col nx_N + n*nu + c, all nx*nu entries
+            rr2, cc2 = np.meshgrid(np.arange(nx), np.arange(nu), indexing='ij')
+            rows_B = ((n_idx + 1) * nx)[:, None, None] + rr2[None, :, :]
+            cols_B = nx_N + (n_idx * nu)[:, None, None] + cc2[None, :, :]
+
+            rows = np.concatenate([rows_diag, rows_A.ravel(), rows_B.ravel()])
+            cols = np.concatenate([cols_diag, cols_A.ravel(), cols_B.ravel()])
+            self._eq_pattern_cache[N] = (rows, cols)
+        return self._eq_pattern_cache[N]
+
+    def _get_rate_ineq(self, N):
+        """Combined [eye(nx_N+nu_N); steering_rate_matrix] inequality matrix
+        (constant for a given N, cached)."""
+        if N not in self._rate_matrix_cache:
+            nx, nu = self.nx, self.nu
+            nx_N = nx * (N + 1)
+            nu_N = nu * N
+            n_rate = N - 1
+
+            i_idx = np.arange(n_rate)
+            rows_rate = np.concatenate([i_idx, i_idx])
+            cols_rate = np.concatenate([
+                nx_N + nu * i_idx + 1,
+                nx_N + nu * (i_idx + 1) + 1,
+            ])
+            vals_rate = np.concatenate([-np.ones(n_rate), np.ones(n_rate)])
+            rate_csc = sparse.csc_matrix(
+                (vals_rate, (rows_rate, cols_rate)), shape=(n_rate, nx_N + nu_N))
+
+            A_inequality = sparse.vstack([
+                sparse.eye(nx_N + nu_N, format='csc'),
+                rate_csc,
+            ], format='csc')
+            self._rate_matrix_cache[N] = A_inequality
+        return self._rate_matrix_cache[N]
+
+    def _get_bounds_template(self, N):
+        """kron-expanded constraint templates for horizon N (cached).
+
+        Staleness is detected fetch-side rather than at update_v_max()'s call
+        site: update_v_max() runs on a parameter-callback thread concurrently
+        with _control() (main thread) via MultiThreadedExecutor, so a
+        clear-on-write there could race with a rebuild on this thread. Instead
+        we stash the umin[0]/umax[0] values baked into the cached template and
+        rebuild here whenever they no longer match the live
+        input_constraints values.
+        """
+        # Snapshot once so the values baked into the template and the values
+        # stored as the staleness tag are guaranteed identical even if
+        # update_v_max() writes concurrently mid-build.
+        umin = self.input_constraints['umin'].copy()
+        umax = self.input_constraints['umax'].copy()
+        cached = self._bounds_template_cache.get(N)
+        if (cached is None
+                or cached[4] != umax[0]
+                or cached[5] != umin[0]):
+            xmin = self.state_constraints['xmin']
+            xmax = self.state_constraints['xmax']
+            xmin_dyn = np.kron(np.ones(N + 1), xmin)
+            xmax_dyn = np.kron(np.ones(N + 1), xmax)
+            umin_dyn = np.kron(np.ones(N), umin)
+            umax_dyn = np.kron(np.ones(N), umax)
+            cached = (xmin_dyn, xmax_dyn, umin_dyn, umax_dyn, umax[0], umin[0])
+            self._bounds_template_cache[N] = cached
+        return cached[:4]
+
+    def _get_cost_cache(self, N):
+        """(P, q_Q_tile, q_R_tile) for horizon N (cached, depends on Q/R/QN).
+
+        Staleness is detected fetch-side by identity: update_Q/R/QN rebind
+        the attributes from a parameter-callback thread, so an entry built
+        from an older Q/R/QN (e.g. inserted just after a concurrent clear())
+        is caught on the next fetch, bounding staleness to one cycle.
+        """
+        Q, R, QN = self.Q, self.R, self.QN
+        cached = self._cost_cache.get(N)
+        if (cached is None
+                or cached[3] is not Q
+                or cached[4] is not R
+                or cached[5] is not QN):
+            P = sparse.block_diag([
+                sparse.kron(sparse.eye(N), Q),
+                QN,
+                sparse.kron(sparse.eye(N), R)
+            ], format='csc')
+            q_Q_tile = -np.tile(np.diag(Q.toarray()), N)
+            q_R_tile = -np.tile(np.diag(R.toarray()), N)
+            cached = (P, q_Q_tile, q_R_tile, Q, R, QN)
+            self._cost_cache[N] = cached
+        return cached[:3]
 
     def _init_problem(self, N, safety_margin):
         """
@@ -87,26 +244,18 @@ class MPC:
         # 既存の制約設定
         umin = self.input_constraints['umin']
         umax = self.input_constraints['umax']
-        xmin = self.state_constraints['xmin']
-        xmax = self.state_constraints['xmax']
 
         # Precompute common terms
-        nx_N = self.nx * (N + 1)
-        nu_N = self.nu * N
+        nx = self.nx
+        nu = self.nu
+        nx_N = nx * (N + 1)
+        nu_N = nu * N
 
-        # LTV System Matrices
-        A = np.zeros((nx_N, nx_N))
-        B = np.zeros((nx_N, nu_N))
-
-        # Reference vector
-        ur = np.zeros(nu_N)
-        xr = np.zeros(nx_N)
-        uq = np.zeros(N * self.nx)
-
-        # Dynamic constraints
-        xmin_dyn = np.kron(np.ones(N + 1), xmin)
-        xmax_dyn = np.kron(np.ones(N + 1), xmax)
-        umax_dyn = np.kron(np.ones(N), umax)
+        # Dynamic constraint templates (cached per N)
+        xmin_dyn_tpl, xmax_dyn_tpl, umin_dyn, umax_dyn_tpl = self._get_bounds_template(N)
+        xmin_dyn = xmin_dyn_tpl.copy()
+        xmax_dyn = xmax_dyn_tpl.copy()
+        umax_dyn = umax_dyn_tpl.copy()
 
         # Get curvature predictions
         kappa_pred = np.tan(np.append(np.array(self.current_control[3::self.nu]), self.current_control[-1])) / self.model.length
@@ -114,33 +263,39 @@ class MPC:
         # Consider control delay
         self.model.wp_id += self.wp_id_offset
 
-        # Iterate over horizon
-        for n in range(N):
-            # Get waypoint information
-            current_waypoint = self.model.reference_path.get_waypoint(self.model.wp_id + n)
-            next_waypoint = self.model.reference_path.get_waypoint(self.model.wp_id + n + 1)
-            delta_s = next_waypoint - current_waypoint
-            kappa_ref = current_waypoint.kappa
+        # Vectorized horizon reference lookup (replicates get_waypoint's
+        # circular-mod / non-circular-clamp semantics exactly)
+        ref = self.model.reference_path
+        n_wp = ref.n_waypoints
+        idx = self.model.wp_id + np.arange(N + 1)
+        if ref.circular:
+            idx = idx % n_wp
+        else:
+            idx = np.minimum(idx, n_wp - 1)
 
-            # Clip reference velocity
-            v_ref = np.clip(current_waypoint.v_ref, self.input_constraints['umin'][0], self.input_constraints['umax'][0])
+        xy = ref.waypoints_xy
+        kappa = ref.kappas[idx[:-1]]
+        v_ref = np.clip(ref.v_refs[idx[:-1]], umin[0], umax[0])
+        dx = xy[idx[1:], 0] - xy[idx[:-1], 0]
+        dy = xy[idx[1:], 1] - xy[idx[:-1], 1]
+        # NOTE: (dx**2 + dy**2)**0.5, not np.hypot, for bit-identity with
+        # Waypoint.__sub__ (reference_path.py:145).
+        delta_s = (dx ** 2 + dy ** 2) ** 0.5
 
-            # Compute LTV matrices
-            f, A_lin, B_lin = self.model.linearize(v_ref, kappa_ref, delta_s)
-            A[(n+1) * self.nx: (n+2)*self.nx, n * self.nx:(n+1)*self.nx] = A_lin
-            B[(n+1) * self.nx: (n+2)*self.nx, n * self.nu:(n+1)*self.nu] = B_lin
+        # Compute LTV matrices for the whole horizon at once
+        f, A_lin, B_lin = self.model.linearize_batch(v_ref, kappa, delta_s)
 
-            # Set reference
-            ur[n*self.nu:(n+1)*self.nu] = [v_ref, kappa_ref]
-            uq[n * self.nx:(n+1)*self.nx] = B_lin.dot([v_ref, kappa_ref]) - f
+        # Set reference
+        ur = np.column_stack([v_ref, kappa]).ravel()
+        uq = (B_lin[:, :, 0] * v_ref[:, None] + B_lin[:, :, 1] * kappa[:, None] - f).ravel()
 
-            # Constrain maximum speed based on curvature
-            if self.use_max_kappa_pred:
-                max_kappa_pred = np.max(np.abs(kappa_pred[n:]))
-                vmax_dyn = np.sqrt(self.ay_max / (np.abs(max_kappa_pred) + 1e-12))
-            else:
-                vmax_dyn = np.sqrt(self.ay_max / (np.abs(kappa_pred[n]) + 1e-12))
-            umax_dyn[self.nu*n] = min(vmax_dyn, umax_dyn[self.nu*n])
+        # Constrain maximum speed based on curvature
+        if self.use_max_kappa_pred:
+            suffix_max = np.maximum.accumulate(np.abs(kappa_pred)[::-1])[::-1]
+            vmax_dyn = np.sqrt(self.ay_max / (suffix_max[:N] + 1e-12))
+        else:
+            vmax_dyn = np.sqrt(self.ay_max / (np.abs(kappa_pred[:N]) + 1e-12))
+        umax_dyn[0::self.nu] = np.minimum(vmax_dyn, umax_dyn[0::self.nu])
 
         # Update path constraints
         if self.use_obstacle_avoidance and not self.use_path_constraints_topic:
@@ -166,32 +321,23 @@ class MPC:
 
         # Update dynamic state constraints
         xmin_dyn[0] = xmax_dyn[0] = self.model.spatial_state.e_y
-        xmin_dyn[self.nx::self.nx] = lb
-        xmax_dyn[self.nx::self.nx] = ub
-        xr[self.nx::self.nx] = (lb + ub) / 2
+        xmin_dyn[nx::nx] = lb
+        xmax_dyn[nx::nx] = ub
+        xr = np.zeros(nx_N)
+        xr[nx::nx] = (lb + ub) / 2
 
-        # Get equality matrix
-        Ax = sparse.kron(sparse.eye(N + 1), -sparse.eye(self.nx)) + sparse.csc_matrix(A)
-        Bu = sparse.csc_matrix(B)
-        Aeq = sparse.hstack([Ax, Bu])
+        # Get equality matrix directly in coordinate form (fixed sparsity
+        # pattern per N, structural zeros preserved — no eliminate_zeros /
+        # csc(dense) pruning, required for Task 5's osqp.update() reuse).
+        rows, cols = self._get_eq_pattern(N)
+        vals = np.concatenate([-np.ones(nx_N), A_lin.ravel(), B_lin.ravel()])
+        Aeq = sparse.csc_matrix((vals, (rows, cols)), shape=(nx_N, nx_N + nu_N))
 
-        # ステアリングレート制約の行列を構築
+        # ステアリングレート制約込みの不等式行列 (N ごとに一度だけ構築してキャッシュ)
         n_rate_constraints = N - 1
-        steering_rate_matrix = np.zeros((n_rate_constraints, nx_N + nu_N))
+        A_inequality = self._get_rate_ineq(N)
 
-        # ステアリングレート制約の行列を設定
-        for i in range(n_rate_constraints):
-            # 連続する制御入力間の差分に対する係数を設定
-            steering_rate_matrix[i, nx_N + self.nu*i + 1] = -1  # 現在のステア角
-            steering_rate_matrix[i, nx_N + self.nu*(i+1) + 1] = 1  # 次のステア角
-
-        # 制約行列の結合
-        A_inequality = sparse.vstack([
-            sparse.eye(nx_N + nu_N),  # 状態と入力の基本的な制約
-            sparse.csc_matrix(steering_rate_matrix)  # ステアリングレート制約
-        ])
-
-        # 完全な制約行列
+        # 完全な制約行列 (Aeq は毎サイクル変わるため vstack はここで実施)
         A_full = sparse.vstack([Aeq, A_inequality], format='csc')
 
         # 境界制約の構築
@@ -200,7 +346,7 @@ class MPC:
         ueq = leq
 
         # 入力と状態の制約境界
-        lineq_basic = np.hstack([xmin_dyn, np.kron(np.ones(N), umin)])
+        lineq_basic = np.hstack([xmin_dyn, umin_dyn])
         uineq_basic = np.hstack([xmax_dyn, umax_dyn])
 
         # ステアリングレート制約の境界
@@ -212,22 +358,64 @@ class MPC:
         l = np.hstack([leq, lineq_basic, lineq_rate])
         u = np.hstack([ueq, uineq_basic, uineq_rate])
 
-        # コスト行列
-        P = sparse.block_diag([
-            sparse.kron(sparse.eye(N), self.Q),
-            self.QN,
-            sparse.kron(sparse.eye(N), self.R)
-        ], format='csc')
+        # コスト行列 (Q/R/QN/N にのみ依存するためキャッシュ)
+        P, q_Q_tile, q_R_tile = self._get_cost_cache(N)
 
         q = np.hstack([
-            -np.tile(np.diag(self.Q.toarray()), N) * xr[:-self.nx],
-            -self.QN.dot(xr[-self.nx:]),
-            -np.tile(np.diag(self.R.toarray()), N) * ur
+            q_Q_tile * xr[:-nx],
+            -self.QN.dot(xr[-nx:]),
+            q_R_tile * ur
         ])
 
-        # オプティマイザの設定
+        # オプティマイザの設定 (Task 5: パターン不変なら setup() を省き update() で
+        # ウォームスタート再利用する)
+        self._setup_or_update(P, q, A_full, l, u, N)
+
+    def _setup_or_update(self, P, q, A_full, l, u, N):
+        """Reuse the OSQP workspace via update() when the sparsity pattern of
+        both A_full and P (and N) matches the last setup(); otherwise
+        re-setup from scratch (which also resets OSQP's internal warm-start
+        state).
+
+        P is transmitted (Px=P.data) on every update() call, not just A, so
+        that Q/R/QN changes made concurrently from another thread (parameter
+        callbacks run on a MultiThreadedExecutor while _control() runs on the
+        main thread) are never silently dropped by a stale cached P — see
+        update_Q/update_R/update_QN below, which no longer invalidate
+        _osqp_cache. If either pattern has drifted (shouldn't normally happen
+        for a fixed N, but checked defensively), fall back to a full re-setup
+        and re-cache both patterns.
+
+        NOTE: cross-cycle warm-starting is deliberately disabled (see the
+        explicit warm_start(0, 0) call below) — see task-5-report.md for the
+        equivalence-failure investigation that led to this.
+        """
+        c = self._osqp_cache
+        if (c is not None and c["N"] == N
+                and np.array_equal(c["A_indptr"], A_full.indptr)
+                and np.array_equal(c["A_indices"], A_full.indices)
+                and np.array_equal(c["P_indptr"], P.indptr)
+                and np.array_equal(c["P_indices"], P.indices)):
+            # Px=P.data assumes triu(P) == P, i.e. P is diagonal (Q/R/QN are
+            # sparse.diags everywhere) — OSQP stores only the upper triangle,
+            # so a future non-diagonal Q would misalign this data vector.
+            self.optimizer.update(q=q, l=l, u=u, Ax=A_full.data, Px=P.data)
+            # Reset both primal and dual warm-start state to zero. Empirically,
+            # letting OSQP auto-warm-start from the *previous* cycle's solution
+            # across update() (its default behavior) causes the LTV problem's
+            # dual iterate to diverge after ~200 cycles into spurious "primal
+            # infeasible" detections (see task-5-report.md for the
+            # investigation) — passing x=None/y=None to warm_start() is a
+            # documented no-op in this OSQP version (osqp==1.0.4), so an
+            # explicit zero array is required to actually cold-start.
+            self.optimizer.warm_start(x=np.zeros_like(q), y=np.zeros_like(l))
+            return
         self.optimizer = osqp.OSQP()
         self.optimizer.setup(P=P, q=q, A=A_full, l=l, u=u, verbose=False)
+        self._osqp_cache = {"N": N, "A_indptr": A_full.indptr.copy(),
+                             "A_indices": A_full.indices.copy(),
+                             "P_indptr": P.indptr.copy(),
+                             "P_indices": P.indices.copy()}
 
     def get_control(self) -> Tuple[np.ndarray, float]:
         """
