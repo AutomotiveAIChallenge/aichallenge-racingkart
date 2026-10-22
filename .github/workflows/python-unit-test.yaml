@@ -1,0 +1,18 @@
+name: python-unit-test
+
+# Pure-Python unit tests that need neither ROS nor a GPU. colcon-build-test runs with
+# skip-tests: true, so without this job these tests are never executed in CI.
+on:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  unittest:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+      - name: vehicle console (vehicle/tests)
+        run: python -m unittest discover -s vehicle/tests -p '*_test.py' -v
