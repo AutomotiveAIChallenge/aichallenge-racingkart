@@ -197,8 +197,12 @@ class PathConstraintsProvider(Node):
                 state_constraints,
                 input_constraints,
                 mpc_cfg.ay_max,
-                True,
-                True)
+                # keyword arguments: MPC.__init__ gained max_steering_rate and
+                # wp_id_offset before these flags, so positional True, True failed
+                max_steering_rate=cfg_mpc.steer_rate_max / cfg_mpc.steering_tire_angle_gain_var,
+                wp_id_offset=cfg_mpc.wp_id_offset,
+                use_obstacle_avoidance=True,
+                use_path_constraints_topic=True)
             return mpc_cfg, mpc
 
         def compute_speed_profile(car: BicycleModel, mpc_config: MPCConfig) -> None:
