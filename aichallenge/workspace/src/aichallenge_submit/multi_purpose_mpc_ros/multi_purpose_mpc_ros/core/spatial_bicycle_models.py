@@ -144,6 +144,17 @@ class SpatialBicycleModel(ABC):
         # Set initial waypoint ID
         self.wp_id = 0
 
+        # Windowed closest-waypoint search: look only at [-back, +ahead] waypoints
+        # around the previous match, and fall back to the whole path when nothing in
+        # the window is within relocalize_distance (first call, reset, teleport).
+        # A whole-path argmin jumps to another leg where the course folds back
+        # (kashiwanoha: antiparallel legs 2.96 m apart). ahead <= 0 disables it.
+        # 折り返し区間で別の区間に飛ばないよう、前回位置の近傍窓で探索する。
+        self.closest_wp_window_back = 5
+        self.closest_wp_window_ahead = 30
+        self.relocalize_distance = 5.0
+        self._last_closest_wp_id = None
+
         # Set initial waypoint
         self.current_waypoint = self.reference_path.waypoints[self.wp_id]
 
@@ -297,12 +308,30 @@ class SpatialBicycleModel(ABC):
         :param y: y coordinate
         :return: Index of the closest waypoint
         """
+        waypoints = self.reference_path.waypoints
+        n_wp = len(waypoints)
+        prev = self._last_closest_wp_id
+        if prev is not None and self.closest_wp_window_ahead > 0 and prev < n_wp:
+            ids = np.arange(prev - self.closest_wp_window_back,
+                            prev + self.closest_wp_window_ahead + 1)
+            if self.reference_path.circular:
+                ids = np.mod(ids, n_wp)
+            else:
+                ids = ids[(ids >= 0) & (ids < n_wp)]
+            d = np.hypot(np.array([waypoints[i].x for i in ids]) - x,
+                         np.array([waypoints[i].y for i in ids]) - y)
+            k = int(np.argmin(d))
+            if d[k] <= self.relocalize_distance:
+                self._last_closest_wp_id = int(ids[k])
+                return self._last_closest_wp_id
+
         # Compute distances from the point to all waypoints
-        distances = np.sqrt((np.array([wp.x for wp in self.reference_path.waypoints]) - x)**2 +
-                            (np.array([wp.y for wp in self.reference_path.waypoints]) - y)**2)
+        distances = np.sqrt((np.array([wp.x for wp in waypoints]) - x)**2 +
+                            (np.array([wp.y for wp in waypoints]) - y)**2)
 
         # Get the index of the closest waypoint
         closest_wp_id = np.argmin(distances)
+        self._last_closest_wp_id = int(closest_wp_id)
 
         return closest_wp_id
 
@@ -393,6 +422,7 @@ class BicycleModel(SpatialBicycleModel):
     def update_reference_path(self, reference_path):
         # Update Reference Path
         self.reference_path = reference_path
+        self._last_closest_wp_id = None  # indices of the old path are meaningless
 
         # Update the current waypoint based on the new reference path
         self.wp_id = self.get_closest_waypoint(self.temporal_state.x, self.temporal_state.y)
