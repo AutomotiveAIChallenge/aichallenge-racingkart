@@ -35,6 +35,7 @@ make eval → run_evaluation.bash → evaluation.launch.xml
 | `e2e.sh` | E2E 練習兼提出参考 | - | 1台 + NPC 2体 / 6 laps / timeout 実質なし / count開始（0秒） / start-random on / handicap・ranking off / camera・lidar cpu |
 | `e2e-final.sh` | E2E 決勝 | - | 4台 / 6 laps / 420s / sync開始 / handicap・ranking on / camera・lidar cpu / sound on |
 | `s2r-final.sh` | S2R 決勝 | - | 4台 / 6 laps / 420s / sync開始 / handicap・ranking on / camera・lidar off / sound on |
+| `practice-final.sh` | 決勝練習（`make practice-4car`） | 環境変数 `PRACTICE_CLASS` / `_HANDICAP` / `_NPCS` / `_VEHICLES` / `_HEADLESS` | 既定は `s2r-final.sh` と同じ引数（sound off のみ差）、`PRACTICE_CLASS=e2e` で `e2e-final.sh` 相当。CWD を `LOG_DIR` に移して結果 JSON を run ディレクトリに出す。一致は `aichallenge/practice/test_practice.py` が検査 |
 | `gate.sh` | Safety Gate テスト | テスト番号 1/2/3/all（既定 all） | 1台。all は test1〜3 を順次実行 |
 | `sample-scenario.sh` | シナリオ指定起動 | - | `StreamingAssets/Race/official.yaml` を `--scenario` で読み込む |
 | `multiplay-server.sh` | Multiplay 専用サーバー | - | `-batchmode -nographics`、port 7777 |
