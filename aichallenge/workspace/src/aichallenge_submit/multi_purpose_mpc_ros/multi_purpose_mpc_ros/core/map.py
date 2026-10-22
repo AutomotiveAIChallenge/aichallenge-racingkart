@@ -159,8 +159,18 @@ class Map:
             # Add circular object to map
             y, x = np.ogrid[-radius_px: radius_px, -radius_px: radius_px]
             index = x ** 2 + y ** 2 <= radius_px ** 2
-            self.data[cy_px-radius_px:cy_px+radius_px, cx_px-radius_px:
-                                                cx_px+radius_px][index] = 0
+            # Clip the stamp to the grid. Near an edge the destination slice is
+            # shorter than the (2r, 2r) mask, or wraps for a negative start, and
+            # the boolean index raised IndexError (controller crash).
+            # グリッド端では書き込み範囲とマスクを同じ範囲に切り出す（内部は従来と同一）。
+            h, w = self.data.shape
+            y0, y1 = cy_px - radius_px, cy_px + radius_px
+            x0, x1 = cx_px - radius_px, cx_px + radius_px
+            yy0, yy1 = max(0, y0), min(h, y1)
+            xx0, xx1 = max(0, x0), min(w, x1)
+            if yy0 < yy1 and xx0 < xx1:
+                sub = index[yy0 - y0:yy1 - y0, xx0 - x0:xx1 - x0]
+                self.data[yy0:yy1, xx0:xx1][sub] = 0
 
     def add_boundary(self, boundaries):
         """
