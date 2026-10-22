@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 import argparse
+import bisect
 from datetime import datetime
 import os
 import sys
@@ -67,14 +68,12 @@ def create_reader(input_uri: str) -> SequentialReader:
 
 
 def sync_topic(data1, data2) -> list:
+    # latest data2 sample with t <= data1 t (data2[0] if none); data2 is time-ordered.
+    times2 = [d[0] for d in data2]
     sync_data = []
-    for idx1 in range(len(data1)):
-        data = data2[0]
-        for idx2 in range(len(data2)):
-            if data1[idx1][0] < data2[idx2][0]:
-                break
-            data = data2[idx2]
-        sync_data.append(data)
+    for d1 in data1:
+        idx = bisect.bisect_right(times2, d1[0]) - 1
+        sync_data.append(data2[max(idx, 0)])
     return sync_data
 
 
