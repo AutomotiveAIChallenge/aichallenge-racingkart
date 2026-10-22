@@ -454,6 +454,7 @@ class MPCController(Node):
                 v_max_safety=float(v2x_cfg.v_max_safety),
                 position_jump_threshold=float(v2x_cfg.position_jump_threshold),
                 warn_callback=self.get_logger().warn,
+                hold_time_s=float(getattr(v2x_cfg, "hold_time_s", 0.0)),
             )
             self._v2x_vehicle_radius = float(v2x_cfg.vehicle_radius)
             mpc_N = int(self._cfg.mpc.N)  # type: ignore
