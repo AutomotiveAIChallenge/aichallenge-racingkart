@@ -14,3 +14,5 @@
   - `bench_baseline.txt`: 公式サンプルのまま（a284274）
   - `bench_fixed_bc_only.txt`: 修正 (b)(c) だけ。1周目の途中で停止した
   - `bench_fixed_all.txt`: 修正 (a)(b)(c) を全部入れたもの。**これが研究のベースライン**
+
+- 2026-11-09 手順2 の確認走行: `bench_step2_probe.*`（単独、ベースラインと同条件、JSON 付き）、`bench_step2_dev2_probe.*`（`make dev2`、JSON の出方の確認のみ）。

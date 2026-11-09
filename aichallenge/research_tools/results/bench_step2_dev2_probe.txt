@@ -1,0 +1,6 @@
+label=step2_dev2_probe logdir=output/20261109-174532 commit=0e57977 mode=dev2 duration=約220秒(手動で make down)
+目的: make dev2 で結果JSONがどう出るかの確認。周回タイムの計測ではない（lap_monitor 未使用）。
+d1 (GoKart1): lap_count=2 laps=[73.59, 83.92] crash=1 (2周目が遅いのは CRASH ペナルティの速度制限と推定、未確認)
+d2 (GoKart2): lap_count=2 laps=[72.96, 68.91] penalty=0
+両車とも同じ提出コード（dev.sh 2 は自車のコピーを2台走らせる。NPC ではない）
+JSON は make down 時(17:49:28)に d1/d2/summary の3ファイルが同時に書かれた。走行中(t+220s)は更新なし。
