@@ -1,0 +1,28 @@
+{
+  "bench_version": 2,
+  "label": "failsim",
+  "commit": "9818e75",
+  "dirty": true,
+  "branch": "tools/bench-v2",
+  "duration_sec": 10,
+  "sim_mode": "dev",
+  "rosbag": false,
+  "host": "nlplab-System-Product-Name",
+  "start_time": "2026-11-10T17:45:20+09:00",
+  "load_avg_start": "1.49 1.44 1.09",
+  "output_dir": "output/20261110-174519",
+  "sha256_start": {
+    "MPC.py": "9396c0afb079a8335339e5e2136a2dbad76eb5bcffeb9b36073032fe2d29fa70",
+    "mpc_controller.py": "99c715c9f9583489730ea24ede8d650ca8ca14ab2ea193b40cf08ffbca74c1f0",
+    "config.yaml": "98eed17581dafdc7cdae90fb8cef99a8afc60abc0e54ff8ffa3c2668c99a170f"
+  },
+  "status": "aborted",
+  "sha256_end": {
+    "MPC.py": "9396c0afb079a8335339e5e2136a2dbad76eb5bcffeb9b36073032fe2d29fa70",
+    "mpc_controller.py": "99c715c9f9583489730ea24ede8d650ca8ca14ab2ea193b40cf08ffbca74c1f0",
+    "config.yaml": "98eed17581dafdc7cdae90fb8cef99a8afc60abc0e54ff8ffa3c2668c99a170f"
+  },
+  "reason": "make dev failed (see make_dev.log)",
+  "end_time": "2026-11-10T17:45:20+09:00",
+  "load_avg_end": "1.49 1.44 1.09"
+}

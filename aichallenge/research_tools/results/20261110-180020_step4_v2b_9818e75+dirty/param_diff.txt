@@ -1,0 +1,16 @@
+node=/mpc_controller compared=14 diff=0 not_in_config=25
+same Q0: 3000000.0
+same Q1: 90000000.0
+same Q2: 100000.0
+same QN0: 1000000.0
+same QN1: 1000.0
+same QN2: 10000.0
+same R0: 100000.0
+same R1: 0.0
+same accel_low_pass_gain: 1.0
+same ay_max: 6.5
+same steer_low_pass_gain: 1.0
+same steering_tire_angle_gain_var: 1.639
+same v_max: 20.0
+same wp_id_offset: 2
+not_in_config: ref_vel/s1/ref_vel ref_vel/s1/wp_id ref_vel/s1_1/ref_vel ref_vel/s1_1/wp_id ref_vel/s2/ref_vel ref_vel/s2/wp_id ref_vel/s3/ref_vel ref_vel/s3/wp_id ref_vel/s4/ref_vel ref_vel/s4/wp_id ref_vel/s5/ref_vel ref_vel/s5/wp_id ref_vel/s6/ref_vel ref_vel/s6/wp_id ref_vel/s7/ref_vel ref_vel/s7/wp_id ref_vel/s8/ref_vel ref_vel/s8/wp_id ref_vel/s9/ref_vel ref_vel/s9/wp_id ref_vel/save use_boost_acceleration use_obstacle_avoidance use_sim_time use_stats

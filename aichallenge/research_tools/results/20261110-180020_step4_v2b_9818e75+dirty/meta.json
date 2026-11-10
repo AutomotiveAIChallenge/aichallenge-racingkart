@@ -1,0 +1,55 @@
+{
+  "bench_version": 2,
+  "label": "step4_v2b",
+  "commit": "9818e75",
+  "dirty": true,
+  "branch": "tools/bench-v2",
+  "duration_sec": 290,
+  "sim_mode": "dev",
+  "make_cmd": "make",
+  "rosbag": true,
+  "compose_file": "docker-compose.yml:docker-compose.gpu.yml:docker-compose.sound.yml",
+  "image_id": "sha256:6af9c0c8deba9637c2da7bdc12043b07b9ed03879a3274905b5441bbd61af7f5",
+  "sha256_dev_sh": "570da148894711f89bedb79dab2e0a6c7be0acdc67b7a796b2c4cb2554ecb2ad",
+  "host": "nlplab-System-Product-Name",
+  "start_time": "2026-11-10T18:00:21+09:00",
+  "load_avg_start": "1.84 2.28 2.06",
+  "output_dir": "output/20261110-180020",
+  "sha256_start": {
+    "MPC.py": "9396c0afb079a8335339e5e2136a2dbad76eb5bcffeb9b36073032fe2d29fa70",
+    "mpc_controller.py": "99c715c9f9583489730ea24ede8d650ca8ca14ab2ea193b40cf08ffbca74c1f0",
+    "config.yaml": "98eed17581dafdc7cdae90fb8cef99a8afc60abc0e54ff8ffa3c2668c99a170f"
+  },
+  "status": "completed",
+  "result_json_before": {
+    "mtime": 1794300708,
+    "sha256": "41b88c29c6a281c68a1aae3f3e8b6a1fbbd08aae30e7107959d88f13354c02b2"
+  },
+  "sim_start_time": "2026-11-10T18:00:21+09:00",
+  "param_override": false,
+  "monitor_start_time": "2026-11-10T18:00:30+09:00",
+  "monitor_end_time": "2026-11-10T18:05:21+09:00",
+  "params_changed_during_run": false,
+  "rosbag_dir": "output/20261110-180020/d1/rosbag2_all",
+  "rosbag_bytes": 22223014,
+  "rosbag_files": 5,
+  "sha256_rosbag_metadata": "e110b2d7bc385a93080e318893c8529bc614f2fe864a3a108e4b2ff967fb43a2",
+  "sim_end_time": "2026-11-10T18:05:32+09:00",
+  "result_json_after": {
+    "mtime": 1794301525,
+    "sha256": "bde1d3ec8bc88e4bad7aecf2473bfe36073303208ff5d389a07ef00791e262f0"
+  },
+  "lap_n": 3,
+  "sha256_autoware_log": "e33ce035092ac34b91dd1e300ef01e413f36469dbf6f2b48b71a72a8345b8e8e",
+  "autoware_log_lines": 348,
+  "mpc_stats_lines": 29,
+  "invariant_rc": 0,
+  "sha256_end": {
+    "MPC.py": "9396c0afb079a8335339e5e2136a2dbad76eb5bcffeb9b36073032fe2d29fa70",
+    "mpc_controller.py": "99c715c9f9583489730ea24ede8d650ca8ca14ab2ea193b40cf08ffbca74c1f0",
+    "config.yaml": "98eed17581dafdc7cdae90fb8cef99a8afc60abc0e54ff8ffa3c2668c99a170f"
+  },
+  "reason": "",
+  "end_time": "2026-11-10T18:05:33+09:00",
+  "load_avg_end": "4.43 3.72 2.77"
+}

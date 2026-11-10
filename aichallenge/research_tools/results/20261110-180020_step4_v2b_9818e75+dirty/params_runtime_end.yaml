@@ -1,0 +1,42 @@
+/mpc_controller:
+  ros__parameters:
+    Q0: 3000000.0
+    Q1: 90000000.0
+    Q2: 100000.0
+    QN0: 1000000.0
+    QN1: 1000.0
+    QN2: 10000.0
+    R0: 100000.0
+    R1: 0.0
+    accel_low_pass_gain: 1.0
+    ay_max: 6.5
+    ref_vel/s1/ref_vel: 30.0
+    ref_vel/s1/wp_id: 1
+    ref_vel/s1_1/ref_vel: 30.0
+    ref_vel/s1_1/wp_id: 30
+    ref_vel/s2/ref_vel: 30.0
+    ref_vel/s2/wp_id: 55
+    ref_vel/s3/ref_vel: 30.0
+    ref_vel/s3/wp_id: 100
+    ref_vel/s4/ref_vel: 22.0
+    ref_vel/s4/wp_id: 155
+    ref_vel/s5/ref_vel: 30.0
+    ref_vel/s5/wp_id: 190
+    ref_vel/s6/ref_vel: 22.0
+    ref_vel/s6/wp_id: 265
+    ref_vel/s7/ref_vel: 30.0
+    ref_vel/s7/wp_id: 290
+    ref_vel/s8/ref_vel: 25.0
+    ref_vel/s8/wp_id: 320
+    ref_vel/s9/ref_vel: 30.0
+    ref_vel/s9/wp_id: 335
+    ref_vel/save: false
+    steer_low_pass_gain: 1.0
+    steering_tire_angle_gain_var: 1.639
+    use_boost_acceleration: false
+    use_obstacle_avoidance: false
+    use_sim_time: true
+    use_stats: false
+    v_max: 20.0
+    wp_id_offset: 2
+

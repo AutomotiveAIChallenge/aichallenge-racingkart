@@ -1,0 +1,15 @@
+{
+  "bench_version": 1,
+  "label": "step2_probe",
+  "commit": "0e57977",
+  "dirty": false,
+  "commit_note": "bench.txt の先頭行に記録あり（手順2 の確認走行。ベースラインと同じコード）",
+  "duration_sec": 290,
+  "sim_mode": "dev",
+  "rosbag": false,
+  "start_time": "2026-11-09T17:39:47+09:00",
+  "output_dir": "output/20261109-173947",
+  "status": "migrated",
+  "migrated_from": "results/bench_step2_probe.{txt,awsim_result.json,awsim_summary.json}",
+  "migrated_on": "2026-11-10"
+}

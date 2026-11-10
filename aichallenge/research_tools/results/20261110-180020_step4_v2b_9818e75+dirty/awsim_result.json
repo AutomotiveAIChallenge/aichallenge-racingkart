@@ -1,0 +1,38 @@
+{
+    "schema_version": "v3",
+    "vehicle_name": "GoKart1",
+    "vehicle_number": 1,
+    "finished": false,
+    "lap_count": 3,
+    "required_laps": 2147483647,
+    "session_timeout": 10000000.0,
+    "min_lap_time": 68.4620132446289,
+    "avg_lap_time": 69.99283599853516,
+    "total_lap_time": 209.978515625,
+    "laps": [
+        72.65970611572266,
+        68.4620132446289,
+        68.85679626464844
+    ],
+    "penalty_count": 0,
+    "penalty_total_seconds": 0.0,
+    "penalty_events": [],
+    "penalty_by_kind": {
+        "crash": {
+            "count": 0,
+            "total_seconds": 0.0
+        },
+        "wall": {
+            "count": 0,
+            "total_seconds": 0.0
+        },
+        "over": {
+            "count": 0,
+            "total_seconds": 0.0
+        },
+        "block": {
+            "count": 0,
+            "total_seconds": 0.0
+        }
+    }
+}

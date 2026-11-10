@@ -1,0 +1,14 @@
+Start AWSIM (SIM_MODE=dev)
+Log dir: ./output/20261110-174644
+LOG_DIR=/output/20261110-174644 SIM_MODE="dev" ROS_DOMAIN_ID=0 docker compose up -d simulator
+ Container aichallenge-simulator-1 Creating 
+ Container aichallenge-simulator-1 Created 
+ Container aichallenge-simulator-1 Starting 
+ Container aichallenge-simulator-1 Started 
+Start Autoware for AWSIM
+Log dir: ./output/20261110-174644
+LOG_DIR=/output/20261110-174644 RUN_MODE=awsim docker compose up -d autoware
+ Container aichallenge-autoware-1 Creating 
+ Container aichallenge-autoware-1 Created 
+ Container aichallenge-autoware-1 Starting 
+ Container aichallenge-autoware-1 Started 

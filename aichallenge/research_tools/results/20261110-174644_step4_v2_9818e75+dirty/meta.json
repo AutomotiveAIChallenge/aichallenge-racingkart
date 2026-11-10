@@ -1,0 +1,36 @@
+{
+  "bench_version": 2,
+  "label": "step4_v2",
+  "commit": "9818e75",
+  "dirty": true,
+  "branch": "tools/bench-v2",
+  "duration_sec": 290,
+  "sim_mode": "dev",
+  "rosbag": true,
+  "host": "nlplab-System-Product-Name",
+  "start_time": "2026-11-10T17:46:44+09:00",
+  "load_avg_start": "2.13 1.70 1.22",
+  "output_dir": "output/20261110-174644",
+  "sha256_start": {
+    "MPC.py": "9396c0afb079a8335339e5e2136a2dbad76eb5bcffeb9b36073032fe2d29fa70",
+    "mpc_controller.py": "99c715c9f9583489730ea24ede8d650ca8ca14ab2ea193b40cf08ffbca74c1f0",
+    "config.yaml": "98eed17581dafdc7cdae90fb8cef99a8afc60abc0e54ff8ffa3c2668c99a170f"
+  },
+  "status": "completed",
+  "param_override": false,
+  "params_changed_during_run": false,
+  "sha256_autoware_log": "284a104858d24361e205700eb6ed90200b2479fc19edb994c18421b1d3e9fe54",
+  "mpc_stats_lines": 29,
+  "rosbag_dir": "output/20261110-174644/d1/rosbag2_all",
+  "rosbag_bytes": 22256920,
+  "lap_n": 3,
+  "invariant_rc": 0,
+  "sha256_end": {
+    "MPC.py": "9396c0afb079a8335339e5e2136a2dbad76eb5bcffeb9b36073032fe2d29fa70",
+    "mpc_controller.py": "99c715c9f9583489730ea24ede8d650ca8ca14ab2ea193b40cf08ffbca74c1f0",
+    "config.yaml": "98eed17581dafdc7cdae90fb8cef99a8afc60abc0e54ff8ffa3c2668c99a170f"
+  },
+  "reason": "",
+  "end_time": "2026-11-10T17:51:56+09:00",
+  "load_avg_end": "3.48 3.10 2.01"
+}

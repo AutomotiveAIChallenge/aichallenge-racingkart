@@ -1,5 +1,6 @@
 """Subscribe /awsim/status and print lap times. Usage: python3 lap_monitor.py [duration_sec]"""
-import sys, time
+import sys
+import time
 import rclpy
 from std_msgs.msg import Float32MultiArray
 

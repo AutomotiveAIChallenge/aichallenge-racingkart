@@ -1,0 +1,15 @@
+{
+  "bench_version": 1,
+  "label": "fixed_all",
+  "commit": "c388dbf",
+  "dirty": true,
+  "commit_note": "推定。コミット前の作業ツリーで走った（修正 (a)(b)(c) 全部入り。c388dbf はその後のコミット）",
+  "duration_sec": 290,
+  "sim_mode": "dev",
+  "rosbag": false,
+  "start_time": "2026-11-09T15:50:04+09:00",
+  "output_dir": "output/20261109-155004",
+  "status": "migrated",
+  "migrated_from": "results/bench_fixed_all.txt",
+  "migrated_on": "2026-11-10"
+}

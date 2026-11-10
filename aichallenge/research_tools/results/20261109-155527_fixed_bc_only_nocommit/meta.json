@@ -1,0 +1,15 @@
+{
+  "bench_version": 1,
+  "label": "fixed_bc_only",
+  "commit": null,
+  "dirty": true,
+  "commit_note": "該当コミット無し（再現不可）。修正 (b)(c) だけを入れた作業ツリーで走った。1周目の途中で停止",
+  "duration_sec": 290,
+  "sim_mode": "dev",
+  "rosbag": false,
+  "start_time": "2026-11-09T15:55:27+09:00",
+  "output_dir": "output/20261109-155527",
+  "status": "migrated",
+  "migrated_from": "results/bench_fixed_bc_only.txt",
+  "migrated_on": "2026-11-10"
+}

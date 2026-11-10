@@ -1,0 +1,305 @@
+diff --git a/.gitignore b/.gitignore
+index 07967a9..3866636 100644
+--- a/.gitignore
++++ b/.gitignore
+@@ -26,3 +26,7 @@ doc/tmp/*
+ 
+ docs/plan/
+ result-*.json
++
++# fork: research_tools の結果ディレクトリ内のログは記録として残す（公式の *.log 無視より優先）
++!aichallenge/research_tools/results/*/*.log
++aichallenge/research_tools/.bench.lock
+diff --git a/aichallenge/research_tools/bench.sh b/aichallenge/research_tools/bench.sh
+index 53518c6..d62efcb 100755
+--- a/aichallenge/research_tools/bench.sh
++++ b/aichallenge/research_tools/bench.sh
+@@ -1,15 +1,224 @@
+ #!/usr/bin/env bash
++# bench.sh v2 — 1走行を「結果ディレクトリ」として残す計測器（方針 §5 の (1)〜(8)）
++#
+ # Usage: aichallenge/research_tools/bench.sh <label> [duration_sec]
+-# Restarts AWSIM+Autoware (make dev), records lap times and MPC solver stats.
+-# Result is printed to stdout; save it under aichallenge/research_tools/results/.
++#   環境変数: BENCH_ROSBAG=0 で rosbag を録らない。BENCH_MAKE=<cmd> は make の差し替え（起動失敗の模擬用）。
++#
++# 出力: aichallenge/research_tools/results/<YYYYMMDD-HHMMSS>_<label>_<commit>[+dirty]/
++#   meta.json            開始時に書き、終了時に status (completed|aborted|void) を追記
++#   bench.txt            旧 bench.sh と同じ本文（label 行、LAP 行、[mpc_stats] 末尾 40 行）
++#   config.yaml          走行時の config.yaml のコピー
++#   params_runtime.yaml  走行中の `ros2 param dump /mpc_controller`（開始直後）
++#   params_runtime_end.yaml 同、走行終了直前
++#   param_diff.txt       config.yaml と params_runtime.yaml の差（compare_params.py）
++#   awsim_result.json    make down 後の aichallenge/d1-result-details.json のコピー
++#   awsim_summary.json   同 aichallenge/result-summary.json
++#   autoware.log, awsim.log  output/<run>/ からのコピー
++#   invariant.txt        invariant_check.py の出力（失敗項目だけ）
++#   git_diff.patch       作業ツリーが dirty のときだけ
++# rosbag は output/<run>/d1/rosbag2_all/ に残す（git には入れない。meta.json にパスを書く）。
++#
++# 失敗の扱い: make dev が失敗した／新しい output/<run>/ ができない／AWSIM や Autoware が起動しない
++#   場合は結果ファイルを書かず、meta.json を status=aborted にして終了コード 1 で終わる。
++#   走行中に MPC.py / mpc_controller.py / config.yaml が変わったら status=void。
+ set -u
+-label="$1"; dur="${2:-290}"
+-cd "$(dirname "$0")/../.." # repo root
+-make down >/dev/null 2>&1
+-make dev >/dev/null 2>&1
+-logdir=$(ls -td output/20* | head -1)
+-echo "label=$label logdir=$logdir commit=$(git rev-parse --short HEAD)$(git diff --quiet || echo '+dirty')"
+-CMD="python3 /aichallenge/research_tools/lap_monitor.py $dur" timeout $((dur + 60)) docker compose run --rm --no-deps autoware-command 2>/dev/null | grep -E "LAP|END"
+-echo "--- mpc_stats ---"
+-grep -a "mpc_stats" "$logdir/d1/autoware.log" | sed -E 's/.*\[mpc_stats\]/[mpc_stats]/' | tail -n 40
+-make down >/dev/null 2>&1
++
++label="${1:?usage: bench.sh <label> [duration_sec]}"
++dur="${2:-290}"
++case "$label" in *[!A-Za-z0-9_.-]*) echo "bench: label は英数字・_・-・. のみ: '$label'" >&2; exit 2;; esac
++
++MAKE="${BENCH_MAKE:-make}"
++ROSBAG="${BENCH_ROSBAG:-1}"
++
++cd "$(dirname "$0")/../.." || exit 1 # repo root
++root="$(pwd)"
++tools="$root/aichallenge/research_tools"
++submit="$root/aichallenge/workspace/src/aichallenge_submit/multi_purpose_mpc_ros"
++watch_files=("$submit/multi_purpose_mpc_ros/core/MPC.py" "$submit/multi_purpose_mpc_ros/mpc_controller.py" "$submit/config/config.yaml")
++result_json="$root/aichallenge/d1-result-details.json"
++summary_json="$root/aichallenge/result-summary.json"
++lock="$tools/.bench.lock"
++
++commit="$(git -C "$root" rev-parse --short HEAD)"
++dirty=""; git -C "$root" diff --quiet HEAD -- . || dirty="+dirty"
++stamp="$(date +%Y%m%d-%H%M%S)"
++run="$stamp"                       # output/<run>（make に LOG_DIR として渡す）
++res="$tools/results/${stamp}_${label}_${commit}${dirty}"
++logdir="$root/output/$run"
++
++sha_of() { sha256sum "$1" | cut -d' ' -f1; }
++now() { date --iso-8601=seconds; }
++loadavg() { cut -d' ' -f1-3 /proc/loadavg; }
++# meta.json のキーを1つ書き換える（python で JSON を扱い、途中で壊さない）
++meta_set() { # meta_set key json_value
++    python3 - "$res/meta.json" "$1" "$2" <<'PY'
++import json, sys
++p, k, v = sys.argv[1:]
++d = json.load(open(p)); d[k] = json.loads(v)
++tmp = p + ".tmp"; json.dump(d, open(tmp, "w"), indent=2, ensure_ascii=False); open(tmp, "a").write("\n")
++import os; os.replace(tmp, p)
++PY
++}
++jstr() { python3 -c 'import json,sys; print(json.dumps(sys.argv[1], ensure_ascii=False))' "$1"; }
++
++status="aborted"; reason=""
++finish() {
++    rc=$?
++    trap - EXIT
++    $MAKE down >/dev/null 2>&1
++    if [ -f "$res/meta.json" ]; then
++        # (5) 終了時のハッシュ。走行中に変わっていれば void
++        end_sha="{"; sep=""
++        for f in "${watch_files[@]}"; do
++            end_sha+="$sep$(jstr "$(basename "$f")"): $(jstr "$(sha_of "$f")")"; sep=", "
++        done; end_sha+="}"
++        meta_set sha256_end "$end_sha"
++        if [ "$status" = "completed" ] && [ "$end_sha" != "$start_sha" ]; then
++            status="void"; reason="watched file changed during run"
++        fi
++        meta_set status "$(jstr "$status")"
++        meta_set reason "$(jstr "$reason")"
++        meta_set end_time "$(jstr "$(now)")"
++        meta_set load_avg_end "$(jstr "$(loadavg)")"
++    fi
++    rm -f "$lock"
++    echo "RESULT_DIR=$res status=$status${reason:+ reason=$reason}"
++    [ "$status" = "completed" ] && exit 0
++    exit "${rc:-1}"
++}
++
++abort() { reason="$1"; echo "bench: ABORT: $reason" >&2; exit 1; }
++
++if [ -e "$lock" ]; then
++    echo "bench: $lock があります（別の bench が走行中？ 中身: $(cat "$lock")）" >&2; exit 3
++fi
++
++mkdir -p "$res" || exit 1
++echo "$$ $res $(now)" > "$lock"
++trap finish EXIT
++trap 'exit 130' INT TERM
++
++# (5) 開始時のハッシュ
++start_sha="{"; sep=""
++for f in "${watch_files[@]}"; do
++    start_sha+="$sep$(jstr "$(basename "$f")"): $(jstr "$(sha_of "$f")")"; sep=", "
++done; start_sha+="}"
++
++# 結果 JSON の「前回の」mtime（走行後に更新されたかを見る）
++json_mtime_before=$(stat -c %Y "$result_json" 2>/dev/null || echo 0)
++
++# (1) 開始時に meta.json
++cat > "$res/meta.json" <<EOF2
++{
++  "bench_version": 2,
++  "label": $(jstr "$label"),
++  "commit": $(jstr "$commit"),
++  "dirty": $([ -n "$dirty" ] && echo true || echo false),
++  "branch": $(jstr "$(git -C "$root" branch --show-current)"),
++  "duration_sec": $dur,
++  "sim_mode": "dev",
++  "rosbag": $([ "$ROSBAG" = "1" ] && echo true || echo false),
++  "host": $(jstr "$(hostname)"),
++  "start_time": $(jstr "$(now)"),
++  "load_avg_start": $(jstr "$(loadavg)"),
++  "output_dir": $(jstr "output/$run"),
++  "sha256_start": $start_sha,
++  "status": "running"
++}
++EOF2
++[ -n "$dirty" ] && git -C "$root" diff HEAD > "$res/git_diff.patch"
++cp "$submit/config/config.yaml" "$res/config.yaml"
++
++$MAKE down >/dev/null 2>&1
++if ! $MAKE dev LOG_DIR="/output/$run" >"$res/make_dev.log" 2>&1; then
++    abort "make dev failed (see make_dev.log)"
++fi
++
++# (2) 新しい output/<run>/ と両ログができるのを待つ（前回のログを拾わない）
++for i in $(seq 1 60); do
++    [ -f "$logdir/awsim.log" ] && [ -f "$logdir/d1/autoware.log" ] && break
++    sleep 1
++done
++[ -d "$logdir" ] || abort "output/$run was not created"
++[ -f "$logdir/awsim.log" ] || abort "awsim.log did not appear in output/$run"
++[ -f "$logdir/d1/autoware.log" ] || abort "d1/autoware.log did not appear in output/$run"
++sleep 5
++if grep -q "\[ERROR\]" "$logdir/awsim.log"; then
++    abort "awsim.log has [ERROR]: $(grep -m1 "\[ERROR\]" "$logdir/awsim.log")"
++fi
++if ! docker compose ps --status running --services 2>/dev/null | grep -qx simulator; then
++    abort "simulator container is not running"
++fi
++if ! docker compose ps --status running --services 2>/dev/null | grep -qx autoware; then
++    abort "autoware container is not running"
++fi
++
++# (3) rosbag（dev と同じ LOG_DIR → output/<run>/d1/rosbag2_all）
++if [ "$ROSBAG" = "1" ]; then
++    $MAKE rosbag LOG_DIR="/output/$run" >"$res/make_rosbag.log" 2>&1 || abort "make rosbag failed"
++fi
++
++rc_cmd() { # コンテナ内で ROS コマンドを1回実行（stdout を返す）
++    CMD="$1" timeout "${2:-60}" docker compose run --rm --no-deps autoware-command 2>/dev/null
++}
++
++# (4) /mpc_controller が上がるのを待って ros2 param dump
++params_ok=0
++for i in $(seq 1 12); do
++    if rc_cmd "ros2 param dump /mpc_controller" 60 > "$res/params_runtime.yaml.tmp" && grep -q "ros__parameters" "$res/params_runtime.yaml.tmp"; then
++        mv "$res/params_runtime.yaml.tmp" "$res/params_runtime.yaml"; params_ok=1; break
++    fi
++    sleep 5
++done
++[ "$params_ok" = 1 ] || abort "ros2 param dump /mpc_controller did not succeed"
++rm -f "$res/params_runtime.yaml.tmp"
++python3 "$tools/compare_params.py" "$res/config.yaml" "$res/params_runtime.yaml" > "$res/param_diff.txt"
++case $? in
++    0) meta_set param_override false ;;
++    1) meta_set param_override true ;;
++    *) abort "compare_params.py failed" ;;
++esac
++
++# 走行（旧 bench.sh と同じ本文を bench.txt に残す）
++{
++    echo "label=$label logdir=output/$run commit=${commit}${dirty}"
++    CMD="python3 /aichallenge/research_tools/lap_monitor.py $dur" timeout $((dur + 60)) docker compose run --rm --no-deps autoware-command 2>/dev/null | grep -E "LAP|END"
++    echo "--- mpc_stats ---"
++    grep -a "mpc_stats" "$logdir/d1/autoware.log" | sed -E 's/.*\[mpc_stats\]/[mpc_stats]/' | tail -n 40
++} | tee "$res/bench.txt"
++
++# (4) 終了直前のパラメータ（走行中に変えられていないか）
++rc_cmd "ros2 param dump /mpc_controller" 60 > "$res/params_runtime_end.yaml" || true
++if ! cmp -s "$res/params_runtime.yaml" "$res/params_runtime_end.yaml"; then
++    meta_set params_changed_during_run true
++else
++    meta_set params_changed_during_run false
++fi
++
++# (7) ログのコピー。rosbag を先に止める（down の前に録り終える）
++[ "$ROSBAG" = "1" ] && docker compose stop rosbag >/dev/null 2>&1
++cp "$logdir/d1/autoware.log" "$res/autoware.log"
++cp "$logdir/awsim.log" "$res/awsim.log"
++meta_set sha256_autoware_log "$(jstr "$(sha_of "$res/autoware.log")")"
++meta_set mpc_stats_lines "$(grep -ac "mpc_stats" "$res/autoware.log")"
++if [ "$ROSBAG" = "1" ] && [ -d "$logdir/d1/rosbag2_all" ]; then
++    meta_set rosbag_dir "$(jstr "output/$run/d1/rosbag2_all")"
++    meta_set rosbag_bytes "$(du -sb "$logdir/d1/rosbag2_all" | cut -f1)"
++fi
++
++# (6) make down で AWSIM が結果 JSON を書く → 新しく書かれたことを確かめてコピー
++$MAKE down >/dev/null 2>&1
++json_mtime_after=$(stat -c %Y "$result_json" 2>/dev/null || echo 0)
++if [ "$json_mtime_after" -le "$json_mtime_before" ]; then
++    abort "result JSON was not rewritten by make down (mtime $json_mtime_before -> $json_mtime_after)"
++fi
++cp "$result_json" "$res/awsim_result.json"
++cp "$summary_json" "$res/awsim_summary.json"
++meta_set lap_n "$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["lap_count"])' "$res/awsim_result.json")"
++
++# (8) 不変条件。失敗項目だけ表示（終了コードは記録のみ。採否は人間）
++python3 "$tools/invariant_check.py" "$res" > "$res/invariant.txt"; inv_rc=$?
++meta_set invariant_rc "$inv_rc"
++cat "$res/invariant.txt"
++
++status="completed"
+diff --git a/aichallenge/research_tools/lap_monitor.py b/aichallenge/research_tools/lap_monitor.py
+index 3f7e331..c2bface 100644
+--- a/aichallenge/research_tools/lap_monitor.py
++++ b/aichallenge/research_tools/lap_monitor.py
+@@ -1,5 +1,6 @@
+ """Subscribe /awsim/status and print lap times. Usage: python3 lap_monitor.py [duration_sec]"""
+-import sys, time
++import sys
++import time
+ import rclpy
+ from std_msgs.msg import Float32MultiArray
+ 
+diff --git a/aichallenge/research_tools/results/bench_baseline.txt b/aichallenge/research_tools/results/20261109-154314_baseline_a284274/bench.txt
+similarity index 100%
+rename from aichallenge/research_tools/results/bench_baseline.txt
+rename to aichallenge/research_tools/results/20261109-154314_baseline_a284274/bench.txt
+diff --git a/aichallenge/research_tools/results/bench_fixed_all.txt b/aichallenge/research_tools/results/20261109-155004_fixed_all_c388dbf+dirty/bench.txt
+similarity index 100%
+rename from aichallenge/research_tools/results/bench_fixed_all.txt
+rename to aichallenge/research_tools/results/20261109-155004_fixed_all_c388dbf+dirty/bench.txt
+diff --git a/aichallenge/research_tools/results/bench_fixed_bc_only.txt b/aichallenge/research_tools/results/20261109-155527_fixed_bc_only_nocommit/bench.txt
+similarity index 100%
+rename from aichallenge/research_tools/results/bench_fixed_bc_only.txt
+rename to aichallenge/research_tools/results/20261109-155527_fixed_bc_only_nocommit/bench.txt
+diff --git a/aichallenge/research_tools/results/bench_step2_probe.awsim_result.json b/aichallenge/research_tools/results/20261109-173947_step2_probe_0e57977/awsim_result.json
+similarity index 100%
+rename from aichallenge/research_tools/results/bench_step2_probe.awsim_result.json
+rename to aichallenge/research_tools/results/20261109-173947_step2_probe_0e57977/awsim_result.json
+diff --git a/aichallenge/research_tools/results/bench_step2_probe.awsim_summary.json b/aichallenge/research_tools/results/20261109-173947_step2_probe_0e57977/awsim_summary.json
+similarity index 100%
+rename from aichallenge/research_tools/results/bench_step2_probe.awsim_summary.json
+rename to aichallenge/research_tools/results/20261109-173947_step2_probe_0e57977/awsim_summary.json
+diff --git a/aichallenge/research_tools/results/bench_step2_probe.txt b/aichallenge/research_tools/results/20261109-173947_step2_probe_0e57977/bench.txt
+similarity index 100%
+rename from aichallenge/research_tools/results/bench_step2_probe.txt
+rename to aichallenge/research_tools/results/20261109-173947_step2_probe_0e57977/bench.txt
+diff --git a/aichallenge/research_tools/results/bench_step2_dev2_probe.awsim_summary.json b/aichallenge/research_tools/results/20261109-174532_step2_dev2_probe_0e57977/awsim_summary.json
+similarity index 100%
+rename from aichallenge/research_tools/results/bench_step2_dev2_probe.awsim_summary.json
+rename to aichallenge/research_tools/results/20261109-174532_step2_dev2_probe_0e57977/awsim_summary.json
+diff --git a/aichallenge/research_tools/results/bench_step2_dev2_probe.txt b/aichallenge/research_tools/results/20261109-174532_step2_dev2_probe_0e57977/bench.txt
+similarity index 100%
+rename from aichallenge/research_tools/results/bench_step2_dev2_probe.txt
+rename to aichallenge/research_tools/results/20261109-174532_step2_dev2_probe_0e57977/bench.txt
+diff --git a/aichallenge/research_tools/results/bench_step2_dev2_probe.d1.awsim_result.json b/aichallenge/research_tools/results/20261109-174532_step2_dev2_probe_0e57977/d1.awsim_result.json
+similarity index 100%
+rename from aichallenge/research_tools/results/bench_step2_dev2_probe.d1.awsim_result.json
+rename to aichallenge/research_tools/results/20261109-174532_step2_dev2_probe_0e57977/d1.awsim_result.json
+diff --git a/aichallenge/research_tools/results/bench_step2_dev2_probe.d2.awsim_result.json b/aichallenge/research_tools/results/20261109-174532_step2_dev2_probe_0e57977/d2.awsim_result.json
+similarity index 100%
+rename from aichallenge/research_tools/results/bench_step2_dev2_probe.d2.awsim_result.json
+rename to aichallenge/research_tools/results/20261109-174532_step2_dev2_probe_0e57977/d2.awsim_result.json

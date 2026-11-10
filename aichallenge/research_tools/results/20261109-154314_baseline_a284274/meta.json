@@ -1,0 +1,15 @@
+{
+  "bench_version": 1,
+  "label": "baseline",
+  "commit": "a284274",
+  "dirty": false,
+  "commit_note": "推定。旧 bench.sh は commit を記録しなかった。公式サンプルのまま（修正前）の走行",
+  "duration_sec": 290,
+  "sim_mode": "dev",
+  "rosbag": false,
+  "start_time": "2026-11-09T15:43:14+09:00",
+  "output_dir": "output/20261109-154314",
+  "status": "migrated",
+  "migrated_from": "results/bench_baseline.txt",
+  "migrated_on": "2026-11-10"
+}

@@ -1,0 +1,15 @@
+{
+  "bench_version": 1,
+  "label": "step2_dev2_probe",
+  "commit": "0e57977",
+  "dirty": false,
+  "commit_note": "bench.txt の先頭行に記録あり。make dev2（2台）で結果 JSON の出方を確かめた走行。bench.sh は使っていない（手動で約220秒後に make down）。d1/d2 の2車分なので awsim_result.json は無く d1./d2. 付き",
+  "duration_sec": 220,
+  "sim_mode": "dev2",
+  "rosbag": false,
+  "start_time": "2026-11-09T17:45:32+09:00",
+  "output_dir": "output/20261109-174532",
+  "status": "migrated",
+  "migrated_from": "results/bench_step2_dev2_probe.*",
+  "migrated_on": "2026-11-10"
+}

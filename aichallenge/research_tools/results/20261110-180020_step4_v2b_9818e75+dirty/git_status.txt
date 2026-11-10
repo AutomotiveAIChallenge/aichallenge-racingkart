@@ -1,0 +1,46 @@
+ M .gitignore
+ M aichallenge/research_tools/README.md
+ M aichallenge/research_tools/bench.sh
+ M aichallenge/research_tools/lap_monitor.py
+R  aichallenge/research_tools/results/bench_baseline.txt -> aichallenge/research_tools/results/20261109-154314_baseline_a284274/bench.txt
+R  aichallenge/research_tools/results/bench_fixed_all.txt -> aichallenge/research_tools/results/20261109-155004_fixed_all_c388dbf+dirty/bench.txt
+R  aichallenge/research_tools/results/bench_fixed_bc_only.txt -> aichallenge/research_tools/results/20261109-155527_fixed_bc_only_nocommit/bench.txt
+R  aichallenge/research_tools/results/bench_step2_probe.awsim_result.json -> aichallenge/research_tools/results/20261109-173947_step2_probe_0e57977/awsim_result.json
+R  aichallenge/research_tools/results/bench_step2_probe.awsim_summary.json -> aichallenge/research_tools/results/20261109-173947_step2_probe_0e57977/awsim_summary.json
+R  aichallenge/research_tools/results/bench_step2_probe.txt -> aichallenge/research_tools/results/20261109-173947_step2_probe_0e57977/bench.txt
+R  aichallenge/research_tools/results/bench_step2_dev2_probe.awsim_summary.json -> aichallenge/research_tools/results/20261109-174532_step2_dev2_probe_0e57977/awsim_summary.json
+R  aichallenge/research_tools/results/bench_step2_dev2_probe.txt -> aichallenge/research_tools/results/20261109-174532_step2_dev2_probe_0e57977/bench.txt
+R  aichallenge/research_tools/results/bench_step2_dev2_probe.d1.awsim_result.json -> aichallenge/research_tools/results/20261109-174532_step2_dev2_probe_0e57977/d1.awsim_result.json
+R  aichallenge/research_tools/results/bench_step2_dev2_probe.d2.awsim_result.json -> aichallenge/research_tools/results/20261109-174532_step2_dev2_probe_0e57977/d2.awsim_result.json
+?? aichallenge/research_tools/bench_common.py
+?? aichallenge/research_tools/compare_params.py
+?? aichallenge/research_tools/invariant_check.py
+?? aichallenge/research_tools/results/20261109-154314_baseline_a284274/meta.json
+?? aichallenge/research_tools/results/20261109-155004_fixed_all_c388dbf+dirty/meta.json
+?? aichallenge/research_tools/results/20261109-155527_fixed_bc_only_nocommit/meta.json
+?? aichallenge/research_tools/results/20261109-173947_step2_probe_0e57977/meta.json
+?? aichallenge/research_tools/results/20261109-174532_step2_dev2_probe_0e57977/meta.json
+?? aichallenge/research_tools/results/20261110-174519_failsim_9818e75+dirty/config.yaml
+?? aichallenge/research_tools/results/20261110-174519_failsim_9818e75+dirty/git_diff.patch
+?? aichallenge/research_tools/results/20261110-174519_failsim_9818e75+dirty/make_dev.log
+?? aichallenge/research_tools/results/20261110-174519_failsim_9818e75+dirty/meta.json
+?? aichallenge/research_tools/results/20261110-174644_step4_v2_9818e75+dirty/autoware.log
+?? aichallenge/research_tools/results/20261110-174644_step4_v2_9818e75+dirty/awsim.log
+?? aichallenge/research_tools/results/20261110-174644_step4_v2_9818e75+dirty/awsim_result.json
+?? aichallenge/research_tools/results/20261110-174644_step4_v2_9818e75+dirty/awsim_summary.json
+?? aichallenge/research_tools/results/20261110-174644_step4_v2_9818e75+dirty/bench.txt
+?? aichallenge/research_tools/results/20261110-174644_step4_v2_9818e75+dirty/config.yaml
+?? aichallenge/research_tools/results/20261110-174644_step4_v2_9818e75+dirty/git_diff.patch
+?? aichallenge/research_tools/results/20261110-174644_step4_v2_9818e75+dirty/invariant.txt
+?? aichallenge/research_tools/results/20261110-174644_step4_v2_9818e75+dirty/make_dev.log
+?? aichallenge/research_tools/results/20261110-174644_step4_v2_9818e75+dirty/make_rosbag.log
+?? aichallenge/research_tools/results/20261110-174644_step4_v2_9818e75+dirty/meta.json
+?? aichallenge/research_tools/results/20261110-174644_step4_v2_9818e75+dirty/param_diff.txt
+?? aichallenge/research_tools/results/20261110-174644_step4_v2_9818e75+dirty/params_runtime.yaml
+?? aichallenge/research_tools/results/20261110-174644_step4_v2_9818e75+dirty/params_runtime_end.yaml
+?? aichallenge/research_tools/results/20261110-180013_failsim2_9818e75+dirty/config.yaml
+?? aichallenge/research_tools/results/20261110-180013_failsim2_9818e75+dirty/git_diff.patch
+?? aichallenge/research_tools/results/20261110-180013_failsim2_9818e75+dirty/git_status.txt
+?? aichallenge/research_tools/results/20261110-180013_failsim2_9818e75+dirty/make_dev.log
+?? aichallenge/research_tools/results/20261110-180013_failsim2_9818e75+dirty/meta.json
+?? aichallenge/research_tools/summarize.py

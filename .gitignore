@@ -26,3 +26,7 @@ doc/tmp/*
 
 docs/plan/
 result-*.json
+
+# fork: research_tools の結果ディレクトリ内のログは記録として残す（公式の *.log 無視より優先）
+!aichallenge/research_tools/results/*/*.log
+aichallenge/research_tools/.bench.lock

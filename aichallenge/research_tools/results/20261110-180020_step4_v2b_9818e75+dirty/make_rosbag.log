@@ -1,0 +1,5 @@
+LOG_DIR=/output/20261110-180020 docker compose up -d rosbag
+ Container aichallenge-rosbag-1 Creating 
+ Container aichallenge-rosbag-1 Created 
+ Container aichallenge-rosbag-1 Starting 
+ Container aichallenge-rosbag-1 Started 
