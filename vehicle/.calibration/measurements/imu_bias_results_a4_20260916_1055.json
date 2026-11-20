@@ -1,0 +1,138 @@
+{
+  "generated_at": "2026-09-16T01:55:48.782565+00:00",
+  "conditions": {
+    "duration_s": 5,
+    "warmup_s": 2,
+    "sensor_startup_wait_s": 0,
+    "std_threshold_rad_s": 0.03,
+    "velocity_threshold_m_s": 0.05,
+    "stationary_confirmation": "User confirmed A4 stationary and would remain untouched during measurement",
+    "network": "Existing vehicle ROS domain 1 over loopback; existing driver and Autoware containers kept running",
+    "settings_applied": false,
+    "collector_method": "Imported unchanged /vehicle/check_imu_bias.py, wrapped ImuBiasChecker.__init__ to retain the node for full-precision statistics, and called main() in --proposal-output mode"
+  },
+  "results": [
+    {
+      "host": "a4",
+      "started_at": "2026-09-16T01:55:39.736087+00:00",
+      "param_sha256_before": "0070010e620771e324f980c0154915a2ba6cbead82a9a30e724132ee2ebc2706",
+      "measurement_script_sha256": "5f5b8d879e875e9d2483a84e8898f9e1f1f4e63635bf0991e5e5101bf62b717a",
+      "calibration_module_sha256": "ba7fc76e58b9e83b048e448a37e6251944ea8b9980394ca6f02f3def6279b4df",
+      "ros_domain_id": "1",
+      "rmw_implementation": "rmw_cyclonedds_cpp",
+      "cyclonedds_uri": "file:///opt/autoware/cyclonedds.xml",
+      "command": [
+        "python3",
+        "/vehicle/check_imu_bias.py",
+        "--duration",
+        "5",
+        "--warmup",
+        "2",
+        "--std-threshold",
+        "0.03",
+        "--velocity-threshold",
+        "0.05",
+        "--param-yaml",
+        "/aichallenge/workspace/src/aichallenge_submit/imu_corrector/config/imu_corrector.param.yaml",
+        "--proposal-output",
+        "/tmp/a4-imu-measurement-ohqrm652/proposal.json"
+      ],
+      "exit_code": 0,
+      "output": "==== IMU gyro bias check ====\nimu topic      : /sensing/imu/imu_raw\nsampling       : 5.0s (after 2.0s warmup)\nKeep the vehicle completely stationary during sampling.\nstationary     : OK (max |velocity|=0.000 m/s)\nsamples        : 372\n\naxis    bias[rad/s]         std  status\n---------------------------------------\nx     +0.007298  0.002140  OK\ny     -0.004994  0.001890  OK\nz     -0.008207  0.002115  OK\n\nIMUジャイロバイアス [rad/s]: /aichallenge/workspace/src/aichallenge_submit/imu_corrector/config/imu_corrector.param.yaml\n軸              現在値           実測値         差分(実測値−現在値)\n----------------------------------------------------\nx     +0.000000  +0.007298  +0.007298\ny     +0.000000  -0.004994  -0.004994\nz     -0.000000  -0.008207  -0.008207\n\nIMU measurement complete; settings have not been changed.\n",
+      "proposal": {
+        "param_yaml": "/aichallenge/workspace/src/aichallenge_submit/imu_corrector/config/imu_corrector.param.yaml",
+        "current_text": "/**:\n  ros__parameters:\n    angular_velocity_offset_x: 0.0     # [rad/s]\n    angular_velocity_offset_y: 0.0     # [rad/s]\n    angular_velocity_offset_z: -0.000  # [rad/s]\n    angular_velocity_stddev_xx: 0.03   # [rad/s]\n    angular_velocity_stddev_yy: 0.03   # [rad/s]\n    angular_velocity_stddev_zz: 0.03   # [rad/s]\n",
+        "offsets": {
+          "x": 0.007298350077120036,
+          "y": -0.0049940226402768765,
+          "z": -0.00820733097980291
+        }
+      },
+      "samples": 372,
+      "velocity_seen": true,
+      "max_abs_velocity_m_s": 0.0,
+      "axes": {
+        "x": {
+          "bias_rad_s": 0.007298350077120036,
+          "std_rad_s": 0.002140210397960412,
+          "current_offset_rad_s": 0.0,
+          "delta_rad_s": 0.007298350077120036,
+          "status": "OK"
+        },
+        "y": {
+          "bias_rad_s": -0.0049940226402768765,
+          "std_rad_s": 0.001890405430563618,
+          "current_offset_rad_s": 0.0,
+          "delta_rad_s": -0.0049940226402768765,
+          "status": "OK"
+        },
+        "z": {
+          "bias_rad_s": -0.00820733097980291,
+          "std_rad_s": 0.002115489175097139,
+          "current_offset_rad_s": -0.0,
+          "delta_rad_s": -0.00820733097980291,
+          "status": "OK"
+        }
+      },
+      "finished_at": "2026-09-16T01:55:47.045902+00:00",
+      "param_sha256_after": "0070010e620771e324f980c0154915a2ba6cbead82a9a30e724132ee2ebc2706",
+      "settings_unchanged": true,
+      "passed": true,
+      "temporary_proposal_removed": true,
+      "ssh_stderr": "",
+      "containers_before": [
+        {
+          "Id": "a26e8690cb033076f48ca58fded14bb32063cd6a71e2919f541a3b7860b59c8b",
+          "Name": "/aichallenge-racingkart-autoware-1",
+          "Image": "sha256:eb39992fd5686f2eb0bdfa7e676af9070717b2a4f0f609699ae39a931f9c15f7",
+          "RestartCount": 0,
+          "started_at": "2026-09-16T01:52:36.047717714Z",
+          "running": true
+        },
+        {
+          "Id": "b621895d0b31ac8f7cb5888d84213a57effd859296c71140c6512d22405a0b04",
+          "Name": "/aichallenge-racingkart-driver-1",
+          "Image": "sha256:19a731b47c3a14f76ec4d4310869362762387b837741aeb1a5f1e1f936e8e24c",
+          "RestartCount": 0,
+          "started_at": "2026-09-16T01:52:36.043697687Z",
+          "running": true
+        },
+        {
+          "Id": "40cdd66cb90e170f94b69e99fbce3ef8272fa2d09a391376acab41bb80f81ecf",
+          "Name": "/aichallenge-racingkart-zenoh-1",
+          "Image": "sha256:eb39992fd5686f2eb0bdfa7e676af9070717b2a4f0f609699ae39a931f9c15f7",
+          "RestartCount": 0,
+          "started_at": "2026-09-16T01:52:51.284100761Z",
+          "running": true
+        }
+      ],
+      "containers_after": [
+        {
+          "Id": "a26e8690cb033076f48ca58fded14bb32063cd6a71e2919f541a3b7860b59c8b",
+          "Name": "/aichallenge-racingkart-autoware-1",
+          "Image": "sha256:eb39992fd5686f2eb0bdfa7e676af9070717b2a4f0f609699ae39a931f9c15f7",
+          "RestartCount": 0,
+          "started_at": "2026-09-16T01:52:36.047717714Z",
+          "running": true
+        },
+        {
+          "Id": "b621895d0b31ac8f7cb5888d84213a57effd859296c71140c6512d22405a0b04",
+          "Name": "/aichallenge-racingkart-driver-1",
+          "Image": "sha256:19a731b47c3a14f76ec4d4310869362762387b837741aeb1a5f1e1f936e8e24c",
+          "RestartCount": 0,
+          "started_at": "2026-09-16T01:52:36.043697687Z",
+          "running": true
+        },
+        {
+          "Id": "40cdd66cb90e170f94b69e99fbce3ef8272fa2d09a391376acab41bb80f81ecf",
+          "Name": "/aichallenge-racingkart-zenoh-1",
+          "Image": "sha256:eb39992fd5686f2eb0bdfa7e676af9070717b2a4f0f609699ae39a931f9c15f7",
+          "RestartCount": 0,
+          "started_at": "2026-09-16T01:52:51.284100761Z",
+          "running": true
+        }
+      ],
+      "containers_unchanged": true
+    }
+  ]
+}

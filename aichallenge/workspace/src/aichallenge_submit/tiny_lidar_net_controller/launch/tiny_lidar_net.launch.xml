@@ -1,5 +1,6 @@
 <launch>
 
+  <arg name="tiny_lidar_net_common_param" default="$(find-pkg-share tiny_lidar_net_controller)/config/tiny_lidar_net_common.param.yaml"/>
   <arg name="tiny_lidar_net_node_param"  default="$(find-pkg-share tiny_lidar_net_controller)/config/tiny_lidar_net_node.param.yaml"/>
   <arg name="use_sim_time" default="true"/>
   <arg name="scan_topic" default="/sensing/lidar/scan"/>
@@ -12,6 +13,7 @@
         name="tiny_lidar_net_controller_node"
         output="screen">
 
+    <param from="$(var tiny_lidar_net_common_param)"/>
     <param from="$(var tiny_lidar_net_node_param)"/>
     <param name="model.ckpt_path" value="$(var ckpt_path)"/>
     <param name="use_sim_time" value="$(var use_sim_time)"/>

@@ -18,6 +18,7 @@ exec $AWSIM_DIRECTORY/AWSIM.x86_64 \
     --collisions on \
     --handicap on \
     --wall-recovery off \
+    --overtaking-lane on \
     --start-random off \
     --ranking on \
     --camera off \

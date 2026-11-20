@@ -14,7 +14,7 @@ echo "=== Config: ${IMAGE_WIDTH}x${IMAGE_HEIGHT}, ${COLOR_SPACE}, output_dim=${O
 echo "=== 1. Extract data ==="
 rm -rf dataset
 python3 extract_data_from_bag.py \
-    --seq-dirs "$BAG_DIR" \
+    --bags-dir "$BAG_DIR" \
     --outdir ./dataset/all \
     --image-topic /sensing/camera/image_raw \
     --control-topic /control/command/control_cmd \
