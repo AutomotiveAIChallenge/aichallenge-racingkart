@@ -8,7 +8,7 @@
 # Add a new vehicle here only. Do not duplicate these mappings in callers.
 
 # shellcheck disable=SC2034  # consumed by the scripts that source this file
-VEHICLE_ID_VALID_LIST="A1, A2, A3, A5, A6, A7, A8"
+VEHICLE_ID_VALID_LIST="A1, A2, A3, A4, A5, A6, A7, A8, test"
 
 # VEHICLE_ID -> Zenoh bridge port on the tournament server.
 zenoh_port_for_vehicle_id() {
@@ -20,7 +20,21 @@ zenoh_port_for_vehicle_id() {
     A1) echo 7452 ;;
     A5) echo 7453 ;;
     A8) echo 7454 ;;
+    A4) echo 7455 ;;
     *) return 1 ;;
+    esac
+}
+
+# VEHICLE_ID -> Zenoh endpoint the vehicle bridge connects to. "test" is not a real kart:
+# it targets a local zenohd (remote/connect_zenoh.bash test-server) instead.
+zenoh_endpoint_for_vehicle_id() {
+    local port
+    case "$1" in
+    test) echo "${ZENOH_LOCAL_ENDPOINT:-tcp/127.0.0.1:7448}" ;;
+    *)
+        port="$(zenoh_port_for_vehicle_id "$1")" || return 1
+        echo "tls/zenoh.dev.aichallenge-board.jsae.or.jp:${port}"
+        ;;
     esac
 }
 
@@ -34,4 +48,35 @@ vehicle_id_for_hostname() {
     ECU-RK-00) echo A7 ;;
     *) return 1 ;;
     esac
+}
+
+# Environment -> repository .env -> ECU hostname. Callers set REPO_ROOT.
+read_env_value() {
+    local key=$1
+    local env_file="${REPO_ROOT}/.env"
+
+    [ -f "${env_file}" ] || return 0
+    # 先頭の空白と `export ` を落として `KEY=value` に正規化してから読む
+    sed -E 's/^[[:space:]]*(export[[:space:]]+)?//' "${env_file}" |
+        awk -F= -v key="${key}" '
+            $1 == key {
+                value = substr($0, length(key) + 2)
+                gsub(/^["'\'']|["'\'']$/, "", value)
+                print value
+            }
+        ' | tail -1
+}
+
+detect_vehicle_id() {
+    local vehicle_id="${VEHICLE_ID-}"
+
+    if [ -z "${vehicle_id}" ]; then
+        vehicle_id="$(read_env_value VEHICLE_ID)"
+    fi
+
+    if [ -z "${vehicle_id}" ]; then
+        vehicle_id="$(vehicle_id_for_hostname "$(hostname)" || true)"
+    fi
+
+    printf '%s\n' "${vehicle_id}"
 }

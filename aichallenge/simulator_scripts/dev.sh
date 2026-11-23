@@ -20,6 +20,7 @@ exec $AWSIM_DIRECTORY/AWSIM.x86_64 \
     --collisions on \
     --handicap off \
     --wall-recovery off \
+    --overtaking-lane off \
     --ranking off \
     --camera off \
     --lidar off

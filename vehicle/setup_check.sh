@@ -24,7 +24,6 @@ INFO="ℹ️"
 MODE="vehicle"
 PHASE="all"
 ENABLE_LOG=false
-LOG_FILE="setup_check_$(date +'%Y%m%d_%H%M%S').log"
 CAN_IFACE="${CAN_IFACE:-can0}"
 CAN_SAMPLE_SEC="${CAN_SAMPLE_SEC:-3}"
 CAN_MIN_FRAMES="${CAN_MIN_FRAMES:-100}"
@@ -41,9 +40,13 @@ REPO_ROOT="$(git -C "${SCRIPT_DIR}" rev-parse --show-toplevel 2>/dev/null || tru
 if [ -z "${REPO_ROOT}" ]; then
     REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 fi
-
 # shellcheck source-path=SCRIPTDIR source=vehicle_ports.sh
 source "${SCRIPT_DIR}/vehicle_ports.sh"
+
+# ログの実パス。呼び出し元の cwd に散らさないため常に vehicle/logs/ 配下に置く。
+# ディレクトリが作れない環境では log() の tee が黙って落ち、画面出力だけが残る。
+LOG_FILE="${SCRIPT_DIR}/logs/setup_check_$(date +'%Y%m%d_%H%M%S').log"
+mkdir -p "${SCRIPT_DIR}/logs" 2>/dev/null || true
 
 # ログ関数
 log() {
@@ -66,7 +69,8 @@ Racing Kart Setup Check Script
 Usage: $0 [OPTIONS]
 
 OPTIONS:
-  --phase PHASE   Check phase: preflight, runtime, or all [default: all]
+  --phase PHASE   Check phase: preflight, driver, autoware, runtime, or all [default: all]
+                  runtime runs driver + autoware checks (compatibility)
   --log           Enable logging to file
   --help          Show this help
 
@@ -87,6 +91,8 @@ MODE:
 Examples:
   $0
   $0 --phase preflight
+  $0 --phase driver
+  $0 --phase autoware
   $0 --phase runtime
   $0 --log
   CAN_SAMPLE_SEC=5 CAN_MIN_FRAMES=200 $0 --log
@@ -99,7 +105,7 @@ while [[ $# -gt 0 ]]; do
     --phase)
         PHASE="${2-}"
         case "${PHASE}" in
-        preflight | runtime | all) ;;
+        preflight | driver | autoware | runtime | all) ;;
         *)
             echo "Invalid phase: ${PHASE}"
             show_help
@@ -325,36 +331,6 @@ check_can_traffic() {
     fi
 }
 
-read_env_value() {
-    local key=$1
-    local env_file="${REPO_ROOT}/.env"
-
-    [ -f "${env_file}" ] || return 0
-    # 先頭の空白と `export ` を落として `KEY=value` に正規化してから読む
-    sed -E 's/^[[:space:]]*(export[[:space:]]+)?//' "${env_file}" |
-        awk -F= -v key="${key}" '
-            $1 == key {
-                value = substr($0, length(key) + 2)
-                gsub(/^["'\'']|["'\'']$/, "", value)
-                print value
-            }
-        ' | tail -1
-}
-
-detect_vehicle_id() {
-    local vehicle_id="${VEHICLE_ID-}"
-
-    if [ -z "${vehicle_id}" ]; then
-        vehicle_id="$(read_env_value VEHICLE_ID)"
-    fi
-
-    if [ -z "${vehicle_id}" ]; then
-        vehicle_id="$(vehicle_id_for_hostname "$(hostname)" || true)"
-    fi
-
-    printf '%s\n' "${vehicle_id}"
-}
-
 # ヘッダー表示
 print_header() {
     log ""
@@ -470,16 +446,19 @@ check_network() {
         fi
     fi
 
-    # Zenohサーバー疎通確認。run_zenoh.bash と同じ VEHICLE_ID -> port 対応を使う。
-    local zenoh_host="${ZENOH_HOST:-zenoh.dev.aichallenge-board.jsae.or.jp}"
+    # Zenohサーバー疎通確認。run_zenoh.bash と同じ VEHICLE_ID -> endpoint 対応を使う。
     local vehicle_id_for_zenoh
-    local zenoh_port
+    local zenoh_endpoint zenoh_host zenoh_port
     vehicle_id_for_zenoh="$(detect_vehicle_id)"
     if [ -z "${vehicle_id_for_zenoh}" ]; then
         log "${FAIL} VEHICLE_ID is not set; cannot choose Zenoh endpoint"
         log "   Fix: export VEHICLE_ID=A6 or add VEHICLE_ID=A6 to .env"
         record_result "fail"
-    elif zenoh_port="$(zenoh_port_for_vehicle_id "${vehicle_id_for_zenoh}")"; then
+    elif zenoh_endpoint="$(zenoh_endpoint_for_vehicle_id "${vehicle_id_for_zenoh}")"; then
+        # "tls/host:port" / "tcp/host:port" -> host, port。ZENOH_HOST は host だけの差し替え。
+        zenoh_host="${zenoh_endpoint#*/}"
+        zenoh_port="${zenoh_host##*:}"
+        zenoh_host="${ZENOH_HOST:-${zenoh_host%:*}}"
         if timeout 5 bash -c "echo >/dev/tcp/${zenoh_host}/${zenoh_port}" 2>/dev/null; then
             log "${OK} Zenoh endpoint connectivity (${vehicle_id_for_zenoh}: ${zenoh_host}:${zenoh_port})"
             record_result "pass"
@@ -549,7 +528,7 @@ check_docker() {
     log ""
 }
 
-# 起動後Dockerサービス確認 (runtime)
+# 指定された起動後Dockerサービスだけを確認する。
 check_runtime_docker_services() {
     print_section "Runtime Docker Service Check"
 
@@ -568,7 +547,8 @@ check_runtime_docker_services() {
         return 0
     fi
 
-    local required_services=(driver autoware rosbag zenoh)
+    # rosbag は記録の有無を運営が都度決めるため必須にしない（未起動でも fail にならない）。
+    local required_services=("$@")
     local running_services
     local missing_services=()
     if running_services="$(compose_running_services)"; then
@@ -592,6 +572,65 @@ check_runtime_docker_services() {
         record_result "fail"
     fi
 
+    log ""
+}
+
+# 起動後はホスト全体を確認する。必須サービスの不足は失敗、追加・重複は警告。
+check_vehicle_containers() {
+    print_section "Vehicle Host Container Check"
+
+    local expected_containers running_containers
+    if ! expected_containers="$(docker compose -f "${REPO_ROOT}/docker-compose.yml" ps \
+        --status running --no-trunc --format '{{.ID}} {{.Service}}' autoware driver zenoh 2>/dev/null)"; then
+        log "${FAIL} Cannot inspect expected vehicle containers"
+        record_result "fail"
+        log ""
+        return 0
+    fi
+    if ! running_containers="$(docker ps --no-trunc --format '{{.ID}} {{.Names}}' 2>/dev/null)"; then
+        log "${FAIL} Cannot inspect running containers on the vehicle host"
+        record_result "fail"
+        log ""
+        return 0
+    fi
+
+    local -A expected_services=()
+    local -A counts=([autoware]=0 [driver]=0 [zenoh]=0)
+    local -A names=()
+    local container_id service container_name
+    while read -r container_id service; do
+        [ -n "${container_id}" ] || continue
+        case "${service}" in
+        autoware | driver | zenoh) expected_services[${container_id}]="${service}" ;;
+        esac
+    done <<<"${expected_containers}"
+
+    # ID で照合するので、別 project の同名サービスや compose run の一時コンテナも
+    # 通常の3サービスと区別できる。停止済みコンテナは docker ps の対象外。
+    while read -r container_id container_name; do
+        [ -n "${container_id}" ] || continue
+        service="${expected_services[${container_id}]-}"
+        if [ -z "${service}" ]; then
+            log "${WARN} Additional running container: ${container_name} (${container_id:0:12})"
+            record_result "warn"
+        else
+            counts[${service}]=$((counts[${service}] + 1))
+            names[${service}]="${names[${service}]:+${names[${service}]} }${container_name}"
+        fi
+    done <<<"${running_containers}"
+
+    for service in autoware driver zenoh; do
+        if [ "${counts[${service}]}" -eq 0 ]; then
+            log "${FAIL} Required compose services not running: ${service}"
+            record_result "fail"
+        elif [ "${counts[${service}]}" -gt 1 ]; then
+            log "${WARN} Multiple running containers for ${service}: ${names[${service}]}"
+            record_result "warn"
+        else
+            log "${OK} ${service}: ${names[${service}]}"
+            record_result "pass"
+        fi
+    done
     log ""
 }
 
@@ -659,32 +698,103 @@ check_gnss_rtk_status() {
     log ""
 }
 
-# ROS topic出力確認 (runtime)
-check_runtime_ros_topics() {
-    print_section "Runtime ROS Topic Output Check"
+# driver が発行する状態・最終指令と、車両への Joy 入力を確認する。
+check_driver_ros_topics() {
+    print_section "Driver ROS Topic Output Check"
+
+    log "${INFO} Raw IMU topic"
+    check_ros_topic_once "driver" "/sensing/imu/imu_raw" "Raw IMU"
 
     log "${INFO} Racing kart hardware/status topics"
     check_ros_topic_once "driver" "/racing_kart/vcu/status" "VCU status"
     check_ros_topic_once "driver" "/racing_kart/steer/status" "Steer status"
     check_ros_topic_once "driver" "/racing_kart/brake/status" "Brake status"
-    check_ros_topic_once "driver" "/racing_kart/joy" "Joy input"
+    check_ros_topic_once "driver" "/racing_kart/sd/joy" "Joy input"
 
     log "${INFO} Racing kart final command topics"
     check_ros_topic_once "driver" "/racing_kart/vcu/command" "VCU command"
     check_ros_topic_once "driver" "/racing_kart/steer/command" "Steer command"
     check_ros_topic_once "driver" "/racing_kart/brake/command" "Brake command"
 
-    log "${INFO} Autoware vehicle status topics"
-    check_ros_topic_once "autoware" "/vehicle/status/velocity_status" "Velocity status"
-    check_ros_topic_once "autoware" "/vehicle/status/steering_status" "Steering status"
-    check_ros_topic_once "autoware" "/vehicle/status/gear_status" "Gear status"
-    check_ros_topic_once "autoware" "/vehicle/status/actuation_status" "Actuation status"
+    log "${INFO} Vehicle status topics published by driver"
+    check_ros_topic_once "driver" "/vehicle/status/velocity_status" "Velocity status"
+    check_ros_topic_once "driver" "/vehicle/status/steering_status" "Steering status"
+    check_ros_topic_once "driver" "/vehicle/status/gear_status" "Gear status"
+    check_ros_topic_once "driver" "/vehicle/status/actuation_status" "Actuation status"
+
+    log ""
+}
+
+check_autoware_ros_topics() {
+    print_section "Autoware ROS Topic Output Check"
 
     log "${INFO} Autoware downstream control command topics"
     check_ros_topic_once "autoware" "/control/command/control_cmd" "Control command"
     check_ros_topic_once "autoware" "/control/command/actuation_cmd" "Actuation command"
+    check_autoware_acceleration
 
     log ""
+}
+
+# 受信できるだけでなく、同じメッセージでアクセルが正・ブレーキがゼロかを確認する。
+check_autoware_acceleration() {
+    local topic="/control/command/actuation_cmd"
+    local label="Autoware accelerator command"
+    log "${INFO} ${label}: checking accel_cmd > 0 and brake_cmd = 0"
+
+    if ! is_compose_service_running "autoware"; then
+        log "${FAIL} ${label}: autoware service is not running"
+        record_result "fail"
+        return 0
+    fi
+
+    local setup_cmd output detail
+    setup_cmd="$(ros_setup_command_for_service "autoware")"
+    local attempt=1
+    detail="no message on ${topic}"
+    while [ "${attempt}" -le "${ROS_TOPIC_RETRY}" ]; do
+        if output="$(docker compose -f "${REPO_ROOT}/docker-compose.yml" exec -T autoware bash -lc "
+            ${setup_cmd}
+            timeout '${ROS_TOPIC_TIMEOUT_SEC}' ros2 topic echo '${topic}' --once --field actuation
+        " 2>/dev/null)"; then
+            # ROS の YAML 出力から数値だけを読む。欠落・NaN・不正な値をゼロ扱いしない。
+            if detail="$(awk '
+                /^[[:space:]]*accel_cmd:/ { accel = $2; accel_count++ }
+                /^[[:space:]]*brake_cmd:/ { brake = $2; brake_count++ }
+                END {
+                    number = "^[+-]?([0-9]+([.][0-9]*)?|[.][0-9]+)([eE][+-]?[0-9]+)?$"
+                    if (accel_count != 1 || brake_count != 1 || accel !~ number || brake !~ number) {
+                        print "invalid or missing accel_cmd/brake_cmd"
+                        exit 1
+                    }
+                    printf "accel_cmd=%s, brake_cmd=%s\n", accel, brake
+                    exit !(accel + 0 > 0 && brake + 0 == 0)
+                }
+            ' <<<"${output}")"; then
+                log "${OK} ${label}: ${detail}"
+                record_result "pass"
+                return 0
+            fi
+        else
+            detail="no message on ${topic} within ${ROS_TOPIC_TIMEOUT_SEC}s"
+        fi
+        attempt=$((attempt + 1))
+    done
+
+    log "${FAIL} ${label}: ${detail} (expected accel_cmd > 0 and brake_cmd = 0; ${ROS_TOPIC_RETRY} attempts)"
+    record_result "fail"
+}
+
+check_driver_runtime() {
+    check_runtime_hardware
+    check_runtime_docker_services driver zenoh
+    check_gnss_rtk_status
+    check_driver_ros_topics
+}
+
+check_autoware_runtime() {
+    check_vehicle_containers
+    check_autoware_ros_topics
 }
 
 # past_log.md既知問題チェック (preflight)
@@ -724,31 +834,30 @@ check_execution_readiness() {
     log ""
 }
 
-# 結果サマリー表示
+# 結果サマリー表示。失敗は最後に置く: TUI のログ pane は末尾しか見えない。
 print_summary() {
-    log "========================================"
-    log "📊 Check Results Summary"
-    log "========================================"
-    log "Total checks: $TOTAL_CHECKS"
-    log "${OK} Passed: $PASSED_CHECKS"
-    log "${WARN} Warnings: $WARNING_CHECKS"
-    log "${FAIL} Failed: $FAILED_CHECKS"
+    local scope
+    case "${PHASE}" in
+    preflight) scope="preflight" ;;
+    driver) scope="driver / zenoh" ;;
+    autoware) scope="Autoware" ;;
+    runtime) scope="driver / zenoh・Autoware" ;;
+    all) scope="全フェーズ" ;;
+    esac
     log ""
-
-    if [ $FAILED_CHECKS -eq 0 ] && [ $WARNING_CHECKS -eq 0 ]; then
-        log "${OK} All checks passed! System ready for vehicle mode."
-        exit 0
-    elif [ $FAILED_CHECKS -eq 0 ]; then
-        log "${WARN} Some warnings found. Review before proceeding with vehicle mode."
-        exit 0
-    else
-        log "${FAIL} Critical issues found! Fix failures before running vehicle mode."
-        log ""
-        log "Recommended actions:"
-        log "1. Address all failed checks above"
-        log "2. Re-run this script"
+    log "📊 ${TOTAL_CHECKS} checks: ${PASSED_CHECKS} ok, ${WARNING_CHECKS} warn, ${FAILED_CHECKS} fail"
+    # 判定を 1 行だけ添える。行頭に ${FAIL} / ${WARN} を置かないこと: TUI が行頭のマーカーで
+    # 失敗行を拾うため、判定行まで failures 領域に混ざる。
+    if [ "${FAILED_CHECKS}" -gt 0 ]; then
+        log "   ${scope} チェックに失敗あり。上の失敗項目を直して再実行してください。"
         exit 1
     fi
+    if [ "${WARNING_CHECKS}" -gt 0 ]; then
+        log "   ${scope} チェック完了（警告あり）。内容を確認してください。"
+    else
+        log "   ${scope} チェック完了。"
+    fi
+    exit 0
 }
 
 # メイン実行
@@ -767,20 +876,22 @@ main() {
         check_known_issues
         check_execution_readiness
         ;;
+    driver)
+        check_driver_runtime
+        ;;
+    autoware)
+        check_autoware_runtime
+        ;;
     runtime)
-        check_runtime_hardware
-        check_runtime_docker_services
-        check_gnss_rtk_status
-        check_runtime_ros_topics
+        check_driver_runtime
+        check_autoware_runtime
         ;;
     all)
         check_hardware
         check_network
         check_docker
-        check_runtime_hardware
-        check_runtime_docker_services
-        check_gnss_rtk_status
-        check_runtime_ros_topics
+        check_driver_runtime
+        check_autoware_runtime
         check_known_issues
         check_execution_readiness
         ;;

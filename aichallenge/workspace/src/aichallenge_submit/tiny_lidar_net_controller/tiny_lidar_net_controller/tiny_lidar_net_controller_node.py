@@ -29,6 +29,8 @@ class TinyLidarNetNode(Node):
         self.declare_parameter('model.ckpt_path', '')
         self.declare_parameter('max_range', 30.0)
         self.declare_parameter('acceleration', 0.1)
+        self.declare_parameter('accel_scale', 1.0)
+        self.declare_parameter('decel_scale', 1.0)
         self.declare_parameter('control_mode', 'ai')
         self.declare_parameter('debug', False)
 
@@ -39,6 +41,8 @@ class TinyLidarNetNode(Node):
         ckpt_path = self.get_parameter('model.ckpt_path').value
         max_range = self.get_parameter('max_range').value
         acceleration = self.get_parameter('acceleration').value
+        accel_scale = self.get_parameter('accel_scale').value
+        decel_scale = self.get_parameter('decel_scale').value
         control_mode = self.get_parameter('control_mode').value
         
         self.debug = self.get_parameter('debug').value
@@ -52,10 +56,13 @@ class TinyLidarNetNode(Node):
                 ckpt_path=ckpt_path,
                 acceleration=acceleration,
                 control_mode=control_mode,
-                max_range=max_range
+                max_range=max_range,
+                accel_scale=accel_scale,
+                decel_scale=decel_scale
             )
             self.get_logger().info(
-                f"Core initialized. Arch: {architecture}, MaxRange: {max_range}"
+                f"Core initialized. Arch: {architecture}, MaxRange: {max_range}, "
+                f"AccelScale: {accel_scale}, DecelScale: {decel_scale}"
             )
         except Exception as e:
             self.get_logger().error(f"Failed to initialize core logic: {e}")

@@ -12,7 +12,7 @@ SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 CONNECT_SCRIPT="${SCRIPT_DIR}/connect_zenoh.bash"
 
 usage() {
-    echo "Usage: $0 {A2|A3|A6|A7|test-*}" >&2
+    echo "Usage: $0 {A1|A2|A3|A4|A5|A6|A7|A8|test-*}" >&2
 }
 
 if [ ! -x "${CONNECT_SCRIPT}" ]; then

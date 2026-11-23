@@ -15,7 +15,7 @@ mkdir workspace/202605122237/ -p
 
 ```.bash
 cd ~/aichallenge-racingkart/aichallenge/ml_workspace/reinforcement_learning/
-cp ./src/config/config_store/default_config.yaml ./workspace/202605122237/default_condig.yaml
+cp ./src/config/config_store/default_config.yaml ./workspace/202605122237/default_config.yaml
 ```
 
 次に、AWSIM が GPU を使って描画するように設定をします。`~/aichallenge-racingkart/.env`ファイルの中に以下の一行が存在するようにしてください。コメントアウトされていた場合は先頭の`#`を取り除いてください。
@@ -30,7 +30,7 @@ COMPOSE_FILE=docker-compose.yml:docker-compose.gpu.yml
 1. `--camera off \`を`--camera cpu \`に変更してください。
 2. `--start-count-seconds 5 \`を`--start-count-seconds 0 \`に変更してください。
 
-その後、`aichallenge-racingkart/aichallenge/workspace/src/aichallenge_submit/aichallenge_submit_launch/launch/reference.launch.xml`のL20の下記の内容をrl_trainに書き換えてください。
+その後、`aichallenge-racingkart/aichallenge/workspace/src/aichallenge_submit/aichallenge_submit_launch/launch/reference.launch.xml`のL24の下記の内容をrl_trainに書き換えてください。
 
 ```.xml
   <arg name="control_method" default="rl_train"

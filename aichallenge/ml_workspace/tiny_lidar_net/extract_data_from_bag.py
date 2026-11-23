@@ -150,7 +150,9 @@ def process_bag(
             connections = [c for c in reader.connections if c.topic in target_topics]
             
             if not connections:
-                if debug: logger.warning(f"{bag_name}: No relevant topics found.")
+                logger.warning(
+                    f"Skipping {bag_name}: neither {config.control_topic} nor {config.scan_topic} is in the bag."
+                )
                 return
 
             for conn, timestamp, raw in reader.messages(connections=connections):
@@ -181,7 +183,10 @@ def process_bag(
     t_end_read = time.perf_counter()
 
     if not cmd_data or not scan_data:
-        if debug: logger.warning(f"Skipping {bag_name}: Insufficient data.")
+        logger.warning(
+            f"Skipping {bag_name}: insufficient data "
+            f"({len(cmd_data)} messages on {config.control_topic}, {len(scan_data)} on {config.scan_topic})."
+        )
         return
 
     # Convert lists to NumPy arrays for efficient processing

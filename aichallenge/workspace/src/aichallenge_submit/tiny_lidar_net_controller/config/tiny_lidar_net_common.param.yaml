@@ -1,0 +1,16 @@
+# 学習（ml_workspace/tiny_lidar_net/train.py）と推論（tiny_lidar_net_controller_node）で共通のパラメータ。
+# 学習と推論で値がずれるとモデルが正しく動かないので、ここだけで設定する。
+# 推論ノード固有のパラメータは tiny_lidar_net_node.param.yaml に置く。
+/**:
+  ros__parameters:
+    model:
+      input_dim: 750             # LiDARスキャンの入力次元
+
+    max_range: 30.0              # LiDARの正規化に使う最大レンジ（メートル）
+
+    # 加速度出力のスケール（control_mode: "ai" のとき）
+    # 出力層は tanh で (-1, 1) なので、学習では教師の加速度を割り、推論では出力に掛ける。
+    #   正の出力（加速）には accel_scale、負の出力（減速）には decel_scale を使う。
+    # 1.0 なら従来どおり（±1.0 m/s^2 まで）。例: accel_scale: 1.37、decel_scale: 3.0
+    accel_scale: 1.0
+    decel_scale: 1.0

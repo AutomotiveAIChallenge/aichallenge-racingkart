@@ -24,8 +24,13 @@ python3 prepare_data.py
 
 ```bash
 python3 train.py
-# loss.accel_weight=0.0 でステアのみ学習可能 (アクセル学習が不安定な場合に推奨)
+# train.loss.accel_weight=0.0 でステアのみ学習可能 (アクセル学習が不安定な場合に推奨)
+# python3 train.py train.loss.accel_weight=0.0
 ```
+
+Hydra のオーバーライドのキーは `config/train.yaml` の階層どおり `train.loss.*` になる (`loss.*` では `Key 'loss' is not in struct` で止まり、エラー文が勧める `+loss.*` では `train.loss.accel_weight` が 1.0 のまま学習される)。
+
+ステアのみ学習した場合、出力次元は 2 のままでアクセル側は未学習になる。走行時は [pilot_net_controller の設定](../../workspace/src/aichallenge_submit/pilot_net_controller/config/pilot_net_node.param.yaml) の `control_mode` を `"fixed"` にする (既定は `"ai"`)。
 
 ## 重みの形式変換
 

@@ -1,0 +1,384 @@
+{
+  "generated_at": "2026-09-14T22:11:33.348347+09:00",
+  "conditions": {
+    "duration_s": 5,
+    "warmup_s": 2,
+    "sensor_startup_wait_s": 3,
+    "std_threshold_rad_s": 0.03,
+    "velocity_threshold_m_s": 0.05,
+    "stationary_confirmation": "User confirmed all five vehicles stationary before measurement",
+    "nodes": [
+      "serial_driver",
+      "imu_converter",
+      "imu_bias_checker"
+    ],
+    "network": "Isolated temporary container; no external DDS network",
+    "settings_applied": false
+  },
+  "results": [
+    {
+      "param_sha256_before": "0070010e620771e324f980c0154915a2ba6cbead82a9a30e724132ee2ebc2706",
+      "containers_running_before": [],
+      "original_script_sha256": "5f5b8d879e875e9d2483a84e8898f9e1f1f4e63635bf0991e5e5101bf62b717a",
+      "measurement_script_sha256": "5f5b8d879e875e9d2483a84e8898f9e1f1f4e63635bf0991e5e5101bf62b717a",
+      "driver_image": "sha256:19a731b47c3a14f76ec4d4310869362762387b837741aeb1a5f1e1f936e8e24c",
+      "device": "/dev/ttyUSB0",
+      "container_exit_code": 0,
+      "container_output": "",
+      "started_at": "2026-09-14T13:08:55.447254+00:00",
+      "command": [
+        "python3",
+        "/measurement/check_imu_bias.py",
+        "--duration",
+        "5",
+        "--warmup",
+        "2",
+        "--std-threshold",
+        "0.03",
+        "--velocity-threshold",
+        "0.05",
+        "--param-yaml",
+        "/imu_corrector.param.yaml",
+        "--proposal-output",
+        "/measurement/proposal.json"
+      ],
+      "exit_code": 0,
+      "output": "1789391338.604798 [173]    python3: selected interface \"lo\" is not multicast-capable: disabling multicast\n==== IMU gyro bias check ====\nimu topic      : /sensing/imu/imu_raw\nsampling       : 5.0s (after 2.0s warmup)\nKeep the vehicle completely stationary during sampling.\nstationary     : velocity_status not received on /vehicle/status/velocity_status; relying on manual confirmation\nsamples        : 373\n\naxis    bias[rad/s]         std  status\n---------------------------------------\nx     -0.016204  0.002100  OK\ny     +0.009572  0.001969  OK\nz     -0.002520  0.001961  OK\n\nIMUジャイロバイアス [rad/s]: /imu_corrector.param.yaml\n軸              現在値           実測値         差分(実測値−現在値)\n----------------------------------------------------\nx     +0.000000  -0.016204  -0.016204\ny     +0.000000  +0.009572  +0.009572\nz     -0.000000  -0.002520  -0.002520\n\nIMU measurement complete; settings have not been changed.\n",
+      "proposal": {
+        "param_yaml": "/imu_corrector.param.yaml",
+        "current_text": "/**:\n  ros__parameters:\n    angular_velocity_offset_x: 0.0     # [rad/s]\n    angular_velocity_offset_y: 0.0     # [rad/s]\n    angular_velocity_offset_z: -0.000  # [rad/s]\n    angular_velocity_stddev_xx: 0.03   # [rad/s]\n    angular_velocity_stddev_yy: 0.03   # [rad/s]\n    angular_velocity_stddev_zz: 0.03   # [rad/s]\n",
+        "offsets": {
+          "x": -0.016204205079051473,
+          "y": 0.0095719323692303,
+          "z": -0.0025196062803397416
+        }
+      },
+      "finished_at": "2026-09-14T13:09:06.918751+00:00",
+      "serial_driver_log": "[INFO] [launch]: All log files can be found below /tmp/imu-bias-ros-logs/2026-09-14-13-08-55-620385-f7774c2430ad-23\n[INFO] [launch]: Default logging verbosity is set to INFO\n[INFO] [serial_driver_node-1]: process started with pid [27]\n[serial_driver_node-1] 1789391335.684165 [173] serial_dri: selected interface \"lo\" is not multicast-capable: disabling multicast\n[serial_driver_node-1] [INFO] [1789391335.690136874] [serial_driver]: Serial port opened at /dev/imu_measurement with baudrate 115200\n[serial_driver_node-1] [INFO] [1789391335.690923014] [serial_driver]: Serial driver node initialized\n[serial_driver_node-1] [WARN] [1789391335.695223280] [serial_driver]: Received serial data is in invalid format: 047� -0.7175572 0.6259542 -0.09160305 0 0 0 0.0 D\n[WARNING] [launch]: user interrupted with ctrl-c (SIGINT)\n[INFO] [serial_driver_node-1]: sending signal 'SIGINT' to process[serial_driver_node-1]\n[serial_driver_node-1] [INFO] [1789391345.887223045] [rclcpp]: signal_handler(SIGINT/SIGTERM)\n[serial_driver_node-1] [INFO] [1789391345.888782561] [rclcpp]: signal_handler(SIGINT/SIGTERM)\n[serial_driver_node-1] [WARN] [1789391345.889157129] [serial_driver]: Received serial data values length is invalid for v7\n[ERROR] [serial_driver_node-1]: process has died [pid 27, exit code -11, cmd '/workspace/install/serial_driver/lib/serial_driver/serial_driver_node --ros-args -r __node:=serial_driver --params-file /tmp/launch_params__0tfyp82 --params-file /workspace/install/serial_driver/share/serial_driver/config/serial_driver.param.yaml'].\n",
+      "imu_converter_log": "[INFO] [launch]: All log files can be found below /tmp/imu-bias-ros-logs/2026-09-14-13-08-55-620384-f7774c2430ad-24\n[INFO] [launch]: Default logging verbosity is set to INFO\n[INFO] [imu_converter_node-1]: process started with pid [25]\n[imu_converter_node-1] 1789391335.684021 [173] imu_conver: selected interface \"lo\" is not multicast-capable: disabling multicast\n[imu_converter_node-1] [INFO] [1789391335.689030080] [imu_converter]: angular_rate_limit: 10.000000, max_angular_rate_limit: 500.000000, N: 50\n[WARNING] [launch]: user interrupted with ctrl-c (SIGINT)\n[imu_converter_node-1] [INFO] [1789391345.887087092] [rclcpp]: signal_handler(SIGINT/SIGTERM)\n[INFO] [imu_converter_node-1]: sending signal 'SIGINT' to process[imu_converter_node-1]\n[imu_converter_node-1] [INFO] [1789391345.889880822] [rclcpp]: signal_handler(SIGINT/SIGTERM)\n[INFO] [imu_converter_node-1]: process has finished cleanly [pid 25]\n",
+      "param_sha256_after": "0070010e620771e324f980c0154915a2ba6cbead82a9a30e724132ee2ebc2706",
+      "settings_unchanged": true,
+      "containers_running_after": [],
+      "host": "a2",
+      "ssh_stderr": "",
+      "remote_staging_dir": "/tmp/imu-bias-20260914-UcHlTR",
+      "remote_staging_removed": true,
+      "samples": 373,
+      "axes": {
+        "x": {
+          "bias_rad_s": -0.016204205079051473,
+          "std_rad_s": 0.0021,
+          "current_offset_rad_s": 0.0,
+          "delta_rad_s": -0.016204205079051473,
+          "status": "OK"
+        },
+        "y": {
+          "bias_rad_s": 0.0095719323692303,
+          "std_rad_s": 0.001969,
+          "current_offset_rad_s": 0.0,
+          "delta_rad_s": 0.0095719323692303,
+          "status": "OK"
+        },
+        "z": {
+          "bias_rad_s": -0.0025196062803397416,
+          "std_rad_s": 0.001961,
+          "current_offset_rad_s": -0.0,
+          "delta_rad_s": -0.0025196062803397416,
+          "status": "OK"
+        }
+      },
+      "passed": true
+    },
+    {
+      "param_sha256_before": "3649ecd19fd349217c70e2b3cba091db093523947d7c662d77419216e93de009",
+      "containers_running_before": [],
+      "original_script_sha256": "5f5b8d879e875e9d2483a84e8898f9e1f1f4e63635bf0991e5e5101bf62b717a",
+      "measurement_script_sha256": "5f5b8d879e875e9d2483a84e8898f9e1f1f4e63635bf0991e5e5101bf62b717a",
+      "driver_image": "sha256:19a731b47c3a14f76ec4d4310869362762387b837741aeb1a5f1e1f936e8e24c",
+      "device": "/dev/ttyUSB0",
+      "container_exit_code": 0,
+      "container_output": "",
+      "started_at": "2026-09-14T13:09:35.357642+00:00",
+      "command": [
+        "python3",
+        "/measurement/check_imu_bias.py",
+        "--duration",
+        "5",
+        "--warmup",
+        "2",
+        "--std-threshold",
+        "0.03",
+        "--velocity-threshold",
+        "0.05",
+        "--param-yaml",
+        "/imu_corrector.param.yaml",
+        "--proposal-output",
+        "/measurement/proposal.json"
+      ],
+      "exit_code": 0,
+      "output": "1789391378.541125 [173]    python3: selected interface \"lo\" is not multicast-capable: disabling multicast\n==== IMU gyro bias check ====\nimu topic      : /sensing/imu/imu_raw\nsampling       : 5.0s (after 2.0s warmup)\nKeep the vehicle completely stationary during sampling.\nstationary     : velocity_status not received on /vehicle/status/velocity_status; relying on manual confirmation\nsamples        : 373\n\naxis    bias[rad/s]         std  status\n---------------------------------------\nx     +0.023206  0.001978  OK\ny     +0.014435  0.002240  OK\nz     -0.013185  0.002157  OK\n\nIMUジャイロバイアス [rad/s]: /imu_corrector.param.yaml\n軸              現在値           実測値         差分(実測値−現在値)\n----------------------------------------------------\nx     +0.022117  +0.023206  +0.001089\ny     +0.014236  +0.014435  +0.000199\nz     -0.013560  -0.013185  +0.000375\n\nIMU measurement complete; settings have not been changed.\n",
+      "proposal": {
+        "param_yaml": "/imu_corrector.param.yaml",
+        "current_text": "/**:\n  ros__parameters:\n    angular_velocity_offset_x: 0.022117     # [rad/s]\n    angular_velocity_offset_y: 0.014236     # [rad/s]\n    angular_velocity_offset_z: -0.013560  # [rad/s]\n    angular_velocity_stddev_xx: 0.03   # [rad/s]\n    angular_velocity_stddev_yy: 0.03   # [rad/s]\n    angular_velocity_stddev_zz: 0.03   # [rad/s]\n",
+        "offsets": {
+          "x": 0.023205809859762307,
+          "y": 0.014434694290270764,
+          "z": -0.01318524925340729
+        }
+      },
+      "finished_at": "2026-09-14T13:09:46.900496+00:00",
+      "serial_driver_log": "[INFO] [launch]: All log files can be found below /tmp/imu-bias-ros-logs/2026-09-14-13-09-35-565099-3acc4e5d4ec3-23\n[INFO] [launch]: Default logging verbosity is set to INFO\n[INFO] [serial_driver_node-1]: process started with pid [27]\n[serial_driver_node-1] 1789391375.635986 [173] serial_dri: selected interface \"lo\" is not multicast-capable: disabling multicast\n[serial_driver_node-1] [INFO] [1789391375.641498391] [serial_driver]: Serial port opened at /dev/imu_measurement with baudrate 115200\n[serial_driver_node-1] [INFO] [1789391375.642151860] [serial_driver]: Serial driver node initialized\n[serial_driver_node-1] [WARN] [1789391375.643568641] [serial_driver]: Received serial data is in invalid format: 62 -0.9160305 0 0 0 0.0 N\n[WARNING] [launch]: user interrupted with ctrl-c (SIGINT)\n[INFO] [serial_driver_node-1]: sending signal 'SIGINT' to process[serial_driver_node-1]\n[serial_driver_node-1] [INFO] [1789391385.850478886] [rclcpp]: signal_handler(SIGINT/SIGTERM)\n[serial_driver_node-1] [INFO] [1789391385.851373077] [serial_driver]: Serial driver node terminated\n[ERROR] [serial_driver_node-1]: process has died [pid 27, exit code -2, cmd '/workspace/install/serial_driver/lib/serial_driver/serial_driver_node --ros-args -r __node:=serial_driver --params-file /tmp/launch_params_1a9op3n_ --params-file /workspace/install/serial_driver/share/serial_driver/config/serial_driver.param.yaml'].\n",
+      "imu_converter_log": "[INFO] [launch]: All log files can be found below /tmp/imu-bias-ros-logs/2026-09-14-13-09-35-565099-3acc4e5d4ec3-24\n[INFO] [launch]: Default logging verbosity is set to INFO\n[INFO] [imu_converter_node-1]: process started with pid [25]\n[imu_converter_node-1] 1789391375.635618 [173] imu_conver: selected interface \"lo\" is not multicast-capable: disabling multicast\n[imu_converter_node-1] [INFO] [1789391375.640354265] [imu_converter]: angular_rate_limit: 10.000000, max_angular_rate_limit: 500.000000, N: 50\n[WARNING] [launch]: user interrupted with ctrl-c (SIGINT)\n[INFO] [imu_converter_node-1]: sending signal 'SIGINT' to process[imu_converter_node-1]\n[imu_converter_node-1] [INFO] [1789391385.850519846] [rclcpp]: signal_handler(SIGINT/SIGTERM)\n[imu_converter_node-1] [INFO] [1789391385.852346764] [rclcpp]: signal_handler(SIGINT/SIGTERM)\n[INFO] [imu_converter_node-1]: process has finished cleanly [pid 25]\n",
+      "param_sha256_after": "3649ecd19fd349217c70e2b3cba091db093523947d7c662d77419216e93de009",
+      "settings_unchanged": true,
+      "containers_running_after": [],
+      "host": "a3",
+      "ssh_stderr": "",
+      "remote_staging_dir": "/tmp/imu-bias-20260914-5pFfpT",
+      "remote_staging_removed": true,
+      "samples": 373,
+      "axes": {
+        "x": {
+          "bias_rad_s": 0.023205809859762307,
+          "std_rad_s": 0.001978,
+          "current_offset_rad_s": 0.022117,
+          "delta_rad_s": 0.001088809859762306,
+          "status": "OK"
+        },
+        "y": {
+          "bias_rad_s": 0.014434694290270764,
+          "std_rad_s": 0.00224,
+          "current_offset_rad_s": 0.014236,
+          "delta_rad_s": 0.00019869429027076328,
+          "status": "OK"
+        },
+        "z": {
+          "bias_rad_s": -0.01318524925340729,
+          "std_rad_s": 0.002157,
+          "current_offset_rad_s": -0.01356,
+          "delta_rad_s": 0.0003747507465927096,
+          "status": "OK"
+        }
+      },
+      "passed": true
+    },
+    {
+      "param_sha256_before": "0070010e620771e324f980c0154915a2ba6cbead82a9a30e724132ee2ebc2706",
+      "containers_running_before": [],
+      "original_script_sha256": "5f5b8d879e875e9d2483a84e8898f9e1f1f4e63635bf0991e5e5101bf62b717a",
+      "measurement_script_sha256": "5f5b8d879e875e9d2483a84e8898f9e1f1f4e63635bf0991e5e5101bf62b717a",
+      "driver_image": "sha256:19a731b47c3a14f76ec4d4310869362762387b837741aeb1a5f1e1f936e8e24c",
+      "device": "/dev/ttyUSB0",
+      "container_exit_code": 0,
+      "container_output": "",
+      "started_at": "2026-09-14T13:09:51.066205+00:00",
+      "command": [
+        "python3",
+        "/measurement/check_imu_bias.py",
+        "--duration",
+        "5",
+        "--warmup",
+        "2",
+        "--std-threshold",
+        "0.03",
+        "--velocity-threshold",
+        "0.05",
+        "--param-yaml",
+        "/imu_corrector.param.yaml",
+        "--proposal-output",
+        "/measurement/proposal.json"
+      ],
+      "exit_code": 3,
+      "output": "1789391394.227739 [173]    python3: selected interface \"lo\" is not multicast-capable: disabling multicast\n==== IMU gyro bias check ====\nimu topic      : /sensing/imu/imu_raw\nsampling       : 5.0s (after 2.0s warmup)\nKeep the vehicle completely stationary during sampling.\n  ❌ Too few messages on /sensing/imu/imu_raw (0 < 10). Is the IMU driver up and publishing at a reasonable rate?\n",
+      "finished_at": "2026-09-14T13:10:02.576034+00:00",
+      "serial_driver_log": "[INFO] [launch]: All log files can be found below /tmp/imu-bias-ros-logs/2026-09-14-13-09-51-246339-782c9d2794d1-23\n[INFO] [launch]: Default logging verbosity is set to INFO\n[INFO] [serial_driver_node-1]: process started with pid [27]\n[serial_driver_node-1] 1789391391.314882 [173] serial_dri: selected interface \"lo\" is not multicast-capable: disabling multicast\n[serial_driver_node-1] [INFO] [1789391391.320336966] [serial_driver]: Serial port opened at /dev/imu_measurement with baudrate 115200\n[serial_driver_node-1] [INFO] [1789391391.321015552] [serial_driver]: Serial driver node initialized\n[WARNING] [launch]: user interrupted with ctrl-c (SIGINT)\n[INFO] [serial_driver_node-1]: sending signal 'SIGINT' to process[serial_driver_node-1]\n[serial_driver_node-1] [INFO] [1789391401.526354252] [rclcpp]: signal_handler(SIGINT/SIGTERM)\n[ERROR] [serial_driver_node-1]: process has died [pid 27, exit code -2, cmd '/workspace/install/serial_driver/lib/serial_driver/serial_driver_node --ros-args -r __node:=serial_driver --params-file /tmp/launch_params_ang27980 --params-file /workspace/install/serial_driver/share/serial_driver/config/serial_driver.param.yaml'].\n",
+      "imu_converter_log": "[INFO] [launch]: All log files can be found below /tmp/imu-bias-ros-logs/2026-09-14-13-09-51-246331-782c9d2794d1-24\n[INFO] [launch]: Default logging verbosity is set to INFO\n[INFO] [imu_converter_node-1]: process started with pid [25]\n[imu_converter_node-1] 1789391391.313870 [173] imu_conver: selected interface \"lo\" is not multicast-capable: disabling multicast\n[imu_converter_node-1] [INFO] [1789391391.318548696] [imu_converter]: angular_rate_limit: 10.000000, max_angular_rate_limit: 500.000000, N: 50\n[WARNING] [launch]: user interrupted with ctrl-c (SIGINT)\n[INFO] [imu_converter_node-1]: sending signal 'SIGINT' to process[imu_converter_node-1]\n[imu_converter_node-1] [INFO] [1789391401.526453498] [rclcpp]: signal_handler(SIGINT/SIGTERM)\n[imu_converter_node-1] [INFO] [1789391401.528060969] [rclcpp]: signal_handler(SIGINT/SIGTERM)\n[INFO] [imu_converter_node-1]: process has finished cleanly [pid 25]\n",
+      "param_sha256_after": "0070010e620771e324f980c0154915a2ba6cbead82a9a30e724132ee2ebc2706",
+      "settings_unchanged": true,
+      "containers_running_after": [],
+      "host": "a4",
+      "ssh_stderr": "",
+      "remote_staging_dir": "/tmp/imu-bias-20260914-rSNFPQ",
+      "diagnostics": {
+        "serial_device": "/dev/ttyUSB0",
+        "serial_read_duration_s": 8,
+        "serial_received_bytes": 0,
+        "note": "Serial device opened successfully; no IMU messages, and no serial data during an additional 8-second read. Awaiting confirmation of vehicle-side power."
+      },
+      "remote_staging_removed": true,
+      "samples": 0,
+      "axes": {},
+      "passed": false
+    },
+    {
+      "param_sha256_before": "0070010e620771e324f980c0154915a2ba6cbead82a9a30e724132ee2ebc2706",
+      "containers_running_before": [],
+      "original_script_sha256": "59af520a7f3b39bcbfc6a3a7ec0e4bd1d29ed5e50c95c2551d33e01f9c40d550",
+      "measurement_script_sha256": "5f5b8d879e875e9d2483a84e8898f9e1f1f4e63635bf0991e5e5101bf62b717a",
+      "driver_image": "sha256:19a731b47c3a14f76ec4d4310869362762387b837741aeb1a5f1e1f936e8e24c",
+      "device": "/dev/ttyUSB0",
+      "container_exit_code": 0,
+      "container_output": "",
+      "started_at": "2026-09-14T13:10:13.627543+00:00",
+      "command": [
+        "python3",
+        "/measurement/check_imu_bias.py",
+        "--duration",
+        "5",
+        "--warmup",
+        "2",
+        "--std-threshold",
+        "0.03",
+        "--velocity-threshold",
+        "0.05",
+        "--param-yaml",
+        "/imu_corrector.param.yaml",
+        "--proposal-output",
+        "/measurement/proposal.json"
+      ],
+      "exit_code": 0,
+      "output": "1789391416.801626 [173]    python3: selected interface \"lo\" is not multicast-capable: disabling multicast\n==== IMU gyro bias check ====\nimu topic      : /sensing/imu/imu_raw\nsampling       : 5.0s (after 2.0s warmup)\nKeep the vehicle completely stationary during sampling.\nstationary     : velocity_status not received on /vehicle/status/velocity_status; relying on manual confirmation\nsamples        : 373\n\naxis    bias[rad/s]         std  status\n---------------------------------------\nx     -0.022481  0.002047  OK\ny     +0.006758  0.001997  OK\nz     -0.004096  0.001972  OK\n\nIMUジャイロバイアス [rad/s]: /imu_corrector.param.yaml\n軸              現在値           実測値         差分(実測値−現在値)\n----------------------------------------------------\nx     +0.000000  -0.022481  -0.022481\ny     +0.000000  +0.006758  +0.006758\nz     -0.000000  -0.004096  -0.004096\n\nIMU measurement complete; settings have not been changed.\n",
+      "proposal": {
+        "param_yaml": "/imu_corrector.param.yaml",
+        "current_text": "/**:\n  ros__parameters:\n    angular_velocity_offset_x: 0.0     # [rad/s]\n    angular_velocity_offset_y: 0.0     # [rad/s]\n    angular_velocity_offset_z: -0.000  # [rad/s]\n    angular_velocity_stddev_xx: 0.03   # [rad/s]\n    angular_velocity_stddev_yy: 0.03   # [rad/s]\n    angular_velocity_stddev_zz: 0.03   # [rad/s]\n",
+        "offsets": {
+          "x": -0.02248143248256895,
+          "y": 0.006758002964480102,
+          "z": -0.004095521135167795
+        }
+      },
+      "finished_at": "2026-09-14T13:10:25.169476+00:00",
+      "serial_driver_log": "[INFO] [launch]: All log files can be found below /tmp/imu-bias-ros-logs/2026-09-14-13-10-13-808819-f2b2a029cb08-23\n[INFO] [launch]: Default logging verbosity is set to INFO\n[INFO] [serial_driver_node-1]: process started with pid [27]\n[serial_driver_node-1] 1789391413.874969 [173] serial_dri: selected interface \"lo\" is not multicast-capable: disabling multicast\n[serial_driver_node-1] [INFO] [1789391413.880980758] [serial_driver]: Serial port opened at /dev/imu_measurement with baudrate 115200\n[serial_driver_node-1] [INFO] [1789391413.881649272] [serial_driver]: Serial driver node initialized\n[serial_driver_node-1] [WARN] [1789391413.896512086] [serial_driver]: Received serial data is in invalid format:  0.�5��\u0002�\u0002�\u0002�\u0002�r�\u0002\"5\n[serial_driver_node-1] HD 8 0 0 0 None -62.7 -52.35 34.65 -0.0201416 -0.01708984 0.9996338 -1.312977 0.4274809 -0.259542 0 0 0 0.0 D\n[WARNING] [launch]: user interrupted with ctrl-c (SIGINT)\n[INFO] [serial_driver_node-1]: sending signal 'SIGINT' to process[serial_driver_node-1]\n[serial_driver_node-1] [INFO] [1789391424.119051489] [rclcpp]: signal_handler(SIGINT/SIGTERM)\n[ERROR] [serial_driver_node-1]: process has died [pid 27, exit code -2, cmd '/workspace/install/serial_driver/lib/serial_driver/serial_driver_node --ros-args -r __node:=serial_driver --params-file /tmp/launch_params_kphhzuqe --params-file /workspace/install/serial_driver/share/serial_driver/config/serial_driver.param.yaml'].\n",
+      "imu_converter_log": "[INFO] [launch]: All log files can be found below /tmp/imu-bias-ros-logs/2026-09-14-13-10-13-808817-f2b2a029cb08-24\n[INFO] [launch]: Default logging verbosity is set to INFO\n[INFO] [imu_converter_node-1]: process started with pid [25]\n[imu_converter_node-1] 1789391413.874968 [173] imu_conver: selected interface \"lo\" is not multicast-capable: disabling multicast\n[imu_converter_node-1] [INFO] [1789391413.879589662] [imu_converter]: angular_rate_limit: 10.000000, max_angular_rate_limit: 500.000000, N: 50\n[WARNING] [launch]: user interrupted with ctrl-c (SIGINT)\n[imu_converter_node-1] [INFO] [1789391424.118913609] [rclcpp]: signal_handler(SIGINT/SIGTERM)\n[INFO] [imu_converter_node-1]: sending signal 'SIGINT' to process[imu_converter_node-1]\n[imu_converter_node-1] [INFO] [1789391424.121271088] [rclcpp]: signal_handler(SIGINT/SIGTERM)\n[INFO] [imu_converter_node-1]: process has finished cleanly [pid 25]\n",
+      "param_sha256_after": "0070010e620771e324f980c0154915a2ba6cbead82a9a30e724132ee2ebc2706",
+      "settings_unchanged": true,
+      "containers_running_after": [],
+      "host": "a6",
+      "ssh_stderr": "",
+      "remote_staging_dir": "/tmp/imu-bias-20260914-Jxqt38",
+      "remote_staging_removed": true,
+      "samples": 373,
+      "axes": {
+        "x": {
+          "bias_rad_s": -0.02248143248256895,
+          "std_rad_s": 0.002047,
+          "current_offset_rad_s": 0.0,
+          "delta_rad_s": -0.02248143248256895,
+          "status": "OK"
+        },
+        "y": {
+          "bias_rad_s": 0.006758002964480102,
+          "std_rad_s": 0.001997,
+          "current_offset_rad_s": 0.0,
+          "delta_rad_s": 0.006758002964480102,
+          "status": "OK"
+        },
+        "z": {
+          "bias_rad_s": -0.004095521135167795,
+          "std_rad_s": 0.001972,
+          "current_offset_rad_s": -0.0,
+          "delta_rad_s": -0.004095521135167795,
+          "status": "OK"
+        }
+      },
+      "passed": true
+    },
+    {
+      "param_sha256_before": "0070010e620771e324f980c0154915a2ba6cbead82a9a30e724132ee2ebc2706",
+      "containers_running_before": [],
+      "original_script_sha256": "5f5b8d879e875e9d2483a84e8898f9e1f1f4e63635bf0991e5e5101bf62b717a",
+      "measurement_script_sha256": "5f5b8d879e875e9d2483a84e8898f9e1f1f4e63635bf0991e5e5101bf62b717a",
+      "driver_image": "sha256:19a731b47c3a14f76ec4d4310869362762387b837741aeb1a5f1e1f936e8e24c",
+      "device": "/dev/ttyUSB0",
+      "container_exit_code": 0,
+      "container_output": "",
+      "started_at": "2026-09-14T13:10:29.607462+00:00",
+      "command": [
+        "python3",
+        "/measurement/check_imu_bias.py",
+        "--duration",
+        "5",
+        "--warmup",
+        "2",
+        "--std-threshold",
+        "0.03",
+        "--velocity-threshold",
+        "0.05",
+        "--param-yaml",
+        "/imu_corrector.param.yaml",
+        "--proposal-output",
+        "/measurement/proposal.json"
+      ],
+      "exit_code": 0,
+      "output": "1789391432.773894 [173]    python3: selected interface \"lo\" is not multicast-capable: disabling multicast\n==== IMU gyro bias check ====\nimu topic      : /sensing/imu/imu_raw\nsampling       : 5.0s (after 2.0s warmup)\nKeep the vehicle completely stationary during sampling.\nstationary     : velocity_status not received on /vehicle/status/velocity_status; relying on manual confirmation\nsamples        : 374\n\naxis    bias[rad/s]         std  status\n---------------------------------------\nx     -0.018335  0.002231  OK\ny     -0.001045  0.002094  OK\nz     -0.006849  0.001922  OK\n\nIMUジャイロバイアス [rad/s]: /imu_corrector.param.yaml\n軸              現在値           実測値         差分(実測値−現在値)\n----------------------------------------------------\nx     +0.000000  -0.018335  -0.018335\ny     +0.000000  -0.001045  -0.001045\nz     -0.000000  -0.006849  -0.006849\n\nIMU measurement complete; settings have not been changed.\n",
+      "proposal": {
+        "param_yaml": "/imu_corrector.param.yaml",
+        "current_text": "/**:\n  ros__parameters:\n    angular_velocity_offset_x: 0.0     # [rad/s]\n    angular_velocity_offset_y: 0.0     # [rad/s]\n    angular_velocity_offset_z: -0.000  # [rad/s]\n    angular_velocity_stddev_xx: 0.03   # [rad/s]\n    angular_velocity_stddev_yy: 0.03   # [rad/s]\n    angular_velocity_stddev_zz: 0.03   # [rad/s]\n",
+        "offsets": {
+          "x": -0.01833461373636425,
+          "y": -0.001045188372961597,
+          "z": -0.006848940864930324
+        }
+      },
+      "finished_at": "2026-09-14T13:10:41.127478+00:00",
+      "serial_driver_log": "[INFO] [launch]: All log files can be found below /tmp/imu-bias-ros-logs/2026-09-14-13-10-29-778855-96cb31eae8fa-23\n[INFO] [launch]: Default logging verbosity is set to INFO\n[INFO] [serial_driver_node-1]: process started with pid [27]\n[serial_driver_node-1] 1789391429.843088 [173] serial_dri: selected interface \"lo\" is not multicast-capable: disabling multicast\n[serial_driver_node-1] [INFO] [1789391429.848929257] [serial_driver]: Serial port opened at /dev/imu_measurement with baudrate 115200\n[serial_driver_node-1] [INFO] [1789391429.849633608] [serial_driver]: Serial driver node initialized\n[WARNING] [launch]: user interrupted with ctrl-c (SIGINT)\n[INFO] [serial_driver_node-1]: sending signal 'SIGINT' to process[serial_driver_node-1]\n[serial_driver_node-1] [INFO] [1789391440.077070403] [rclcpp]: signal_handler(SIGINT/SIGTERM)\n[serial_driver_node-1] [WARN] [1789391440.077733391] [serial_driver]: Received serial data values length is invalid for v7\n[ERROR] [serial_driver_node-1]: process has died [pid 27, exit code -2, cmd '/workspace/install/serial_driver/lib/serial_driver/serial_driver_node --ros-args -r __node:=serial_driver --params-file /tmp/launch_params_px4j3y3u --params-file /workspace/install/serial_driver/share/serial_driver/config/serial_driver.param.yaml'].\n",
+      "imu_converter_log": "[INFO] [launch]: All log files can be found below /tmp/imu-bias-ros-logs/2026-09-14-13-10-29-778856-96cb31eae8fa-24\n[INFO] [launch]: Default logging verbosity is set to INFO\n[INFO] [imu_converter_node-1]: process started with pid [25]\n[imu_converter_node-1] 1789391429.843088 [173] imu_conver: selected interface \"lo\" is not multicast-capable: disabling multicast\n[imu_converter_node-1] [INFO] [1789391429.848475988] [imu_converter]: angular_rate_limit: 10.000000, max_angular_rate_limit: 500.000000, N: 50\n[WARNING] [launch]: user interrupted with ctrl-c (SIGINT)\n[INFO] [imu_converter_node-1]: sending signal 'SIGINT' to process[imu_converter_node-1]\n[imu_converter_node-1] [INFO] [1789391440.076991228] [rclcpp]: signal_handler(SIGINT/SIGTERM)\n[imu_converter_node-1] [INFO] [1789391440.078226647] [rclcpp]: signal_handler(SIGINT/SIGTERM)\n[INFO] [imu_converter_node-1]: process has finished cleanly [pid 25]\n",
+      "param_sha256_after": "0070010e620771e324f980c0154915a2ba6cbead82a9a30e724132ee2ebc2706",
+      "settings_unchanged": true,
+      "containers_running_after": [],
+      "host": "a7",
+      "ssh_stderr": "",
+      "remote_staging_dir": "/tmp/imu-bias-20260914-eHEEKm",
+      "remote_staging_removed": true,
+      "samples": 374,
+      "axes": {
+        "x": {
+          "bias_rad_s": -0.01833461373636425,
+          "std_rad_s": 0.002231,
+          "current_offset_rad_s": 0.0,
+          "delta_rad_s": -0.01833461373636425,
+          "status": "OK"
+        },
+        "y": {
+          "bias_rad_s": -0.001045188372961597,
+          "std_rad_s": 0.002094,
+          "current_offset_rad_s": 0.0,
+          "delta_rad_s": -0.001045188372961597,
+          "status": "OK"
+        },
+        "z": {
+          "bias_rad_s": -0.006848940864930324,
+          "std_rad_s": 0.001922,
+          "current_offset_rad_s": -0.0,
+          "delta_rad_s": -0.006848940864930324,
+          "status": "OK"
+        }
+      },
+      "passed": true
+    }
+  ],
+  "initial_setup_failures": [
+    {
+      "param_sha256_before": "0070010e620771e324f980c0154915a2ba6cbead82a9a30e724132ee2ebc2706",
+      "containers_running_before": [],
+      "original_script_sha256": "5f5b8d879e875e9d2483a84e8898f9e1f1f4e63635bf0991e5e5101bf62b717a",
+      "measurement_script_sha256": "5f5b8d879e875e9d2483a84e8898f9e1f1f4e63635bf0991e5e5101bf62b717a",
+      "driver_image": "sha256:19a731b47c3a14f76ec4d4310869362762387b837741aeb1a5f1e1f936e8e24c",
+      "device": "/dev/ttyUSB0",
+      "container_exit_code": 0,
+      "container_output": "",
+      "started_at": "2026-09-14T13:08:33.455838+00:00",
+      "error": "A sensor node exited before measurement",
+      "finished_at": "2026-09-14T13:08:36.459751+00:00",
+      "serial_driver_log": "[INFO] [launch]: All log files can be found below /tmp/imu-bias-ros-logs/2026-09-14-13-08-33-631008-e034ba7a6674-23\n[INFO] [launch]: Default logging verbosity is set to INFO\n[INFO] [serial_driver_node-1]: process started with pid [27]\n[serial_driver_node-1] 1789391313.696262 [173] serial_dri: lo: the same interface may not be selected twice\n[serial_driver_node-1] [ERROR] [1789391313.696278171] [rmw_cyclonedds_cpp]: rmw_create_node: failed to create domain, error Error\n[serial_driver_node-1] \n[serial_driver_node-1] >>> [rcutils|error_handling.c:108] rcutils_set_error_state()\n[serial_driver_node-1] This error state is being overwritten:\n[serial_driver_node-1] \n[serial_driver_node-1]   'error not set, at ./src/rcl/node.c:263'\n[serial_driver_node-1] \n[serial_driver_node-1] with this new error message:\n[serial_driver_node-1] \n[serial_driver_node-1]   'rcl node's rmw handle is invalid, at ./src/rcl/node.c:415'\n[serial_driver_node-1] \n[serial_driver_node-1] rcutils_reset_error() should be called after error handling to avoid this.\n[serial_driver_node-1] <<<\n[serial_driver_node-1] [ERROR] [1789391313.696308005] [rcl]: Failed to fini publisher for node: 1\n[serial_driver_node-1] terminate called after throwing an instance of 'rclcpp::exceptions::RCLError'\n[serial_driver_node-1]   what():  failed to initialize rcl node: rcl node's rmw handle is invalid, at ./src/rcl/node.c:415\n[ERROR] [serial_driver_node-1]: process has died [pid 27, exit code -6, cmd '/workspace/install/serial_driver/lib/serial_driver/serial_driver_node --ros-args -r __node:=serial_driver --params-file /tmp/launch_params_1c206tf9 --params-file /workspace/install/serial_driver/share/serial_driver/config/serial_driver.param.yaml'].\n",
+      "imu_converter_log": "[INFO] [launch]: All log files can be found below /tmp/imu-bias-ros-logs/2026-09-14-13-08-33-631008-e034ba7a6674-24\n[INFO] [launch]: Default logging verbosity is set to INFO\n[INFO] [imu_converter_node-1]: process started with pid [25]\n[imu_converter_node-1] 1789391313.695716 [173] imu_conver: lo: the same interface may not be selected twice\n[imu_converter_node-1] [ERROR] [1789391313.695733790] [rmw_cyclonedds_cpp]: rmw_create_node: failed to create domain, error Error\n[imu_converter_node-1] \n[imu_converter_node-1] >>> [rcutils|error_handling.c:108] rcutils_set_error_state()\n[imu_converter_node-1] This error state is being overwritten:\n[imu_converter_node-1] \n[imu_converter_node-1]   'error not set, at ./src/rcl/node.c:263'\n[imu_converter_node-1] \n[imu_converter_node-1] with this new error message:\n[imu_converter_node-1] \n[imu_converter_node-1]   'rcl node's rmw handle is invalid, at ./src/rcl/node.c:415'\n[imu_converter_node-1] \n[imu_converter_node-1] rcutils_reset_error() should be called after error handling to avoid this.\n[imu_converter_node-1] <<<\n[imu_converter_node-1] [ERROR] [1789391313.695771603] [rcl]: Failed to fini publisher for node: 1\n[imu_converter_node-1] terminate called after throwing an instance of 'rclcpp::exceptions::RCLError'\n[imu_converter_node-1]   what():  failed to initialize rcl node: rcl node's rmw handle is invalid, at ./src/rcl/node.c:415\n[ERROR] [imu_converter_node-1]: process has died [pid 25, exit code -6, cmd '/workspace/install/imu_converter/lib/imu_converter/imu_converter_node --ros-args -r __node:=imu_converter --params-file /workspace/install/imu_converter/share/imu_converter/config/imu_converter.param.yaml'].\n",
+      "param_sha256_after": "0070010e620771e324f980c0154915a2ba6cbead82a9a30e724132ee2ebc2706",
+      "settings_unchanged": true,
+      "containers_running_after": [],
+      "host": "a2",
+      "ssh_stderr": "",
+      "remote_staging_dir": "/tmp/imu-bias-20260914-L1Dw6i",
+      "remote_staging_removed": true
+    }
+  ]
+}

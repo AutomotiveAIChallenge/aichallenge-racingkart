@@ -2,12 +2,15 @@
 SHELL := /bin/bash
 
 .PHONY: autoware-build autoware-vehicle autoware-simulator autoware-request-initialpose autoware-request-control  awsim-request-start awsim-request-reset autoware-driver-zenoh autoware-driver-zenoh-rosbag setup-vehicle \
-	simulator dev dev2 dev3 dev4 driver zenoh download rviz2 down down_all ps autoware-attach autoware-bash eval e2e
+	workspace-clean \
+	simulator dev dev2 dev3 dev4 driver zenoh rosbag download submission-extract rviz2 down down_all ps autoware-attach autoware-bash eval e2e vehicle-tui vehicle-tui-staff workspace
 
 # Used by docker-compose.yml for build/eval artifact ownership.
 HOST_UID ?= $(shell id -u)
 HOST_GID ?= $(shell id -g)
 export HOST_UID HOST_GID
+# Project 名の既定値は docker-compose.yml の name で統一する。
+# make 経由の起動も直接 docker compose を呼ぶ停止・確認も同じ project を使う。
 # Stop host shell's ROS_DOMAIN_ID from overriding .env via compose interpolation,
 # but still honor an explicit `make foo ROS_DOMAIN_ID=N` command-line override.
 unexport ROS_DOMAIN_ID
@@ -17,14 +20,18 @@ endif
 
 TIMESTAMP := $(shell date +%Y%m%d-%H%M%S)
 LOG_DIR := /output/$(TIMESTAMP)
-
 # make simulator-<mode>: <mode> は simulator_scripts/*.sh のファイル名
 SIM_MODES := $(notdir $(basename $(wildcard aichallenge/simulator_scripts/*.sh)))
-# dev<N>（車両数）/ gate<N>（テスト番号）は run_simulator.bash が展開するエイリアス
-SIM_MODES += dev2 dev3 dev4 gate1 gate2 gate3
+# dev<N>（車両数、2..4）は run_simulator.bash が展開するエイリアス
+DEV_NS := 2 3 4
+SIM_MODES += $(addprefix dev,$(DEV_NS))
 .PHONY: $(addprefix simulator-,$(SIM_MODES))
 $(addprefix simulator-,$(SIM_MODES)): simulator-%:
 	@$(MAKE) simulator SIM_MODE=$*
+
+# gate<N>（テスト番号、任意）も run_simulator.bash が展開するエイリアス
+simulator-gate%:
+	@$(MAKE) simulator SIM_MODE=gate$*
 
 # autowareのbuildのみ
 autoware-build:
@@ -70,19 +77,17 @@ driver:
 zenoh:
 	docker compose up -d zenoh
 
+# all-topic rosbag (docker compose up -d rosbag)
+rosbag:
+	LOG_DIR=$(LOG_DIR) docker compose up -d rosbag
+
 dev: SIM_MODE := dev
 dev: simulator autoware-simulator
-	@echo "Start dev simulation (AWSIM + Autoware)"
-	@echo "To stop: make down  (docker compose down --remove-orphans)"
 
-dev2: SIM_MODE := dev2
-dev3: SIM_MODE := dev3
-dev4: SIM_MODE := dev4
-dev2 dev3 dev4: simulator
-	@N=$(@:dev%=%); \
-	echo "Start $$N-vehicle dev (autoware on ROS_DOMAIN_ID 1..$$N via docker compose -p)"; \
-	for p in $$(seq 1 $$N); do LOG_DIR=$(LOG_DIR) ROS_DOMAIN_ID=$$p docker compose -p $$p up -d autoware; done; \
-	echo "To Stop: make down"
+# dev<N>: N台並列（autoware を compose -p 1..N / ROS_DOMAIN_ID=1..N で起動）
+$(addprefix dev,$(DEV_NS)): dev%:
+	@$(MAKE) simulator SIM_MODE=$@ LOG_DIR=$(LOG_DIR)
+	@for p in $$(seq 1 $*); do LOG_DIR=$(LOG_DIR) ROS_DOMAIN_ID=$$p docker compose -p $$p up -d autoware; done
 
 # e2e は練習兼提出参考モード（e2e.sh）。e2e-final.sh は make simulator-e2e-final。
 e2e: SIM_MODE := e2e
@@ -90,12 +95,10 @@ e2e: simulator autoware-simulator
 	@echo "Start e2e simulation (AWSIM + Autoware)"
 	@echo "To stop: make down  (docker compose down --remove-orphans)"
 
-gate1: SIM_MODE := gate1
-gate2: SIM_MODE := gate2
-gate3: SIM_MODE := gate3
-gate1 gate2 gate3: simulator autoware-simulator
-	@echo "Start safety gate simulation (AWSIM + Autoware)"
-	@echo "To stop: make down  (docker compose down --remove-orphans)"
+# gate<N>: 任意のテスト番号を受け付ける（例: make gate7）
+gate%:
+	@$(MAKE) simulator SIM_MODE=$@ LOG_DIR=$(LOG_DIR)
+	@$(MAKE) autoware-simulator LOG_DIR=$(LOG_DIR)
 
 eval:
 	@echo "Start evaluation simulation (AWSIM + Autoware)"
@@ -125,13 +128,19 @@ autoware-driver-zenoh-rosbag:
 	LOG_DIR=$(LOG_DIR) RUN_MODE=vehicle docker compose up -d driver autoware rosbag
 	sleep 15
 	LOG_DIR=$(LOG_DIR) docker compose up -d zenoh
-	@echo "Run vehicle setup runtime check"
-	@cd vehicle && ./setup_check.sh --phase runtime
+
+# --staged も戻すのは stage 済みの提出物を残さないため。パスを限定するのは
+# リポジトリ全体のローカル変更を巻き込まないため。
+workspace-clean:
+	@echo "Clean aichallenge/workspace: restore src/aichallenge_submit/, remove build/ install/ log/ and untracked files"
+	git restore --source=HEAD --staged --worktree -- aichallenge/workspace/src/aichallenge_submit
+	git clean -fdx aichallenge/workspace
 
 down:
 	@for p in 1 2 3 4; do docker compose -p $$p down --remove-orphans; done
 	@docker compose down --remove-orphans
 
+# 車両 PC は専用ホストなので、1 日の終わりには project を問わず全コンテナを強制削除する。
 down_all:
 	sudo docker ps -aq | xargs -r sudo docker rm -f
 
@@ -170,3 +179,26 @@ download:
 			vehicle/download_submission.sh --output aichallenge/workspace/src/; \
 		fi; \
 	fi
+
+# 事前に置いた vehicle/.submissions/<id>.zip（パスワード付き）で src/aichallenge_submit/ を入れ替える。
+# ID とパスワードは対話で聞く（SUBMISSION_ID で ID を先渡し可）。
+# 展開時に参加者の承認を確認して共通 accel/brake map と車両別の保存済み IMU バイアスを適用する。
+submission-extract:
+	vehicle/extract_submission.py $(if $(SUBMISSION_ID),--id $(SUBMISSION_ID))
+
+# 車両 PC 上の操作コンソール。tmux 常駐なので ssh が切れても作業が残り、
+# 同じチームディレクトリから再接続すれば -A で同じセッションへアタッチする。
+# チームを切り替えたときに前チームの TUI を再利用しないよう、セッション名には
+# 起動したリポジトリのディレクトリ名を含める。
+vehicle-tui:
+	@session_name="aic-vehicle-$(notdir $(CURDIR))"; \
+	tmux new -A -s "$$session_name" "vehicle/tui.py"
+
+# 運営用。driver / zenoh / rosbag の起動・停止、down all を出す。tmux セッションを分けるので
+# 参加者のチーム別セッションが残っていても運営側の画面になる。
+vehicle-tui-staff:
+	tmux new -A -s aic-vehicle-staff "vehicle/tui.py --role staff"
+
+# 遠隔操作用ワークスペース。terminator を 4 分割 (車両 ssh×3 + remote/gui_tools.py) で開く。
+workspace:
+	remote/workspace.bash
