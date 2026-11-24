@@ -129,7 +129,7 @@
 
       <!-- Customizable -->
       <node pkg="simple_trajectory_generator" exec="simple_trajectory_generator_node" name="simple_trajectory_generator" output="screen">
-            <param name="csv_path" value="$(find-pkg-share simple_trajectory_generator)/data/$(var track_subdir)raceline_awsim_30km_from_garage.csv"/>
+            <param name="csv_path" value="$(find-pkg-share simple_trajectory_generator)/data/$(var track_subdir)raceline_awsim_30km.csv"/>
             <param name="z" value="6.5"/>
       </node>
       
