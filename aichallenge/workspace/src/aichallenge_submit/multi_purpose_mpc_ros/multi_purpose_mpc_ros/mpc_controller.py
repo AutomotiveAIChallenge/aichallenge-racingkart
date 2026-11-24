@@ -193,11 +193,13 @@ class MPCController(Node):
         return cfg
 
     def _create_reference_path_from_autoware_trajectory(self, trajectory: Trajectory) -> Optional[ReferencePath]:
-        wp_x = [0] * len(trajectory.points)
-        wp_y = [0] * len(trajectory.points)
+        wp_x = [0.0] * len(trajectory.points)
+        wp_y = [0.0] * len(trajectory.points)
+        wp_v = [0.0] * len(trajectory.points)
         for i, p in enumerate(trajectory.points):
             wp_x[i] = p.pose.position.x
             wp_y[i] = p.pose.position.y
+            wp_v[i] = p.longitudinal_velocity_mps
 
         cfg_ref_path = self._cfg.reference_path # type: ignore
         reference_path = ReferencePath(
@@ -217,7 +219,43 @@ class MPCController(Node):
         if not reference_path.compute_speed_profile(speed_profile_constraints):
             return None
 
+        # trajectory の longitudinal_velocity_mps を各 waypoint の参照速度に割り当てる。
+        # これにより ref_vel.yaml / CSV に依存せず、topic 由来の速度を使う。
+        self._assign_velocity_from_trajectory(reference_path, wp_x, wp_y, wp_v)
+
         return reference_path
+
+    def _assign_velocity_from_trajectory(
+            self,
+            reference_path: ReferencePath,
+            traj_x: List[float],
+            traj_y: List[float],
+            traj_v: List[float]) -> None:
+        # ReferencePath は trajectory 点を resolution 間隔に再サンプルするため、
+        # waypoint 数と trajectory 点数は一致しない。各 waypoint に最近傍の
+        # trajectory 点の速度を割り当てる。
+        # 注意: ここで compute_speed_profile(曲率ベース)が設定した v_ref を
+        # topic 速度で上書きする。コーナーでの速度抑制は MPC の _init_problem 内
+        # umax_dyn(ay_max ベース)が担保する。
+        if len(traj_x) == 0:
+            return
+        traj_xy = np.column_stack((np.asarray(traj_x, dtype=np.float64),
+                                   np.asarray(traj_y, dtype=np.float64)))
+        traj_v_arr = np.asarray(traj_v, dtype=np.float64)
+        v_ref: List[float] = []
+        for wp in reference_path.waypoints:
+            d2 = (traj_xy[:, 0] - wp.x) ** 2 + (traj_xy[:, 1] - wp.y) ** 2
+            v_ref.append(float(traj_v_arr[int(np.argmin(d2))]))
+        reference_path.set_v_ref(v_ref)
+
+    def _update_waypoint_xy(self) -> None:
+        # 障害物回避のコリドー絞り込み(_filter_obstacles_to_corridor)で使う
+        # 参照パス waypoint 配列を、現在の self._reference_path から更新する。
+        # 障害物回避 off、または参照パス未構築のときは何もしない。
+        if not self.USE_OBSTACLE_AVOIDANCE or self._reference_path is None:
+            return
+        self._waypoint_xy = np.asarray(
+            [(wp.x, wp.y) for wp in self._reference_path.waypoints], dtype=np.float64)
 
     def _setup_parameters_callback(self) -> None:
         def declatre_parameters():
@@ -242,6 +280,11 @@ class MPCController(Node):
         def param_cb(parameters):
             cfg_mpc = self._cfg.mpc # type: ignore
             mpc_cfg = self._mpc_cfg
+
+            if self._mpc is None or self._reference_path is None:
+                # topic モードでは MPC 構築(run())前にパラメータ更新が来る可能性がある。
+                self.get_logger().warn("MPC 未初期化のためパラメータ更新をスキップしました")
+                return SetParametersResult(successful=True)
 
             def update_Q(index: int, value: float):
                 cfg_mpc.Q[index] = value
@@ -373,10 +416,9 @@ class MPCController(Node):
                 cfg_model.width,
                 1.0 / self._cfg.mpc.control_rate) # type: ignore
 
-        def create_mpc(car: BicycleModel) -> Tuple[MPCConfig, MPC]:
+        def create_mpc_config() -> MPCConfig:
             cfg_mpc = self._cfg.mpc # type: ignore
-
-            mpc_cfg = MPCConfig(
+            return MPCConfig(
                 cfg_mpc.N,
                 sparse.diags(cfg_mpc.Q),
                 sparse.diags(cfg_mpc.R),
@@ -393,6 +435,9 @@ class MPCController(Node):
                 cfg_mpc.steer_low_pass_gain,
                 cfg_mpc.wp_id_offset,
                 cfg_mpc.use_max_kappa_pred)
+
+        def create_mpc(car: BicycleModel) -> Tuple[MPCConfig, MPC]:
+            mpc_cfg = create_mpc_config()
 
             state_constraints = {
                 "xmin": np.array([-np.inf, -np.inf, -np.inf]),
@@ -433,13 +478,44 @@ class MPCController(Node):
                 return None
             return ReferenceVelocityConfigulator(self, self._config_path, self._ref_vel_config_path)
 
-        self._map = create_map()
-        self._reference_path = create_ref_path(self._map)
-        self._car = create_car(self._reference_path)
-        self._mpc_cfg, self._mpc = create_mpc(self._car)
-        compute_speed_profile(self._car, self._mpc_cfg)
+        # run() から参照パス構築をやり直せるようにクロージャを保持する
+        self._create_car_fn = create_car
+        self._create_mpc_fn = create_mpc
 
-        self._ref_vel_configulator: Optional[ReferenceVelocityConfigulator] = create_ref_vel_configulator()
+        self._map = create_map()
+        self._update_by_topic = bool(self._cfg.reference_path.update_by_topic) # type: ignore
+
+        if self._update_by_topic and self.USE_OBSTACLE_AVOIDANCE:
+            # OGMベース(use_path_constraints_topic:false)の障害物回避は対応したが実走未検証。
+            self.get_logger().warn(
+                "update_by_topic と障害物回避の併用は実走未検証です")
+            if self._cfg.reference_path.use_path_constraints_topic: # type: ignore
+                # path_constraints_provider は CSV(traj_mincurv)基準のため topic 経路と不整合。
+                self.get_logger().warn(
+                    "use_path_constraints_topic:true は topic 経路と形状不整合のため未対応です")
+
+        # ref_vel.yaml(区間ごとの目標速度)を読み込むかは config で決める。
+        # update_by_topic とは独立。キーが無い既存 config では従来どおり読み込む(True)。
+        self._use_ref_vel_config = bool(
+            getattr(self._cfg.reference_path, "use_ref_vel_config", True)) # type: ignore
+
+        if self._update_by_topic:
+            # topic モード: CSV を読み込まない。
+            # 参照パス・車両モデル・MPC は最初の trajectory 受信後に run() で構築する。
+            self._mpc_cfg = create_mpc_config()
+            self._reference_path: Optional[ReferencePath] = None
+            self._car: Optional[BicycleModel] = None
+            self._mpc: Optional[MPC] = None
+        else:
+            self._reference_path = create_ref_path(self._map)
+            self._car = create_car(self._reference_path)
+            self._mpc_cfg, self._mpc = create_mpc(self._car)
+            compute_speed_profile(self._car, self._mpc_cfg)
+
+        # ref_vel configulator は config(use_ref_vel_config)で制御する。
+        # false、または --ref_vel_path 未指定(create 内で None)なら無効。
+        self._ref_vel_configulator: Optional[ReferenceVelocityConfigulator] = (
+            create_ref_vel_configulator() if self._use_ref_vel_config else None)
 
         self._trajectory: Optional[Trajectory] = None
         self._path_constraints = None
@@ -467,9 +543,10 @@ class MPCController(Node):
             self._v2x_corridor_threshold_sq = (
                 ref_max_width / 2.0 + self._v2x_vehicle_radius + 0.5
             ) ** 2
-            wps = self._reference_path.waypoints
-            self._waypoint_xy = np.asarray(
-                [(wp.x, wp.y) for wp in wps], dtype=np.float64)
+            # topicモードでは setup 時点で参照パス未構築(None)。空で初期化し、
+            # run()/再構築時に _update_waypoint_xy() で更新する。
+            self._waypoint_xy = np.empty((0, 2), dtype=np.float64)
+            self._update_waypoint_xy()
 
         # Laps
         self._current_laps = 1
@@ -592,6 +669,9 @@ class MPCController(Node):
             self._enable_control = True
 
     def _path_constraints_callback(self, msg: PathConstraints):
+        # topicモードでは参照パス構築(run())前にメッセージが来る可能性がある。
+        if self._reference_path is None:
+            return
         self._reference_path.set_path_constraints(
             msg.upper_bounds, msg.lower_bounds, msg.rows, msg.cols)
 
@@ -615,6 +695,9 @@ class MPCController(Node):
         return kept
 
     def _border_cells_callback(self, msg: BorderCells):
+        # topicモードでは参照パス構築(run())前にメッセージが来る可能性がある。
+        if self._reference_path is None:
+            return
         self._reference_path.set_border_cells(
             msg.dynamic_upper_bounds, msg.dynamic_lower_bounds, msg.rows, msg.cols)
 
@@ -769,10 +852,29 @@ class MPCController(Node):
         if self._loop % 100 == 0:
             # update reference path
             if self._cfg.reference_path.update_by_topic: # type: ignore
+                if self.USE_OBSTACLE_AVOIDANCE:
+                    # 新パスの静的コリドー(_compute_width)は構築時のマップ状態で決まる。
+                    # マップに障害物が残っていると静的コリドーが障害物位置で狭まり(中心線上
+                    # なら潰れてフォールバック)、動的回避の基準が壊れる。CSVモードが init 時
+                    # (=障害物なし)で構築されるのと同条件にするため、構築前にマップを戻し、
+                    # 構築後に下の障害物ブロックで障害物を再登録・動的制約を再構築させる。
+                    self._map.reset_map()
+                    self._obstacles_updated = True
                 new_referece_path = self._create_reference_path_from_autoware_trajectory(self._trajectory)
                 if new_referece_path is not None:
+                    # MPCコンストラクタと同様に path_constraints を計算しておく。
+                    # これを行わないと get_control() -> _init_problem() で
+                    # reference_path.path_constraints が None のまま参照されクラッシュする。
+                    if not self.USE_OBSTACLE_AVOIDANCE:
+                        new_referece_path.update_simple_path_constraints(
+                            self._mpc.N, self._car.safety_margin)
                     self._car.reference_path = new_referece_path
+                    # self._reference_path も car と一致させる(ref_vel/障害物処理が
+                    # self._reference_path を参照するため、乖離させない)。
+                    self._reference_path = new_referece_path
                     self._car.update_reference_path(self._car.reference_path)
+                    # 障害物回避のコリドー絞り込み用 waypoint 配列を更新。
+                    self._update_waypoint_xy()
 
             def plot_reference_path(car):
                 import matplotlib.pyplot as plt
@@ -881,6 +983,20 @@ class MPCController(Node):
         self._wait_until_clock_received()
         self._wait_until_odom_received()
         self._wait_until_trajectory_received()
+
+        # topic モード: trajectory 受信後すぐに参照パス・車両モデル・MPC を構築する。
+        # path_constraints 待ち(_wait_until_path_constraints_received)より前に行うことで、
+        # 障害物回避モードでも self._reference_path が None にならない。
+        # (MPC コンストラクタが path_constraints を計算)
+        if self._update_by_topic:
+            reference_path = self._create_reference_path_from_autoware_trajectory(self._trajectory)
+            if reference_path is None:
+                raise RuntimeError("受信した trajectory から参照パスを構築できませんでした")
+            self._reference_path = reference_path
+            self._car = self._create_car_fn(reference_path)
+            self._mpc_cfg, self._mpc = self._create_mpc_fn(self._car)
+            self._update_waypoint_xy()
+
         self._wait_until_path_constraints_received()
 
         # initialize car states
@@ -920,6 +1036,16 @@ class MPCController(Node):
         self.get_logger().warn("----------------------")
         self.get_logger().warn("Stopping...")
         self.get_logger().warn("----------------------")
+
+        # topicモードで trajectory 受信前にエラー等で停止した場合、MPC/車両モデルが
+        # 未構築(None)。制御ループや結果表示は行わず、停止指令だけ出して戻る。
+        if self._mpc is None or self._car is None:
+            zero_cmd = self._create_ackerman_control_command(
+                self.get_clock().now(), [0.0, 0.0], 0.0, False)
+            self._command_pub.publish(zero_cmd)
+            self.get_logger().warn(">> Stop Completed (MPC 未構築のためスキップ)!")
+            return
+
         timeout_time = self.get_clock().now() + rclpy.time.Duration(seconds=5)
         while self._odom.twist.twist.linear.x > 0.1 and self.get_clock().now() < timeout_time:
             self._enable_control = False

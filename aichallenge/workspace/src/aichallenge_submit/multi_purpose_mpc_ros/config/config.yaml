@@ -20,13 +20,31 @@ obstacles:
   radius: 1.25
 
 reference_path:
-  update_by_topic: false # When true, 'circle' must be false
-  # path from pkg share dir
-  # csv_path: ""
+  # 中心線(参照パス)の取得元を切り替える。
+  #   true : /planning/scenario_planning/trajectory トピックから取得。
+  #          このとき下記 csv_path は使われない(CSVは読み込まれない)。速度は use_ref_vel_config に従う。
+  #          circular は trajectory の形状に合わせる(閉ループ→true / 開経路・前方ウィンドウ→false)。
+  #   false: csv_path の CSV から取得(csv_path が空なら waypoints.csv_path)。
+  update_by_topic: true
+  # ref_vel.yaml(区間ごとの目標速度)を読み込むか。update_by_topic とは独立。
+  # true の場合: ref_vel.yaml を読み込み、wp_id 区間ごとの目標速度で速度参照を上書きする
+  #             (update_v_max + set_v_ref)。--ref_vel_path 未指定なら無効。
+  #             ※ update_by_topic: true との併用は、ref_vel が CSV(traj_mincurv)の
+  #               wp_id 基準のため topic 経路と形状が合わず、実質 update_v_max(全体上限)
+  #               のみ効く。topic 経路で区間速度を使いたい場合は別途対応が必要。
+  # false の場合: topicモードなら topic の longitudinal_velocity_mps、
+  #               CSVモードなら compute_speed_profile(曲率ベース)を速度参照に使う。
+  use_ref_vel_config: false
+  # 参照パスCSV(pkg share 基準)。次のいずれかで読み込まれる:
+  #   - update_by_topic: false(CSVモードの中心線)
+  #   - use_ref_vel_config: true(ref_vel 用参照パス。update_by_topic:true でも読まれる)
+  # topic + use_ref_vel_config:false のときのみ読み込まれない。
+  # "" にすると waypoints.csv_path(列: wp_x,wp_y)にフォールバックする。
   csv_path: "env/final_ver3/traj_mincurv.csv"
   resolution: 0.6
   smoothing_distance: 2
   max_width: 6.0
+  # 経路が閉ループか。閉ループ→true(連続周回可)/ 開経路→false(終端で停止)。
   circular: true
   use_path_constraints_topic: false
   use_border_cells_topic: false
